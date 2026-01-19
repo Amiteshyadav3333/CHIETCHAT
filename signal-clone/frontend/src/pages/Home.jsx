@@ -190,14 +190,19 @@ const Home = () => {
             // Set timeout to 0 (no timeout) or very large for big files
             const res = await axios.post('/api/upload', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
-                timeout: 3600000, // 1 hour
+                timeout: 3600000,
                 onUploadProgress: (progressEvent) => {
-                    // Could add progress bar state here later
                     const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
                     console.log(`Upload Progress: ${percentCompleted}%`);
                 }
             });
-            handleSendMessage(res.data.url, 'image'); // 'image' type handles all files for link rendering currently
+
+            const url = res.data.url;
+            let type = 'file';
+            if (url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) type = 'image';
+            else if (url.match(/\.(mp4|webm|ogg)$/i)) type = 'video';
+
+            handleSendMessage(url, type);
         } catch (err) {
             console.error(err);
             alert("Upload failed: " + (err.response?.statusText || err.message));

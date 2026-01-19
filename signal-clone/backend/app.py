@@ -25,14 +25,15 @@ with app.app_context():
 @app.route('/api/register', methods=['POST'])
 def register():
     data = request.json
+    phone = data['phone'].strip()
     # Validate phone
-    if User.query.filter_by(phone=data['phone']).first():
+    if User.query.filter_by(phone=phone).first():
         return jsonify({"error": "Phone number already registered"}), 400
     
     hashed_pw = generate_password_hash(data['password'])
     new_user = User(
         username=data['username'], 
-        phone=data['phone'],
+        phone=phone,
         password_hash=hashed_pw, 
         public_key=data.get('publicKey')
     )
@@ -43,8 +44,9 @@ def register():
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.json
+    phone = data['phone'].strip()
     # Login with phone
-    user = User.query.filter_by(phone=data['phone']).first()
+    user = User.query.filter_by(phone=phone).first()
     if user and check_password_hash(user.password_hash, data['password']):
         token = jwt.encode({
             'user_id': user.id,
@@ -75,11 +77,11 @@ def get_users():
 @app.route('/api/user/search', methods=['POST'])
 def search_user():
     data = request.json
-    phone = data.get('phone')
+    phone = data.get('phone').strip()
     user = User.query.filter_by(phone=phone).first()
     if user:
         return jsonify({"id": user.id, "username": user.username, "avatar": user.avatar})
-    return jsonify({"error": "User not found"}), 404
+    return jsonify({"error": "User not registered with this number"}), 404
 
 @app.route('/api/users/<int:user_id>/key', methods=['GET'])
 def get_user_public_key(user_id):

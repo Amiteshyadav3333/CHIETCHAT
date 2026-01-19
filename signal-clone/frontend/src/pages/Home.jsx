@@ -205,12 +205,14 @@ const Home = () => {
     };
 
     const createChatByPhone = async () => {
-        const phone = prompt("Enter User's Phone Number:");
+        const phone = prompt("Enter Exact User's Phone Number (case-sensitive if included letters):");
         if (!phone) return;
+
+        const cleanPhone = phone.trim();
 
         try {
             // Search user
-            const userRes = await axios.post('/api/user/search', { phone });
+            const userRes = await axios.post('/api/user/search', { phone: cleanPhone });
             const foundUser = userRes.data;
 
             if (foundUser) {

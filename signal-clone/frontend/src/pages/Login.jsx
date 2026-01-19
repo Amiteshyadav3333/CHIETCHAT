@@ -14,9 +14,12 @@ const Login = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+
+        const cleanPhone = phone.trim();
+
         try {
             if (isLogin) {
-                const res = await axios.post('/api/login', { phone, password });
+                const res = await axios.post('/api/login', { phone: cleanPhone, password });
                 login(res.data.user, res.data.token);
                 navigate('/');
             } else {
@@ -24,7 +27,7 @@ const Login = () => {
                 const keys = await generateKeys();
                 await axios.post('/api/register', {
                     username,
-                    phone,
+                    phone: cleanPhone,
                     password,
                     publicKey: keys.publicKeyString
                 });

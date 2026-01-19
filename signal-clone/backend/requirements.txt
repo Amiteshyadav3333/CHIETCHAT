@@ -1,0 +1,11 @@
+flask
+flask-socketio
+flask-cors
+sqlalchemy
+flask-sqlalchemy
+pyjwt
+bcrypt
+cryptography
+python-dotenv
+eventlet
+gunicorn

@@ -22,8 +22,7 @@ const Home = () => {
     const [loadingChats, setLoadingChats] = useState(true);
     const [showCallModal, setShowCallModal] = useState(false);
 
-    // E2EE Keys via Hook
-    const { privateKey } = useEncryption(user, token);
+    // Non-Encrypted Ref
     const messagesEndRef = useRef(null);
 
     useEffect(() => {
@@ -52,22 +51,14 @@ const Home = () => {
 
         socket.on('receive_message', async (newMsg) => {
             if (activeChat && newMsg.chatId === activeChat.id) {
-                let content = newMsg.content;
-                if (privateKey && newMsg.senderId !== user.id && newMsg.type === 'text') {
-                    try {
-                        content = await decryptMessage(privateKey, newMsg.content);
-                    } catch (e) {
-                        content = "⚠️ Decryption Error";
-                    }
-                }
-
-                setMessages(prev => [...prev, { ...newMsg, content }]);
+                // Direct message content, no decryption
+                setMessages(prev => [...prev, newMsg]);
                 scrollToBottom();
             }
 
             setChats(prev => prev.map(c => {
                 if (c.id === newMsg.chatId) {
-                    return { ...c, lastMessage: { ...c.lastMessage, content: 'New Message', timestamp: newMsg.timestamp } };
+                    return { ...c, lastMessage: { ...c.lastMessage, content: newMsg.type === 'text' ? newMsg.content : newMsg.type, timestamp: newMsg.timestamp } };
                 }
                 return c;
             }));
@@ -77,7 +68,7 @@ const Home = () => {
             socket.off('receive_message');
             socket.off('call_made');
         };
-    }, [socket, activeChat, privateKey, user]);
+    }, [socket, activeChat]);
 
     useEffect(() => {
         const fetchMessages = async () => {
@@ -87,30 +78,8 @@ const Home = () => {
                     headers: { Authorization: `Bearer ${token}` }
                 });
 
-                const decryptedMsgs = await Promise.all(res.data.map(async (msg) => {
-                    if (msg.type !== 'text') return msg;
-
-                    if (msg.senderId === user.id) {
-                        // For own messages, we theoretically can't decrypt them if we didn't store self-encrypted version
-                        // But usually we just show "You sent an encrypted message" or if we store plain text locally.
-                        // For this simple clone, we will mark them.
-                        // Improvement: If we want to read history, we should store a version encrypted with OUR public key too.
-                        // But for now, keep existing behavior or just show content if it wasn't actually encrypted (backward compat)
-                        // Actually, let's just show "Encrypted message" if we can't do anything, or try.
-                        return { ...msg, content: "You (Encrypted)" };
-                    }
-                    if (privateKey) {
-                        try {
-                            const decrypted = await decryptMessage(privateKey, msg.content);
-                            return { ...msg, content: decrypted };
-                        } catch (e) {
-                            return { ...msg, content: "🔒 Decryption Failed" };
-                        }
-                    }
-                    return msg;
-                }));
-
-                setMessages(decryptedMsgs);
+                // No decryption needed, just show plain content
+                setMessages(res.data);
                 scrollToBottom();
 
                 socket.emit('join_room', { room: activeChat.id });
@@ -119,7 +88,7 @@ const Home = () => {
             }
         };
         fetchMessages();
-    }, [activeChat, token, privateKey, user, socket]);
+    }, [activeChat, token, socket]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -128,34 +97,7 @@ const Home = () => {
     const handleSendMessage = async (text, type = 'text') => {
         if (!activeChat) return;
 
-        const otherParticipant = activeChat.participants.find(p => p.id !== user.id);
-
-        // Fetch fresh public key for recipient to avoid decryption errors if they re-logged in
-        let otherPubKeyString = otherParticipant?.publicKey;
-        if (otherParticipant) {
-            try {
-                const keyRes = await axios.get(`/api/users/${otherParticipant.id}/key`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                if (keyRes.data.publicKey) {
-                    otherPubKeyString = keyRes.data.publicKey;
-                }
-            } catch (e) {
-                console.error("Failed to fetch fresh public key", e);
-            }
-        }
-
-        let encryptedContent = text;
-
-        if (otherPubKeyString && type === 'text') {
-            try {
-                const otherKey = await importPublicKey(otherPubKeyString);
-                encryptedContent = await encryptMessage(otherKey, text);
-            } catch (e) {
-                console.error("Encryption failed, sending plain", e);
-            }
-        }
-
+        // Send Plain Text
         const tempMsg = {
             id: Date.now(),
             senderId: user.id,
@@ -169,7 +111,7 @@ const Home = () => {
         socket.emit('send_message', {
             chatId: activeChat.id,
             senderId: user.id,
-            content: encryptedContent,
+            content: text, // Plain text content
             type,
             ttl: 0
         });

@@ -1,4 +1,5 @@
 import React, { createContext, useState, useEffect } from 'react';
+import axios from 'axios';
 
 export const AuthContext = createContext();
 
@@ -18,6 +19,22 @@ export const AuthProvider = ({ children }) => {
         }
         setLoading(false);
     }, [token]);
+
+    // Handle 401 (Token Expired/Invalid due to server restart)
+    useEffect(() => {
+        const interceptor = axios.interceptors.response.use(
+            response => response,
+            error => {
+                if (error.response && error.response.status === 401) {
+                    console.warn("Session expired or invalid, logging out...");
+                    logout();
+                    window.location.href = '/login';
+                }
+                return Promise.reject(error);
+            }
+        );
+        return () => axios.interceptors.response.eject(interceptor);
+    }, []);
 
     const login = (userData, authToken) => {
         setUser(userData);

@@ -204,31 +204,74 @@ const Home = () => {
         }
     };
 
-    const createChatByPhone = async () => {
-        const phone = prompt("Enter Exact User's Phone Number (case-sensitive if included letters):");
-        if (!phone) return;
+    const [showDirectory, setShowDirectory] = useState(false);
+    const [allUsers, setAllUsers] = useState([]);
 
-        const cleanPhone = phone.trim();
-
+    const openDirectory = async () => {
         try {
-            // Search user
-            const userRes = await axios.post('/api/user/search', { phone: cleanPhone });
-            const foundUser = userRes.data;
-
-            if (foundUser) {
-                await axios.post('/api/chats/create', {
-                    participants: [user.id, foundUser.id]
-                });
-                window.location.reload();
-            }
+            const res = await axios.get('/api/users');
+            // Filter out self
+            const others = res.data.filter(u => u.id !== user.id);
+            setAllUsers(others);
+            setShowDirectory(true);
         } catch (err) {
-            alert(err.response?.data?.error || "User not found or error");
+            console.error("Failed to fetch users", err);
+        }
+    };
+
+    const startChat = async (targetUser) => {
+        try {
+            await axios.post('/api/chats/create', {
+                participants: [user.id, targetUser.id]
+            });
+            setShowDirectory(false);
+            // Refresh chats
+            const res = await axios.get('/api/chats', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setChats(res.data);
+        } catch (err) {
+            alert(err.response?.data?.error || "Error creating chat");
         }
     };
 
     return (
-        <div className="flex h-screen bg-signal-bg overflow-hidden text-gray-100 font-sans">
+        <div className="flex h-screen bg-signal-bg overflow-hidden text-gray-100 font-sans relative">
             {showCallModal && <VideoCallModal activeChat={activeChat} onClose={() => setShowCallModal(false)} />}
+
+            {showDirectory && (
+                <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+                    <div className="bg-signal-secondary w-full max-w-md rounded-2xl p-6 shadow-2xl border border-gray-700 h-[80vh] flex flex-col">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl font-bold text-white">New Chat</h2>
+                            <button onClick={() => setShowDirectory(false)} className="text-gray-400 hover:text-white">Close</button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+                            {allUsers.length === 0 ? (
+                                <p className="text-center text-gray-500 mt-10">No other users found.<br />Ask friends to register!</p>
+                            ) : (
+                                allUsers.map(u => (
+                                    <div key={u.id} className="flex items-center justify-between p-3 bg-signal-input rounded-xl hover:bg-gray-700 transition">
+                                        <div className="flex items-center gap-3">
+                                            <img src={u.avatar} className="w-10 h-10 rounded-full bg-gray-600" alt="" />
+                                            <div>
+                                                <h4 className="font-bold text-sm">{u.username}</h4>
+                                                <p className="text-xs text-gray-400">{u.phone}</p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => startChat(u)}
+                                            className="bg-signal-accent hover:bg-signal-accentHover text-white px-4 py-2 rounded-full text-xs font-bold"
+                                        >
+                                            Chat
+                                        </button>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Sidebar */}
             <div className={`w-full md:w-1/3 lg:w-1/4 border-r border-gray-800 flex flex-col ${activeChat ? 'hidden md:flex' : 'flex'}`}>
@@ -239,7 +282,7 @@ const Home = () => {
                         <h2 className="font-bold">{user?.username}</h2>
                     </div>
                     <div className="flex gap-2">
-                        <button onClick={createChatByPhone} className="p-2 hover:bg-gray-700 rounded-full">
+                        <button onClick={openDirectory} className="p-2 hover:bg-gray-700 rounded-full" title="New Chat">
                             <PlusIcon className="w-6 h-6" />
                         </button>
                         <button onClick={logout} className="p-2 text-red-400 hover:bg-gray-700 rounded-full text-xs">

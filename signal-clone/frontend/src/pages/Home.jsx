@@ -204,34 +204,40 @@ const Home = () => {
         }
     };
 
-    const [showDirectory, setShowDirectory] = useState(false);
-    const [allUsers, setAllUsers] = useState([]);
+    const [showSearchModal, setShowSearchModal] = useState(false);
+    const [searchPhone, setSearchPhone] = useState('');
+    const [searchedUser, setSearchedUser] = useState(null);
+    const [searchError, setSearchError] = useState('');
 
-    const openDirectory = async () => {
+    const handleSearchUser = async (e) => {
+        e.preventDefault();
+        setSearchError('');
+        setSearchedUser(null);
+
         try {
-            const res = await axios.get('/api/users');
-            // Filter out self
-            const others = res.data.filter(u => u.id !== user.id);
-            setAllUsers(others);
-            setShowDirectory(true);
+            const res = await axios.post('/api/user/search', { phone: searchPhone.trim() });
+            setSearchedUser(res.data);
         } catch (err) {
-            console.error("Failed to fetch users", err);
+            setSearchError(err.response?.data?.error || "User not found");
         }
     };
 
-    const startChat = async (targetUser) => {
+    const startChat = async () => {
+        if (!searchedUser) return;
         try {
             await axios.post('/api/chats/create', {
-                participants: [user.id, targetUser.id]
+                participants: [user.id, searchedUser.id]
             });
-            setShowDirectory(false);
+            setShowSearchModal(false);
+            setSearchedUser(null);
+            setSearchPhone('');
             // Refresh chats
             const res = await axios.get('/api/chats', {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setChats(res.data);
         } catch (err) {
-            alert(err.response?.data?.error || "Error creating chat");
+            alert("Error creating chat");
         }
     };
 
@@ -239,36 +245,58 @@ const Home = () => {
         <div className="flex h-screen bg-signal-bg overflow-hidden text-gray-100 font-sans relative">
             {showCallModal && <VideoCallModal activeChat={activeChat} onClose={() => setShowCallModal(false)} />}
 
-            {showDirectory && (
+            {showSearchModal && (
                 <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-                    <div className="bg-signal-secondary w-full max-w-md rounded-2xl p-6 shadow-2xl border border-gray-700 h-[80vh] flex flex-col">
-                        <div className="flex justify-between items-center mb-6">
+                    <div className="bg-signal-secondary w-full max-w-sm rounded-2xl p-6 shadow-2xl border border-gray-700">
+                        <div className="flex justify-between items-center mb-4">
                             <h2 className="text-xl font-bold text-white">New Chat</h2>
-                            <button onClick={() => setShowDirectory(false)} className="text-gray-400 hover:text-white">Close</button>
+                            <button onClick={() => setShowSearchModal(false)} className="text-gray-400 hover:text-white">Close</button>
                         </div>
-                        <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-                            {allUsers.length === 0 ? (
-                                <p className="text-center text-gray-500 mt-10">No other users found.<br />Ask friends to register!</p>
-                            ) : (
-                                allUsers.map(u => (
-                                    <div key={u.id} className="flex items-center justify-between p-3 bg-signal-input rounded-xl hover:bg-gray-700 transition">
-                                        <div className="flex items-center gap-3">
-                                            <img src={u.avatar} className="w-10 h-10 rounded-full bg-gray-600" alt="" />
-                                            <div>
-                                                <h4 className="font-bold text-sm">{u.username}</h4>
-                                                <p className="text-xs text-gray-400">{u.phone}</p>
-                                            </div>
-                                        </div>
-                                        <button
-                                            onClick={() => startChat(u)}
-                                            className="bg-signal-accent hover:bg-signal-accentHover text-white px-4 py-2 rounded-full text-xs font-bold"
-                                        >
-                                            Chat
-                                        </button>
+
+                        <form onSubmit={handleSearchUser} className="mb-4">
+                            <label className="block text-xs text-gray-400 mb-1 ml-1">PHONE NUMBER</label>
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={searchPhone}
+                                    onChange={(e) => setSearchPhone(e.target.value)}
+                                    placeholder="e.g. 9876543210"
+                                    className="flex-1 bg-signal-input border-none rounded-lg px-4 py-2 focus:ring-1 focus:ring-signal-accent outline-none text-white"
+                                    autoFocus
+                                />
+                                <button type="submit" className="bg-signal-input hover:bg-gray-700 text-white px-4 rounded-lg font-bold">
+                                    Search
+                                </button>
+                            </div>
+                        </form>
+
+                        {searchError && (
+                            <div className="p-3 bg-red-500/10 text-red-500 rounded-lg text-sm mb-4 text-center border border-red-500/20">
+                                {searchError}
+                            </div>
+                        )}
+
+                        {searchedUser && (
+                            <div className="bg-signal-input rounded-xl p-4 flex items-center justify-between animate-fade-in border border-signal-accent/30">
+                                <div className="flex items-center gap-3">
+                                    <div className="relative">
+                                        <img src={searchedUser.avatar} className="w-12 h-12 rounded-full" alt="" />
+                                        {/* Simple online simulation logic - In real app, check socket status map */}
+                                        <div className="absolute bottom-0 right-0 w-3 h-3 bg-gray-500 rounded-full border-2 border-signal-input"></div>
                                     </div>
-                                ))
-                            )}
-                        </div>
+                                    <div>
+                                        <h3 className="font-bold">{searchedUser.username}</h3>
+                                        <p className="text-xs text-gray-400">Found</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={startChat}
+                                    className="bg-signal-accent hover:bg-signal-accentHover text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg"
+                                >
+                                    Chat
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
@@ -282,7 +310,7 @@ const Home = () => {
                         <h2 className="font-bold">{user?.username}</h2>
                     </div>
                     <div className="flex gap-2">
-                        <button onClick={openDirectory} className="p-2 hover:bg-gray-700 rounded-full" title="New Chat">
+                        <button onClick={() => setShowSearchModal(true)} className="p-2 hover:bg-gray-700 rounded-full" title="New Chat">
                             <PlusIcon className="w-6 h-6" />
                         </button>
                         <button onClick={logout} className="p-2 text-red-400 hover:bg-gray-700 rounded-full text-xs">

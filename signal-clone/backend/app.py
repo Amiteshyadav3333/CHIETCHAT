@@ -81,6 +81,13 @@ def search_user():
         return jsonify({"id": user.id, "username": user.username, "avatar": user.avatar})
     return jsonify({"error": "User not found"}), 404
 
+@app.route('/api/users/<int:user_id>/key', methods=['GET'])
+def get_user_public_key(user_id):
+    user = User.query.get(user_id)
+    if user:
+        return jsonify({"publicKey": user.public_key})
+    return jsonify({"error": "User not found"}), 404
+
 @app.route('/api/user/key', methods=['POST'])
 def update_public_key():
     auth_header = request.headers.get('Authorization')

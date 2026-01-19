@@ -7,4 +7,5 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'jwt-secret-key-change-this'
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=7)
-    UPLOAD_FOLDER = 'uploads'
+    UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads')
+    MAX_CONTENT_LENGTH = 16 * 1024 * 1024 * 1024  # 16 GB max upload

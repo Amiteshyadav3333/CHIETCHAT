@@ -129,7 +129,21 @@ const Home = () => {
         if (!activeChat) return;
 
         const otherParticipant = activeChat.participants.find(p => p.id !== user.id);
-        const otherPubKeyString = otherParticipant?.publicKey;
+
+        // Fetch fresh public key for recipient to avoid decryption errors if they re-logged in
+        let otherPubKeyString = otherParticipant?.publicKey;
+        if (otherParticipant) {
+            try {
+                const keyRes = await axios.get(`/api/users/${otherParticipant.id}/key`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (keyRes.data.publicKey) {
+                    otherPubKeyString = keyRes.data.publicKey;
+                }
+            } catch (e) {
+                console.error("Failed to fetch fresh public key", e);
+            }
+        }
 
         let encryptedContent = text;
 
@@ -162,16 +176,31 @@ const Home = () => {
     };
 
     const handleUpload = async (file) => {
+        // 5GB limit check (roughly usually handled by server, but good for UI)
+        // file.size is in bytes. 5GB = 5 * 1024 * 1024 * 1024
+        const maxSize = 5 * 1024 * 1024 * 1024;
+        if (file.size > maxSize) {
+            alert("File is too large (Max 5GB)");
+            return;
+        }
+
         const formData = new FormData();
         formData.append('file', file);
         try {
+            // Set timeout to 0 (no timeout) or very large for big files
             const res = await axios.post('/api/upload', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
+                headers: { 'Content-Type': 'multipart/form-data' },
+                timeout: 3600000, // 1 hour
+                onUploadProgress: (progressEvent) => {
+                    // Could add progress bar state here later
+                    const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                    console.log(`Upload Progress: ${percentCompleted}%`);
+                }
             });
-            handleSendMessage(res.data.url, 'image');
+            handleSendMessage(res.data.url, 'image'); // 'image' type handles all files for link rendering currently
         } catch (err) {
             console.error(err);
-            alert("Upload failed");
+            alert("Upload failed: " + (err.response?.statusText || err.message));
         }
     };
 

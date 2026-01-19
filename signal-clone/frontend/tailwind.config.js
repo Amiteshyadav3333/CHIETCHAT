@@ -8,14 +8,16 @@ export default {
         extend: {
             colors: {
                 signal: {
-                    bg: '#121212', // Main dark background
-                    secondary: '#1f1f1f', // Sidebar/Item background
-                    accent: '#3b82f6', // Signal Blue
-                    input: '#2c2c2c',
-                    text: '#eaeaea',
-                    muted: '#8e8e8e',
-                    incoming: '#2c2c2c',
-                    outgoing: '#3b82f6'
+                    bg: '#0a0a0a', // Deeper black
+                    secondary: '#171717', // Richer dark gray
+                    accent: '#2563eb', // Vivid Blue
+                    accentHover: '#1d4ed8',
+                    input: '#262626',
+                    text: '#f3f4f6',
+                    muted: '#9ca3af',
+                    incoming: '#262626',
+                    outgoing: '#2563eb',
+                    danger: '#ef4444'
                 }
             }
         },

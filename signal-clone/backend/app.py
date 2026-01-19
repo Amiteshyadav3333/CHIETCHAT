@@ -81,6 +81,21 @@ def search_user():
         return jsonify({"id": user.id, "username": user.username, "avatar": user.avatar})
     return jsonify({"error": "User not found"}), 404
 
+@app.route('/api/user/key', methods=['POST'])
+def update_public_key():
+    auth_header = request.headers.get('Authorization')
+    if not auth_header: return jsonify({"error": "Unauthorized"}), 401
+    try:
+        token = auth_header.split(" ")[1]
+        payload = jwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+        user = User.query.get(payload['user_id'])
+        if user:
+            user.public_key = request.json.get('publicKey')
+            db.session.commit()
+            return jsonify({"message": "Key updated"})
+    except Exception as e:
+        return jsonify({"error": "Invalid token"}), 401
+
 # --- Static Files ---
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):

@@ -6,7 +6,8 @@ import ContactList from '../components/ContactList';
 import ChatBubble from '../components/ChatBubble';
 import MessageInput from '../components/MessageInput';
 import VideoCallModal from '../components/VideoCall';
-import { decryptMessage, encryptMessage, importPublicKey, generateKeys } from '../utils/encryption';
+import { decryptMessage, encryptMessage, importPublicKey } from '../utils/encryption';
+import { useEncryption } from '../hooks/useEncryption';
 import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, EllipsisVerticalIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { useNavigate } from 'react-router-dom';
 
@@ -21,22 +22,9 @@ const Home = () => {
     const [loadingChats, setLoadingChats] = useState(true);
     const [showCallModal, setShowCallModal] = useState(false);
 
-    // E2EE Keys
-    const [myKeys, setMyKeys] = useState(null);
+    // E2EE Keys via Hook
+    const { privateKey } = useEncryption(user, token);
     const messagesEndRef = useRef(null);
-
-    useEffect(() => {
-        const init = async () => {
-            // Load keys from storage if available
-            const storedPriv = localStorage.getItem(`privKey_${user?.username}`);
-            // We need to re-import them properly using hook logic or here
-            // simplified for now: re-gen if missing in storage logic 
-            // but for this MVP let's just generate new if not handled by hook
-            const keys = await generateKeys();
-            setMyKeys(keys);
-        };
-        if (user) init();
-    }, [user]);
 
     useEffect(() => {
         const fetchChats = async () => {
@@ -60,16 +48,18 @@ const Home = () => {
         // Listen for call requests to auto-show modal
         socket.on('call_made', (data) => {
             setShowCallModal(true);
-            // The modal will capture the event too via its own listener
         });
 
         socket.on('receive_message', async (newMsg) => {
             if (activeChat && newMsg.chatId === activeChat.id) {
                 let content = newMsg.content;
-                if (myKeys && newMsg.senderId !== user.id && newMsg.type === 'text') {
-                    content = await decryptMessage(myKeys.privateKey, newMsg.content);
+                if (privateKey && newMsg.senderId !== user.id && newMsg.type === 'text') {
+                    try {
+                        content = await decryptMessage(privateKey, newMsg.content);
+                    } catch (e) {
+                        content = "⚠️ Decryption Error";
+                    }
                 }
-                // If not text (image), content is url, don't decrypt
 
                 setMessages(prev => [...prev, { ...newMsg, content }]);
                 scrollToBottom();
@@ -87,7 +77,7 @@ const Home = () => {
             socket.off('receive_message');
             socket.off('call_made');
         };
-    }, [socket, activeChat, myKeys, user]);
+    }, [socket, activeChat, privateKey, user]);
 
     useEffect(() => {
         const fetchMessages = async () => {
@@ -98,14 +88,20 @@ const Home = () => {
                 });
 
                 const decryptedMsgs = await Promise.all(res.data.map(async (msg) => {
-                    if (msg.type !== 'text') return msg; // Images don't need decryption in this simple version
+                    if (msg.type !== 'text') return msg;
 
                     if (msg.senderId === user.id) {
-                        return { ...msg, content: "🔒 Encrypted (History)" };
+                        // For own messages, we theoretically can't decrypt them if we didn't store self-encrypted version
+                        // But usually we just show "You sent an encrypted message" or if we store plain text locally.
+                        // For this simple clone, we will mark them.
+                        // Improvement: If we want to read history, we should store a version encrypted with OUR public key too.
+                        // But for now, keep existing behavior or just show content if it wasn't actually encrypted (backward compat)
+                        // Actually, let's just show "Encrypted message" if we can't do anything, or try.
+                        return { ...msg, content: "You (Encrypted)" };
                     }
-                    if (myKeys) {
+                    if (privateKey) {
                         try {
-                            const decrypted = await decryptMessage(myKeys.privateKey, msg.content);
+                            const decrypted = await decryptMessage(privateKey, msg.content);
                             return { ...msg, content: decrypted };
                         } catch (e) {
                             return { ...msg, content: "🔒 Decryption Failed" };
@@ -123,7 +119,7 @@ const Home = () => {
             }
         };
         fetchMessages();
-    }, [activeChat, token, myKeys, user, socket]);
+    }, [activeChat, token, privateKey, user, socket]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

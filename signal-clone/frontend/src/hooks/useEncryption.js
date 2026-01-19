@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { generateKeys, importPublicKey, importPrivateKey } from '../utils/encryption';
+import { generateKeys, importPrivateKey } from '../utils/encryption';
+import axios from 'axios';
 
-export const useEncryption = (user) => {
+export const useEncryption = (user, token) => {
     const [privateKey, setPrivateKey] = useState(null);
     const [publicKey, setPublicKey] = useState(null);
 
@@ -18,18 +19,15 @@ export const useEncryption = (user) => {
             if (storedPriv && storedPub) {
                 try {
                     const importedPriv = await importPrivateKey(storedPriv);
-                    // const importedPub = await importPublicKey(storedPub); 
-                    // specific import not strongly needed for local verify but good for consistency
-
                     setPrivateKey(importedPriv);
                     setPublicKey(storedPub);
-                    // console.log("Loaded keys from storage");
                     return;
                 } catch (e) {
                     console.error("Failed to import stored keys", e);
                 }
             }
 
+            // Generate new keys if missing (e.g. new device/browser)
             const keys = await generateKeys();
 
             localStorage.setItem(storageKeyPriv, keys.privateKeyString);
@@ -37,10 +35,23 @@ export const useEncryption = (user) => {
 
             setPrivateKey(keys.privateKey);
             setPublicKey(keys.publicKeyString);
+
+            // Sync public key with server
+            if (token) {
+                try {
+                    await axios.post('/api/user/key',
+                        { publicKey: keys.publicKeyString },
+                        { headers: { Authorization: `Bearer ${token}` } }
+                    );
+                    console.log("Synced new public key with server");
+                } catch (e) {
+                    console.error("Failed to sync key", e);
+                }
+            }
         };
 
         initKeys();
-    }, [user]);
+    }, [user, token]);
 
     return { privateKey, publicKey };
 };

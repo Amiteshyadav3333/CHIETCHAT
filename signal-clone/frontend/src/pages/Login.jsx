@@ -28,6 +28,11 @@ const Login = () => {
                     password,
                     publicKey: keys.publicKeyString
                 });
+
+                // Save keys locally so we can decrypt later
+                localStorage.setItem(`privKey_${username}`, keys.privateKeyString);
+                localStorage.setItem(`pubKey_${username}`, keys.publicKeyString);
+
                 alert('Account created! Please login.');
                 setIsLogin(true);
             }

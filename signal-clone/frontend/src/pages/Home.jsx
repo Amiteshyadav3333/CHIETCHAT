@@ -193,7 +193,7 @@ const Home = () => {
     };
 
     return (
-        <div className="flex h-screen bg-signal-bg overflow-hidden text-gray-100 font-sans relative">
+        <div className="flex h-[100dvh] bg-signal-bg overflow-hidden text-gray-100 font-sans relative">
             {showCallModal && <VideoCallModal activeChat={activeChat} onClose={() => setShowCallModal(false)} />}
 
             {showSearchModal && (

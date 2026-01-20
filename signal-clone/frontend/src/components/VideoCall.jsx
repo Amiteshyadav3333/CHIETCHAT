@@ -163,7 +163,7 @@ const VideoCallModal = ({ activeChat, onClose }) => {
                             callStatus === 'receiving' ? `Incoming Call from ${incomingCall?.name}` : 'Connected'}
                 </h2>
 
-                <div className="flex justify-center gap-4 h-64 md:h-96 relative bg-black rounded-xl overflow-hidden">
+                <div className="flex justify-center gap-4 h-[60dvh] md:h-96 relative bg-black rounded-xl overflow-hidden">
                     {/* Remote Video */}
                     {remoteStream && (
                         <video ref={remoteVideoRef} autoPlay className="w-full h-full object-cover" />

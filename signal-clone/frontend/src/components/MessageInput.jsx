@@ -26,7 +26,7 @@ const MessageInput = ({ onSend, onUpload }) => {
     };
 
     return (
-        <div className="p-3 bg-signal-secondary flex items-end gap-2 relative border-t border-gray-800">
+        <div className="p-2 md:p-3 bg-signal-secondary flex items-end gap-2 relative border-t border-gray-800">
             {showEmoji && (
                 <div className="absolute bottom-16 left-0">
                     <EmojiPicker onEmojiClick={handleEmojiClick} theme="dark" />

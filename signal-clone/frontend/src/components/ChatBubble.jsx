@@ -6,7 +6,7 @@ import { LockClosedIcon, ExclamationTriangleIcon } from '@heroicons/react/24/sol
 const ChatBubble = ({ message, isOwn, senderName }) => {
     return (
         <div className={`flex w-full ${isOwn ? 'justify-end' : 'justify-start'} mb-2`}>
-            <div className={`max-w-[75%] md:max-w-[60%] w-fit px-4 py-3 rounded-2xl relative shadow-md transition-all ${isOwn
+            <div className={`max-w-[85%] md:max-w-[60%] w-fit px-4 py-3 rounded-2xl relative shadow-md transition-all ${isOwn
                 ? 'bg-gradient-to-br from-signal-accent to-signal-accentHover text-white rounded-br-sm'
                 : 'bg-signal-input text-gray-100 rounded-bl-sm'
                 }`}>

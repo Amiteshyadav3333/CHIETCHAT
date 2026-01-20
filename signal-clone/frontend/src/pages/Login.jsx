@@ -46,7 +46,7 @@ const Login = () => {
     };
 
     return (
-        <div className="min-h-screen bg-signal-bg flex items-center justify-center p-4">
+        <div className="min-h-[100dvh] bg-signal-bg flex items-center justify-center p-4">
             <div className="bg-signal-secondary p-8 rounded-2xl w-full max-w-md shadow-2xl">
                 <div className="text-center mb-8">
                     <h1 className="text-3xl font-bold text-signal-text mb-2">Signal</h1>

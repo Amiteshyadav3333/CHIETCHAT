@@ -9,7 +9,7 @@ from config import Config
 from models import db, User, Chat, ChatParticipant, Message
 from sqlalchemy import or_
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static')
 app.config.from_object(Config)
 CORS(app, resources={r"/*": {"origins": "*"}})
 socketio = SocketIO(app, cors_allowed_origins="*")

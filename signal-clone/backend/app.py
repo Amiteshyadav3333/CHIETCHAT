@@ -81,7 +81,7 @@ def search_user():
     user = User.query.filter_by(phone=phone).first()
     if user:
         return jsonify({"id": user.id, "username": user.username, "avatar": user.avatar})
-    return jsonify({"error": "User not registered with this number"}), 404
+    return jsonify({"error": "User not registered with this number"}), 200
 
 @app.route('/api/users/<int:user_id>/key', methods=['GET'])
 def get_user_public_key(user_id):
@@ -262,6 +262,15 @@ def on_answer_call(data):
 def on_ice_candidate(data):
     emit('ice_candidate', data, room=f"user_{data['to']}")
 
+
+# --- Serve React App ---
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve(path):
+    if path != "" and os.path.exists(app.static_folder + '/' + path):
+        return send_from_directory(app.static_folder, path)
+    else:
+        return send_from_directory(app.static_folder, 'index.html')
 
 
 if __name__ == '__main__':

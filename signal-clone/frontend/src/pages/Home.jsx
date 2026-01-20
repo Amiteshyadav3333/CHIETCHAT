@@ -163,7 +163,11 @@ const Home = () => {
 
         try {
             const res = await axios.post('/api/user/search', { phone: searchPhone.trim() });
-            setSearchedUser(res.data);
+            if (res.data.error) {
+                setSearchError(res.data.error);
+            } else {
+                setSearchedUser(res.data);
+            }
         } catch (err) {
             setSearchError(err.response?.data?.error || "User not found");
         }

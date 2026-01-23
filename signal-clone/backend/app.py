@@ -22,6 +22,17 @@ with app.app_context():
     db.create_all()
 
 # --- Auth Routes (Phone Based) ---
+# --- Debug Route (For fixing DB schema) ---
+@app.route('/api/debug/reset_db', methods=['GET'])
+def reset_db():
+    try:
+        with app.app_context():
+            db.drop_all()
+            db.create_all()
+        return jsonify({"message": "Database reset successfully. Schema updated."}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/register', methods=['POST'])
 def register():
     data = request.json

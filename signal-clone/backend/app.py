@@ -35,45 +35,54 @@ def reset_db():
 
 @app.route('/api/register', methods=['POST'])
 def register():
-    data = request.json
-    phone = data['phone'].strip()
-    # Validate phone
-    if User.query.filter_by(phone=phone).first():
-        return jsonify({"error": "Phone number already registered"}), 400
-    
-    hashed_pw = generate_password_hash(data['password'])
-    new_user = User(
-        username=data['username'], 
-        phone=phone,
-        password_hash=hashed_pw, 
-        public_key=data.get('publicKey')
-    )
-    db.session.add(new_user)
-    db.session.commit()
-    return jsonify({"message": "User created"}), 201
+    try:
+        data = request.json
+        phone = data['phone'].strip()
+        # Validate phone
+        if User.query.filter_by(phone=phone).first():
+            return jsonify({"error": "Phone number already registered"}), 400
+        
+        hashed_pw = generate_password_hash(data['password'])
+        new_user = User(
+            username=data['username'], 
+            phone=phone,
+            password_hash=hashed_pw, 
+            public_key=data.get('publicKey')
+        )
+        db.session.add(new_user)
+        db.session.commit()
+        return jsonify({"message": "User created"}), 201
+    except Exception as e:
+        print(f"Register Error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/login', methods=['POST'])
 def login():
-    data = request.json
-    phone = data['phone'].strip()
-    # Login with phone
-    user = User.query.filter_by(phone=phone).first()
-    if user and check_password_hash(user.password_hash, data['password']):
-        token = jwt.encode({
-            'user_id': user.id,
-            'exp': datetime.datetime.utcnow() + datetime.timedelta(days=7)
-        }, app.config['JWT_SECRET_KEY'], algorithm='HS256')
-        return jsonify({
-            "token": token, 
-            "user": {
-                "id": user.id, 
-                "username": user.username, 
-                "phone": user.phone,
-                "avatar": user.avatar,
-                "publicKey": user.public_key
-            }
-        })
-    return jsonify({"error": "Invalid credentials"}), 401
+    try:
+        data = request.json
+        phone = data['phone'].strip()
+        # Login with phone
+        user = User.query.filter_by(phone=phone).first()
+        if user and check_password_hash(user.password_hash, data['password']):
+            token = jwt.encode({
+                'user_id': user.id,
+                'exp': datetime.datetime.utcnow() + datetime.timedelta(days=7)
+            }, app.config['JWT_SECRET_KEY'], algorithm='HS256')
+            return jsonify({
+                "token": token, 
+                "user": {
+                    "id": user.id, 
+                    "username": user.username, 
+                    "phone": user.phone,
+                    "avatar": user.avatar,
+                    "publicKey": user.public_key
+                }
+            }), 200
+        return jsonify({"error": "Invalid credentials"}), 401
+    except Exception as e:
+        print(f"Login Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route('/api/users', methods=['GET'])
 def get_users():

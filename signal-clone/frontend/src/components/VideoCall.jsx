@@ -1,198 +1,261 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
-import Peer from 'peerjs';
 import { SocketContext } from '../context/SocketContext';
 import { AuthContext } from '../context/AuthContext';
-import { PhoneIcon, VideoCameraIcon, XMarkIcon } from '@heroicons/react/24/solid';
+import { PhoneIcon, VideoCameraIcon, VideoCameraSlashIcon, XMarkIcon, MicrophoneIcon, SpeakerXMarkIcon } from '@heroicons/react/24/solid';
 
 const VideoCallModal = ({ activeChat, onClose }) => {
     const { socket } = useContext(SocketContext);
     const { user } = useContext(AuthContext);
 
-    const [stream, setStream] = useState(null);
-    const [remoteStream, setRemoteStream] = useState(null);
-    const [callStatus, setCallStatus] = useState('idle'); // idle, calling, receiving, connected
-    const [peerId, setPeerId] = useState('');
-    const [incomingCall, setIncomingCall] = useState(null); // { signal, from, name }
+    const [myStream, setMyStream] = useState(null);
+    const [peers, setPeers] = useState({}); // { [socketId]: { stream, user, pc } }
+    const peersRef = useRef({});
 
     const myVideoRef = useRef();
-    const remoteVideoRef = useRef();
-    const peerRef = useRef();
+
+    // State for controls
+    const [isMuted, setIsMuted] = useState(false);
+    const [isVideoOff, setIsVideoOff] = useState(false);
 
     useEffect(() => {
-        // Initialize Peer
-        // In real app, reuse the peer connection
-        const peer = new Peer(undefined, {
-            // host: '/', port: 3001 // if running own peer server
-        });
-        peerRef.current = peer;
+        peersRef.current = peers;
+    }, [peers]);
 
-        peer.on('open', (id) => {
-            setPeerId(id);
-            // We don't really need to send this to server if we use socket signaling entirely
-            // But if we used PeerJS server properly, we'd exchange peerIDs.
-            // Here we use simplified socket signaling to transport "Offer/Answer" data manually or let PeerJS do it?
-            // "WebRTC peerjs for simulation" -> PeerJS simplifies it.
-            // It expects peer.connect(peerID).
-            // But we don't know the remote peerID unless we exchange it via socket.
-        });
+    useEffect(() => {
+        const initCall = async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                setMyStream(stream);
+                if (myVideoRef.current) myVideoRef.current.srcObject = stream;
 
-        peer.on('call', (call) => {
-            // Incoming call via PeerJS (if we knew ID)
-            // But since we want to handle signaling manually for learning or robust custom logic:
-            // Actually, PeerJS handles signaling if we just exchange IDs.
-            // Let's use the socket events 'call_user' to Just send the PeerID!
+                // Join the call room
+                socket.emit('join_call', { chatId: activeChat.id, userId: user.id });
 
-            navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((currentStream) => {
-                setStream(currentStream);
-                if (myVideoRef.current) myVideoRef.current.srcObject = currentStream;
-
-                call.answer(currentStream);
-
-                call.on('stream', (userVideoStream) => {
-                    setRemoteStream(userVideoStream);
-                    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = userVideoStream;
+                // Socket Listeners
+                socket.on('user_joined_call', (data) => {
+                    // data: { userId, socketId }
+                    // Existing user initiates call to new user
+                    createPeer(data.socketId, data.userId, stream, true);
                 });
-                setCallStatus('connected');
-            });
-        });
 
-        // Socket listeners for manual signaling of PeerIDs
-        socket.on('call_made', (data) => {
-            // Received a call intent
-            // data contains: signal (PeerID of caller), from, name
-            setIncomingCall(data);
-            setCallStatus('receiving');
-        });
+                socket.on('user_left_call', (data) => {
+                    removePeer(data.socketId);
+                });
+
+                socket.on('offer', async (data) => {
+                    // Received Offer: create peer (not initiator) and answer
+                    // data: { offer, from (userId), fromSocket }
+                    const pc = createPeer(data.fromSocket, data.from, stream, false);
+                    await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+                    socket.emit('answer', { to: data.fromSocket, answer, from: user.id, fromSocket: socket.id });
+                });
+
+                socket.on('answer', async (data) => {
+                    // Received Answer
+                    // data: { answer, fromSocket }
+                    const peerObj = peersRef.current[data.fromSocket];
+                    if (peerObj && peerObj.pc) {
+                        await peerObj.pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+                    }
+                });
+
+                socket.on('ice_candidate', async (data) => {
+                    const peerObj = peersRef.current[data.fromSocket];
+                    if (peerObj && peerObj.pc && data.candidate) {
+                        try {
+                            await peerObj.pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                        } catch (e) {
+                            console.error("Error adding ice candidate", e);
+                        }
+                    }
+                });
+
+            } catch (err) {
+                console.error("Failed to get media", err);
+                alert("Could not access camera/microphone. Please allow permissions.");
+                onClose();
+            }
+        };
+
+        if (activeChat?.id) {
+            initCall();
+        }
 
         return () => {
-            peer.destroy();
-            socket.off('call_made');
-            if (stream) stream.getTracks().forEach(track => track.stop());
+            socket.emit('leave_call', { chatId: activeChat?.id, userId: user?.id });
+
+            // Cleanup peers
+            Object.values(peersRef.current).forEach(p => {
+                if (p.pc) p.pc.close();
+            });
+            if (myStream) {
+                myStream.getTracks().forEach(t => t.stop());
+            }
+
+            socket.off('user_joined_call');
+            socket.off('user_left_call');
+            socket.off('offer');
+            socket.off('answer');
+            socket.off('ice_candidate');
+        };
+    }, [activeChat?.id]);
+
+    const createPeer = (remoteSocketId, remoteUserId, stream, isInitiator) => {
+        if (peersRef.current[remoteSocketId]) return peersRef.current[remoteSocketId].pc;
+
+        const pc = new RTCPeerConnection({
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        });
+
+        pc.onicecandidate = (event) => {
+            if (event.candidate) {
+                socket.emit('ice_candidate', {
+                    to: remoteSocketId,
+                    candidate: event.candidate,
+                    fromSocket: socket.id
+                });
+            }
+        };
+
+        pc.ontrack = (event) => {
+            setPeers(prev => ({
+                ...prev,
+                [remoteSocketId]: {
+                    ...prev[remoteSocketId],
+                    stream: event.streams[0]
+                }
+            }));
+        };
+
+        stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+        // Add to state immediately
+        // We might not know username yet? We can fetch or pass it. 
+        // For now, simplify and show "User <id>" or ideally backend sends map.
+        // Let's assume we can map userId to username from activeChat participants
+        const remoteParticipant = activeChat.participants.find(p => p.id === remoteUserId);
+        const username = remoteParticipant ? remoteParticipant.username : `User ${remoteUserId}`;
+
+        setPeers(prev => ({
+            ...prev,
+            [remoteSocketId]: {
+                pc,
+                stream: null, // Will be set in ontrack
+                user: { username }
+            }
+        }));
+
+        if (isInitiator) {
+            pc.onnegotiationneeded = async () => {
+                try {
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    socket.emit('offer', {
+                        to: remoteSocketId,
+                        offer: pc.localDescription,
+                        from: user.id,
+                        fromSocket: socket.id
+                    });
+                } catch (e) {
+                    console.error(e);
+                }
+            };
         }
-    }, [socket]);
 
-    const startCall = () => {
-        setCallStatus('calling');
-        navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((currentStream) => {
-            setStream(currentStream);
-            if (myVideoRef.current) myVideoRef.current.srcObject = currentStream;
-
-            // Tell the other user to call us? Or we call them?
-            // With PeerJS, if I have their ID, I call them.
-            // I don't have their ID.
-            // So I send MY ID to them via Socket. They use it to call me? Or I wait for them to send theirs?
-            // Standard Pattern: I send my PeerID to them via Socket. They Call Me.
-            // OR: I wait for their PeerID?
-            // Simpler: I send "call_user" with my PeerID. They receive it and `peer.call(myPeerID, stream)`.
-            // Wait, standard is Caller calls Callee.
-            // Caller needs Callee's PeerID.
-            // So Callee must have sent it to server? Or we exchange on connect?
-
-            // Simplest for now: Broadcast PeerID on "call_user".
-            // But `peer.call` takes an ID. 
-            // Let's assume we send our ID. The RECEIVER calls us back? No that's reverse.
-            // Let's assume we exchange IDs.
-
-            // Let's change strategy: We use PeerJS automatic ID generation.
-            // We send OUR ID to the recipient via socket `call_user`.
-            // The RECIPIENT receives `call_made` with OUR ID.
-            // The RECIPIENT calls US? (Reverse calling?)
-            // OR The RECIPIENT accepts, sends their ID back, and WE call THEM?
-
-            // Let's go with: Caller sends intent. Recipient sends "I am ready, here is my ID". Caller calls.
-            // OR: Both join a room?
-
-            // EASIEST: Caller gets media. Caller emits 'call_user' with { from: socketId, name, ... }.
-            // Recipient answers. Recipient emits 'answer_call'.
-            // This is for SimplePeer (manual signaling). PeerJS wraps this.
-
-            // If using PeerJS:
-            // 1. We need the OTHER person's PeerJS ID.
-            // 2. Since we don't store it in DB, we must message them "Hey what's your PeerID?"
-            // 3. Or we just use Short-lived Socket signaling to Manual Signal.
-
-            // Let's use SimplePeer logic conceptually but with PeerJS events?
-            // No, let's just use manual signaling with `simple-peer` library would be easier for "custom" signaling.
-            // But prompt said "WebRTC peerjs".
-
-            // Okay, PeerJS Flow:
-            // Both users have a random PeerID.
-            // 1. Caller: emits `call_request` via socket to Callee.
-            // 2. Callee: receives `call_request`, emits `call_accepted` with THEIR PeerID.
-            // 3. Caller: receives `call_accepted`, calls `peer.call(CalleeID, stream)`.
-            // 4. Callee: receives `peer.on('call')`, answers.
-
-            socket.emit('call_user', {
-                to: activeChat.participants.find(p => p.id !== user.id).id,
-                signalData: peerId, // We send OUR ID initially just in case (or just specific msg)
-                from: user.id,
-                name: user.username
-            });
-        });
+        return pc;
     };
 
-    const answerCall = () => {
-        // incomingCall.signal is the CALLER's PeerID.
-        // We can call them! 
-        setCallStatus('connected');
-        navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((currentStream) => {
-            setStream(currentStream);
-            if (myVideoRef.current) myVideoRef.current.srcObject = currentStream;
 
-            // We call the caller using their ID we received
-            const call = peerRef.current.call(incomingCall.signal, currentStream);
-
-            call.on('stream', (remoteStream) => {
-                setRemoteStream(remoteStream);
-                if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
+    const toggleAudio = () => {
+        if (myStream) {
+            const newMutedState = !isMuted;
+            setIsMuted(newMutedState);
+            myStream.getAudioTracks().forEach(track => {
+                track.enabled = !newMutedState;
             });
-        });
+        }
     };
 
-    if (callStatus === 'idle' && !activeChat) return null;
+    const toggleVideo = () => {
+        if (myStream) {
+            const newVideoState = !isVideoOff;
+            setIsVideoOff(newVideoState);
+            myStream.getVideoTracks().forEach(track => {
+                track.enabled = !newVideoState;
+            });
+        }
+    };
 
-    // Minimal UI
     return (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-            <div className="bg-gray-900 p-4 rounded-2xl w-full max-w-2xl relative">
-                <button onClick={onClose} className="absolute top-2 right-2 text-white"><XMarkIcon className="w-6 h-6" /></button>
+        <div className="fixed inset-0 bg-black/90 z-50 flex flex-col p-4">
+            <div className="flex justify-between items-center mb-4 text-white">
+                <h2 className="text-xl font-bold">Group Call: {activeChat.name}</h2>
+                <button onClick={onClose} className="bg-red-600 hover:bg-red-700 p-2 rounded-full">
+                    <XMarkIcon className="w-6 h-6" />
+                </button>
+            </div>
 
-                <h2 className="text-white text-center mb-4">
-                    {callStatus === 'idle' ? 'Start Call' :
-                        callStatus === 'calling' ? 'Calling...' :
-                            callStatus === 'receiving' ? `Incoming Call from ${incomingCall?.name}` : 'Connected'}
-                </h2>
-
-                <div className="flex justify-center gap-4 h-[60dvh] md:h-96 relative bg-black rounded-xl overflow-hidden">
-                    {/* Remote Video */}
-                    {remoteStream && (
-                        <video ref={remoteVideoRef} autoPlay className="w-full h-full object-cover" />
-                    )}
-                    {/* My Video (PiP) */}
-                    <div className="absolute bottom-4 right-4 w-32 h-48 bg-gray-800 rounded-lg overflow-hidden border-2 border-white">
-                        <video ref={myVideoRef} autoPlay muted className="w-full h-full object-cover" />
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto">
+                {/* My Video */}
+                <div className="relative bg-gray-800 rounded-xl overflow-hidden aspect-video border-2 border-green-500">
+                    <video ref={myVideoRef} muted autoPlay playsInline className={`w-full h-full object-cover ${isVideoOff ? 'hidden' : ''}`} />
+                    {isVideoOff && <div className="absolute inset-0 flex items-center justify-center text-white bg-gray-900">Video Off</div>}
+                    <div className="absolute bottom-2 left-2 bg-black/50 px-2 py-1 rounded text-white text-sm flex items-center gap-2">
+                        You {isMuted && <span className="text-red-500 flex items-center"><SpeakerXMarkIcon className="w-3 h-3 mr-1" /> Muted</span>}
                     </div>
                 </div>
 
-                <div className="flex justify-center gap-4 mt-4">
-                    {callStatus === 'idle' && (
-                        <button onClick={startCall} className="bg-green-600 p-4 rounded-full text-white">
-                            <VideoCameraIcon className="w-6 h-6" />
-                        </button>
-                    )}
+                {/* Remote Peers */}
+                {Object.entries(peers).map(([id, peerData]) => (
+                    <VideoPlayer key={id} stream={peerData.stream} user={peerData.user} />
+                ))}
+            </div>
 
-                    {callStatus === 'receiving' && (
-                        <button onClick={answerCall} className="bg-green-600 p-4 rounded-full text-white animate-pulse">
-                            <PhoneIcon className="w-6 h-6" />
-                        </button>
-                    )}
+            <div className="mt-4 flex justify-center gap-4">
+                <button
+                    onClick={toggleAudio}
+                    className={`p-4 rounded-full text-white transition-colors ${isMuted ? 'bg-red-600' : 'bg-gray-700 hover:bg-gray-600'}`}
+                    title={isMuted ? "Unmute" : "Mute"}
+                >
+                    {isMuted ? <SpeakerXMarkIcon className="w-6 h-6 text-white" /> : <MicrophoneIcon className="w-6 h-6" />}
+                </button>
+                <button
+                    onClick={toggleVideo}
+                    className={`p-4 rounded-full text-white transition-colors ${isVideoOff ? 'bg-red-600' : 'bg-gray-700 hover:bg-gray-600'}`}
+                    title={isVideoOff ? "Turn Video On" : "Turn Video Off"}
+                >
+                    {isVideoOff ? <VideoCameraSlashIcon className="w-6 h-6 text-white" /> : <VideoCameraIcon className="w-6 h-6" />}
+                </button>
+            </div>
+        </div>
+    );
+};
 
-                    {(callStatus === 'connected' || callStatus === 'calling' || callStatus === 'receiving') && (
-                        <button onClick={onClose} className="bg-red-600 p-4 rounded-full text-white">
-                            <PhoneIcon className="w-6 h-6 transform rotate-[135deg]" />
-                        </button>
-                    )}
-                </div>
+// Helper component for video
+const VideoPlayer = ({ stream, user }) => {
+    const videoRef = useRef();
+
+    useEffect(() => {
+        if (videoRef.current && stream) {
+            videoRef.current.srcObject = stream;
+        }
+    }, [stream]);
+
+    return (
+        <div className="relative bg-gray-800 rounded-xl overflow-hidden aspect-video">
+            {stream ? (
+                <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+            ) : (
+                <div className="w-full h-full flex items-center justify-center text-gray-500">Connecting...</div>
+            )}
+
+            <div className="absolute bottom-2 left-2 bg-black/50 px-2 py-1 rounded text-white text-sm">
+                {user ? user.username : 'Unknown'}
             </div>
         </div>
     );

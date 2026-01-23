@@ -199,6 +199,8 @@ def get_messages(chat_id):
         "ttl": m.ttl
     } for m in messages])
 
+from werkzeug.utils import secure_filename
+
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
     if 'file' not in request.files:
@@ -207,10 +209,12 @@ def upload_file():
     if file.filename == '':
         return jsonify({"error": "No selection"}), 400
     
-    filename = str(int(datetime.datetime.utcnow().timestamp())) + "_" + file.filename
-    file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-    # Correct URL pointing to port 5001
-    return jsonify({"url": f"http://localhost:5001/uploads/{filename}"}) 
+    filename = secure_filename(file.filename)
+    unique_filename = str(int(datetime.datetime.utcnow().timestamp())) + "_" + filename
+    file.save(os.path.join(app.config['UPLOAD_FOLDER'], unique_filename))
+    
+    # Return relative URL so frontend proxy handles it (avoids CORS)
+    return jsonify({"url": f"/uploads/{unique_filename}"}) 
 
 # --- Socket Events ---
 @socketio.on('join_room')
@@ -241,26 +245,48 @@ def on_message(data):
         "chatId": data['chatId']
     }, room=data['chatId'])
 
-# --- WebRTC Signaling ---
-@socketio.on('call_user')
-def on_call_user(data):
-    # data: { to (userId), signalData, from (userId), name }
-    emit('call_made', {
-        "signal": data['signalData'],
-        "from": data['from'],
-        "name": data['name']
-    }, room=f"user_{data['to']}")
+# --- WebRTC Signaling (Mesh Manual) ---
+@socketio.on('join_call')
+def on_join_call(data):
+    # data: { chatId, userId }
+    room = f"call_{data['chatId']}"
+    join_room(room)
+    # Notify others in the room that a new user joined, so they can initiate offers
+    # We send the sender's info so they can connect
+    emit('user_joined_call', { "userId": data['userId'], "socketId": request.sid }, room=room, include_self=False)
 
-@socketio.on('answer_call')
-def on_answer_call(data):
-    # data: { to (userId), signal }
-    emit('call_answered', {
-        "signal": data['signal']
-    }, room=f"user_{data['to']}")
+@socketio.on('leave_call')
+def on_leave_call(data):
+    room = f"call_{data['chatId']}"
+    leave_room(room)
+    # Notify others to cleanup
+    emit('user_left_call', { "userId": data.get('userId'), "socketId": request.sid }, room=room, include_self=False)
+
+@socketio.on('offer')
+def on_offer(data):
+    # data: { to (socketId), offer, from (userId), fromSocket }
+    emit('offer', data, room=data['to'])
+
+@socketio.on('answer')
+def on_answer(data):
+    # data: { to (socketId), answer, from (userId), fromSocket }
+    emit('answer', data, room=data['to'])
 
 @socketio.on('ice_candidate')
 def on_ice_candidate(data):
-    emit('ice_candidate', data, room=f"user_{data['to']}")
+    # data: { to (socketId), candidate, from... }
+    emit('ice_candidate', data, room=data['to'])
+
+@socketio.on('notify_ring')
+def on_notify_ring(data):
+    # data: { chatId, callerName, participants: [id1, id2...], callerId }
+    for uid in data['participants']:
+        if uid != data['callerId']:
+            emit('incoming_call', {
+                "chatId": data['chatId'],
+                "callerName": data['callerName'],
+                "callerId": data['callerId']
+            }, room=f"user_{uid}")
 
 
 # --- Serve React App ---
@@ -270,7 +296,10 @@ def serve(path):
     if path != "" and os.path.exists(app.static_folder + '/' + path):
         return send_from_directory(app.static_folder, path)
     else:
-        return send_from_directory(app.static_folder, 'index.html')
+        if os.path.exists(os.path.join(app.static_folder, 'index.html')):
+            return send_from_directory(app.static_folder, 'index.html')
+        else:
+            return "Signal Clone Backend Running. Use port 3000 for Frontend (Development Mode)", 200
 
 
 if __name__ == '__main__':

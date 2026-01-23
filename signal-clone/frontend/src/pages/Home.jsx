@@ -5,11 +5,10 @@ import { SocketContext } from '../context/SocketContext';
 import ContactList from '../components/ContactList';
 import ChatBubble from '../components/ChatBubble';
 import MessageInput from '../components/MessageInput';
+import IncomingCallModal from '../components/IncomingCallModal';
 import VideoCallModal from '../components/VideoCall';
-import { decryptMessage, encryptMessage, importPublicKey } from '../utils/encryption';
-import { useEncryption } from '../hooks/useEncryption';
-import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, EllipsisVerticalIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { useNavigate } from 'react-router-dom';
+import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, EllipsisVerticalIcon, PlusIcon } from '@heroicons/react/24/outline';
 
 const Home = () => {
     const { user, token, logout } = useContext(AuthContext);
@@ -21,6 +20,13 @@ const Home = () => {
     const [messages, setMessages] = useState([]);
     const [loadingChats, setLoadingChats] = useState(true);
     const [showCallModal, setShowCallModal] = useState(false);
+    const [incomingCall, setIncomingCall] = useState(null); // { chatId, callerName, callerId }
+
+    // Search Modal States
+    const [showSearchModal, setShowSearchModal] = useState(false);
+    const [searchPhone, setSearchPhone] = useState('');
+    const [searchedUser, setSearchedUser] = useState(null);
+    const [searchError, setSearchError] = useState('');
 
     // Non-Encrypted Ref
     const messagesEndRef = useRef(null);
@@ -44,9 +50,17 @@ const Home = () => {
     useEffect(() => {
         if (!socket) return;
 
-        // Listen for call requests to auto-show modal
-        socket.on('call_made', (data) => {
-            setShowCallModal(true);
+        if (user) {
+            socket.emit('join_room', { room: 'global', userId: user.id });
+        }
+
+        // Listen for Incoming Call Ring
+        socket.on('incoming_call', (data) => {
+            // data: { chatId, callerName, callerId }
+            // Only show if not already in a call
+            if (!showCallModal) {
+                setIncomingCall(data);
+            }
         });
 
         socket.on('receive_message', async (newMsg) => {
@@ -66,9 +80,9 @@ const Home = () => {
 
         return () => {
             socket.off('receive_message');
-            socket.off('call_made');
+            socket.off('incoming_call');
         };
-    }, [socket, activeChat]);
+    }, [socket, activeChat, showCallModal]);
 
     useEffect(() => {
         const fetchMessages = async () => {
@@ -78,7 +92,6 @@ const Home = () => {
                     headers: { Authorization: `Bearer ${token}` }
                 });
 
-                // No decryption needed, just show plain content
                 setMessages(res.data);
                 scrollToBottom();
 
@@ -111,15 +124,13 @@ const Home = () => {
         socket.emit('send_message', {
             chatId: activeChat.id,
             senderId: user.id,
-            content: text, // Plain text content
+            content: text,
             type,
             ttl: 0
         });
     };
 
     const handleUpload = async (file) => {
-        // 5GB limit check (roughly usually handled by server, but good for UI)
-        // file.size is in bytes. 5GB = 5 * 1024 * 1024 * 1024
         const maxSize = 5 * 1024 * 1024 * 1024;
         if (file.size > maxSize) {
             alert("File is too large (Max 5GB)");
@@ -129,14 +140,9 @@ const Home = () => {
         const formData = new FormData();
         formData.append('file', file);
         try {
-            // Set timeout to 0 (no timeout) or very large for big files
             const res = await axios.post('/api/upload', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
                 timeout: 3600000,
-                onUploadProgress: (progressEvent) => {
-                    const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-                    console.log(`Upload Progress: ${percentCompleted}%`);
-                }
             });
 
             const url = res.data.url;
@@ -150,11 +156,6 @@ const Home = () => {
             alert("Upload failed: " + (err.response?.statusText || err.message));
         }
     };
-
-    const [showSearchModal, setShowSearchModal] = useState(false);
-    const [searchPhone, setSearchPhone] = useState('');
-    const [searchedUser, setSearchedUser] = useState(null);
-    const [searchError, setSearchError] = useState('');
 
     const handleSearchUser = async (e) => {
         e.preventDefault();
@@ -173,28 +174,51 @@ const Home = () => {
         }
     };
 
-    const startChat = async () => {
-        if (!searchedUser) return;
-        try {
-            await axios.post('/api/chats/create', {
-                participants: [user.id, searchedUser.id]
-            });
-            setShowSearchModal(false);
-            setSearchedUser(null);
-            setSearchPhone('');
-            // Refresh chats
-            const res = await axios.get('/api/chats', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setChats(res.data);
-        } catch (err) {
-            alert("Error creating chat");
+    const startVideoCall = () => {
+        if (!activeChat) return;
+
+        // Notify others
+        socket.emit('notify_ring', {
+            chatId: activeChat.id,
+            callerName: user.username,
+            callerId: user.id,
+            participants: activeChat.participants.map(p => p.id)
+        });
+
+        setShowCallModal(true);
+    };
+
+    const acceptCall = () => {
+        // incomingCall: { chatId, callerName, callerId }
+        // We might need to switch active chat to the calling chat if different
+        if (incomingCall) {
+            const chat = chats.find(c => c.id === incomingCall.chatId);
+            if (chat) {
+                setActiveChat(chat);
+                setShowCallModal(true);
+            }
+            setIncomingCall(null);
         }
     };
 
+    const rejectCall = () => {
+        setIncomingCall(null);
+    };
+
+    // ... (startChat)
+
     return (
         <div className="flex h-[100dvh] bg-signal-bg overflow-hidden text-gray-100 font-sans relative">
+            {incomingCall && (
+                <IncomingCallModal
+                    callerName={incomingCall.callerName}
+                    onAccept={acceptCall}
+                    onReject={rejectCall}
+                />
+            )}
+
             {showCallModal && <VideoCallModal activeChat={activeChat} onClose={() => setShowCallModal(false)} />}
+
 
             {showSearchModal && (
                 <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
@@ -298,8 +322,8 @@ const Home = () => {
                             </div>
                         </div>
                         <div className="flex gap-4 text-signal-accent">
-                            <button onClick={() => setShowCallModal(true)}><PhoneIcon className="w-6 h-6" /></button>
-                            <button onClick={() => setShowCallModal(true)}><VideoCameraIcon className="w-6 h-6" /></button>
+                            <button onClick={startVideoCall}><PhoneIcon className="w-6 h-6" /></button>
+                            <button onClick={startVideoCall}><VideoCameraIcon className="w-6 h-6" /></button>
                         </div>
                     </div>
 

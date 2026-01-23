@@ -38,6 +38,13 @@ const Home = () => {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 setChats(res.data);
+
+                // Restore active chat if exists in storage
+                const savedChatId = localStorage.getItem('activeChatId');
+                if (savedChatId) {
+                    const found = res.data.find(c => c.id === parseInt(savedChatId));
+                    if (found) setActiveChat(found);
+                }
             } catch (err) {
                 console.error(err);
             } finally {
@@ -46,6 +53,13 @@ const Home = () => {
         };
         if (token) fetchChats();
     }, [token]);
+
+    // Persist active chat logic
+    useEffect(() => {
+        if (activeChat) {
+            localStorage.setItem('activeChatId', activeChat.id);
+        }
+    }, [activeChat]);
 
     useEffect(() => {
         if (!socket) return;
@@ -308,7 +322,7 @@ const Home = () => {
                     {/* Chat Header */}
                     <div className="h-16 bg-signal-bg border-b border-gray-800 flex items-center justify-between px-4">
                         <div className="flex items-center gap-3">
-                            <button onClick={() => setActiveChat(null)} className="md:hidden p-2 -ml-2">
+                            <button onClick={() => { setActiveChat(null); localStorage.removeItem('activeChatId'); }} className="md:hidden p-2 -ml-2">
                                 <ArrowLeftIcon className="w-6 h-6 text-gray-300" />
                             </button>
                             <img

@@ -8,10 +8,13 @@ import MessageInput from '../components/MessageInput';
 import IncomingCallModal from '../components/IncomingCallModal';
 import VideoCallModal from '../components/VideoCall';
 import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon } from '@heroicons/react/24/outline';
+import { useEncryption } from '../hooks/useEncryption';
+import { decryptEnvelope, encryptForRecipients, isEncryptedPayload } from '../utils/encryption';
 
 const Home = () => {
     const { user, token, logout, updateUser } = useContext(AuthContext);
     const { socket } = useContext(SocketContext);
+    const { privateKey, publicKey } = useEncryption(user, token);
 
     const [chats, setChats] = useState([]);
     const [activeChat, setActiveChat] = useState(null);
@@ -37,24 +40,54 @@ const Home = () => {
             const res = await axios.get('/api/chats', {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setChats(res.data);
+            const normalizedChats = await Promise.all(res.data.map(async chat => {
+                let lastMessageContent = chat.lastMessage.content;
+                if (isEncryptedPayload(lastMessageContent)) {
+                    lastMessageContent = privateKey && user
+                        ? await decryptEnvelope(privateKey, user.id, lastMessageContent)
+                        : 'Encrypted message';
+                }
+
+                return {
+                    ...chat,
+                    lastMessage: {
+                        ...chat.lastMessage,
+                        content: lastMessageContent
+                    }
+                };
+            }));
+            setChats(normalizedChats);
 
             if (restoreActive) {
                 const savedChatId = localStorage.getItem('activeChatId');
                 if (savedChatId) {
-                    const found = res.data.find(c => c.id === parseInt(savedChatId, 10));
+                    const found = normalizedChats.find(c => c.id === parseInt(savedChatId, 10));
                     if (found) setActiveChat(found);
                 }
             }
 
-            return res.data;
+            return normalizedChats;
         } catch (err) {
             console.error(err);
             return [];
         } finally {
             setLoadingChats(false);
         }
-    }, [token]);
+    }, [token, privateKey, user]);
+
+    const decryptMessageForCurrentUser = useCallback(async (message) => {
+        if (!privateKey || !user) return message;
+
+        return {
+            ...message,
+            encryptedContent: isEncryptedPayload(message.content),
+            content: await decryptEnvelope(privateKey, user.id, message.content)
+        };
+    }, [privateKey, user]);
+
+    const decryptMessagesForCurrentUser = useCallback(async (incomingMessages) => {
+        return Promise.all(incomingMessages.map(decryptMessageForCurrentUser));
+    }, [decryptMessageForCurrentUser]);
 
     useEffect(() => {
         if (token) fetchChats({ restoreActive: true });
@@ -84,23 +117,25 @@ const Home = () => {
         });
 
         socket.on('receive_message', async (newMsg) => {
-            if (activeChat && newMsg.chatId === activeChat.id) {
+            const readableMsg = await decryptMessageForCurrentUser(newMsg);
+
+            if (activeChat && readableMsg.chatId === activeChat.id) {
                 // Direct message content, no decryption
                 setMessages(prev => {
-                    if (prev.some(message => message.id === newMsg.id)) return prev;
-                    return [...prev, newMsg];
+                    if (prev.some(message => message.id === readableMsg.id)) return prev;
+                    return [...prev, readableMsg];
                 });
                 scrollToBottom();
             }
 
-            if (!chats.some(chat => chat.id === newMsg.chatId)) {
+            if (!chats.some(chat => chat.id === readableMsg.chatId)) {
                 fetchChats();
                 return;
             }
 
             setChats(prev => prev.map(c => {
-                if (c.id === newMsg.chatId) {
-                    return { ...c, lastMessage: { ...c.lastMessage, content: newMsg.type === 'text' ? newMsg.content : newMsg.type, timestamp: newMsg.timestamp } };
+                if (c.id === readableMsg.chatId) {
+                    return { ...c, lastMessage: { ...c.lastMessage, content: readableMsg.type === 'text' ? readableMsg.content : readableMsg.type, timestamp: readableMsg.timestamp } };
                 }
                 return c;
             }));
@@ -158,7 +193,7 @@ const Home = () => {
             socket.off('presence_update');
             socket.off('user_profile_updated');
         };
-    }, [socket, activeChat, showCallModal, chats, fetchChats]);
+    }, [socket, activeChat, showCallModal, chats, fetchChats, decryptMessageForCurrentUser]);
 
     useEffect(() => {
         const fetchMessages = async () => {
@@ -168,7 +203,7 @@ const Home = () => {
                     headers: { Authorization: `Bearer ${token}` }
                 });
 
-                setMessages(res.data);
+                setMessages(await decryptMessagesForCurrentUser(res.data));
                 scrollToBottom();
 
                 socket?.emit('join_room', { room: activeChat.id });
@@ -177,7 +212,7 @@ const Home = () => {
             }
         };
         fetchMessages();
-    }, [activeChat, token, socket]);
+    }, [activeChat, token, socket, decryptMessagesForCurrentUser]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -186,10 +221,31 @@ const Home = () => {
     const handleSendMessage = async (text, type = 'text') => {
         if (!activeChat || !socket) return;
 
+        if (!privateKey || !publicKey) {
+            alert("Encryption keys are still loading. Please try again in a moment.");
+            return;
+        }
+
+        const recipientPublicKeys = {};
+        for (const participant of activeChat.participants) {
+            const participantPublicKey = participant.id === user.id
+                ? publicKey
+                : participant.publicKey;
+
+            if (!participantPublicKey) {
+                alert(`${participant.username} does not have an encryption key yet. Ask them to login once, then try again.`);
+                return;
+            }
+
+            recipientPublicKeys[participant.id] = participantPublicKey;
+        }
+
+        const encryptedContent = await encryptForRecipients(recipientPublicKeys, text);
+
         socket.emit('send_message', {
             chatId: activeChat.id,
             senderId: user.id,
-            content: text,
+            content: encryptedContent,
             type,
             ttl: 0
         });

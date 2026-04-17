@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: chietchat
+    env: python
+    rootDir: signal-clone
+    buildCommand: ./render-build.sh
+    startCommand: gunicorn --worker-class eventlet -w 1 --chdir backend wsgi:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: FLASK_DEBUG
+        value: "0"
+

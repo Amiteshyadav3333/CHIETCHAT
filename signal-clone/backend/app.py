@@ -7,8 +7,13 @@ from flask_cors import CORS
 from sqlalchemy import inspect, text
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-from config import Config
-from models import db, User, Chat, ChatParticipant, Message
+
+try:
+    from .config import Config
+    from .models import db, User, Chat, ChatParticipant, Message
+except ImportError:
+    from config import Config
+    from models import db, User, Chat, ChatParticipant, Message
 
 app = Flask(__name__, static_folder='static')
 app.config.from_object(Config)
@@ -27,8 +32,8 @@ with app.app_context():
     if 'user' in inspector.get_table_names():
         user_columns = [column['name'] for column in inspector.get_columns('user')]
         if 'last_seen' not in user_columns:
-            db.session.execute(text('ALTER TABLE user ADD COLUMN last_seen DATETIME'))
-            db.session.execute(text('UPDATE user SET last_seen = created_at WHERE last_seen IS NULL'))
+            db.session.execute(text('ALTER TABLE "user" ADD COLUMN last_seen TIMESTAMP'))
+            db.session.execute(text('UPDATE "user" SET last_seen = created_at WHERE last_seen IS NULL'))
             db.session.commit()
 
 
@@ -180,6 +185,34 @@ def login():
         return jsonify({"error": "Invalid credentials"}), 401
     except Exception as e:
         print(f"Login Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/forgot-password', methods=['POST'])
+def forgot_password():
+    try:
+        data = get_json_data()
+        phone = (data.get('phone') or '').strip()
+        username = (data.get('username') or '').strip()
+        new_password = data.get('newPassword') or ''
+
+        if not phone or not username or not new_password:
+            return jsonify({"error": "Phone, username, and new password are required"}), 400
+
+        if len(new_password) < 6:
+            return jsonify({"error": "Password must be at least 6 characters"}), 400
+
+        user = User.query.filter_by(phone=phone).first()
+        if not user or user.username.strip().lower() != username.lower():
+            return jsonify({"error": "No account matched this phone and username"}), 404
+
+        user.password_hash = generate_password_hash(new_password)
+        user.last_seen = utc_now()
+        db.session.commit()
+
+        return jsonify({"message": "Password reset successfully. Please login with your new password."}), 200
+    except Exception as e:
+        print(f"Forgot Password Error: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -560,4 +593,6 @@ def serve(path):
 
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True, port=5001)
+    port = int(os.environ.get('PORT', 5001))
+    debug = os.environ.get('FLASK_DEBUG') == '1'
+    socketio.run(app, host='0.0.0.0', port=port, debug=debug)

@@ -1,6 +1,25 @@
 import React from 'react';
 
-const ContactList = ({ chats, activeChat, onSelectChat }) => {
+const ContactList = ({ chats, activeChat, onSelectChat, loading }) => {
+    if (loading) {
+        return (
+            <div className="flex-1 flex items-center justify-center text-sm text-gray-500">
+                Loading chats...
+            </div>
+        );
+    }
+
+    const formatStatus = (chat) => {
+        if (chat.isGroup) return chat.lastMessage.content;
+
+        const otherParticipant = chat.participants?.find(participant => participant.username === chat.name);
+        if (otherParticipant?.isOnline) return 'Online';
+        if (!otherParticipant?.lastSeen) return chat.lastMessage.content;
+
+        const lastSeenDate = new Date(otherParticipant.lastSeen);
+        return `Last seen ${lastSeenDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    };
+
     return (
         <div className="flex flex-col overflow-y-auto h-full space-y-1">
             {chats.map(chat => (
@@ -19,7 +38,7 @@ const ContactList = ({ chats, activeChat, onSelectChat }) => {
                             className="w-12 h-12 rounded-full object-cover"
                         />
                         {/* Online Indicator simulation */}
-                        <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-signal-bg"></div>
+                        <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-signal-bg ${chat.participants?.some(participant => participant.username === chat.name && participant.isOnline) ? 'bg-green-500' : 'bg-gray-500'}`}></div>
                     </div>
 
                     <div className="ml-3 flex-1 overflow-hidden">
@@ -32,7 +51,7 @@ const ContactList = ({ chats, activeChat, onSelectChat }) => {
                             )}
                         </div>
                         <p className="text-sm text-gray-400 truncate">
-                            {chat.lastMessage.content}
+                            {formatStatus(chat)}
                         </p>
                     </div>
                 </div>

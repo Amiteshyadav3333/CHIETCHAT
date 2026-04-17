@@ -13,7 +13,7 @@ export const SocketProvider = ({ children }) => {
             // We can pass token in auth object
             const url = import.meta.env.VITE_API_URL || '/';
             const newSocket = io(url, {
-                auth: { error: 'e' } // placeholder, actual key passing usually needed
+                auth: { token }
             });
             setSocket(newSocket);
 

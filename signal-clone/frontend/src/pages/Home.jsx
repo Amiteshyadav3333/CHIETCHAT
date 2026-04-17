@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useRef } from 'react';
+import React, { useState, useEffect, useContext, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import { SocketContext } from '../context/SocketContext';
@@ -7,13 +7,11 @@ import ChatBubble from '../components/ChatBubble';
 import MessageInput from '../components/MessageInput';
 import IncomingCallModal from '../components/IncomingCallModal';
 import VideoCallModal from '../components/VideoCall';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, EllipsisVerticalIcon, PlusIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon } from '@heroicons/react/24/outline';
 
 const Home = () => {
-    const { user, token, logout } = useContext(AuthContext);
+    const { user, token, logout, updateUser } = useContext(AuthContext);
     const { socket } = useContext(SocketContext);
-    const navigate = useNavigate();
 
     const [chats, setChats] = useState([]);
     const [activeChat, setActiveChat] = useState(null);
@@ -30,29 +28,37 @@ const Home = () => {
 
     // Non-Encrypted Ref
     const messagesEndRef = useRef(null);
+    const avatarInputRef = useRef(null);
 
-    useEffect(() => {
-        const fetchChats = async () => {
-            try {
-                const res = await axios.get('/api/chats', {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                setChats(res.data);
+    const fetchChats = useCallback(async ({ restoreActive = false } = {}) => {
+        if (!token) return [];
 
-                // Restore active chat if exists in storage
+        try {
+            const res = await axios.get('/api/chats', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setChats(res.data);
+
+            if (restoreActive) {
                 const savedChatId = localStorage.getItem('activeChatId');
                 if (savedChatId) {
-                    const found = res.data.find(c => c.id === parseInt(savedChatId));
+                    const found = res.data.find(c => c.id === parseInt(savedChatId, 10));
                     if (found) setActiveChat(found);
                 }
-            } catch (err) {
-                console.error(err);
-            } finally {
-                setLoadingChats(false);
             }
-        };
-        if (token) fetchChats();
+
+            return res.data;
+        } catch (err) {
+            console.error(err);
+            return [];
+        } finally {
+            setLoadingChats(false);
+        }
     }, [token]);
+
+    useEffect(() => {
+        if (token) fetchChats({ restoreActive: true });
+    }, [token, fetchChats]);
 
     // Persist active chat logic
     useEffect(() => {
@@ -80,8 +86,16 @@ const Home = () => {
         socket.on('receive_message', async (newMsg) => {
             if (activeChat && newMsg.chatId === activeChat.id) {
                 // Direct message content, no decryption
-                setMessages(prev => [...prev, newMsg]);
+                setMessages(prev => {
+                    if (prev.some(message => message.id === newMsg.id)) return prev;
+                    return [...prev, newMsg];
+                });
                 scrollToBottom();
+            }
+
+            if (!chats.some(chat => chat.id === newMsg.chatId)) {
+                fetchChats();
+                return;
             }
 
             setChats(prev => prev.map(c => {
@@ -92,11 +106,59 @@ const Home = () => {
             }));
         });
 
+        socket.on('presence_update', ({ userId, isOnline, lastSeen }) => {
+            setChats(prev => prev.map(chat => ({
+                ...chat,
+                participants: chat.participants.map(participant =>
+                    participant.id === userId
+                        ? { ...participant, isOnline, lastSeen }
+                        : participant
+                )
+            })));
+
+            setActiveChat(prev => prev ? {
+                ...prev,
+                participants: prev.participants.map(participant =>
+                    participant.id === userId
+                        ? { ...participant, isOnline, lastSeen }
+                        : participant
+                )
+            } : prev);
+        });
+
+        socket.on('user_profile_updated', ({ user: updatedUser }) => {
+            setChats(prev => prev.map(chat => ({
+                ...chat,
+                avatar: !chat.isGroup && chat.participants.some(participant => participant.id === updatedUser.id)
+                    ? updatedUser.avatar
+                    : chat.avatar,
+                participants: chat.participants.map(participant =>
+                    participant.id === updatedUser.id
+                        ? { ...participant, ...updatedUser }
+                        : participant
+                )
+            })));
+
+            setActiveChat(prev => prev ? {
+                ...prev,
+                avatar: !prev.isGroup && prev.participants.some(participant => participant.id === updatedUser.id)
+                    ? updatedUser.avatar
+                    : prev.avatar,
+                participants: prev.participants.map(participant =>
+                    participant.id === updatedUser.id
+                        ? { ...participant, ...updatedUser }
+                        : participant
+                )
+            } : prev);
+        });
+
         return () => {
             socket.off('receive_message');
             socket.off('incoming_call');
+            socket.off('presence_update');
+            socket.off('user_profile_updated');
         };
-    }, [socket, activeChat, showCallModal]);
+    }, [socket, activeChat, showCallModal, chats, fetchChats]);
 
     useEffect(() => {
         const fetchMessages = async () => {
@@ -109,7 +171,7 @@ const Home = () => {
                 setMessages(res.data);
                 scrollToBottom();
 
-                socket.emit('join_room', { room: activeChat.id });
+                socket?.emit('join_room', { room: activeChat.id });
             } catch (err) {
                 console.error(err);
             }
@@ -122,18 +184,7 @@ const Home = () => {
     };
 
     const handleSendMessage = async (text, type = 'text') => {
-        if (!activeChat) return;
-
-        // Send Plain Text
-        const tempMsg = {
-            id: Date.now(),
-            senderId: user.id,
-            content: text,
-            type,
-            timestamp: new Date().toISOString()
-        };
-        setMessages(prev => [...prev, tempMsg]);
-        scrollToBottom();
+        if (!activeChat || !socket) return;
 
         socket.emit('send_message', {
             chatId: activeChat.id,
@@ -155,14 +206,18 @@ const Home = () => {
         formData.append('file', file);
         try {
             const res = await axios.post('/api/upload', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                    Authorization: `Bearer ${token}`
+                },
                 timeout: 3600000,
             });
 
             const url = res.data.url;
             let type = 'file';
-            if (url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) type = 'image';
-            else if (url.match(/\.(mp4|webm|ogg)$/i)) type = 'video';
+            if (file.type.startsWith('image/') || url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) type = 'image';
+            else if (file.type.startsWith('audio/') || url.match(/\.(mp3|wav|m4a|aac|oga)$/i)) type = 'audio';
+            else if (file.type.startsWith('video/') || url.match(/\.(mp4|webm|ogg)$/i)) type = 'video';
 
             handleSendMessage(url, type);
         } catch (err) {
@@ -189,7 +244,7 @@ const Home = () => {
     };
 
     const startVideoCall = () => {
-        if (!activeChat) return;
+        if (!activeChat || !socket) return;
 
         // Notify others
         socket.emit('notify_ring', {
@@ -219,7 +274,96 @@ const Home = () => {
         setIncomingCall(null);
     };
 
-    // ... (startChat)
+    const startChat = async () => {
+        if (!searchedUser || !user || !token) return;
+
+        const existingChat = chats.find(chat =>
+            !chat.isGroup &&
+            chat.participants?.some(participant => participant.id === searchedUser.id)
+        );
+
+        if (existingChat) {
+            setActiveChat(existingChat);
+            setShowSearchModal(false);
+            setSearchPhone('');
+            setSearchedUser(null);
+            return;
+        }
+
+        try {
+            const res = await axios.post('/api/chats/create', {
+                participants: [user.id, searchedUser.id],
+                isGroup: false
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            const updatedChats = await fetchChats();
+            const newChat = updatedChats.find(chat => chat.id === res.data.id);
+            if (newChat) setActiveChat(newChat);
+
+            setShowSearchModal(false);
+            setSearchPhone('');
+            setSearchedUser(null);
+        } catch (err) {
+            console.error(err);
+            setSearchError(err.response?.data?.error || "Could not start chat");
+        }
+    };
+
+    const handleAvatarChange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('avatar', file);
+
+        try {
+            const res = await axios.post('/api/user/avatar', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                    Authorization: `Bearer ${token}`
+                }
+            });
+            updateUser(res.data.user);
+            await fetchChats();
+        } catch (err) {
+            console.error(err);
+            alert(err.response?.data?.error || "Could not update profile photo");
+        } finally {
+            e.target.value = '';
+        }
+    };
+
+    const getOtherParticipant = (chat) => {
+        if (!chat || chat.isGroup) return null;
+        return chat.participants.find(participant => participant.id !== user?.id) || null;
+    };
+
+    const formatLastSeen = (lastSeen) => {
+        if (!lastSeen) return "last seen recently";
+
+        const date = new Date(lastSeen);
+        const today = new Date();
+        const isToday = date.toDateString() === today.toDateString();
+
+        if (isToday) {
+            return `last seen today at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        }
+
+        return `last seen ${date.toLocaleDateString([], { day: 'numeric', month: 'short' })} at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    };
+
+    const getChatStatus = (chat) => {
+        const otherParticipant = getOtherParticipant(chat);
+        if (!otherParticipant) return "Tap to open chat";
+        if (otherParticipant.isOnline) return "Online";
+        return formatLastSeen(otherParticipant.lastSeen);
+    };
+
+    const visibleActiveChat = activeChat
+        ? chats.find(chat => chat.id === activeChat.id) || activeChat
+        : null;
 
     return (
         <div className="flex h-[100dvh] bg-signal-bg overflow-hidden text-gray-100 font-sans relative">
@@ -295,8 +439,28 @@ const Home = () => {
                 {/* Header */}
                 <div className="p-4 bg-signal-secondary flex justify-between items-center shadow-md z-10">
                     <div className="flex items-center gap-3">
-                        <img src={user?.avatar} alt="me" className="w-10 h-10 rounded-full" />
-                        <h2 className="font-bold">{user?.username}</h2>
+                        <button
+                            type="button"
+                            onClick={() => avatarInputRef.current?.click()}
+                            className="relative group"
+                            title="Change profile photo"
+                        >
+                            <img src={user?.avatar} alt="me" className="w-10 h-10 rounded-full object-cover" />
+                            <span className="absolute inset-0 hidden group-hover:flex items-center justify-center rounded-full bg-black/60 text-[10px] text-white">
+                                Edit
+                            </span>
+                        </button>
+                        <input
+                            ref={avatarInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={handleAvatarChange}
+                            className="hidden"
+                        />
+                        <div>
+                            <h2 className="font-bold">{user?.username}</h2>
+                            <p className="text-xs text-green-500">Online</p>
+                        </div>
                     </div>
                     <div className="flex gap-2">
                         <button onClick={() => setShowSearchModal(true)} className="p-2 hover:bg-gray-700 rounded-full" title="New Chat">
@@ -313,11 +477,12 @@ const Home = () => {
                     chats={chats}
                     activeChat={activeChat}
                     onSelectChat={setActiveChat}
+                    loading={loadingChats}
                 />
             </div>
 
             {/* Chat Room */}
-            {activeChat ? (
+            {visibleActiveChat ? (
                 <div className={`flex-1 flex flex-col h-full bg-black/50 ${activeChat ? 'flex' : 'hidden md:flex'}`}>
                     {/* Chat Header */}
                     <div className="h-16 bg-signal-bg border-b border-gray-800 flex items-center justify-between px-4">
@@ -326,13 +491,15 @@ const Home = () => {
                                 <ArrowLeftIcon className="w-6 h-6 text-gray-300" />
                             </button>
                             <img
-                                src={activeChat.avatar || `https://ui-avatars.com/api/?name=${activeChat.name}`}
+                                src={visibleActiveChat.avatar || `https://ui-avatars.com/api/?name=${visibleActiveChat.name}`}
                                 className="w-10 h-10 rounded-full"
                                 alt=""
                             />
                             <div>
-                                <h3 className="font-bold text-sm md:text-base">{activeChat.name}</h3>
-                                <p className="text-xs text-green-500">Connected</p>
+                                <h3 className="font-bold text-sm md:text-base">{visibleActiveChat.name}</h3>
+                                <p className={`text-xs ${getOtherParticipant(visibleActiveChat)?.isOnline ? 'text-green-500' : 'text-gray-400'}`}>
+                                    {getChatStatus(visibleActiveChat)}
+                                </p>
                             </div>
                         </div>
                         <div className="flex gap-4 text-signal-accent">
@@ -348,7 +515,7 @@ const Home = () => {
                                 key={idx}
                                 message={msg}
                                 isOwn={msg.senderId === user.id}
-                                senderName={activeChat.participants.find(p => p.id === msg.senderId)?.username}
+                                senderName={visibleActiveChat.participants.find(p => p.id === msg.senderId)?.username}
                             />
                         ))}
                         <div ref={messagesEndRef} />

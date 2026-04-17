@@ -10,6 +10,7 @@ const VideoCallModal = ({ activeChat, onClose }) => {
     const [myStream, setMyStream] = useState(null);
     const [peers, setPeers] = useState({}); // { [socketId]: { stream, user, pc } }
     const peersRef = useRef({});
+    const myStreamRef = useRef(null);
 
     const myVideoRef = useRef();
 
@@ -26,6 +27,7 @@ const VideoCallModal = ({ activeChat, onClose }) => {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 setMyStream(stream);
+                myStreamRef.current = stream;
                 if (myVideoRef.current) myVideoRef.current.srcObject = stream;
 
                 // Join the call room
@@ -90,8 +92,9 @@ const VideoCallModal = ({ activeChat, onClose }) => {
             Object.values(peersRef.current).forEach(p => {
                 if (p.pc) p.pc.close();
             });
-            if (myStream) {
-                myStream.getTracks().forEach(t => t.stop());
+            if (myStreamRef.current) {
+                myStreamRef.current.getTracks().forEach(t => t.stop());
+                myStreamRef.current = null;
             }
 
             socket.off('user_joined_call');
@@ -170,6 +173,18 @@ const VideoCallModal = ({ activeChat, onClose }) => {
         return pc;
     };
 
+    const removePeer = (socketId) => {
+        const peer = peersRef.current[socketId];
+        if (peer?.pc) peer.pc.close();
+
+        setPeers(prev => {
+            const next = { ...prev };
+            delete next[socketId];
+            return next;
+        });
+
+        delete peersRef.current[socketId];
+    };
 
     const toggleAudio = () => {
         if (myStream) {

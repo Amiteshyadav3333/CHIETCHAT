@@ -1,6 +1,8 @@
 import os
 from datetime import timedelta
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'super-secret-signal-key-change-this'
     # Production DB (PostgreSQL) or Local DB (SQLite)
@@ -13,5 +15,5 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'jwt-secret-key-change-this'
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=7)
-    UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads')
+    UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024 * 1024  # 16 GB max upload

@@ -19,6 +19,8 @@ const ChatBubble = ({ message, isOwn, senderName }) => {
 
                 {message.type === 'image' || message.content.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
                     <img src={message.content} alt="sent" className="rounded-lg max-h-60 object-cover shadow-sm cursor-pointer" onClick={() => window.open(message.content, '_blank')} />
+                ) : message.type === 'audio' || message.content.match(/\.(mp3|wav|m4a|aac|oga)$/i) ? (
+                    <audio controls src={message.content} className="max-w-full" />
                 ) : message.type === 'video' || message.content.match(/\.(mp4|webm|ogg)$/i) ? (
                     <video controls src={message.content} className="rounded-lg max-h-60 shadow-sm" />
                 ) : message.type === 'file' || message.content.startsWith('http') ? (

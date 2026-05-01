@@ -10,8 +10,8 @@ export const useEncryption = (user, token) => {
         const initKeys = async () => {
             if (!user) return;
 
-            const storageKeyPriv = `privKey_${user.username}`;
-            const storageKeyPub = `pubKey_${user.username}`;
+            const storageKeyPriv = `privKey_${user.phone}`;
+            const storageKeyPub = `pubKey_${user.phone}`;
 
             const storedPriv = localStorage.getItem(storageKeyPriv);
             const storedPub = localStorage.getItem(storageKeyPub);

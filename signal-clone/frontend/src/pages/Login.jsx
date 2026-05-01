@@ -38,9 +38,9 @@ const Login = () => {
                     publicKey: keys.publicKeyString
                 });
 
-                // Save keys locally so we can decrypt later
-                localStorage.setItem(`privKey_${cleanUsername}`, keys.privateKeyString);
-                localStorage.setItem(`pubKey_${cleanUsername}`, keys.publicKeyString);
+                // Save keys locally keyed by phone (stable unique identifier)
+                localStorage.setItem(`privKey_${cleanPhone}`, keys.privateKeyString);
+                localStorage.setItem(`pubKey_${cleanPhone}`, keys.publicKeyString);
 
                 alert('Account created! Please login.');
                 setMode('login');

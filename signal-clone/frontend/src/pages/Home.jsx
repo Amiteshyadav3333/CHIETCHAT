@@ -32,6 +32,13 @@ const Home = () => {
     // Non-Encrypted Ref
     const messagesEndRef = useRef(null);
     const avatarInputRef = useRef(null);
+    const activeChatRef = useRef(activeChat);
+    const chatsRef = useRef(chats);
+    const showCallModalRef = useRef(showCallModal);
+
+    useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
+    useEffect(() => { chatsRef.current = chats; }, [chats]);
+    useEffect(() => { showCallModalRef.current = showCallModal; }, [showCallModal]);
 
     const fetchChats = useCallback(async ({ restoreActive = false } = {}) => {
         if (!token) return [];
@@ -107,11 +114,8 @@ const Home = () => {
             socket.emit('join_room', { room: 'global', userId: user.id });
         }
 
-        // Listen for Incoming Call Ring
         socket.on('incoming_call', (data) => {
-            // data: { chatId, callerName, callerId }
-            // Only show if not already in a call
-            if (!showCallModal) {
+            if (!showCallModalRef.current) {
                 setIncomingCall(data);
             }
         });
@@ -119,8 +123,7 @@ const Home = () => {
         socket.on('receive_message', async (newMsg) => {
             const readableMsg = await decryptMessageForCurrentUser(newMsg);
 
-            if (activeChat && readableMsg.chatId === activeChat.id) {
-                // Direct message content, no decryption
+            if (activeChatRef.current && readableMsg.chatId === activeChatRef.current.id) {
                 setMessages(prev => {
                     if (prev.some(message => message.id === readableMsg.id)) return prev;
                     return [...prev, readableMsg];
@@ -128,7 +131,7 @@ const Home = () => {
                 scrollToBottom();
             }
 
-            if (!chats.some(chat => chat.id === readableMsg.chatId)) {
+            if (!chatsRef.current.some(chat => chat.id === readableMsg.chatId)) {
                 fetchChats();
                 return;
             }
@@ -193,11 +196,11 @@ const Home = () => {
             socket.off('presence_update');
             socket.off('user_profile_updated');
         };
-    }, [socket, activeChat, showCallModal, chats, fetchChats, decryptMessageForCurrentUser]);
+    }, [socket, user, fetchChats, decryptMessageForCurrentUser]);
 
     useEffect(() => {
         const fetchMessages = async () => {
-            if (!activeChat) return;
+            if (!activeChat || !privateKey) return;
             try {
                 const res = await axios.get(`/api/chats/${activeChat.id}/messages`, {
                     headers: { Authorization: `Bearer ${token}` }
@@ -212,7 +215,7 @@ const Home = () => {
             }
         };
         fetchMessages();
-    }, [activeChat, token, socket, decryptMessagesForCurrentUser]);
+    }, [activeChat?.id, token, socket, privateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

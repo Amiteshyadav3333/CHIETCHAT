@@ -74,7 +74,7 @@ def decode_socket_user_id(auth):
 
 
 def utc_now():
-    return datetime.datetime.utcnow()
+    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
 
 
 def iso_utc(dt):
@@ -118,17 +118,6 @@ def emit_to_user_chat_contacts(user_id, event, payload):
 
 
 # --- Auth Routes (Phone Based) ---
-# --- Debug Route (For fixing DB schema) ---
-@app.route('/api/debug/reset_db', methods=['GET'])
-def reset_db():
-    try:
-        with app.app_context():
-            db.drop_all()
-            db.create_all()
-        return jsonify({"message": "Database reset successfully. Schema updated."}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 @app.route('/api/register', methods=['POST'])
 def register():
     try:
@@ -176,7 +165,7 @@ def login():
 
             token = jwt.encode({
                 'user_id': user.id,
-                'exp': datetime.datetime.utcnow() + datetime.timedelta(days=7)
+                'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)
             }, app.config['JWT_SECRET_KEY'], algorithm='HS256')
             return jsonify({
                 "token": token, 

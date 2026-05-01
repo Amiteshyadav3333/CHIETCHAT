@@ -17,20 +17,20 @@ const ChatBubble = ({ message, isOwn, senderName }) => {
                     </p>
                 )}
 
-                {message.type === 'image' || message.content.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                {message.type === 'image' || (message.content && message.content.match(/\.(jpg|jpeg|png|gif|webp)$/i)) ? (
                     <img src={message.content} alt="sent" className="rounded-lg max-h-60 object-cover shadow-sm cursor-pointer" onClick={() => window.open(message.content, '_blank')} />
-                ) : message.type === 'audio' || message.content.match(/\.(mp3|wav|m4a|aac|oga)$/i) ? (
+                ) : message.type === 'audio' || (message.content && message.content.match(/\.(mp3|wav|m4a|aac|oga)$/i)) ? (
                     <audio controls src={message.content} className="max-w-full" />
-                ) : message.type === 'video' || message.content.match(/\.(mp4|webm|ogg)$/i) ? (
+                ) : message.type === 'video' || (message.content && message.content.match(/\.(mp4|webm|ogg)$/i)) ? (
                     <video controls src={message.content} className="rounded-lg max-h-60 shadow-sm" />
-                ) : message.type === 'file' || message.content.startsWith('http') ? (
+                ) : message.type === 'file' || (message.content && message.content.startsWith('http')) ? (
                     <a href={message.content} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-blue-300 hover:text-blue-100 underline decoration-dotted">
                         📎 Attachment
                     </a>
                 ) : (
                     <div className="flex items-center gap-2">
                         <p className="break-words text-sm md:text-base">
-                            {message.content}
+                            {message.content || ''}
                         </p>
                     </div>
                 )}

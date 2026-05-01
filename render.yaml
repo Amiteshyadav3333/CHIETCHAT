@@ -1,9 +1,3 @@
-databases:
-  - name: chietchat-db
-    databaseName: chietchat
-    user: chietchat
-    region: oregon
-
 services:
   - type: web
     name: chietchat

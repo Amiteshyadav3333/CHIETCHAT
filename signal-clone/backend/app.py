@@ -19,8 +19,16 @@ except ImportError:
 
 app = Flask(__name__, static_folder='static')
 app.config.from_object(Config)
-CORS(app, resources={r"/*": {"origins": "*"}})
-socketio = SocketIO(app, cors_allowed_origins="*")
+CORS(app, resources={r"/*": {"origins": [
+    "http://localhost:3000",
+    "https://chietchat.vercel.app",
+    "https://chietchat.onrender.com"
+]}}, supports_credentials=True)
+socketio = SocketIO(app, cors_allowed_origins=[
+    "http://localhost:3000",
+    "https://chietchat.vercel.app",
+    "https://chietchat.onrender.com"
+])
 db.init_app(app)
 socket_users = {}
 user_connection_counts = {}

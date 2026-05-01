@@ -21,6 +21,23 @@ app = Flask(__name__, static_folder='static')
 app.config.from_object(Config)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=False)
 socketio = SocketIO(app, cors_allowed_origins="*")
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    return response
+
+@app.before_request
+def handle_options():
+    if request.method == 'OPTIONS':
+        from flask import Response
+        res = Response()
+        res.headers['Access-Control-Allow-Origin'] = '*'
+        res.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        res.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        return res, 200
 db.init_app(app)
 socket_users = {}
 user_connection_counts = {}

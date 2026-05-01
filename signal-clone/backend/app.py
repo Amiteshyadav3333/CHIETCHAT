@@ -21,12 +21,12 @@ app = Flask(__name__, static_folder='static')
 app.config.from_object(Config)
 CORS(app, resources={r"/*": {"origins": [
     "http://localhost:3000",
-    "https://chietchat.vercel.app",
+    "https://chat.indiasearch.site",
     "https://chietchat.onrender.com"
 ]}}, supports_credentials=True)
 socketio = SocketIO(app, cors_allowed_origins=[
     "http://localhost:3000",
-    "https://chietchat.vercel.app",
+    "https://chat.indiasearch.site",
     "https://chietchat.onrender.com"
 ])
 db.init_app(app)

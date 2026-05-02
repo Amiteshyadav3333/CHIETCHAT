@@ -44,6 +44,10 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
                 socket.on('user_left_call', (data) => {
                     removePeer(data.socketId);
                     setParticipantCount(c => Math.max(1, c - 1));
+                    // Agar sirf 2 log the (1-on-1 call) toh dono side band karo
+                    if (Object.keys(peersRef.current).length === 0) {
+                        onClose();
+                    }
                 });
 
                 socket.on('offer', async (data) => {
@@ -67,6 +71,11 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
                     }
                 });
 
+                // Agar koi bhi call cut kare toh sab band
+                socket.on('call_ended', () => {
+                    onClose();
+                });
+
             } catch (err) {
                 console.error(err);
                 alert('Could not access microphone/camera. Please allow permissions.');
@@ -87,6 +96,7 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
             socket.off('offer');
             socket.off('answer');
             socket.off('ice_candidate');
+            socket.off('call_ended');
         };
     }, [activeChat?.id]);
 

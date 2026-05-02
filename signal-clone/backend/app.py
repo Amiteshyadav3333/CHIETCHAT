@@ -559,6 +559,8 @@ def on_leave_call(data):
     room = f"call_{data['chatId']}"
     leave_room(room)
     emit('user_left_call', {"userId": data.get('userId'), "socketId": request.sid}, room=room, include_self=False)
+    # Agar caller ne call cut ki toh baaki sabko bhi band karo
+    emit('call_ended', {"userId": data.get('userId')}, room=room, include_self=False)
 
 
 @socketio.on('offer')

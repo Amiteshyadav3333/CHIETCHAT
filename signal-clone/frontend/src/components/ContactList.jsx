@@ -1,4 +1,5 @@
 import React from 'react';
+import AvatarZoom from './AvatarZoom';
 
 const ContactList = ({ chats, activeChat, onSelectChat, loading }) => {
     if (loading) {
@@ -32,12 +33,11 @@ const ContactList = ({ chats, activeChat, onSelectChat, loading }) => {
                         }`}
                 >
                     <div className="relative">
-                        <img
-                            src={chat.avatar || `https://ui-avatars.com/api/?name=${chat.name}&background=random`}
-                            alt={chat.name}
-                            className="w-12 h-12 rounded-full object-cover"
+                        <AvatarZoom
+                            src={chat.avatar || null}
+                            name={chat.name}
+                            size="w-12 h-12"
                         />
-                        {/* Online Indicator simulation */}
                         <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-signal-bg ${chat.participants?.some(participant => participant.username === chat.name && participant.isOnline) ? 'bg-green-500' : 'bg-gray-500'}`}></div>
                     </div>
 

@@ -7,6 +7,7 @@ import ChatBubble from '../components/ChatBubble';
 import MessageInput from '../components/MessageInput';
 import IncomingCallModal from '../components/IncomingCallModal';
 import VideoCallModal from '../components/VideoCall';
+import AvatarZoom from '../components/AvatarZoom';
 import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { useEncryption } from '../hooks/useEncryption';
 import { decryptEnvelope, encryptForRecipients, isEncryptedPayload } from '../utils/encryption';
@@ -514,8 +515,8 @@ const Home = () => {
                             className="relative group"
                             title="Change profile photo"
                         >
-                            <img src={user?.avatar} alt="me" className="w-10 h-10 rounded-full object-cover" />
-                            <span className="absolute inset-0 hidden group-hover:flex items-center justify-center rounded-full bg-black/60 text-[10px] text-white">
+                            <AvatarZoom src={user?.avatar} name={user?.username} size="w-10 h-10" />
+                            <span className="absolute inset-0 hidden group-hover:flex items-center justify-center rounded-full bg-black/60 text-[10px] text-white pointer-events-none">
                                 Edit
                             </span>
                         </button>
@@ -559,10 +560,10 @@ const Home = () => {
                             <button onClick={() => { setActiveChat(null); localStorage.removeItem('activeChatId'); }} className="md:hidden p-2 -ml-2">
                                 <ArrowLeftIcon className="w-6 h-6 text-gray-300" />
                             </button>
-                            <img
-                                src={visibleActiveChat.avatar || `https://ui-avatars.com/api/?name=${visibleActiveChat.name}`}
-                                className="w-10 h-10 rounded-full"
-                                alt=""
+                            <AvatarZoom
+                                src={visibleActiveChat.avatar || null}
+                                name={visibleActiveChat.name}
+                                size="w-10 h-10"
                             />
                             <div>
                                 <h3 className="font-bold text-sm md:text-base">{visibleActiveChat.name}</h3>

@@ -43,9 +43,23 @@ class Message(db.Model):
 
     sender = db.relationship('User')
 
-class Story(db.Model):
+class Status(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    content = db.Column(db.String(500), nullable=False)
-    timestamp = db.Column(db.DateTime, default=utc_now)
+    media_url = db.Column(db.String(500), nullable=False)
+    media_type = db.Column(db.String(20), default='image')  # image | video
+    caption = db.Column(db.String(300), nullable=True)
+    music_url = db.Column(db.String(500), nullable=True)
+    music_name = db.Column(db.String(200), nullable=True)
+    duration = db.Column(db.Integer, default=15)  # seconds, max 15
+    expires_at = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now)
     user = db.relationship('User')
+    views = db.relationship('StatusView', backref='status', lazy=True, cascade='all, delete-orphan')
+
+class StatusView(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    status_id = db.Column(db.Integer, db.ForeignKey('status.id'), nullable=False)
+    viewer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    viewed_at = db.Column(db.DateTime, default=utc_now)
+    viewer = db.relationship('User')

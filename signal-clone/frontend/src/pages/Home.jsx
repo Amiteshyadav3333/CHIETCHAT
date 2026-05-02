@@ -8,6 +8,7 @@ import MessageInput from '../components/MessageInput';
 import IncomingCallModal from '../components/IncomingCallModal';
 import VideoCallModal from '../components/VideoCall';
 import AvatarZoom from '../components/AvatarZoom';
+import StatusSection from '../components/StatusSection';
 import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { useEncryption } from '../hooks/useEncryption';
 import { decryptEnvelope, encryptForRecipients, isEncryptedPayload } from '../utils/encryption';
@@ -541,6 +542,7 @@ const Home = () => {
                 </div>
 
                 {/* Contacts */}
+                <StatusSection user={user} token={token} />
                 <ContactList
                     chats={chats}
                     activeChat={activeChat}

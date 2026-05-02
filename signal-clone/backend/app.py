@@ -414,6 +414,24 @@ def get_messages(chat_id):
     } for m in messages])
 
 
+@app.route('/api/messages/<int:message_id>', methods=['DELETE'])
+def delete_message(message_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    message = Message.query.get(message_id)
+    if not message:
+        return jsonify({"error": "Message not found"}), 404
+
+    if message.sender_id != user_id:
+        return jsonify({"error": "Forbidden"}), 403
+
+    db.session.delete(message)
+    db.session.commit()
+    return jsonify({"message": "Deleted"}), 200
+
+
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
     user_id = get_current_user_id()
@@ -565,7 +583,8 @@ def on_notify_ring(data):
             emit('incoming_call', {
                 "chatId": data['chatId'],
                 "callerName": data['callerName'],
-                "callerId": data['callerId']
+                "callerId": data['callerId'],
+                "callType": data.get('callType', 'video')
             }, room=f"user_{uid}")
 
 

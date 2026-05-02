@@ -21,6 +21,7 @@ const Home = () => {
     const [messages, setMessages] = useState([]);
     const [loadingChats, setLoadingChats] = useState(true);
     const [showCallModal, setShowCallModal] = useState(false);
+    const [callType, setCallType] = useState('video');
     const [incomingCall, setIncomingCall] = useState(null); // { chatId, callerName, callerId }
 
     // Search Modal States
@@ -302,27 +303,36 @@ const Home = () => {
         }
     };
 
-    const startVideoCall = () => {
+    const startCall = (type = 'video') => {
         if (!activeChat || !socket) return;
-
-        // Notify others
+        setCallType(type);
         socket.emit('notify_ring', {
             chatId: activeChat.id,
             callerName: user.username,
             callerId: user.id,
-            participants: activeChat.participants.map(p => p.id)
+            participants: activeChat.participants.map(p => p.id),
+            callType: type
         });
-
         setShowCallModal(true);
     };
 
+    const handleDeleteMessage = async (messageId) => {
+        try {
+            await axios.delete(`/api/messages/${messageId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setMessages(prev => prev.filter(m => m.id !== messageId));
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
     const acceptCall = () => {
-        // incomingCall: { chatId, callerName, callerId }
-        // We might need to switch active chat to the calling chat if different
         if (incomingCall) {
             const chat = chats.find(c => c.id === incomingCall.chatId);
             if (chat) {
                 setActiveChat(chat);
+                setCallType(incomingCall.callType || 'video');
                 setShowCallModal(true);
             }
             setIncomingCall(null);
@@ -434,7 +444,7 @@ const Home = () => {
                 />
             )}
 
-            {showCallModal && <VideoCallModal activeChat={activeChat} onClose={() => setShowCallModal(false)} />}
+            {showCallModal && <VideoCallModal activeChat={activeChat} onClose={() => setShowCallModal(false)} callType={callType} />}
 
 
             {showSearchModal && (
@@ -562,8 +572,8 @@ const Home = () => {
                             </div>
                         </div>
                         <div className="flex gap-4 text-signal-accent">
-                            <button onClick={startVideoCall}><PhoneIcon className="w-6 h-6" /></button>
-                            <button onClick={startVideoCall}><VideoCameraIcon className="w-6 h-6" /></button>
+                            <button onClick={() => startCall('voice')} title="Voice Call"><PhoneIcon className="w-6 h-6" /></button>
+                            <button onClick={() => startCall('video')} title="Video Call"><VideoCameraIcon className="w-6 h-6" /></button>
                         </div>
                     </div>
 
@@ -575,6 +585,7 @@ const Home = () => {
                                 message={msg}
                                 isOwn={msg.senderId === user.id}
                                 senderName={visibleActiveChat.participants.find(p => p.id === msg.senderId)?.username}
+                                onDelete={handleDeleteMessage}
                             />
                         ))}
                         <div ref={messagesEndRef} />

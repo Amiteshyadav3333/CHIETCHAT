@@ -509,17 +509,15 @@ const Home = () => {
                 {/* Header */}
                 <div className="p-4 bg-signal-secondary flex justify-between items-center shadow-md z-10">
                     <div className="flex items-center gap-3">
-                        <button
-                            type="button"
-                            onClick={() => avatarInputRef.current?.click()}
-                            className="relative group"
-                            title="Change profile photo"
-                        >
+                        <div className="relative group cursor-pointer" title="Change profile photo">
                             <AvatarZoom src={user?.avatar} name={user?.username} size="w-10 h-10" />
-                            <span className="absolute inset-0 hidden group-hover:flex items-center justify-center rounded-full bg-black/60 text-[10px] text-white pointer-events-none">
+                            <span
+                                onClick={() => avatarInputRef.current?.click()}
+                                className="absolute inset-0 hidden group-hover:flex items-center justify-center rounded-full bg-black/60 text-[10px] text-white z-10 cursor-pointer"
+                            >
                                 Edit
                             </span>
-                        </button>
+                        </div>
                         <input
                             ref={avatarInputRef}
                             type="file"

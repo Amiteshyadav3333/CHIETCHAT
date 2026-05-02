@@ -1,9 +1,15 @@
 import React, { useState } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/solid';
 
-const AvatarZoom = ({ src, name, size = 'w-10 h-10', className = '' }) => {
+const AvatarZoom = ({ src, name, size = 'w-10 h-10', className = '', onClick }) => {
     const [open, setOpen] = useState(false);
     const fallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(name || '?')}&background=random&size=256`;
+
+    const handleClick = (e) => {
+        e.stopPropagation();
+        if (onClick) { onClick(e); return; }
+        setOpen(true);
+    };
 
     return (
         <>
@@ -11,7 +17,7 @@ const AvatarZoom = ({ src, name, size = 'w-10 h-10', className = '' }) => {
                 src={src || fallback}
                 alt={name}
                 className={`${size} rounded-full object-cover cursor-pointer hover:opacity-90 transition-opacity ${className}`}
-                onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+                onClick={handleClick}
             />
 
             {open && (

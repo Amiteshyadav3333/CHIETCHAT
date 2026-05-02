@@ -3,7 +3,7 @@ import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import { SocketContext } from '../context/SocketContext';
 import ContactList from '../components/ContactList';
-import ChatBubble from '../components/ChatBubble';
+import ChatBubble, { DateSeparator } from '../components/ChatBubble';
 import MessageInput from '../components/MessageInput';
 import IncomingCallModal from '../components/IncomingCallModal';
 import VideoCallModal from '../components/VideoCall';
@@ -583,17 +583,36 @@ const Home = () => {
                         </div>
                     </div>
 
-                    {/* Messages Area */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[url('https://adrianh.com/assets/images/signal-bg.png')] bg-repeat bg-contain bg-opacity-5">
-                        {messages.map((msg, idx) => (
-                            <ChatBubble
-                                key={idx}
-                                message={msg}
-                                isOwn={msg.senderId === user.id}
-                                senderName={visibleActiveChat.participants.find(p => p.id === msg.senderId)?.username}
-                                onDelete={handleDeleteMessage}
-                            />
-                        ))}
+                    {/* Messages Area - WhatsApp style background */}
+                    <div
+                        className="flex-1 overflow-y-auto px-4 py-3 space-y-0.5"
+                        style={{ background: 'linear-gradient(to bottom, #0b141a, #0d1b22)' }}
+                    >
+                        {messages.map((msg, idx) => {
+                            const prevMsg = messages[idx - 1];
+                            const currDate = new Date(msg.timestamp).toDateString();
+                            const prevDate = prevMsg ? new Date(prevMsg.timestamp).toDateString() : null;
+                            const showDate = currDate !== prevDate;
+
+                            const prevSenderId = prevMsg?.senderId;
+                            const showAvatar = !msg.senderId === user.id && prevSenderId !== msg.senderId;
+
+                            const sender = visibleActiveChat.participants.find(p => p.id === msg.senderId);
+
+                            return (
+                                <React.Fragment key={msg.id || idx}>
+                                    {showDate && <DateSeparator date={msg.timestamp} />}
+                                    <ChatBubble
+                                        message={msg}
+                                        isOwn={msg.senderId === user.id}
+                                        senderName={visibleActiveChat.isGroup ? sender?.username : null}
+                                        senderAvatar={sender?.avatar}
+                                        showAvatar={showAvatar || prevSenderId !== msg.senderId}
+                                        onDelete={handleDeleteMessage}
+                                    />
+                                </React.Fragment>
+                            );
+                        })}
                         <div ref={messagesEndRef} />
                     </div>
 

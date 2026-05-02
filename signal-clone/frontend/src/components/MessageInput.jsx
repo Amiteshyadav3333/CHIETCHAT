@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { PaperAirplaneIcon, PhotoIcon, FaceSmileIcon, MicrophoneIcon, StopIcon } from '@heroicons/react/24/solid';
+import { PaperAirplaneIcon, FaceSmileIcon, PaperClipIcon, MicrophoneIcon, StopIcon } from '@heroicons/react/24/solid';
 import EmojiPicker from 'emoji-picker-react';
 
 const MessageInput = ({ onSend, onUpload }) => {
@@ -8,24 +8,32 @@ const MessageInput = ({ onSend, onUpload }) => {
     const [isRecording, setIsRecording] = useState(false);
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
+    const inputRef = useRef(null);
 
     const handleSubmit = (e) => {
         e.preventDefault();
         if (text.trim()) {
-            onSend(text, 'text');
+            onSend(text.trim(), 'text');
             setText('');
+            setShowEmoji(false);
+        }
+    };
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSubmit(e);
         }
     };
 
     const handleEmojiClick = (emojiData) => {
-        setText((prev) => prev + emojiData.emoji);
+        setText(prev => prev + emojiData.emoji);
+        inputRef.current?.focus();
     };
 
-    const handleFileChange = async (e) => {
+    const handleFileChange = (e) => {
         const file = e.target.files[0];
-        if (file) {
-            onUpload(file);
-        }
+        if (file) onUpload(file);
         e.target.value = '';
     };
 
@@ -36,99 +44,106 @@ const MessageInput = ({ onSend, onUpload }) => {
             mediaRecorderRef.current = mediaRecorder;
             audioChunksRef.current = [];
 
-            mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0) {
-                    audioChunksRef.current.push(event.data);
-                }
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) audioChunksRef.current.push(e.data);
             };
 
             mediaRecorder.onstop = () => {
-                const audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType || 'audio/webm' });
-                const audioFile = new File([audioBlob], `voice-message-${Date.now()}.webm`, { type: audioBlob.type });
-                stream.getTracks().forEach(track => track.stop());
-
-                if (audioBlob.size > 0) {
-                    onUpload(audioFile);
-                }
+                const blob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType || 'audio/webm' });
+                const file = new File([blob], `voice-${Date.now()}.webm`, { type: blob.type });
+                stream.getTracks().forEach(t => t.stop());
+                if (blob.size > 0) onUpload(file);
             };
 
             mediaRecorder.start();
             setIsRecording(true);
-        } catch (err) {
-            console.error(err);
-            alert("Microphone permission is needed to record voice messages.");
+        } catch {
+            alert('Microphone permission needed.');
         }
     };
 
     const stopRecording = () => {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-            mediaRecorderRef.current.stop();
-        }
+        mediaRecorderRef.current?.stop();
         setIsRecording(false);
     };
 
-    const handleActionClick = () => {
-        if (text.trim()) return;
-        if (isRecording) {
-            stopRecording();
-        } else {
-            startRecording();
-        }
-    };
-
     return (
-        <div className="p-2 md:p-3 bg-signal-secondary flex items-end gap-2 relative border-t border-gray-800">
+        <div className="relative bg-[#202c33] border-t border-gray-800">
+            {/* Emoji Picker */}
             {showEmoji && (
-                <div className="absolute bottom-16 left-0">
-                    <EmojiPicker onEmojiClick={handleEmojiClick} theme="dark" />
+                <div className="absolute bottom-full left-0 z-50">
+                    <EmojiPicker
+                        onEmojiClick={handleEmojiClick}
+                        theme="dark"
+                        height={380}
+                        width={320}
+                        searchDisabled={false}
+                        skinTonesDisabled
+                        previewConfig={{ showPreview: false }}
+                    />
                 </div>
             )}
 
-            <button
-                className="p-2 text-gray-400 hover:text-gray-200 transition-colors bg-signal-input rounded-full"
-                onClick={() => setShowEmoji(!showEmoji)}
-            >
-                <FaceSmileIcon className="w-6 h-6" />
-            </button>
+            <div className="flex items-end gap-2 px-3 py-2">
+                {/* Emoji + Attach */}
+                {!isRecording && (
+                    <div className="flex items-center gap-1 flex-shrink-0 pb-1">
+                        <button
+                            onClick={() => setShowEmoji(v => !v)}
+                            className={`p-2 rounded-full transition-colors ${showEmoji ? 'text-blue-400' : 'text-gray-400 hover:text-gray-200'}`}
+                        >
+                            <FaceSmileIcon className="w-6 h-6" />
+                        </button>
+                        <label className="p-2 text-gray-400 hover:text-gray-200 cursor-pointer rounded-full transition-colors">
+                            <input type="file" className="hidden" onChange={handleFileChange} />
+                            <PaperClipIcon className="w-6 h-6" />
+                        </label>
+                    </div>
+                )}
 
-            <label className="p-2 text-gray-400 hover:text-gray-200 transition-colors bg-signal-input rounded-full cursor-pointer">
-                <input type="file" className="hidden" onChange={handleFileChange} />
-                <PhotoIcon className="w-6 h-6" />
-            </label>
-
-            <form onSubmit={handleSubmit} className="flex-1 flex gap-2">
-                <div className="flex-1 flex items-center bg-signal-input rounded-3xl pr-1">
-                    <input
-                        type="text"
-                        value={text}
-                        onChange={(e) => setText(e.target.value)}
-                        placeholder={isRecording ? "Recording voice message..." : "Signal message"}
-                        disabled={isRecording}
-                        className="flex-1 min-w-0 bg-transparent text-gray-100 px-4 py-3 focus:outline-none font-light"
-                    />
-
-                    {isRecording && (
-                        <span className="text-xs text-red-400 px-2 animate-pulse whitespace-nowrap">
-                            Recording
-                        </span>
-                    )}
-                </div>
-
-                <button
-                    type={text.trim() ? "submit" : "button"}
-                    onClick={handleActionClick}
-                    className={`p-3 rounded-full transition-all ${text.trim() ? 'bg-signal-accent text-white' : isRecording ? 'bg-red-600 text-white' : 'bg-signal-input text-gray-400'}`}
-                    title={text.trim() ? "Send" : isRecording ? "Stop and send voice" : "Record voice"}
-                >
-                    {text.trim() ? (
-                        <PaperAirplaneIcon className="w-5 h-5" />
-                    ) : isRecording ? (
-                        <StopIcon className="w-5 h-5" />
+                {/* Input */}
+                <form onSubmit={handleSubmit} className="flex-1 flex items-end gap-2">
+                    {isRecording ? (
+                        <div className="flex-1 flex items-center gap-3 bg-[#2a3942] rounded-3xl px-4 py-3">
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                            <span className="text-red-400 text-sm font-medium">Recording...</span>
+                        </div>
                     ) : (
-                        <MicrophoneIcon className="w-5 h-5" />
+                        <textarea
+                            ref={inputRef}
+                            value={text}
+                            onChange={e => setText(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            placeholder="Message"
+                            rows={1}
+                            className="flex-1 bg-[#2a3942] text-gray-100 placeholder-gray-500 rounded-3xl px-4 py-3 text-[15px] focus:outline-none resize-none max-h-32 overflow-y-auto leading-relaxed"
+                            style={{ scrollbarWidth: 'none' }}
+                            onClick={() => setShowEmoji(false)}
+                        />
                     )}
-                </button>
-            </form>
+
+                    {/* Send / Mic button */}
+                    {text.trim() ? (
+                        <button
+                            type="submit"
+                            className="w-11 h-11 bg-[#00a884] hover:bg-[#00c49a] rounded-full flex items-center justify-center flex-shrink-0 transition-colors shadow-lg"
+                        >
+                            <PaperAirplaneIcon className="w-5 h-5 text-white" />
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={isRecording ? stopRecording : startRecording}
+                            className={`w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 transition-colors shadow-lg ${isRecording ? 'bg-red-500 hover:bg-red-600' : 'bg-[#00a884] hover:bg-[#00c49a]'}`}
+                        >
+                            {isRecording
+                                ? <StopIcon className="w-5 h-5 text-white" />
+                                : <MicrophoneIcon className="w-5 h-5 text-white" />
+                            }
+                        </button>
+                    )}
+                </form>
+            </div>
         </div>
     );
 };

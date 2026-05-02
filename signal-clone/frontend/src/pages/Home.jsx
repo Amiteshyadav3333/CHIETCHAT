@@ -574,6 +574,11 @@ const Home = () => {
                         <div className="flex gap-4 text-signal-accent">
                             <button onClick={() => startCall('voice')} title="Voice Call"><PhoneIcon className="w-6 h-6" /></button>
                             <button onClick={() => startCall('video')} title="Video Call"><VideoCameraIcon className="w-6 h-6" /></button>
+                            {visibleActiveChat.isGroup && (
+                                <button onClick={() => startCall('video')} title="Group Video Call" className="flex items-center gap-1 text-xs bg-signal-accent px-2 py-1 rounded-lg text-white font-bold">
+                                    👥 Group Call
+                                </button>
+                            )}
                         </div>
                     </div>
 

@@ -3,12 +3,28 @@ import jwt
 import datetime
 from dotenv import load_dotenv
 load_dotenv()
+import cloudinary
+import cloudinary.uploader
 from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask_cors import CORS
 from sqlalchemy import inspect, text
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+
+cloudinary.config(
+    cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'),
+    api_key=os.environ.get('CLOUDINARY_API_KEY'),
+    api_secret=os.environ.get('CLOUDINARY_API_SECRET')
+)
+
+def upload_to_cloudinary(file, folder='chietchat', resource_type='auto'):
+    result = cloudinary.uploader.upload(
+        file,
+        folder=folder,
+        resource_type=resource_type
+    )
+    return result['secure_url']
 
 try:
     from .config import Config
@@ -244,21 +260,20 @@ def update_avatar():
         return jsonify({"error": "No avatar selected"}), 400
 
     filename = secure_filename(file.filename)
-    if not filename:
-        return jsonify({"error": "Invalid filename"}), 400
-
     extension = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
     if extension not in {'jpg', 'jpeg', 'png', 'gif', 'webp'}:
         return jsonify({"error": "Please upload an image file"}), 400
 
-    unique_filename = f"avatar_{user_id}_{int(utc_now().timestamp())}_{filename}"
-    file.save(os.path.join(app.config['UPLOAD_FOLDER'], unique_filename))
+    try:
+        url = upload_to_cloudinary(file, folder='chietchat/avatars', resource_type='image')
+    except Exception as e:
+        return jsonify({"error": f"Upload failed: {str(e)}"}), 500
 
     user = User.query.get(user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
 
-    user.avatar = f"/uploads/{unique_filename}"
+    user.avatar = url
     db.session.commit()
 
     payload = {"user": serialize_user(user)}
@@ -356,20 +371,22 @@ def create_status():
 
     if ext in image_exts:
         media_type = 'image'
+        resource_type = 'image'
     elif ext in video_exts:
         media_type = 'video'
+        resource_type = 'video'
     else:
         return jsonify({"error": "Only images and videos allowed"}), 400
 
-    unique_filename = f"status_{user_id}_{int(utc_now().timestamp())}_{filename}"
-    file.save(os.path.join(app.config['UPLOAD_FOLDER'], unique_filename))
-    media_url = f"/uploads/{unique_filename}"
+    try:
+        media_url = upload_to_cloudinary(file, folder='chietchat/status', resource_type=resource_type)
+    except Exception as e:
+        return jsonify({"error": f"Upload failed: {str(e)}"}), 500
 
     caption = request.form.get('caption', '')
     music_url = request.form.get('musicUrl', None)
     music_name = request.form.get('musicName', None)
     duration = min(int(request.form.get('duration', 15)), 15)
-
     expires_at = utc_now() + datetime.timedelta(hours=24)
 
     status = Status(
@@ -562,13 +579,11 @@ def upload_file():
     if file.filename == '':
         return jsonify({"error": "No selection"}), 400
 
-    filename = secure_filename(file.filename)
-    if not filename:
-        return jsonify({"error": "Invalid filename"}), 400
-
-    unique_filename = str(int(utc_now().timestamp())) + "_" + filename
-    file.save(os.path.join(app.config['UPLOAD_FOLDER'], unique_filename))
-    return jsonify({"url": f"/uploads/{unique_filename}"})
+    try:
+        url = upload_to_cloudinary(file, folder='chietchat/uploads', resource_type='auto')
+        return jsonify({"url": url})
+    except Exception as e:
+        return jsonify({"error": f"Upload failed: {str(e)}"}), 500
 
 
 # --- Socket Events ---

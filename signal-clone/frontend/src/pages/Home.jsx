@@ -308,7 +308,9 @@ const Home = () => {
         setSearchedUser(null);
 
         try {
-            const res = await axios.post('/api/user/search', { phone: searchPhone.trim() });
+            const res = await axios.post('/api/user/search', { phone: searchPhone.trim() }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
             if (res.data.error) {
                 setSearchError(res.data.error);
             } else {

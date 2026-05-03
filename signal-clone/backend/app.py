@@ -38,10 +38,10 @@ def upload_to_cloudinary(file, folder='chietchat', resource_type='auto'):
 
 try:
     from .config import Config
-    from .models import db, User, Chat, ChatParticipant, Message, Status, StatusView, Block
+    from .models import db, User, Chat, ChatParticipant, Contact, Message, Status, StatusView, Block
 except ImportError:
     from config import Config
-    from models import db, User, Chat, ChatParticipant, Message, Status, StatusView, Block
+    from models import db, User, Chat, ChatParticipant, Contact, Message, Status, StatusView, Block
 
 static_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
 app = Flask(__name__, static_folder=static_folder)
@@ -163,6 +163,76 @@ def get_chat_participant_ids(chat_id):
         participant.user_id
         for participant in ChatParticipant.query.filter_by(chat_id=chat_id).all()
     ]
+
+
+def find_direct_chat(user_a_id, user_b_id):
+    first_user_chats = ChatParticipant.query.filter_by(user_id=user_a_id).all()
+    target_ids = {user_a_id, user_b_id}
+    for participation in first_user_chats:
+        chat = Chat.query.get(participation.chat_id)
+        if not chat or chat.is_group:
+            continue
+        participant_ids = {p.user_id for p in ChatParticipant.query.filter_by(chat_id=chat.id).all()}
+        if participant_ids == target_ids:
+            return chat
+    return None
+
+
+def get_or_create_direct_chat(user_a_id, user_b_id):
+    existing_chat = find_direct_chat(user_a_id, user_b_id)
+    if existing_chat:
+        return existing_chat
+
+    chat = Chat(is_group=False)
+    db.session.add(chat)
+    db.session.commit()
+    db.session.add(ChatParticipant(chat_id=chat.id, user_id=user_a_id))
+    db.session.add(ChatParticipant(chat_id=chat.id, user_id=user_b_id))
+    db.session.commit()
+    return chat
+
+
+def users_share_direct_chat(user_a_id, user_b_id):
+    return find_direct_chat(user_a_id, user_b_id) is not None
+
+
+def has_contact(owner_id, contact_user_id):
+    return Contact.query.filter_by(owner_id=owner_id, contact_user_id=contact_user_id).first() is not None
+
+
+def add_contact(owner_id, contact_user_id):
+    if owner_id == contact_user_id:
+        return False
+    if has_contact(owner_id, contact_user_id):
+        return False
+    db.session.add(Contact(owner_id=owner_id, contact_user_id=contact_user_id))
+    db.session.commit()
+    return True
+
+
+def get_contact_user_ids(owner_id):
+    return [
+        contact.contact_user_id
+        for contact in Contact.query.filter_by(owner_id=owner_id).all()
+    ]
+
+
+def user_can_access_chat(user_id, chat_id):
+    if not user_is_chat_participant(user_id, chat_id):
+        return False
+
+    chat = Chat.query.get(chat_id)
+    if not chat:
+        return False
+
+    other_ids = [
+        participant.user_id
+        for participant in ChatParticipant.query.filter_by(chat_id=chat_id).all()
+        if participant.user_id != user_id
+    ]
+    if not other_ids:
+        return True
+    return all(has_contact(user_id, other_id) for other_id in other_ids)
 
 
 def decode_socket_user_id(auth):
@@ -331,19 +401,34 @@ def forgot_password():
 
 @app.route('/api/users', methods=['GET'])
 def get_users():
-    users = User.query.all()
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    contact_ids = get_contact_user_ids(user_id)
+    if not contact_ids:
+        return jsonify([])
+    users = User.query.filter(User.id.in_(contact_ids)).all()
     return jsonify([serialize_user(u) for u in users])
 
 
 @app.route('/api/user/search', methods=['POST'])
 def search_user():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
     data = get_json_data()
     phone = (data.get('phone') or '').strip()
     if not phone:
         return jsonify({"error": "Phone number is required"}), 400
     user = User.query.filter_by(phone=phone).first()
+    if user and user.id == user_id:
+        return jsonify({"error": "You cannot add your own number"}), 400
     if user:
-        return jsonify(serialize_user(user))
+        added = add_contact(user_id, user.id)
+        payload = serialize_user(user)
+        payload["isContact"] = True
+        payload["contactAdded"] = added
+        return jsonify(payload)
     return jsonify({"error": "User not registered with this number"}), 200
 
 
@@ -384,6 +469,11 @@ def update_avatar():
 
 @app.route('/api/users/<int:user_id>/key', methods=['GET'])
 def get_user_public_key(user_id):
+    current_user_id = get_current_user_id()
+    if not current_user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    if user_id != current_user_id and not has_contact(current_user_id, user_id):
+        return jsonify({"error": "Forbidden"}), 403
     user = User.query.get(user_id)
     if user:
         return jsonify({"publicKey": user.public_key})
@@ -472,7 +562,7 @@ def delete_chat(chat_id):
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
-    if not user_is_chat_participant(user_id, chat_id):
+    if not user_can_access_chat(user_id, chat_id):
         return jsonify({"error": "Forbidden"}), 403
     Message.query.filter_by(chat_id=chat_id).delete()
     ChatParticipant.query.filter_by(chat_id=chat_id).delete()
@@ -516,14 +606,7 @@ def get_statuses():
 
     now = utc_now()
 
-    # Get only users who share a chat with current user
-    my_chat_ids = [p.chat_id for p in ChatParticipant.query.filter_by(user_id=user_id).all()]
-    contact_user_ids = set()
-    for chat_id in my_chat_ids:
-        chat = Chat.query.get(chat_id)
-        if chat and not chat.is_group:
-            for p in ChatParticipant.query.filter_by(chat_id=chat_id).all():
-                contact_user_ids.add(p.user_id)
+    contact_user_ids = set(get_contact_user_ids(user_id))
     contact_user_ids.add(user_id)  # apna khud ka status bhi dikhega
 
     statuses = Status.query.filter(
@@ -628,6 +711,59 @@ def view_status(status_id):
     return jsonify({"ok": True})
 
 
+@app.route('/api/status/<int:status_id>/reply', methods=['POST'])
+def reply_to_status(status_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = get_json_data()
+    reply_text = (data.get('message') or '').strip()
+    if not reply_text:
+        return jsonify({"error": "Reply message is required"}), 400
+    if len(reply_text) > 1000:
+        return jsonify({"error": "Reply is too long"}), 400
+
+    status = Status.query.get(status_id)
+    if not status or status.expires_at <= utc_now():
+        return jsonify({"error": "Status not found"}), 404
+    if status.user_id == user_id:
+        return jsonify({"error": "You cannot reply to your own status"}), 400
+    if not has_contact(user_id, status.user_id):
+        return jsonify({"error": "You can only reply to your contacts' statuses"}), 403
+
+    chat = get_or_create_direct_chat(user_id, status.user_id)
+    status_label = status.caption.strip() if status.caption else status.media_type
+    message_content = f"Replied to your status ({status_label}):\n{reply_text}"
+    new_msg = Message(
+        chat_id=chat.id,
+        sender_id=user_id,
+        content=message_content,
+        type='text',
+        reply_content=status.media_url,
+        reply_sender_name='Status'
+    )
+    db.session.add(new_msg)
+    db.session.commit()
+
+    payload = {
+        "id": new_msg.id,
+        "senderId": new_msg.sender_id,
+        "content": new_msg.content,
+        "type": new_msg.type,
+        "timestamp": iso_utc(new_msg.timestamp),
+        "chatId": chat.id,
+        "replyToId": new_msg.reply_to_id,
+        "replyContent": new_msg.reply_content,
+        "replySenderName": new_msg.reply_sender_name
+    }
+
+    for participant in ChatParticipant.query.filter_by(chat_id=chat.id).all():
+        socketio.emit('receive_message', payload, room=f"user_{participant.user_id}")
+
+    return jsonify({"ok": True, "chatId": chat.id, "message": payload}), 201
+
+
 @app.route('/api/status/<int:status_id>', methods=['DELETE'])
 def delete_status(status_id):
     user_id = get_current_user_id()
@@ -657,6 +793,8 @@ def get_chats():
 
         result = []
         for chat in chats:
+            if not user_can_access_chat(user_id, chat.id):
+                continue
             participants = ChatParticipant.query.filter_by(chat_id=chat.id).all()
             part_data = [serialize_user(p.user) for p in participants]
 
@@ -717,6 +855,11 @@ def create_chat():
     if users_found != len(participant_ids):
         return jsonify({"error": "One or more participants do not exist"}), 404
 
+    other_participant_ids = [uid for uid in participant_ids if uid != user_id]
+    missing_contacts = [uid for uid in other_participant_ids if not has_contact(user_id, uid)]
+    if missing_contacts:
+        return jsonify({"error": "Add this number to your contacts before starting a chat"}), 403
+
     if not is_group and len(participant_ids) == 2:
         first_user_chats = ChatParticipant.query.filter_by(user_id=participant_ids[0]).all()
         for participation in first_user_chats:
@@ -744,7 +887,7 @@ def get_messages(chat_id):
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
 
-    if not user_is_chat_participant(user_id, chat_id):
+    if not user_can_access_chat(user_id, chat_id):
         return jsonify({"error": "Forbidden"}), 403
 
     messages = Message.query.filter_by(chat_id=chat_id).order_by(Message.timestamp.asc()).all()
@@ -858,7 +1001,7 @@ def on_join(data):
         emit('room_error', {"error": "Invalid room"})
         return
 
-    if not user_is_chat_participant(user_id, chat_id):
+    if not user_can_access_chat(user_id, chat_id):
         emit('room_error', {"error": "Forbidden"})
         return
 
@@ -885,7 +1028,7 @@ def on_message(data):
         emit('message_error', {"error": "Invalid message data"})
         return
 
-    if not user_is_chat_participant(socket_user_id, chat_id):
+    if not user_can_access_chat(socket_user_id, chat_id):
         emit('message_error', {"error": "Sender is not a chat participant"})
         return
 
@@ -928,7 +1071,7 @@ def on_join_call(data):
         emit('call_error', {"error": "Invalid call data"})
         return
 
-    if not user_id or not user_is_chat_participant(user_id, chat_id):
+    if not user_id or not user_can_access_chat(user_id, chat_id):
         emit('call_error', {"error": "Forbidden"})
         return
 
@@ -945,7 +1088,7 @@ def on_leave_call(data):
     except (KeyError, TypeError, ValueError):
         return
 
-    if not user_id or not user_is_chat_participant(user_id, chat_id):
+    if not user_id or not user_can_access_chat(user_id, chat_id):
         return
 
     room = f"call_{chat_id}"
@@ -996,7 +1139,7 @@ def on_notify_ring(data):
         emit('call_error', {"error": "Invalid call data"})
         return
 
-    if not caller_id or not user_is_chat_participant(caller_id, chat_id):
+    if not caller_id or not user_can_access_chat(caller_id, chat_id):
         emit('call_error', {"error": "Forbidden"})
         return
 

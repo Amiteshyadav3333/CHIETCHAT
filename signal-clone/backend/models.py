@@ -32,6 +32,18 @@ class ChatParticipant(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     user = db.relationship('User')
 
+class Contact(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    contact_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now)
+
+    owner = db.relationship('User', foreign_keys=[owner_id])
+    contact_user = db.relationship('User', foreign_keys=[contact_user_id])
+    __table_args__ = (
+        db.UniqueConstraint('owner_id', 'contact_user_id', name='uq_owner_contact_user'),
+    )
+
 class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     chat_id = db.Column(db.Integer, db.ForeignKey('chat.id'), nullable=False)

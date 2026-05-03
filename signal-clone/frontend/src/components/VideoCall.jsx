@@ -3,7 +3,7 @@ import { SocketContext } from '../context/SocketContext';
 import { AuthContext } from '../context/AuthContext';
 import {
     VideoCameraIcon, VideoCameraSlashIcon, XMarkIcon,
-    MicrophoneIcon, SpeakerXMarkIcon, ArrowsPointingOutIcon
+    MicrophoneIcon, SpeakerXMarkIcon, ArrowsPointingOutIcon, ArrowPathIcon
 } from '@heroicons/react/24/solid';
 
 const MAX_PARTICIPANTS = 10;
@@ -22,9 +22,12 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
     const [showControls, setShowControls] = useState(true);
     const [mainView, setMainView] = useState('remote'); // 'remote' | socketId of peer | 'me'
     const [localStream, setLocalStream] = useState(null);
+    const [facingMode, setFacingMode] = useState('user');
     const controlsTimerRef = useRef(null);
+    const facingModeRef = useRef('user');
 
     useEffect(() => { peersRef.current = peers; }, [peers]);
+    useEffect(() => { facingModeRef.current = facingMode; }, [facingMode]);
 
     // Auto-hide controls after 4s
     useEffect(() => {
@@ -40,7 +43,7 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
             try {
                 const constraints = callType === 'voice'
                     ? { audio: true, video: false }
-                    : { audio: true, video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } };
+                    : { audio: true, video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: facingModeRef.current } };
 
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 streamRef.current = stream;
@@ -161,7 +164,10 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
     const switchToVideo = async () => {
         if (currentCallType === 'video') return;
         try {
-            const videoStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+            const videoStream = await navigator.mediaDevices.getUserMedia({
+                video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: facingModeRef.current },
+                audio: false
+            });
             const videoTrack = videoStream.getVideoTracks()[0];
             streamRef.current.addTrack(videoTrack);
             setLocalStream(new MediaStream(streamRef.current.getTracks()));
@@ -181,6 +187,48 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
         const newOff = !isVideoOff;
         setIsVideoOff(newOff);
         streamRef.current?.getVideoTracks().forEach(t => { t.enabled = !newOff; });
+    };
+
+    const flipCamera = async () => {
+        if (currentCallType !== 'video') {
+            await switchToVideo();
+            return;
+        }
+
+        const nextFacingMode = facingModeRef.current === 'user' ? 'environment' : 'user';
+
+        try {
+            const nextStream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
+                    facingMode: { ideal: nextFacingMode }
+                },
+                audio: false
+            });
+            const nextVideoTrack = nextStream.getVideoTracks()[0];
+            const currentStream = streamRef.current;
+            const oldVideoTracks = currentStream?.getVideoTracks() || [];
+
+            Object.values(peersRef.current).forEach(({ pc }) => {
+                const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+                sender?.replaceTrack(nextVideoTrack);
+            });
+
+            oldVideoTracks.forEach(track => {
+                currentStream.removeTrack(track);
+                track.stop();
+            });
+            currentStream.addTrack(nextVideoTrack);
+
+            setFacingMode(nextFacingMode);
+            setIsVideoOff(false);
+            setLocalStream(new MediaStream(currentStream.getTracks()));
+            setShowControls(true);
+        } catch (err) {
+            console.error(err);
+            alert('Could not switch camera. This device may not have another camera.');
+        }
     };
 
     const isVoiceOnly = currentCallType === 'voice';
@@ -258,6 +306,9 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
                     </ControlBtn>
                     <ControlBtn onClick={switchToVideo} activeColor="bg-blue-600" label="Video">
                         <VideoCameraIcon className="w-6 h-6" />
+                    </ControlBtn>
+                    <ControlBtn onClick={flipCamera} activeColor="bg-gray-700" label="Switch Camera">
+                        <ArrowPathIcon className="w-6 h-6" />
                     </ControlBtn>
                     <button onClick={onClose} className="w-16 h-16 rounded-full bg-red-600 hover:bg-red-700 flex items-center justify-center shadow-lg">
                         <XMarkIcon className="w-7 h-7 text-white" />
@@ -372,6 +423,10 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
 
                 <ControlBtn onClick={toggleVideo} active={isVideoOff} activeColor="bg-red-600" label={isVideoOff ? 'Start Video' : 'Stop Video'}>
                     {isVideoOff ? <VideoCameraSlashIcon className="w-6 h-6" /> : <VideoCameraIcon className="w-6 h-6" />}
+                </ControlBtn>
+
+                <ControlBtn onClick={flipCamera} activeColor="bg-gray-700" label="Switch Camera">
+                    <ArrowPathIcon className="w-6 h-6" />
                 </ControlBtn>
 
                 <button

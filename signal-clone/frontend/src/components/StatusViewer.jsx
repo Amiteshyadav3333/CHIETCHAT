@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { XMarkIcon, ChevronLeftIcon, ChevronRightIcon, MusicalNoteIcon, EyeIcon, TrashIcon } from '@heroicons/react/24/solid';
+import { XMarkIcon, ChevronLeftIcon, ChevronRightIcon, MusicalNoteIcon, EyeIcon, TrashIcon, PaperAirplaneIcon } from '@heroicons/react/24/solid';
 import axios from 'axios';
 
 const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, token, onClose, onDelete }) => {
@@ -9,6 +9,9 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, toke
     const [paused, setPaused] = useState(false);
     const [showViews, setShowViews] = useState(false);
     const [musicBlocked, setMusicBlocked] = useState(false);
+    const [replyText, setReplyText] = useState('');
+    const [replySending, setReplySending] = useState(false);
+    const [replyNotice, setReplyNotice] = useState('');
 
     const timerRef = useRef(null);
     const videoRef = useRef(null);
@@ -59,6 +62,8 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, toke
         if (!currentStatus) return;
         progressRef.current = 0;
         setProgress(0);
+        setReplyText('');
+        setReplyNotice('');
         pausedRef.current = false;
         setPaused(false);
 
@@ -111,6 +116,41 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, toke
         });
         onDelete(currentStatus.id);
         goNext();
+    };
+
+    const setViewerPaused = (value) => {
+        setPaused(value);
+        pausedRef.current = value;
+        if (videoRef.current) value ? videoRef.current.pause() : videoRef.current.play().catch(() => {});
+        if (audioRef.current) {
+            if (value) {
+                audioRef.current.pause();
+            } else {
+                audioRef.current.play().then(() => setMusicBlocked(false)).catch(() => setMusicBlocked(true));
+            }
+        }
+    };
+
+    const handleReplySubmit = async (e) => {
+        e.preventDefault();
+        const message = replyText.trim();
+        if (!message || replySending || isOwn) return;
+
+        setReplySending(true);
+        setReplyNotice('');
+        try {
+            await axios.post(`/api/status/${currentStatus.id}/reply`, { message }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setReplyText('');
+            setReplyNotice('Reply sent');
+            setViewerPaused(false);
+            setTimeout(() => setReplyNotice(''), 1800);
+        } catch (err) {
+            setReplyNotice(err.response?.data?.error || 'Could not send reply');
+        } finally {
+            setReplySending(false);
+        }
     };
 
     if (!currentGroup || !currentStatus) return null;
@@ -226,7 +266,7 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, toke
                 </div>
 
                 {/* Footer */}
-                <div className="absolute bottom-0 left-0 right-0 z-10 flex items-center justify-between px-4 py-3 bg-gradient-to-t from-black/60 to-transparent">
+                <div className="absolute bottom-0 left-0 right-0 z-30 flex items-center justify-between px-4 py-3 bg-gradient-to-t from-black/60 to-transparent">
                     {isOwn ? (
                         <button
                             onClick={(e) => { e.stopPropagation(); setPaused(true); pausedRef.current = true; setShowViews(true); }}
@@ -235,8 +275,36 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, toke
                             <EyeIcon className="w-4 h-4" />
                             <span>{currentStatus.viewCount} views</span>
                         </button>
-                    ) : <div />}
+                    ) : (
+                        <form
+                            onSubmit={handleReplySubmit}
+                            onClick={e => e.stopPropagation()}
+                            className="flex w-full items-center gap-2"
+                        >
+                            <input
+                                type="text"
+                                value={replyText}
+                                onChange={e => setReplyText(e.target.value)}
+                                onFocus={() => setViewerPaused(true)}
+                                placeholder={`Reply to ${currentGroup.user.username}...`}
+                                maxLength={1000}
+                                className="min-w-0 flex-1 rounded-full bg-white/15 px-4 py-2 text-sm text-white placeholder-white/60 outline-none ring-1 ring-white/20 focus:ring-white/50"
+                            />
+                            <button
+                                type="submit"
+                                disabled={!replyText.trim() || replySending}
+                                className="h-10 w-10 rounded-full bg-blue-600 text-white flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <PaperAirplaneIcon className="w-4 h-4" />
+                            </button>
+                        </form>
+                    )}
                 </div>
+                {replyNotice && (
+                    <div className="absolute bottom-16 left-1/2 z-40 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1 text-xs text-white">
+                        {replyNotice}
+                    </div>
+                )}
 
                 {/* Left/Right tap zones */}
                 <button className="absolute left-0 top-0 w-1/3 h-full z-20 opacity-0" onClick={(e) => { e.stopPropagation(); goPrev(); }} />

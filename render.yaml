@@ -19,4 +19,11 @@ services:
         generateValue: true
       - key: JWT_SECRET_KEY
         generateValue: true
-
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: MAX_UPLOAD_BYTES
+        value: "104857600"

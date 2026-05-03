@@ -2,6 +2,8 @@ import React, { useState, useRef } from 'react';
 import { XMarkIcon, MusicalNoteIcon, PhotoIcon } from '@heroicons/react/24/solid';
 import axios from 'axios';
 
+const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+
 const StatusUploader = ({ token, onClose, onUploaded }) => {
     const [file, setFile] = useState(null);
     const [preview, setPreview] = useState(null);
@@ -21,6 +23,11 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
         const f = e.target.files[0];
         if (!f) return;
         setError('');
+
+        if (f.size > MAX_UPLOAD_BYTES) {
+            setError('File is too large (Max 100MB)');
+            return;
+        }
 
         const isVideo = f.type.startsWith('video/');
         const isImage = f.type.startsWith('image/');
@@ -55,6 +62,10 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
     const handleMusicSelect = (e) => {
         const f = e.target.files[0];
         if (!f) return;
+        if (f.size > MAX_UPLOAD_BYTES) {
+            setError('Music file is too large (Max 100MB)');
+            return;
+        }
         setMusicFile(f);
         setMusicName(f.name.replace(/\.[^/.]+$/, ''));
     };

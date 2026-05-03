@@ -19,6 +19,13 @@ cloudinary.config(
 )
 
 def upload_to_cloudinary(file, folder='chietchat', resource_type='auto'):
+    if not all([
+        os.environ.get('CLOUDINARY_CLOUD_NAME'),
+        os.environ.get('CLOUDINARY_API_KEY'),
+        os.environ.get('CLOUDINARY_API_SECRET')
+    ]):
+        raise RuntimeError("Cloudinary environment variables are not configured")
+
     result = cloudinary.uploader.upload(
         file,
         folder=folder,
@@ -28,10 +35,10 @@ def upload_to_cloudinary(file, folder='chietchat', resource_type='auto'):
 
 try:
     from .config import Config
-    from .models import db, User, Chat, ChatParticipant, Message, Status, StatusView
+    from .models import db, User, Chat, ChatParticipant, Message, Status, StatusView, Block
 except ImportError:
     from config import Config
-    from models import db, User, Chat, ChatParticipant, Message, Status, StatusView
+    from models import db, User, Chat, ChatParticipant, Message, Status, StatusView, Block
 
 static_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
 app = Flask(__name__, static_folder=static_folder)
@@ -49,15 +56,61 @@ if not os.path.exists(app.config['UPLOAD_FOLDER']):
 if not os.path.exists(static_folder):
     os.makedirs(static_folder)
 
-with app.app_context():
+
+def add_missing_columns(table_name, columns):
+    inspector = inspect(db.engine)
+    if table_name not in inspector.get_table_names():
+        return
+
+    existing_columns = {column['name'] for column in inspector.get_columns(table_name)}
+    preparer = db.engine.dialect.identifier_preparer
+    quoted_table = preparer.quote(table_name)
+
+    for column_name, column_type in columns.items():
+        if column_name in existing_columns:
+            continue
+
+        quoted_column = preparer.quote(column_name)
+        compiled_type = column_type.compile(dialect=db.engine.dialect)
+        db.session.execute(text(f'ALTER TABLE {quoted_table} ADD COLUMN {quoted_column} {compiled_type}'))
+
+
+def ensure_database_schema():
     db.create_all()
+    add_missing_columns('user', {
+        'public_key': db.Text(),
+        'avatar': db.String(200),
+        'last_seen': db.DateTime(),
+        'created_at': db.DateTime(),
+    })
+    add_missing_columns('chat', {
+        'is_group': db.Boolean(),
+        'name': db.String(100),
+        'group_admin_id': db.Integer(),
+        'created_at': db.DateTime(),
+    })
+    add_missing_columns('message', {
+        'ttl': db.Integer(),
+        'reply_to_id': db.Integer(),
+        'reply_content': db.Text(),
+        'reply_sender_name': db.String(80),
+    })
+    add_missing_columns('status', {
+        'music_url': db.String(500),
+        'music_name': db.String(200),
+        'duration': db.Integer(),
+    })
+
     inspector = inspect(db.engine)
     if 'user' in inspector.get_table_names():
-        user_columns = [column['name'] for column in inspector.get_columns('user')]
-        if 'last_seen' not in user_columns:
-            db.session.execute(text('ALTER TABLE "user" ADD COLUMN last_seen TIMESTAMP'))
+        user_columns = {column['name'] for column in inspector.get_columns('user')}
+        if {'last_seen', 'created_at'}.issubset(user_columns):
             db.session.execute(text('UPDATE "user" SET last_seen = created_at WHERE last_seen IS NULL'))
-            db.session.commit()
+    db.session.commit()
+
+
+with app.app_context():
+    ensure_database_schema()
 
 
 @app.after_request
@@ -96,6 +149,17 @@ def get_current_user_id():
 
 def user_is_chat_participant(user_id, chat_id):
     return ChatParticipant.query.filter_by(user_id=user_id, chat_id=chat_id).first() is not None
+
+
+def get_socket_user_id():
+    return socket_users.get(request.sid)
+
+
+def get_chat_participant_ids(chat_id):
+    return [
+        participant.user_id
+        for participant in ChatParticipant.query.filter_by(chat_id=chat_id).all()
+    ]
 
 
 def decode_socket_user_id(auth):
@@ -314,6 +378,72 @@ def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 
+@app.route('/api/user/avatar', methods=['DELETE'])
+def delete_avatar():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    user.avatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix"
+    db.session.commit()
+    payload = {"user": serialize_user(user)}
+    emit_to_user_chat_contacts(user_id, 'user_profile_updated', payload)
+    return jsonify(payload)
+
+
+@app.route('/api/user/block', methods=['POST'])
+def block_user():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    data = get_json_data()
+    blocked_id = data.get('userId')
+    if not blocked_id:
+        return jsonify({"error": "userId required"}), 400
+    existing = Block.query.filter_by(blocker_id=user_id, blocked_id=blocked_id).first()
+    if not existing:
+        db.session.add(Block(blocker_id=user_id, blocked_id=blocked_id))
+        db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route('/api/user/unblock', methods=['POST'])
+def unblock_user():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    data = get_json_data()
+    blocked_id = data.get('userId')
+    Block.query.filter_by(blocker_id=user_id, blocked_id=blocked_id).delete()
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route('/api/user/blocked', methods=['GET'])
+def get_blocked():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    blocked = Block.query.filter_by(blocker_id=user_id).all()
+    return jsonify([b.blocked_id for b in blocked])
+
+
+@app.route('/api/chats/<int:chat_id>', methods=['DELETE'])
+def delete_chat(chat_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    if not user_is_chat_participant(user_id, chat_id):
+        return jsonify({"error": "Forbidden"}), 403
+    Message.query.filter_by(chat_id=chat_id).delete()
+    ChatParticipant.query.filter_by(chat_id=chat_id).delete()
+    Chat.query.filter_by(id=chat_id).delete()
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
 # --- Status Routes ---
 @app.route('/api/status', methods=['GET'])
 def get_statuses():
@@ -322,8 +452,21 @@ def get_statuses():
         return jsonify({"error": "Unauthorized"}), 401
 
     now = utc_now()
-    # Get all active statuses grouped by user
-    statuses = Status.query.filter(Status.expires_at > now).order_by(Status.created_at.desc()).all()
+
+    # Get only users who share a chat with current user
+    my_chat_ids = [p.chat_id for p in ChatParticipant.query.filter_by(user_id=user_id).all()]
+    contact_user_ids = set()
+    for chat_id in my_chat_ids:
+        chat = Chat.query.get(chat_id)
+        if chat and not chat.is_group:
+            for p in ChatParticipant.query.filter_by(chat_id=chat_id).all():
+                contact_user_ids.add(p.user_id)
+    contact_user_ids.add(user_id)  # apna khud ka status bhi dikhega
+
+    statuses = Status.query.filter(
+        Status.expires_at > now,
+        Status.user_id.in_(contact_user_ids)
+    ).order_by(Status.created_at.desc()).all()
 
     users_map = {}
     for s in statuses:
@@ -545,7 +688,10 @@ def get_messages(chat_id):
         "content": m.content,
         "type": m.type,
         "timestamp": iso_utc(m.timestamp),
-        "ttl": m.ttl
+        "ttl": m.ttl,
+        "replyToId": m.reply_to_id,
+        "replyContent": m.reply_content,
+        "replySenderName": m.reply_sender_name
     } for m in messages])
 
 
@@ -630,38 +776,62 @@ def on_disconnect():
 
 @socketio.on('join_room')
 def on_join(data):
-    join_room(data['room'])
-    if 'userId' in data:
-        join_room(f"user_{data['userId']}")
+    user_id = get_socket_user_id()
+    if not user_id:
+        emit('room_error', {"error": "Unauthorized"})
+        return
+
+    room = str(data.get('room', ''))
+    if room == 'global':
+        join_room('global')
+        return
+
+    try:
+        chat_id = int(room)
+    except (TypeError, ValueError):
+        emit('room_error', {"error": "Invalid room"})
+        return
+
+    if not user_is_chat_participant(user_id, chat_id):
+        emit('room_error', {"error": "Forbidden"})
+        return
+
+    join_room(room)
 
 
 @socketio.on('send_message')
 def on_message(data):
+    socket_user_id = get_socket_user_id()
+    if not socket_user_id:
+        emit('message_error', {"error": "Unauthorized"})
+        return
+
     chat_id = data.get('chatId')
-    sender_id = data.get('senderId')
     content = data.get('content')
 
-    if not chat_id or not sender_id or content is None:
+    if not chat_id or content is None:
         emit('message_error', {"error": "Invalid message data"})
         return
 
     try:
         chat_id = int(chat_id)
-        sender_id = int(sender_id)
     except (TypeError, ValueError):
         emit('message_error', {"error": "Invalid message data"})
         return
 
-    if not user_is_chat_participant(sender_id, chat_id):
+    if not user_is_chat_participant(socket_user_id, chat_id):
         emit('message_error', {"error": "Sender is not a chat participant"})
         return
 
     new_msg = Message(
         chat_id=chat_id,
-        sender_id=sender_id,
+        sender_id=socket_user_id,
         content=content,
         type=data.get('type', 'text'),
-        ttl=data.get('ttl', 0)
+        ttl=data.get('ttl', 0),
+        reply_to_id=data.get('replyToId'),
+        reply_content=data.get('replyContent'),
+        reply_sender_name=data.get('replySenderName')
     )
     db.session.add(new_msg)
     db.session.commit()
@@ -672,7 +842,10 @@ def on_message(data):
         "content": new_msg.content,
         "type": new_msg.type,
         "timestamp": iso_utc(new_msg.timestamp),
-        "chatId": chat_id
+        "chatId": chat_id,
+        "replyToId": new_msg.reply_to_id,
+        "replyContent": new_msg.reply_content,
+        "replySenderName": new_msg.reply_sender_name
     }
 
     participants = ChatParticipant.query.filter_by(chat_id=chat_id).all()
@@ -682,43 +855,93 @@ def on_message(data):
 
 @socketio.on('join_call')
 def on_join_call(data):
-    room = f"call_{data['chatId']}"
+    user_id = get_socket_user_id()
+    try:
+        chat_id = int(data['chatId'])
+    except (KeyError, TypeError, ValueError):
+        emit('call_error', {"error": "Invalid call data"})
+        return
+
+    if not user_id or not user_is_chat_participant(user_id, chat_id):
+        emit('call_error', {"error": "Forbidden"})
+        return
+
+    room = f"call_{chat_id}"
     join_room(room)
-    emit('user_joined_call', {"userId": data['userId'], "socketId": request.sid}, room=room, include_self=False)
+    emit('user_joined_call', {"userId": user_id, "socketId": request.sid}, room=room, include_self=False)
 
 
 @socketio.on('leave_call')
 def on_leave_call(data):
-    room = f"call_{data['chatId']}"
+    user_id = get_socket_user_id()
+    try:
+        chat_id = int(data['chatId'])
+    except (KeyError, TypeError, ValueError):
+        return
+
+    if not user_id or not user_is_chat_participant(user_id, chat_id):
+        return
+
+    room = f"call_{chat_id}"
     leave_room(room)
-    emit('user_left_call', {"userId": data.get('userId'), "socketId": request.sid}, room=room, include_self=False)
-    # Agar caller ne call cut ki toh baaki sabko bhi band karo
-    emit('call_ended', {"userId": data.get('userId')}, room=room, include_self=False)
+    emit('user_left_call', {"userId": user_id, "socketId": request.sid}, room=room, include_self=False)
+    emit('call_ended', {"userId": user_id}, room=room, include_self=False)
 
 
 @socketio.on('offer')
 def on_offer(data):
+    if not get_socket_user_id():
+        emit('call_error', {"error": "Unauthorized"})
+        return
+    if not data.get('to'):
+        emit('call_error', {"error": "Invalid call data"})
+        return
     emit('offer', data, room=data['to'])
 
 
 @socketio.on('answer')
 def on_answer(data):
+    if not get_socket_user_id():
+        emit('call_error', {"error": "Unauthorized"})
+        return
+    if not data.get('to'):
+        emit('call_error', {"error": "Invalid call data"})
+        return
     emit('answer', data, room=data['to'])
 
 
 @socketio.on('ice_candidate')
 def on_ice_candidate(data):
+    if not get_socket_user_id():
+        emit('call_error', {"error": "Unauthorized"})
+        return
+    if not data.get('to'):
+        emit('call_error', {"error": "Invalid call data"})
+        return
     emit('ice_candidate', data, room=data['to'])
 
 
 @socketio.on('notify_ring')
 def on_notify_ring(data):
-    for uid in data['participants']:
-        if uid != data['callerId']:
+    caller_id = get_socket_user_id()
+    try:
+        chat_id = int(data['chatId'])
+    except (KeyError, TypeError, ValueError):
+        emit('call_error', {"error": "Invalid call data"})
+        return
+
+    if not caller_id or not user_is_chat_participant(caller_id, chat_id):
+        emit('call_error', {"error": "Forbidden"})
+        return
+
+    caller = User.query.get(caller_id)
+    participant_ids = get_chat_participant_ids(chat_id)
+    for uid in participant_ids:
+        if uid != caller_id:
             emit('incoming_call', {
-                "chatId": data['chatId'],
-                "callerName": data['callerName'],
-                "callerId": data['callerId'],
+                "chatId": chat_id,
+                "callerName": caller.username if caller else data.get('callerName', 'Unknown'),
+                "callerId": caller_id,
                 "callType": data.get('callType', 'video')
             }, room=f"user_{uid}")
 

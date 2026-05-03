@@ -16,4 +16,5 @@ class Config:
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'jwt-secret-key-change-this'
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=7)
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
-    MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100 MB max upload
+    MAX_UPLOAD_BYTES = int(os.environ.get('MAX_UPLOAD_BYTES', 100 * 1024 * 1024))
+    MAX_CONTENT_LENGTH = MAX_UPLOAD_BYTES

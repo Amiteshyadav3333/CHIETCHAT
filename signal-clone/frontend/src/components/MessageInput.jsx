@@ -1,8 +1,9 @@
 import React, { useRef, useState } from 'react';
-import { PaperAirplaneIcon, FaceSmileIcon, PaperClipIcon, MicrophoneIcon, StopIcon } from '@heroicons/react/24/solid';
+import { PaperAirplaneIcon, FaceSmileIcon, PaperClipIcon, MicrophoneIcon, StopIcon, XMarkIcon } from '@heroicons/react/24/solid';
+import { ArrowUturnLeftIcon } from '@heroicons/react/24/outline';
 import EmojiPicker from 'emoji-picker-react';
 
-const MessageInput = ({ onSend, onUpload }) => {
+const MessageInput = ({ onSend, onUpload, replyTo, onCancelReply }) => {
     const [text, setText] = useState('');
     const [showEmoji, setShowEmoji] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
@@ -32,8 +33,8 @@ const MessageInput = ({ onSend, onUpload }) => {
     };
 
     const handleFileChange = (e) => {
-        const file = e.target.files[0];
-        if (file) onUpload(file);
+        const files = Array.from(e.target.files);
+        files.forEach(file => onUpload(file));
         e.target.value = '';
     };
 
@@ -69,6 +70,21 @@ const MessageInput = ({ onSend, onUpload }) => {
 
     return (
         <div className="relative bg-[#202c33] border-t border-gray-800">
+            {/* Reply Preview Bar */}
+            {replyTo && (
+                <div className="flex items-center gap-2 px-4 py-2 bg-[#2a3942] border-b border-gray-700">
+                    <ArrowUturnLeftIcon className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                        <p className="text-xs text-blue-400 font-semibold truncate">{replyTo.senderName || 'Message'}</p>
+                        <p className="text-xs text-gray-400 truncate">
+                            {replyTo.type && replyTo.type !== 'text' ? `📎 ${replyTo.type}` : replyTo.content}
+                        </p>
+                    </div>
+                    <button onClick={onCancelReply} className="text-gray-400 hover:text-white flex-shrink-0">
+                        <XMarkIcon className="w-4 h-4" />
+                    </button>
+                </div>
+            )}
             {/* Emoji Picker */}
             {showEmoji && (
                 <div className="absolute bottom-full left-0 z-50">
@@ -95,7 +111,7 @@ const MessageInput = ({ onSend, onUpload }) => {
                             <FaceSmileIcon className="w-6 h-6" />
                         </button>
                         <label className="p-2 text-gray-400 hover:text-gray-200 cursor-pointer rounded-full transition-colors">
-                            <input type="file" className="hidden" onChange={handleFileChange} />
+                            <input type="file" className="hidden" onChange={handleFileChange} multiple accept="*/*" />
                             <PaperClipIcon className="w-6 h-6" />
                         </label>
                     </div>

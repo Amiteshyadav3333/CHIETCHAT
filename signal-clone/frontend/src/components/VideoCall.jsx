@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import { SocketContext } from '../context/SocketContext';
 import { AuthContext } from '../context/AuthContext';
-import { VideoCameraIcon, VideoCameraSlashIcon, XMarkIcon, MicrophoneIcon, SpeakerXMarkIcon, UserGroupIcon } from '@heroicons/react/24/solid';
+import {
+    VideoCameraIcon, VideoCameraSlashIcon, XMarkIcon,
+    MicrophoneIcon, SpeakerXMarkIcon, ArrowsPointingOutIcon
+} from '@heroicons/react/24/solid';
 
 const MAX_PARTICIPANTS = 10;
 
@@ -11,43 +14,47 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
 
     const [peers, setPeers] = useState({});
     const peersRef = useRef({});
-    const myStreamRef = useRef(null);
-    const myVideoRef = useRef();
     const streamRef = useRef(null);
 
     const [isMuted, setIsMuted] = useState(false);
     const [isVideoOff, setIsVideoOff] = useState(callType === 'voice');
-    const [participantCount, setParticipantCount] = useState(1);
+    const [currentCallType, setCurrentCallType] = useState(callType);
+    const [showControls, setShowControls] = useState(true);
+    const [mainView, setMainView] = useState('remote'); // 'remote' | socketId of peer | 'me'
+    const [localStream, setLocalStream] = useState(null);
+    const controlsTimerRef = useRef(null);
 
     useEffect(() => { peersRef.current = peers; }, [peers]);
+
+    // Auto-hide controls after 4s
+    useEffect(() => {
+        if (showControls) {
+            clearTimeout(controlsTimerRef.current);
+            controlsTimerRef.current = setTimeout(() => setShowControls(false), 4000);
+        }
+        return () => clearTimeout(controlsTimerRef.current);
+    }, [showControls]);
 
     useEffect(() => {
         const initCall = async () => {
             try {
                 const constraints = callType === 'voice'
                     ? { audio: true, video: false }
-                    : { audio: true, video: { width: 640, height: 480 } };
+                    : { audio: true, video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } };
 
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                myStreamRef.current = stream;
                 streamRef.current = stream;
-                if (myVideoRef.current) myVideoRef.current.srcObject = stream;
-
+                setLocalStream(stream);
                 socket.emit('join_call', { chatId: activeChat.id, userId: user.id });
 
                 socket.on('user_joined_call', (data) => {
                     if (Object.keys(peersRef.current).length >= MAX_PARTICIPANTS - 1) return;
                     createPeer(data.socketId, data.userId, stream, true);
-                    setParticipantCount(c => c + 1);
                 });
 
                 socket.on('user_left_call', (data) => {
                     removePeer(data.socketId);
-                    setParticipantCount(c => Math.max(1, c - 1));
-                    // Agar sirf 2 log the (1-on-1 call) toh dono side band karo
-                    if (Object.keys(peersRef.current).length === 0) {
-                        onClose();
-                    }
+                    if (Object.keys(peersRef.current).length === 0) onClose();
                 });
 
                 socket.on('offer', async (data) => {
@@ -71,10 +78,7 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
                     }
                 });
 
-                // Agar koi bhi call cut kare toh sab band
-                socket.on('call_ended', () => {
-                    onClose();
-                });
+                socket.on('call_ended', () => onClose());
 
             } catch (err) {
                 console.error(err);
@@ -89,8 +93,8 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
             socket.emit('leave_call', { chatId: activeChat?.id, userId: user?.id });
             Object.values(peersRef.current).forEach(p => p.pc?.close());
             streamRef.current?.getTracks().forEach(t => t.stop());
-            myStreamRef.current = null;
             streamRef.current = null;
+            setLocalStream(null);
             socket.off('user_joined_call');
             socket.off('user_left_call');
             socket.off('offer');
@@ -98,7 +102,7 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
             socket.off('ice_candidate');
             socket.off('call_ended');
         };
-    }, [activeChat?.id]);
+    }, [activeChat?.id]); // eslint-disable-line
 
     const createPeer = (remoteSocketId, remoteUserId, stream, isInitiator) => {
         if (peersRef.current[remoteSocketId]) return peersRef.current[remoteSocketId].pc;
@@ -107,7 +111,6 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' }
             ]
         });
 
@@ -120,9 +123,7 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
         };
 
         pc.onconnectionstatechange = () => {
-            if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-                removePeer(remoteSocketId);
-            }
+            if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') removePeer(remoteSocketId);
         };
 
         stream.getTracks().forEach(track => pc.addTrack(track, stream));
@@ -154,6 +155,20 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
         peersRef.current[socketId]?.pc?.close();
         setPeers(prev => { const next = { ...prev }; delete next[socketId]; return next; });
         delete peersRef.current[socketId];
+        if (mainView === socketId) setMainView('remote');
+    };
+
+    const switchToVideo = async () => {
+        if (currentCallType === 'video') return;
+        try {
+            const videoStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+            const videoTrack = videoStream.getVideoTracks()[0];
+            streamRef.current.addTrack(videoTrack);
+            setLocalStream(new MediaStream(streamRef.current.getTracks()));
+            Object.values(peersRef.current).forEach(({ pc }) => pc.addTrack(videoTrack, streamRef.current));
+            setCurrentCallType('video');
+            setIsVideoOff(false);
+        } catch { alert('Could not access camera.'); }
     };
 
     const toggleAudio = () => {
@@ -168,141 +183,256 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
         streamRef.current?.getVideoTracks().forEach(t => { t.enabled = !newOff; });
     };
 
-    const isVoiceOnly = callType === 'voice';
+    const isVoiceOnly = currentCallType === 'voice';
     const peerList = Object.entries(peers);
-    const totalCount = peerList.length + 1;
 
-    // Grid layout based on participant count
-    const getGridClass = () => {
-        if (totalCount <= 1) return 'grid-cols-1';
-        if (totalCount <= 2) return 'grid-cols-2';
-        if (totalCount <= 4) return 'grid-cols-2';
-        if (totalCount <= 6) return 'grid-cols-3';
-        return 'grid-cols-4';
+    const firstPeer = peerList[0];
+    const selectedPeer = mainView === 'me'
+        ? null
+        : peers[mainView] ? [mainView, peers[mainView]] : firstPeer;
+    const mainIsMe = mainView === 'me';
+    const thumbnails = [
+        { id: 'me', type: 'me', name: 'You', avatar: user?.avatar, stream: localStream, muted: true, isVideoOff },
+        ...peerList.map(([id, peer]) => ({
+            id,
+            type: 'peer',
+            name: peer.user?.username,
+            avatar: peer.user?.avatar,
+            stream: peer.stream,
+            muted: false,
+            isVideoOff: false
+        }))
+    ].filter(item => item.id !== (mainIsMe ? 'me' : selectedPeer?.[0]));
+
+    const selectMainView = (viewId) => {
+        setMainView(viewId);
+        setShowControls(true);
     };
 
-    return (
-        <div className="fixed inset-0 bg-black z-50 flex flex-col">
-            {/* Header */}
-            <div className="flex justify-between items-center px-4 py-3 bg-gray-900 border-b border-gray-800">
-                <div className="flex items-center gap-2 text-white">
-                    <span className="text-lg">{isVoiceOnly ? '🎙️' : '📹'}</span>
-                    <h2 className="font-bold">{activeChat.name}</h2>
-                    <span className="text-xs bg-gray-700 px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <UserGroupIcon className="w-3 h-3" /> {totalCount}/{MAX_PARTICIPANTS}
-                    </span>
-                </div>
-                <button onClick={onClose} className="bg-red-600 hover:bg-red-700 p-2 rounded-full">
-                    <XMarkIcon className="w-5 h-5 text-white" />
-                </button>
-            </div>
-
-            {/* Call Area */}
-            {isVoiceOnly ? (
-                // Voice Call UI
-                <div className="flex-1 flex flex-col items-center justify-center gap-4 p-4">
-                    <div className="flex flex-wrap justify-center gap-6 max-w-2xl">
-                        {/* Me */}
-                        <div className="flex flex-col items-center gap-2">
-                            <div className={`w-20 h-20 rounded-full border-4 flex items-center justify-center text-3xl overflow-hidden ${isMuted ? 'border-red-500' : 'border-green-500 animate-pulse'}`}>
-                                {user?.avatar ? <img src={user.avatar} className="w-full h-full object-cover" alt="" /> : '👤'}
-                            </div>
-                            <span className="text-white text-sm font-medium">You {isMuted && '🔇'}</span>
+    // Voice call UI
+    if (isVoiceOnly) {
+        return (
+            <div
+                className="fixed inset-0 z-50 flex flex-col"
+                style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)' }}
+                onClick={() => setShowControls(true)}
+            >
+                {/* Top info */}
+                <div className="flex flex-col items-center pt-16 flex-1 justify-center gap-6">
+                    <div className="relative">
+                        <div className={`w-32 h-32 rounded-full overflow-hidden border-4 ${isMuted ? 'border-red-500' : 'border-green-400'} shadow-2xl`}>
+                            {firstPeer?.[1]?.user?.avatar
+                                ? <img src={firstPeer[1].user.avatar} className="w-full h-full object-cover" alt="" />
+                                : <div className="w-full h-full bg-gray-700 flex items-center justify-center text-5xl">👤</div>
+                            }
                         </div>
-                        {/* Peers */}
-                        {peerList.map(([id, p]) => (
-                            <div key={id} className="flex flex-col items-center gap-2">
-                                <div className={`w-20 h-20 rounded-full border-4 flex items-center justify-center text-3xl overflow-hidden ${p.stream ? 'border-green-500 animate-pulse' : 'border-gray-600'}`}>
-                                    {p.user?.avatar ? <img src={p.user.avatar} className="w-full h-full object-cover" alt="" /> : '👤'}
-                                </div>
-                                <span className="text-white text-sm font-medium">{p.user?.username}</span>
-                                {p.stream && <AudioPlayer stream={p.stream} />}
-                            </div>
-                        ))}
-                    </div>
-                    <p className="text-green-400 text-sm animate-pulse mt-4">Voice call in progress...</p>
-                </div>
-            ) : (
-                // Video Call Grid UI
-                <div className={`flex-1 grid ${getGridClass()} gap-1 p-1 overflow-hidden`}>
-                    {/* My Video */}
-                    <div className="relative bg-gray-900 rounded-lg overflow-hidden">
-                        <video ref={myVideoRef} muted autoPlay playsInline className={`w-full h-full object-cover ${isVideoOff ? 'hidden' : ''}`} />
-                        {isVideoOff && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-gray-800">
-                                <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-green-500">
-                                    {user?.avatar ? <img src={user.avatar} className="w-full h-full object-cover" alt="" /> : <span className="text-4xl flex items-center justify-center h-full">👤</span>}
-                                </div>
-                            </div>
+                        {firstPeer?.[1]?.stream && (
+                            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-400 rounded-full border-2 border-gray-900 animate-pulse" />
                         )}
-                        <div className="absolute bottom-2 left-2 bg-black/60 px-2 py-0.5 rounded text-white text-xs flex items-center gap-1">
+                    </div>
+                    <div className="text-center">
+                        <h2 className="text-white text-2xl font-bold">{firstPeer?.[1]?.user?.username || activeChat.name}</h2>
+                        <p className="text-green-400 text-sm mt-1 animate-pulse">
+                            {firstPeer?.[1]?.stream ? 'Connected' : 'Calling...'}
+                        </p>
+                    </div>
+
+                    {/* My avatar small */}
+                    <div className="flex flex-col items-center gap-1 mt-4">
+                        <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-gray-600">
+                            {user?.avatar
+                                ? <img src={user.avatar} className="w-full h-full object-cover" alt="" />
+                                : <div className="w-full h-full bg-gray-700 flex items-center justify-center text-2xl">👤</div>
+                            }
+                        </div>
+                        <span className="text-gray-400 text-xs">You {isMuted && '🔇'}</span>
+                    </div>
+
+                    {peerList.map(([id, p]) => p.stream && <AudioPlayer key={id} stream={p.stream} />)}
+                </div>
+
+                {/* Controls */}
+                <div className="flex justify-center gap-6 pb-12">
+                    <ControlBtn onClick={toggleAudio} active={isMuted} activeColor="bg-red-600" label={isMuted ? 'Unmute' : 'Mute'}>
+                        {isMuted ? <SpeakerXMarkIcon className="w-6 h-6" /> : <MicrophoneIcon className="w-6 h-6" />}
+                    </ControlBtn>
+                    <ControlBtn onClick={switchToVideo} activeColor="bg-blue-600" label="Video">
+                        <VideoCameraIcon className="w-6 h-6" />
+                    </ControlBtn>
+                    <button onClick={onClose} className="w-16 h-16 rounded-full bg-red-600 hover:bg-red-700 flex items-center justify-center shadow-lg">
+                        <XMarkIcon className="w-7 h-7 text-white" />
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // Video call UI — WhatsApp style
+    return (
+        <div
+            className="fixed inset-0 z-50 bg-black flex flex-col select-none"
+            onClick={() => setShowControls(v => !v)}
+        >
+            {/* ── MAIN VIDEO (full screen) ── */}
+            <div className="absolute inset-0">
+                {mainIsMe ? (
+                    // My video is main
+                    <>
+                        <LocalVideo stream={localStream} muted className={`w-full h-full object-cover ${isVideoOff ? 'hidden' : ''}`} />
+                        {isVideoOff && <AvatarPlaceholder avatar={user?.avatar} name="You" />}
+                        <div className="absolute bottom-24 left-4 bg-black/50 px-3 py-1 rounded-full text-white text-sm font-medium">
                             You {isMuted && '🔇'}
                         </div>
-                        <div className="absolute top-2 right-2 w-2 h-2 bg-green-500 rounded-full"></div>
-                    </div>
-
-                    {/* Remote Peers */}
-                    {peerList.map(([id, peerData]) => (
-                        <VideoPlayer key={id} stream={peerData.stream} user={peerData.user} />
-                    ))}
-                </div>
-            )}
-
-            {/* Controls */}
-            <div className="flex justify-center gap-4 py-4 bg-gray-900 border-t border-gray-800">
-                <button
-                    onClick={toggleAudio}
-                    className={`p-4 rounded-full text-white transition-all ${isMuted ? 'bg-red-600 scale-95' : 'bg-gray-700 hover:bg-gray-600'}`}
-                    title={isMuted ? 'Unmute' : 'Mute'}
-                >
-                    {isMuted ? <SpeakerXMarkIcon className="w-6 h-6" /> : <MicrophoneIcon className="w-6 h-6" />}
-                </button>
-
-                {!isVoiceOnly && (
-                    <button
-                        onClick={toggleVideo}
-                        className={`p-4 rounded-full text-white transition-all ${isVideoOff ? 'bg-red-600 scale-95' : 'bg-gray-700 hover:bg-gray-600'}`}
-                        title={isVideoOff ? 'Turn Video On' : 'Turn Video Off'}
-                    >
-                        {isVideoOff ? <VideoCameraSlashIcon className="w-6 h-6" /> : <VideoCameraIcon className="w-6 h-6" />}
-                    </button>
+                    </>
+                ) : (
+                    // Remote peer is main
+                    selectedPeer ? (
+                        <>
+                            <RemoteVideo stream={selectedPeer[1].stream} className="w-full h-full object-cover bg-black" />
+                            {!selectedPeer[1].stream && <AvatarPlaceholder avatar={selectedPeer[1].user?.avatar} name={selectedPeer[1].user?.username} />}
+                            <div className="absolute bottom-24 left-4 bg-black/50 px-3 py-1 rounded-full text-white text-sm font-medium">
+                                {selectedPeer[1].user?.username}
+                            </div>
+                        </>
+                    ) : (
+                        // Waiting for peer
+                        <div className="w-full h-full flex flex-col items-center justify-center gap-4"
+                            style={{ background: 'linear-gradient(135deg, #1a1a2e, #0f3460)' }}>
+                            <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-gray-600">
+                                {activeChat.avatar
+                                    ? <img src={activeChat.avatar} className="w-full h-full object-cover" alt="" />
+                                    : <div className="w-full h-full bg-gray-700 flex items-center justify-center text-4xl">👤</div>
+                                }
+                            </div>
+                            <p className="text-white text-xl font-bold">{activeChat.name}</p>
+                            <p className="text-gray-400 text-sm animate-pulse">Waiting for others to join...</p>
+                        </div>
+                    )
                 )}
+            </div>
+
+            {/* ── PIP thumbnails ── */}
+            <div className="absolute top-4 right-4 z-20 flex flex-col gap-2">
+                {thumbnails.length > 0 ? thumbnails.map(item => (
+                    <button
+                        key={item.id}
+                        type="button"
+                        className="relative w-28 h-36 md:w-32 md:h-44 overflow-hidden rounded-2xl border-2 border-white/40 bg-gray-900 shadow-2xl transition-transform active:scale-95"
+                        onClick={(e) => { e.stopPropagation(); selectMainView(item.id); }}
+                        title={`Show ${item.name || 'participant'} full screen`}
+                    >
+                        {item.type === 'me' ? (
+                            <>
+                                <LocalVideo stream={item.stream} muted className={`w-full h-full object-cover ${item.isVideoOff ? 'hidden' : ''}`} />
+                                {item.isVideoOff && <AvatarPlaceholder avatar={item.avatar} name={item.name} small />}
+                            </>
+                        ) : (
+                            <>
+                                <RemoteVideo stream={item.stream} className="w-full h-full object-cover" />
+                                {!item.stream && <AvatarPlaceholder avatar={item.avatar} name={item.name} small />}
+                            </>
+                        )}
+                        <div className="absolute left-0 right-0 bottom-0 px-2 py-1 bg-gradient-to-t from-black/80 to-transparent">
+                            <p className="truncate text-left text-[11px] font-medium text-white">
+                                {item.name || 'Participant'} {item.id === 'me' && isMuted ? 'Muted' : ''}
+                            </p>
+                        </div>
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-opacity hover:bg-black/25 hover:opacity-100">
+                            <ArrowsPointingOutIcon className="w-5 h-5 text-white" />
+                        </div>
+                    </button>
+                )) : (
+                    <div className="w-28 h-36 md:w-32 md:h-44 rounded-2xl border border-white/20 bg-gray-900/80 flex items-center justify-center shadow-2xl">
+                        <span className="text-gray-400 text-xs text-center px-3">Waiting...</span>
+                    </div>
+                )}
+            </div>
+
+            {/* ── TOP BAR (name + end call) ── */}
+            <div className={`absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-4 pt-10 pb-4 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.6), transparent)' }}
+            >
+                <div>
+                    <h2 className="text-white font-bold text-lg">{activeChat.name}</h2>
+                    <p className="text-green-400 text-xs">
+                        {firstPeer?.[1]?.stream ? 'Connected' : 'Calling...'}
+                    </p>
+                </div>
+            </div>
+
+            {/* ── BOTTOM CONTROLS ── */}
+            <div
+                className={`absolute bottom-0 left-0 right-0 z-10 flex justify-center gap-5 pb-10 pt-6 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)' }}
+                onClick={e => e.stopPropagation()}
+            >
+                <ControlBtn onClick={toggleAudio} active={isMuted} activeColor="bg-red-600" label={isMuted ? 'Unmute' : 'Mute'}>
+                    {isMuted ? <SpeakerXMarkIcon className="w-6 h-6" /> : <MicrophoneIcon className="w-6 h-6" />}
+                </ControlBtn>
+
+                <ControlBtn onClick={toggleVideo} active={isVideoOff} activeColor="bg-red-600" label={isVideoOff ? 'Start Video' : 'Stop Video'}>
+                    {isVideoOff ? <VideoCameraSlashIcon className="w-6 h-6" /> : <VideoCameraIcon className="w-6 h-6" />}
+                </ControlBtn>
 
                 <button
                     onClick={onClose}
-                    className="px-8 py-4 rounded-full bg-red-600 hover:bg-red-700 text-white font-bold transition-all"
+                    className="w-16 h-16 rounded-full bg-red-600 hover:bg-red-700 flex items-center justify-center shadow-xl transition-transform active:scale-95"
                 >
-                    End Call
+                    <XMarkIcon className="w-7 h-7 text-white" />
                 </button>
             </div>
+
+            {/* Audio players for all peers */}
+            {peerList.map(([id, p]) => p.stream && <AudioPlayer key={id} stream={p.stream} />)}
         </div>
     );
 };
 
-const VideoPlayer = ({ stream, user }) => {
-    const videoRef = useRef();
-    useEffect(() => { if (videoRef.current && stream) videoRef.current.srcObject = stream; }, [stream]);
+// ── Helper Components ──
 
-    return (
-        <div className="relative bg-gray-900 rounded-lg overflow-hidden">
-            {stream ? (
-                <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
-            ) : (
-                <div className="absolute inset-0 flex items-center justify-center bg-gray-800">
-                    <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-gray-600">
-                        {user?.avatar ? <img src={user.avatar} className="w-full h-full object-cover" alt="" /> : <span className="text-4xl flex items-center justify-center h-full">👤</span>}
-                    </div>
-                </div>
-            )}
-            <div className="absolute bottom-2 left-2 bg-black/60 px-2 py-0.5 rounded text-white text-xs">{user?.username}</div>
-            {stream && <div className="absolute top-2 right-2 w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>}
+const ControlBtn = ({ onClick, active, activeColor = 'bg-gray-700', children, label }) => (
+    <button
+        onClick={onClick}
+        title={label}
+        className={`w-14 h-14 rounded-full flex items-center justify-center text-white shadow-lg transition-all active:scale-95 ${active ? activeColor : 'bg-gray-700/80 hover:bg-gray-600'}`}
+    >
+        {children}
+    </button>
+);
+
+const AvatarPlaceholder = ({ avatar, name, small }) => (
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gray-900">
+        <div className={`${small ? 'w-12 h-12' : 'w-24 h-24'} rounded-full overflow-hidden border-2 border-gray-600`}>
+            {avatar
+                ? <img src={avatar} className="w-full h-full object-cover" alt="" />
+                : <div className="w-full h-full bg-gray-700 flex items-center justify-center text-3xl">👤</div>
+            }
         </div>
-    );
+        {!small && <p className="text-white text-sm font-medium">{name}</p>}
+    </div>
+);
+
+const RemoteVideo = ({ stream, className }) => {
+    const videoRef = useRef();
+    useEffect(() => {
+        if (videoRef.current && stream) videoRef.current.srcObject = stream;
+    }, [stream]);
+    return <video ref={videoRef} autoPlay playsInline className={className} />;
+};
+
+const LocalVideo = ({ stream, className, muted = true }) => {
+    const videoRef = useRef();
+    useEffect(() => {
+        if (videoRef.current && stream) videoRef.current.srcObject = stream;
+    }, [stream]);
+    return <video ref={videoRef} muted={muted} autoPlay playsInline className={className} />;
 };
 
 const AudioPlayer = ({ stream }) => {
     const audioRef = useRef();
-    useEffect(() => { if (audioRef.current && stream) audioRef.current.srcObject = stream; }, [stream]);
+    useEffect(() => {
+        if (audioRef.current && stream) audioRef.current.srcObject = stream;
+    }, [stream]);
     return <audio ref={audioRef} autoPlay />;
 };
 

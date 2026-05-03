@@ -9,7 +9,7 @@ import IncomingCallModal from '../components/IncomingCallModal';
 import VideoCallModal from '../components/VideoCall';
 import AvatarZoom from '../components/AvatarZoom';
 import StatusSection from '../components/StatusSection';
-import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon, EllipsisVerticalIcon, XMarkIcon, TrashIcon, NoSymbolIcon } from '@heroicons/react/24/outline';
 import { useEncryption } from '../hooks/useEncryption';
 import { decryptEnvelope, encryptForRecipients, isEncryptedPayload } from '../utils/encryption';
 
@@ -24,7 +24,10 @@ const Home = () => {
     const [loadingChats, setLoadingChats] = useState(true);
     const [showCallModal, setShowCallModal] = useState(false);
     const [callType, setCallType] = useState('video');
-    const [incomingCall, setIncomingCall] = useState(null); // { chatId, callerName, callerId }
+    const [incomingCall, setIncomingCall] = useState(null);
+    const [replyTo, setReplyTo] = useState(null);
+    const [showInfoPanel, setShowInfoPanel] = useState(false);
+    const [blockedUsers, setBlockedUsers] = useState([]);
 
     // Search Modal States
     const [showSearchModal, setShowSearchModal] = useState(false);
@@ -102,6 +105,13 @@ const Home = () => {
     useEffect(() => {
         if (token) fetchChats({ restoreActive: true });
     }, [token, fetchChats]);
+
+    useEffect(() => {
+        if (!token) return;
+        axios.get('/api/user/blocked', { headers: { Authorization: `Bearer ${token}` } })
+            .then(r => setBlockedUsers(r.data))
+            .catch(() => {});
+    }, [token]);
 
     // Persist active chat logic
     useEffect(() => {
@@ -224,7 +234,7 @@ const Home = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
 
-    const handleSendMessage = async (text, type = 'text') => {
+    const handleSendMessage = async (text, type = 'text', replyMsg = null) => {
         if (!activeChat || !socket) return;
 
         if (!privateKey || !publicKey) {
@@ -253,14 +263,18 @@ const Home = () => {
             senderId: user.id,
             content: encryptedContent,
             type,
-            ttl: 0
+            ttl: 0,
+            replyToId: replyMsg?.id || null,
+            replyContent: replyMsg ? (replyMsg.type !== 'text' ? replyMsg.type : replyMsg.content) : null,
+            replySenderName: replyMsg?.senderName || null
         });
+        setReplyTo(null);
     };
 
     const handleUpload = async (file) => {
-        const maxSize = 5 * 1024 * 1024 * 1024;
+        const maxSize = 100 * 1024 * 1024;
         if (file.size > maxSize) {
-            alert("File is too large (Max 5GB)");
+            alert("File is too large (Max 100MB)");
             return;
         }
 
@@ -316,6 +330,38 @@ const Home = () => {
             callType: type
         });
         setShowCallModal(true);
+    };
+
+    const handleDeleteChat = async (chatId) => {
+        if (!window.confirm('Delete this chat for everyone?')) return;
+        try {
+            await axios.delete(`/api/chats/${chatId}`, { headers: { Authorization: `Bearer ${token}` } });
+            setChats(prev => prev.filter(c => c.id !== chatId));
+            setActiveChat(null);
+            localStorage.removeItem('activeChatId');
+        } catch (err) { console.error(err); }
+    };
+
+    const handleBlockUser = async (targetUserId) => {
+        try {
+            await axios.post('/api/user/block', { userId: targetUserId }, { headers: { Authorization: `Bearer ${token}` } });
+            setBlockedUsers(prev => [...prev, targetUserId]);
+        } catch (err) { console.error(err); }
+    };
+
+    const handleUnblockUser = async (targetUserId) => {
+        try {
+            await axios.post('/api/user/unblock', { userId: targetUserId }, { headers: { Authorization: `Bearer ${token}` } });
+            setBlockedUsers(prev => prev.filter(id => id !== targetUserId));
+        } catch (err) { console.error(err); }
+    };
+
+    const handleDeleteAvatar = async () => {
+        try {
+            const res = await axios.delete('/api/user/avatar', { headers: { Authorization: `Bearer ${token}` } });
+            updateUser(res.data.user);
+            await fetchChats();
+        } catch (err) { console.error(err); }
     };
 
     const handleDeleteMessage = async (messageId) => {
@@ -512,12 +558,14 @@ const Home = () => {
                     <div className="flex items-center gap-3">
                         <div className="relative group cursor-pointer" title="Change profile photo">
                             <AvatarZoom src={user?.avatar} name={user?.username} size="w-10 h-10" />
-                            <span
-                                onClick={() => avatarInputRef.current?.click()}
-                                className="absolute inset-0 hidden group-hover:flex items-center justify-center rounded-full bg-black/60 text-[10px] text-white z-10 cursor-pointer"
+                            <div
+                                className="absolute inset-0 hidden group-hover:flex flex-col items-center justify-center rounded-full bg-black/70 z-10 cursor-pointer gap-0.5"
                             >
-                                Edit
-                            </span>
+                                <span onClick={() => avatarInputRef.current?.click()} className="text-[9px] text-white leading-tight">Edit</span>
+                                {user?.avatar && !user.avatar.includes('dicebear') && (
+                                    <span onClick={handleDeleteAvatar} className="text-[9px] text-red-400 leading-tight">Delete</span>
+                                )}
+                            </div>
                         </div>
                         <input
                             ref={avatarInputRef}
@@ -553,11 +601,11 @@ const Home = () => {
 
             {/* Chat Room */}
             {visibleActiveChat ? (
-                <div className={`flex-1 flex flex-col h-full bg-black/50 ${activeChat ? 'flex' : 'hidden md:flex'}`}>
+                <div className={`flex-1 flex flex-col h-full bg-black/50 relative ${activeChat ? 'flex' : 'hidden md:flex'}`}>
                     {/* Chat Header */}
                     <div className="h-16 bg-signal-bg border-b border-gray-800 flex items-center justify-between px-4">
-                        <div className="flex items-center gap-3">
-                            <button onClick={() => { setActiveChat(null); localStorage.removeItem('activeChatId'); }} className="md:hidden p-2 -ml-2">
+                        <div className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer" onClick={() => setShowInfoPanel(true)}>
+                            <button onClick={(e) => { e.stopPropagation(); setActiveChat(null); localStorage.removeItem('activeChatId'); }} className="md:hidden p-2 -ml-2">
                                 <ArrowLeftIcon className="w-6 h-6 text-gray-300" />
                             </button>
                             <AvatarZoom
@@ -565,23 +613,69 @@ const Home = () => {
                                 name={visibleActiveChat.name}
                                 size="w-10 h-10"
                             />
-                            <div>
-                                <h3 className="font-bold text-sm md:text-base">{visibleActiveChat.name}</h3>
+                            <div className="min-w-0">
+                                <h3 className="font-bold text-sm md:text-base truncate">{visibleActiveChat.name}</h3>
                                 <p className={`text-xs ${getOtherParticipant(visibleActiveChat)?.isOnline ? 'text-green-500' : 'text-gray-400'}`}>
                                     {getChatStatus(visibleActiveChat)}
                                 </p>
                             </div>
                         </div>
-                        <div className="flex gap-4 text-signal-accent">
+                        <div className="flex gap-3 text-signal-accent items-center">
                             <button onClick={() => startCall('voice')} title="Voice Call"><PhoneIcon className="w-6 h-6" /></button>
                             <button onClick={() => startCall('video')} title="Video Call"><VideoCameraIcon className="w-6 h-6" /></button>
-                            {visibleActiveChat.isGroup && (
-                                <button onClick={() => startCall('video')} title="Group Video Call" className="flex items-center gap-1 text-xs bg-signal-accent px-2 py-1 rounded-lg text-white font-bold">
-                                    👥 Group Call
-                                </button>
-                            )}
+                            <button onClick={() => setShowInfoPanel(true)} className="text-gray-400 hover:text-white">
+                                <EllipsisVerticalIcon className="w-6 h-6" />
+                            </button>
                         </div>
                     </div>
+
+                    {/* Info Panel */}
+                    {showInfoPanel && (() => {
+                        const other = getOtherParticipant(visibleActiveChat);
+                        const isBlocked = other && blockedUsers.includes(other.id);
+                        return (
+                            <div className="absolute inset-0 z-40 bg-black/70 flex justify-end" onClick={() => setShowInfoPanel(false)}>
+                                <div className="w-80 bg-[#111b21] h-full flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+                                    <div className="flex items-center gap-3 p-4 border-b border-gray-800">
+                                        <button onClick={() => setShowInfoPanel(false)} className="text-gray-400 hover:text-white">
+                                            <XMarkIcon className="w-6 h-6" />
+                                        </button>
+                                        <h2 className="text-white font-bold text-lg">Contact Info</h2>
+                                    </div>
+                                    <div className="flex flex-col items-center py-6 gap-2 border-b border-gray-800">
+                                        <img
+                                            src={visibleActiveChat.avatar || other?.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=x'}
+                                            className="w-24 h-24 rounded-full object-cover border-2 border-gray-700"
+                                            alt=""
+                                        />
+                                        <h3 className="text-white font-bold text-xl">{visibleActiveChat.name}</h3>
+                                        {other && <p className="text-gray-400 text-sm">📞 {other.phone}</p>}
+                                        <p className={`text-xs ${other?.isOnline ? 'text-green-500' : 'text-gray-500'}`}>
+                                            {other?.isOnline ? 'Online' : formatLastSeen(other?.lastSeen)}
+                                        </p>
+                                    </div>
+                                    <div className="flex flex-col gap-1 p-3">
+                                        {other && (
+                                            <button
+                                                onClick={() => isBlocked ? handleUnblockUser(other.id) : handleBlockUser(other.id)}
+                                                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${isBlocked ? 'text-green-400 hover:bg-green-500/10' : 'text-red-400 hover:bg-red-500/10'}`}
+                                            >
+                                                <NoSymbolIcon className="w-5 h-5" />
+                                                {isBlocked ? `Unblock ${other.username}` : `Block ${other.username}`}
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={() => { setShowInfoPanel(false); handleDeleteChat(visibleActiveChat.id); }}
+                                            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors"
+                                        >
+                                            <TrashIcon className="w-5 h-5" />
+                                            Delete Chat
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })()}
 
                     {/* Messages Area - WhatsApp style background */}
                     <div
@@ -593,22 +687,27 @@ const Home = () => {
                             const currDate = new Date(msg.timestamp).toDateString();
                             const prevDate = prevMsg ? new Date(prevMsg.timestamp).toDateString() : null;
                             const showDate = currDate !== prevDate;
-
                             const prevSenderId = prevMsg?.senderId;
                             const showAvatar = !msg.senderId === user.id && prevSenderId !== msg.senderId;
-
                             const sender = visibleActiveChat.participants.find(p => p.id === msg.senderId);
+                            const replyData = msg.replyToId ? {
+                                content: msg.replyContent,
+                                type: msg.replyType,
+                                senderName: msg.replySenderName
+                            } : null;
 
                             return (
                                 <React.Fragment key={msg.id || idx}>
                                     {showDate && <DateSeparator date={msg.timestamp} />}
                                     <ChatBubble
-                                        message={msg}
+                                        message={{ ...msg, senderName: sender?.username }}
                                         isOwn={msg.senderId === user.id}
                                         senderName={visibleActiveChat.isGroup ? sender?.username : null}
                                         senderAvatar={sender?.avatar}
                                         showAvatar={showAvatar || prevSenderId !== msg.senderId}
                                         onDelete={handleDeleteMessage}
+                                        onReply={(m) => setReplyTo({ ...m, senderName: sender?.username || 'You' })}
+                                        replyTo={replyData}
                                     />
                                 </React.Fragment>
                             );
@@ -617,7 +716,12 @@ const Home = () => {
                     </div>
 
                     {/* Input Area */}
-                    <MessageInput onSend={handleSendMessage} onUpload={handleUpload} />
+                    <MessageInput
+                        onSend={(text, type) => handleSendMessage(text, type, replyTo)}
+                        onUpload={handleUpload}
+                        replyTo={replyTo}
+                        onCancelReply={() => setReplyTo(null)}
+                    />
                 </div>
             ) : (
                 <div className="hidden md:flex flex-1 items-center justify-center flex-col text-gray-500">

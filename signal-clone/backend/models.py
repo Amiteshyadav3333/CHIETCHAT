@@ -40,6 +40,9 @@ class Message(db.Model):
     type = db.Column(db.String(20), default='text')
     timestamp = db.Column(db.DateTime, default=utc_now)
     ttl = db.Column(db.Integer, default=0)
+    reply_to_id = db.Column(db.Integer, nullable=True)
+    reply_content = db.Column(db.Text, nullable=True)
+    reply_sender_name = db.Column(db.String(80), nullable=True)
 
     sender = db.relationship('User')
 
@@ -63,3 +66,9 @@ class StatusView(db.Model):
     viewer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     viewed_at = db.Column(db.DateTime, default=utc_now)
     viewer = db.relationship('User')
+
+class Block(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    blocker_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    blocked_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now)

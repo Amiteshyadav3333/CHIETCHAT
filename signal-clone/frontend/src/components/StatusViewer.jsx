@@ -8,6 +8,7 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, toke
     const [progress, setProgress] = useState(0);
     const [paused, setPaused] = useState(false);
     const [showViews, setShowViews] = useState(false);
+    const [musicBlocked, setMusicBlocked] = useState(false);
 
     const timerRef = useRef(null);
     const videoRef = useRef(null);
@@ -79,13 +80,14 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, toke
 
     // Video sync
     useEffect(() => {
+        setMusicBlocked(false);
         if (videoRef.current) {
             videoRef.current.currentTime = 0;
             videoRef.current.play().catch(() => {});
         }
         if (audioRef.current) {
             audioRef.current.currentTime = 0;
-            audioRef.current.play().catch(() => {});
+            audioRef.current.play().catch(() => setMusicBlocked(true));
         }
     }, [currentStatus?.id]);
 
@@ -94,7 +96,13 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, toke
         setPaused(newPaused);
         pausedRef.current = newPaused;
         if (videoRef.current) newPaused ? videoRef.current.pause() : videoRef.current.play();
-        if (audioRef.current) newPaused ? audioRef.current.pause() : audioRef.current.play();
+        if (audioRef.current) {
+            if (newPaused) {
+                audioRef.current.pause();
+            } else {
+                audioRef.current.play().then(() => setMusicBlocked(false)).catch(() => setMusicBlocked(true));
+            }
+        }
     };
 
     const handleDelete = async () => {
@@ -171,7 +179,7 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, toke
 
                     {/* Music */}
                     {currentStatus.musicUrl && (
-                        <audio ref={audioRef} src={currentStatus.musicUrl} loop />
+                        <audio ref={audioRef} src={currentStatus.musicUrl} loop onError={() => setMusicBlocked(true)} />
                     )}
 
                     {/* Pause indicator */}
@@ -203,6 +211,17 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, toke
                             <MusicalNoteIcon className="w-3 h-3 text-white animate-spin" style={{ animationDuration: '3s' }} />
                             <span className="text-white text-xs">{currentStatus.musicName}</span>
                         </div>
+                    )}
+                    {currentStatus.musicUrl && musicBlocked && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                audioRef.current?.play().then(() => setMusicBlocked(false)).catch(() => {});
+                            }}
+                            className="absolute bottom-14 left-4 bg-purple-600/90 text-white text-xs px-3 py-1.5 rounded-full"
+                        >
+                            Tap to play music
+                        </button>
                     )}
                 </div>
 

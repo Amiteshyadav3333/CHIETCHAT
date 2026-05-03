@@ -1,7 +1,81 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { PhoneIcon, XMarkIcon } from '@heroicons/react/24/solid';
 
 const IncomingCallModal = ({ callerName, onAccept, onReject }) => {
+    const ringtoneRef = useRef(null);
+
+    useEffect(() => {
+        let stopped = false;
+        let timeoutId = null;
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+
+        if (!AudioContextClass) return undefined;
+
+        const audioContext = new AudioContextClass();
+        ringtoneRef.current = {
+            stop: () => {
+                stopped = true;
+                clearTimeout(timeoutId);
+                audioContext.close().catch(() => {});
+            }
+        };
+
+        const playTone = (frequency, startTime, duration) => {
+            const oscillator = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(frequency, startTime);
+            gain.gain.setValueAtTime(0.0001, startTime);
+            gain.gain.exponentialRampToValueAtTime(0.18, startTime + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+
+            oscillator.connect(gain);
+            gain.connect(audioContext.destination);
+            oscillator.start(startTime);
+            oscillator.stop(startTime + duration + 0.02);
+        };
+
+        const ring = async () => {
+            if (stopped) return;
+            try {
+                if (audioContext.state === 'suspended') {
+                    await audioContext.resume();
+                }
+
+                const now = audioContext.currentTime;
+                playTone(880, now, 0.22);
+                playTone(1046.5, now + 0.26, 0.22);
+            } catch {
+                return;
+            }
+
+            timeoutId = window.setTimeout(ring, 1400);
+        };
+
+        ring();
+
+        return () => {
+            stopped = true;
+            clearTimeout(timeoutId);
+            audioContext.close().catch(() => {});
+        };
+    }, []);
+
+    const stopRingtone = () => {
+        ringtoneRef.current?.stop();
+    };
+
+    const handleReject = () => {
+        stopRingtone();
+        onReject();
+    };
+
+    const handleAccept = () => {
+        stopRingtone();
+        onAccept();
+    };
+
     return (
         <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
             <div className="bg-gray-800 p-6 rounded-2xl shadow-2xl w-full max-w-sm flex flex-col items-center animate-bounce-short">
@@ -13,7 +87,7 @@ const IncomingCallModal = ({ callerName, onAccept, onReject }) => {
 
                 <div className="flex gap-8 w-full justify-center">
                     <button
-                        onClick={onReject}
+                        onClick={handleReject}
                         className="flex flex-col items-center gap-2 group"
                     >
                         <div className="w-14 h-14 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center shadow-lg transition-transform group-hover:scale-110">
@@ -23,7 +97,7 @@ const IncomingCallModal = ({ callerName, onAccept, onReject }) => {
                     </button>
 
                     <button
-                        onClick={onAccept}
+                        onClick={handleAccept}
                         className="flex flex-col items-center gap-2 group"
                     >
                         <div className="w-14 h-14 bg-green-500 hover:bg-green-600 rounded-full flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 animate-pulse">

@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { XMarkIcon, MusicalNoteIcon, PhotoIcon } from '@heroicons/react/24/solid';
+import React, { useEffect, useState, useRef } from 'react';
+import { XMarkIcon, MusicalNoteIcon, PhotoIcon, MagnifyingGlassIcon, PlayIcon, PauseIcon } from '@heroicons/react/24/solid';
 import axios from 'axios';
 
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
@@ -11,6 +11,13 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
     const [caption, setCaption] = useState('');
     const [musicFile, setMusicFile] = useState(null);
     const [musicName, setMusicName] = useState('');
+    const [selectedSong, setSelectedSong] = useState(null);
+    const [songQuery, setSongQuery] = useState('');
+    const [songResults, setSongResults] = useState([]);
+    const [searchingSongs, setSearchingSongs] = useState(false);
+    const [songSearchOpen, setSongSearchOpen] = useState(false);
+    const [songWarning, setSongWarning] = useState('');
+    const [playingSongId, setPlayingSongId] = useState(null);
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState('');
     const [videoDuration, setVideoDuration] = useState(null);
@@ -18,6 +25,11 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
     const fileRef = useRef();
     const musicRef = useRef();
     const videoRef = useRef();
+    const previewAudioRef = useRef(null);
+
+    useEffect(() => {
+        return () => stopSongPreview();
+    }, []);
 
     const handleMediaSelect = (e) => {
         const f = e.target.files[0];
@@ -66,8 +78,80 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
             setError('Music file is too large (Max 100MB)');
             return;
         }
+        setSelectedSong(null);
+        stopSongPreview();
         setMusicFile(f);
         setMusicName(f.name.replace(/\.[^/.]+$/, ''));
+    };
+
+    const stopSongPreview = () => {
+        if (previewAudioRef.current) {
+            previewAudioRef.current.pause();
+            previewAudioRef.current.src = '';
+            previewAudioRef.current = null;
+        }
+        setPlayingSongId(null);
+    };
+
+    const searchSongs = async (e) => {
+        e?.preventDefault();
+        const query = songQuery.trim();
+        if (query.length < 2) {
+            setSongWarning('Type at least 2 characters');
+            return;
+        }
+
+        setSearchingSongs(true);
+        setSongWarning('');
+        try {
+            const res = await axios.get('/api/music/search', {
+                params: { q: query },
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setSongResults(res.data.tracks || []);
+            setSongWarning(res.data.warning || ((res.data.tracks || []).length ? '' : 'No songs found'));
+        } catch {
+            setSongResults([]);
+            setSongWarning('Song search is unavailable. You can still post status without a song.');
+        } finally {
+            setSearchingSongs(false);
+        }
+    };
+
+    const toggleSongPreview = (song) => {
+        if (!song?.previewUrl) return;
+        if (playingSongId === song.id) {
+            stopSongPreview();
+            return;
+        }
+
+        stopSongPreview();
+        const audio = new Audio(song.previewUrl);
+        previewAudioRef.current = audio;
+        audio.onended = () => setPlayingSongId(null);
+        audio.onerror = () => {
+            setSongWarning('Preview could not play. You can still select this song.');
+            setPlayingSongId(null);
+        };
+        audio.play()
+            .then(() => setPlayingSongId(song.id))
+            .catch(() => setSongWarning('Tap again or select the song. Browser blocked preview playback.'));
+    };
+
+    const selectSong = (song) => {
+        stopSongPreview();
+        setSelectedSong(song);
+        setMusicFile(null);
+        setMusicName(`${song.title} - ${song.artist}`);
+        setSongSearchOpen(false);
+        setSongWarning('');
+    };
+
+    const clearMusic = () => {
+        stopSongPreview();
+        setMusicFile(null);
+        setSelectedSong(null);
+        setMusicName('');
     };
 
     const handleSubmit = async () => {
@@ -81,15 +165,21 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
             formData.append('caption', caption);
             formData.append('duration', videoDuration || 15);
 
-            if (musicFile) {
-                // Upload music first
-                const musicForm = new FormData();
-                musicForm.append('file', musicFile);
-                const musicRes = await axios.post('/api/upload', musicForm, {
-                    headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` }
-                });
-                formData.append('musicUrl', musicRes.data.url);
-                formData.append('musicName', musicName);
+            if (selectedSong?.previewUrl) {
+                formData.append('musicUrl', selectedSong.previewUrl);
+                formData.append('musicName', `${selectedSong.title} - ${selectedSong.artist}`);
+            } else if (musicFile) {
+                try {
+                    const musicForm = new FormData();
+                    musicForm.append('file', musicFile);
+                    const musicRes = await axios.post('/api/upload', musicForm, {
+                        headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` }
+                    });
+                    formData.append('musicUrl', musicRes.data.url);
+                    formData.append('musicName', musicName);
+                } catch {
+                    console.warn('Music upload failed; posting status without music.');
+                }
             }
 
             await axios.post('/api/status', formData, {
@@ -163,17 +253,97 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
                     />
 
                     {/* Music */}
-                    <div className="flex items-center gap-2">
+                    <div className="space-y-2">
                         <button
-                            onClick={() => musicRef.current?.click()}
-                            className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm px-3 py-2 rounded-lg flex-1 transition-colors"
+                            onClick={() => setSongSearchOpen(v => !v)}
+                            className="w-full flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm px-3 py-2 rounded-lg transition-colors"
                         >
                             <MusicalNoteIcon className="w-4 h-4 text-purple-400" />
-                            <span className="truncate">{musicName || 'Add Music (optional)'}</span>
+                            <span className="truncate flex-1 text-left">{musicName || 'Search song (optional)'}</span>
+                            <MagnifyingGlassIcon className="w-4 h-4 text-gray-500" />
                         </button>
-                        {musicFile && (
-                            <button onClick={() => { setMusicFile(null); setMusicName(''); }} className="text-gray-500 hover:text-red-400">
-                                <XMarkIcon className="w-4 h-4" />
+
+                        {musicName && (
+                            <div className="flex items-center gap-2 rounded-lg bg-purple-500/10 border border-purple-500/20 px-3 py-2">
+                                {selectedSong?.artwork ? (
+                                    <img src={selectedSong.artwork} alt="" className="w-9 h-9 rounded object-cover" />
+                                ) : (
+                                    <div className="w-9 h-9 rounded bg-gray-800 flex items-center justify-center">
+                                        <MusicalNoteIcon className="w-4 h-4 text-purple-300" />
+                                    </div>
+                                )}
+                                <div className="min-w-0 flex-1">
+                                    <p className="truncate text-xs font-semibold text-white">{musicName}</p>
+                                    <p className="text-[11px] text-gray-400">{selectedSong ? '30 sec preview' : 'Uploaded audio'}</p>
+                                </div>
+                                <button onClick={clearMusic} className="text-gray-500 hover:text-red-400">
+                                    <XMarkIcon className="w-4 h-4" />
+                                </button>
+                            </div>
+                        )}
+
+                        {songSearchOpen && (
+                            <div className="rounded-xl border border-gray-800 bg-gray-950 p-3 space-y-3">
+                                <form onSubmit={searchSongs} className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={songQuery}
+                                        onChange={e => setSongQuery(e.target.value)}
+                                        placeholder="Search any song..."
+                                        className="flex-1 bg-gray-800 text-white text-sm px-3 py-2 rounded-lg outline-none focus:ring-1 focus:ring-purple-500 placeholder-gray-500"
+                                    />
+                                    <button
+                                        type="submit"
+                                        disabled={searchingSongs}
+                                        className="bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white px-3 rounded-lg"
+                                    >
+                                        <MagnifyingGlassIcon className="w-4 h-4" />
+                                    </button>
+                                </form>
+
+                                {songWarning && <p className="text-xs text-yellow-300">{songWarning}</p>}
+
+                                <div className="max-h-52 overflow-y-auto space-y-2 pr-1">
+                                    {songResults.map(song => (
+                                        <div key={song.id} className="flex items-center gap-2 rounded-lg bg-gray-900 p-2">
+                                            {song.artwork ? (
+                                                <img src={song.artwork} alt="" className="w-10 h-10 rounded object-cover" />
+                                            ) : (
+                                                <div className="w-10 h-10 rounded bg-gray-800 flex items-center justify-center">
+                                                    <MusicalNoteIcon className="w-4 h-4 text-purple-300" />
+                                                </div>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() => toggleSongPreview(song)}
+                                                className="w-8 h-8 rounded-full bg-gray-800 hover:bg-gray-700 flex items-center justify-center text-white flex-shrink-0"
+                                            >
+                                                {playingSongId === song.id ? <PauseIcon className="w-4 h-4" /> : <PlayIcon className="w-4 h-4" />}
+                                            </button>
+                                            <button type="button" onClick={() => selectSong(song)} className="min-w-0 flex-1 text-left">
+                                                <p className="truncate text-sm text-white font-medium">{song.title}</p>
+                                                <p className="truncate text-xs text-gray-400">{song.artist}</p>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={() => musicRef.current?.click()}
+                                    className="w-full text-xs text-gray-400 hover:text-white border border-gray-800 rounded-lg py-2"
+                                >
+                                    Upload audio instead
+                                </button>
+                            </div>
+                        )}
+                        {!songSearchOpen && (
+                            <button
+                                type="button"
+                                onClick={() => musicRef.current?.click()}
+                                className="w-full text-xs text-gray-500 hover:text-gray-300"
+                            >
+                                Upload audio file instead
                             </button>
                         )}
                     </div>

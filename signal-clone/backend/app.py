@@ -1,6 +1,9 @@
 import os
 import jwt
 import datetime
+import json
+import urllib.parse
+import urllib.request
 from dotenv import load_dotenv
 load_dotenv()
 import cloudinary
@@ -213,6 +216,40 @@ def emit_to_user_chat_contacts(user_id, event, payload):
     notified_user_ids.add(user_id)
     for participant_id in notified_user_ids:
         socketio.emit(event, payload, room=f"user_{participant_id}")
+
+
+def search_itunes_tracks(query, limit=12):
+    params = urllib.parse.urlencode({
+        "term": query,
+        "media": "music",
+        "entity": "song",
+        "limit": limit,
+    })
+    url = f"https://itunes.apple.com/search?{params}"
+    request_obj = urllib.request.Request(url, headers={"User-Agent": "CHIETCHAT/1.0"})
+
+    with urllib.request.urlopen(request_obj, timeout=6) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+
+    tracks = []
+    for item in payload.get("results", []):
+        preview_url = item.get("previewUrl")
+        if not preview_url:
+            continue
+        artwork = item.get("artworkUrl100")
+        if artwork:
+            artwork = artwork.replace("100x100bb", "300x300bb")
+        tracks.append({
+            "id": str(item.get("trackId") or preview_url),
+            "title": item.get("trackName") or "Unknown song",
+            "artist": item.get("artistName") or "Unknown artist",
+            "album": item.get("collectionName") or "",
+            "previewUrl": preview_url,
+            "artwork": artwork,
+            "source": "itunes",
+            "durationMs": item.get("trackTimeMillis"),
+        })
+    return tracks
 
 
 # --- Auth Routes ---
@@ -444,6 +481,32 @@ def delete_chat(chat_id):
     return jsonify({"ok": True})
 
 
+# --- Music Routes ---
+@app.route('/api/music/search', methods=['GET'])
+def search_music():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    query = (request.args.get('q') or '').strip()
+    if len(query) < 2:
+        return jsonify({"tracks": []})
+
+    try:
+        limit = min(max(int(request.args.get('limit', 12)), 1), 25)
+    except ValueError:
+        limit = 12
+
+    try:
+        return jsonify({"tracks": search_itunes_tracks(query, limit)})
+    except Exception as e:
+        print(f"Music Search Error: {e}")
+        return jsonify({
+            "tracks": [],
+            "warning": "Song search is temporarily unavailable. You can still post your status."
+        }), 200
+
+
 # --- Status Routes ---
 @app.route('/api/status', methods=['GET'])
 def get_statuses():
@@ -529,7 +592,10 @@ def create_status():
     caption = request.form.get('caption', '')
     music_url = request.form.get('musicUrl', None)
     music_name = request.form.get('musicName', None)
-    duration = min(int(request.form.get('duration', 15)), 15)
+    try:
+        duration = min(max(int(request.form.get('duration', 15)), 1), 15)
+    except (TypeError, ValueError):
+        duration = 15
     expires_at = utc_now() + datetime.timedelta(hours=24)
 
     status = Status(

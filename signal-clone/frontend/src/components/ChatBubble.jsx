@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { format, isToday, isYesterday } from 'date-fns';
-import { TrashIcon, DocumentIcon, ArrowUturnLeftIcon } from '@heroicons/react/24/outline';
+import { TrashIcon, DocumentIcon, ArrowUturnLeftIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { CheckIcon } from '@heroicons/react/24/solid';
 
 const SWIPE_THRESHOLD = 60;
@@ -11,6 +11,26 @@ const ChatBubble = ({ message, isOwn, senderName, onDelete, senderAvatar, showAv
     const [swiping, setSwiping] = useState(false);
     const touchStartX = useRef(null);
     const content = message.content || '';
+
+    const handleDownload = async (url) => {
+        try {
+            const response = await fetch(url);
+            const blob = await response.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            const fileName = url.split('/').pop() || 'download';
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(blobUrl);
+        } catch (error) {
+            console.error('Download failed:', error);
+            // Fallback: open in new tab
+            window.open(url, '_blank');
+        }
+    };
 
     const handleTouchStart = (e) => {
         touchStartX.current = e.touches[0].clientX;
@@ -37,32 +57,70 @@ const ChatBubble = ({ message, isOwn, senderName, onDelete, senderAvatar, showAv
     const renderContent = (cnt, type) => {
         if (type === 'image' || cnt.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
             return (
-                <img
-                    src={cnt}
-                    alt="sent"
-                    className="rounded-xl max-w-[260px] max-h-[300px] w-full object-cover cursor-pointer block"
-                    onClick={() => window.open(cnt, '_blank')}
-                />
+                <div className="relative group/media">
+                    <img
+                        src={cnt}
+                        alt="sent"
+                        className="rounded-xl max-w-[260px] max-h-[300px] w-full object-cover cursor-pointer block"
+                        onClick={() => window.open(cnt, '_blank')}
+                    />
+                    <button
+                        onClick={(e) => { e.stopPropagation(); handleDownload(cnt); }}
+                        className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 rounded-full text-white opacity-0 group-hover/media:opacity-100 transition-opacity"
+                        title="Download Image"
+                    >
+                        <ArrowDownTrayIcon className="w-4 h-4" />
+                    </button>
+                </div>
             );
         }
         if (type === 'audio' || cnt.match(/\.(mp3|wav|m4a|aac|oga|webm)$/i)) {
-            return <audio controls src={cnt} className="w-full h-8 accent-blue-500 min-w-[200px]" />;
+            return (
+                <div className="flex flex-col gap-1">
+                    <audio controls src={cnt} className="w-full h-8 accent-blue-500 min-w-[200px]" />
+                    <button
+                        onClick={() => handleDownload(cnt)}
+                        className="text-[10px] text-white/60 hover:text-white flex items-center gap-1 self-end px-1"
+                    >
+                        <ArrowDownTrayIcon className="w-3 h-3" /> Download
+                    </button>
+                </div>
+            );
         }
         if (type === 'video' || cnt.match(/\.(mp4|webm|ogg)$/i)) {
-            return <video controls src={cnt} className="rounded-xl max-w-[260px] max-h-[300px] w-full object-cover" />;
+            return (
+                <div className="relative group/media">
+                    <video controls src={cnt} className="rounded-xl max-w-[260px] max-h-[300px] w-full object-cover" />
+                    <button
+                        onClick={(e) => { e.stopPropagation(); handleDownload(cnt); }}
+                        className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 rounded-full text-white opacity-0 group-hover/media:opacity-100 transition-opacity"
+                        title="Download Video"
+                    >
+                        <ArrowDownTrayIcon className="w-4 h-4" />
+                    </button>
+                </div>
+            );
         }
         if (type === 'file') {
             const fileName = cnt.split('/').pop() || 'File';
             return (
-                <a href={cnt} target="_blank" rel="noreferrer" className="flex items-center gap-3 min-w-[180px]">
-                    <div className={`p-2 rounded-lg ${isOwn ? 'bg-white/20' : 'bg-blue-500/20'}`}>
-                        <DocumentIcon className="w-6 h-6 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate text-white">{fileName}</p>
-                        <p className="text-xs opacity-60">Tap to open</p>
-                    </div>
-                </a>
+                <div className="flex flex-col gap-1">
+                    <a href={cnt} target="_blank" rel="noreferrer" className="flex items-center gap-3 min-w-[180px]">
+                        <div className={`p-2 rounded-lg ${isOwn ? 'bg-white/20' : 'bg-blue-500/20'}`}>
+                            <DocumentIcon className="w-6 h-6 text-white" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate text-white">{fileName}</p>
+                            <p className="text-xs opacity-60">Tap to open</p>
+                        </div>
+                    </a>
+                    <button
+                        onClick={() => handleDownload(cnt)}
+                        className="text-[10px] text-white/60 hover:text-white flex items-center gap-1 self-end px-1"
+                    >
+                        <ArrowDownTrayIcon className="w-3 h-3" /> Download
+                    </button>
+                </div>
             );
         }
         return <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap">{cnt}</p>;

@@ -6,6 +6,7 @@ import axios from 'axios';
 const ReelCard = ({ reel, currentUser, onShare }) => {
     const [liked, setLiked] = useState(reel.isLiked);
     const [likesCount, setLikesCount] = useState(reel.likesCount);
+    const [sharesCount, setSharesCount] = useState(reel.sharesCount || 0);
     const [isFollowing, setIsFollowing] = useState(reel.user.isFollowing);
     const [showComments, setShowComments] = useState(false);
     const [comments, setComments] = useState([]);
@@ -69,6 +70,11 @@ const ReelCard = ({ reel, currentUser, onShare }) => {
     };
 
     const handleShare = async () => {
+        try {
+            const res = await axios.post(`/api/reels/${reel.id}/share`);
+            setSharesCount(res.data.sharesCount);
+        } catch (err) { console.error(err); }
+
         const shareData = {
             title: 'Check out this Reel!',
             text: reel.caption,
@@ -164,9 +170,12 @@ const ReelCard = ({ reel, currentUser, onShare }) => {
                     )}
                 </div>
 
-                <button onClick={handleShare} className="p-2">
-                    <ShareIcon className="w-8 h-8 text-white" />
-                </button>
+                <div className="flex flex-col items-center">
+                    <button onClick={handleShare} className="p-2">
+                        <ShareIcon className="w-8 h-8 text-white" />
+                    </button>
+                    <span className="text-white text-xs font-bold">{sharesCount}</span>
+                </div>
             </div>
 
             {/* User Info Overlay */}

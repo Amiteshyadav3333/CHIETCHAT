@@ -90,6 +90,7 @@ def ensure_database_schema():
     add_missing_columns('reel', {
         'music_url': db.String(500),
         'music_name': db.String(200),
+        'shares_count': db.Integer(),
     })
     add_missing_columns('chat', {
         'is_group': db.Boolean(),
@@ -834,6 +835,7 @@ def get_reels():
             "user": user_data,
             "likesCount": len(r.likes),
             "commentsCount": len(r.comments),
+            "sharesCount": r.shares_count or 0,
             "isLiked": is_liked
         })
     return jsonify(result)
@@ -921,6 +923,13 @@ def comment_on_reel(reel_id):
     db.session.add(comment)
     db.session.commit()
     return jsonify({"id": comment.id, "message": "Comment added"})
+
+@app.route('/api/reels/<int:reel_id>/share', methods=['POST'])
+def share_reel(reel_id):
+    reel = Reel.query.get_or_404(reel_id)
+    reel.shares_count = (reel.shares_count or 0) + 1
+    db.session.commit()
+    return jsonify({"sharesCount": reel.shares_count})
 
 # --- Chat Routes ---
 @app.route('/api/chats', methods=['GET'])

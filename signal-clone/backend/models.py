@@ -93,6 +93,7 @@ class Reel(db.Model):
     music_url = db.Column(db.String(500), nullable=True)
     music_name = db.Column(db.String(200), nullable=True)
     caption = db.Column(db.String(500), nullable=True)
+    shares_count = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=utc_now)
     
     user = db.relationship('User', backref='reels')

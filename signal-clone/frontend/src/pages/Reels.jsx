@@ -5,6 +5,7 @@ import { AuthContext } from '../context/AuthContext';
 import { ArrowLeftIcon, PlusIcon } from '@heroicons/react/24/outline';
 import ReelUploader from '../components/ReelUploader';
 import ReelProfile from '../components/ReelProfile';
+import ReelReactor from '../components/ReelReactor';
 
 const Reels = ({ onBack, onShareToChat }) => {
     const [reels, setReels] = useState([]);
@@ -12,6 +13,7 @@ const Reels = ({ onBack, onShareToChat }) => {
     const [filter, setFilter] = useState('foryou'); // 'foryou' | 'following'
     const [showUploader, setShowUploader] = useState(false);
     const [selectedProfileUserId, setSelectedProfileUserId] = useState(null);
+    const [reactingToReel, setReactingToReel] = useState(null);
     const { user, token } = useContext(AuthContext);
 
     const fetchReels = async (f = filter) => {
@@ -87,6 +89,7 @@ const Reels = ({ onBack, onShareToChat }) => {
                             currentUser={user} 
                             onShare={onShareToChat}
                             onProfileClick={(uid) => setSelectedProfileUserId(uid)}
+                            onReact={(r) => setReactingToReel(r)}
                         />
                     ))
                 ) : (
@@ -107,6 +110,14 @@ const Reels = ({ onBack, onShareToChat }) => {
                 <ReelUploader 
                     onClose={() => setShowUploader(false)} 
                     onSuccess={() => { setShowUploader(false); fetchReels(); }}
+                />
+            )}
+
+            {reactingToReel && (
+                <ReelReactor 
+                    originalReel={reactingToReel}
+                    onClose={() => setReactingToReel(null)}
+                    onSuccess={() => { setReactingToReel(null); fetchReels(); }}
                 />
             )}
 

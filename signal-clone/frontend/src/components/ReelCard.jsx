@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { HeartIcon, ChatBubbleOvalLeftIcon, ShareIcon, MusicalNoteIcon, FaceSmileIcon } from '@heroicons/react/24/solid';
+import { HeartIcon, ChatBubbleOvalLeftIcon, ShareIcon, MusicalNoteIcon, FaceSmileIcon, EyeIcon } from '@heroicons/react/24/solid';
 import { HeartIcon as HeartOutline } from '@heroicons/react/24/outline';
 import axios from 'axios';
 
-const ReelCard = ({ reel, currentUser, onShare, onProfileClick }) => {
+const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact }) => {
     const [liked, setLiked] = useState(reel.isLiked);
     const [likesCount, setLikesCount] = useState(reel.likesCount);
     const [sharesCount, setSharesCount] = useState(reel.sharesCount || 0);
@@ -168,6 +168,13 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick }) => {
                             ))}
                         </div>
                     )}
+                </div>
+
+                <div className="flex flex-col items-center">
+                    <button onClick={() => onReact(reel)} className="p-2 bg-blue-500/20 rounded-full animate-pulse">
+                        <EyeIcon className="w-8 h-8 text-blue-400" />
+                    </button>
+                    <span className="text-white text-[10px] font-bold mt-1">React</span>
                 </div>
 
                 <div className="flex flex-col items-center">

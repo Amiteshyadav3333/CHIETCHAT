@@ -93,6 +93,7 @@ def ensure_database_schema():
         'created_at': db.DateTime(),
     })
     add_missing_columns('message', {
+        'status': db.String(20),
         'ttl': db.Integer(),
         'reply_to_id': db.Integer(),
         'reply_content': db.Text(),
@@ -907,6 +908,7 @@ def get_messages(chat_id):
         "id": m.id,
         "senderId": m.sender_id,
         "content": m.content,
+        "status": m.status or 'sent',
         "type": m.type,
         "timestamp": iso_utc(m.timestamp),
         "ttl": m.ttl,
@@ -968,6 +970,24 @@ def on_connect(auth):
             db.session.commit()
 
         join_room(f"user_{user_id}")
+        
+        # Mark all pending messages as delivered
+        chats = ChatParticipant.query.filter_by(user_id=user_id).all()
+        for c in chats:
+            undelivered = Message.query.filter(
+                Message.chat_id == c.chat_id,
+                Message.sender_id != user_id,
+                Message.status == 'sent'
+            ).all()
+            for m in undelivered:
+                m.status = 'delivered'
+                db.session.commit()
+                socketio.emit('message_status_update', {
+                    "messageId": m.id,
+                    "chatId": m.chat_id,
+                    "status": 'delivered'
+                }, room=f"user_{m.sender_id}")
+
         emit_to_user_chat_contacts(user_id, 'presence_update', {
             "userId": user_id,
             "isOnline": True,
@@ -1061,6 +1081,7 @@ def on_message(data):
         "id": new_msg.id,
         "senderId": new_msg.sender_id,
         "content": new_msg.content,
+        "status": new_msg.status,
         "type": new_msg.type,
         "timestamp": iso_utc(new_msg.timestamp),
         "chatId": chat_id,
@@ -1071,7 +1092,36 @@ def on_message(data):
 
     participants = ChatParticipant.query.filter_by(chat_id=chat_id).all()
     for participant in participants:
+        # Check if recipient is online
+        if participant.user_id != socket_user_id and is_user_online(participant.user_id):
+            new_msg.status = 'delivered'
+            db.session.commit()
+            payload["status"] = 'delivered'
+        
         emit('receive_message', payload, room=f"user_{participant.user_id}")
+
+
+@socketio.on('mark_read')
+def on_mark_read(data):
+    user_id = get_socket_user_id()
+    chat_id = data.get('chatId')
+    if not user_id or not chat_id:
+        return
+
+    unread = Message.query.filter(
+        Message.chat_id == chat_id,
+        Message.sender_id != user_id,
+        Message.status != 'read'
+    ).all()
+
+    for m in unread:
+        m.status = 'read'
+        db.session.commit()
+        socketio.emit('message_status_update', {
+            "messageId": m.id,
+            "chatId": m.chat_id,
+            "status": 'read'
+        }, room=f"user_{m.sender_id}")
 
 
 @socketio.on('join_call')
@@ -1142,6 +1192,24 @@ def on_ice_candidate(data):
     emit('ice_candidate', data, room=data['to'])
 
 
+@socketio.on('request_video_upgrade')
+def on_request_video_upgrade(data):
+    if not get_socket_user_id():
+        return
+    if not data.get('to'):
+        return
+    emit('request_video_upgrade', data, room=data['to'])
+
+
+@socketio.on('video_upgrade_accepted')
+def on_video_upgrade_accepted(data):
+    if not get_socket_user_id():
+        return
+    if not data.get('to'):
+        return
+    emit('video_upgrade_accepted', data, room=data['to'])
+
+
 @socketio.on('notify_ring')
 def on_notify_ring(data):
     caller_id = get_socket_user_id()
@@ -1165,6 +1233,34 @@ def on_notify_ring(data):
                 "callerId": caller_id,
                 "callType": data.get('callType', 'video')
             }, room=f"user_{uid}")
+
+    # Send a message to the chat that a call was started
+    call_type_label = data.get('callType', 'video').capitalize()
+    new_msg = Message(
+        chat_id=chat_id,
+        sender_id=caller_id,
+        content=f"📞 {call_type_label} call started",
+        type='text',
+        status='sent'
+    )
+    db.session.add(new_msg)
+    db.session.commit()
+
+    msg_payload = {
+        "id": new_msg.id,
+        "senderId": caller_id,
+        "content": new_msg.content,
+        "status": 'sent',
+        "type": 'text',
+        "timestamp": iso_utc(new_msg.timestamp),
+        "chatId": chat_id
+    }
+    for uid in participant_ids:
+        if is_user_online(uid) and uid != caller_id:
+            new_msg.status = 'delivered'
+            db.session.commit()
+            msg_payload["status"] = 'delivered'
+        socketio.emit('receive_message', msg_payload, room=f"user_{uid}")
 
 
 # --- Serve React App ---

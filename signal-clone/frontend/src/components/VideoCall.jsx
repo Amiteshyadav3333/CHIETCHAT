@@ -20,6 +20,7 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
     const [isVideoOff, setIsVideoOff] = useState(callType === 'voice');
     const [currentCallType, setCurrentCallType] = useState(callType);
     const [showControls, setShowControls] = useState(true);
+    const [upgradeRequest, setUpgradeRequest] = useState(null); // { fromSocket, fromName }
     const [mainView, setMainView] = useState('remote'); // 'remote' | socketId of peer | 'me'
     const [localStream, setLocalStream] = useState(null);
     const [facingMode, setFacingMode] = useState('user');
@@ -83,6 +84,17 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
 
                 socket.on('call_ended', () => onClose());
 
+                socket.on('request_video_upgrade', (data) => {
+                    const peer = peersRef.current[data.fromSocket];
+                    setUpgradeRequest({ fromSocket: data.fromSocket, fromName: peer?.user?.username || 'User' });
+                });
+
+                socket.on('video_upgrade_accepted', async () => {
+                    if (currentCallType === 'voice') {
+                        await actuallySwitchToVideo();
+                    }
+                });
+
             } catch (err) {
                 console.error(err);
                 alert('Could not access microphone/camera. Please allow permissions.');
@@ -104,6 +116,8 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
             socket.off('answer');
             socket.off('ice_candidate');
             socket.off('call_ended');
+            socket.off('request_video_upgrade');
+            socket.off('video_upgrade_accepted');
         };
     }, [activeChat?.id]); // eslint-disable-line
 
@@ -163,6 +177,14 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
 
     const switchToVideo = async () => {
         if (currentCallType === 'video') return;
+        // Notify others about the request
+        Object.keys(peersRef.current).forEach(socketId => {
+            socket.emit('request_video_upgrade', { to: socketId, fromSocket: socket.id });
+        });
+        alert('Video upgrade request sent to participants...');
+    };
+
+    const actuallySwitchToVideo = async () => {
         try {
             const videoStream = await navigator.mediaDevices.getUserMedia({
                 video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: facingModeRef.current },
@@ -175,6 +197,12 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
             setCurrentCallType('video');
             setIsVideoOff(false);
         } catch { alert('Could not access camera.'); }
+    };
+
+    const acceptVideoUpgrade = async () => {
+        await actuallySwitchToVideo();
+        socket.emit('video_upgrade_accepted', { to: upgradeRequest.fromSocket, fromSocket: socket.id });
+        setUpgradeRequest(null);
     };
 
     const toggleAudio = () => {
@@ -314,6 +342,31 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
                         <XMarkIcon className="w-7 h-7 text-white" />
                     </button>
                 </div>
+
+                {/* Upgrade Request Popup */}
+                {upgradeRequest && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 animate-fade-in">
+                        <div className="bg-[#202c33] p-6 rounded-2xl w-full max-w-sm shadow-2xl text-center">
+                            <VideoCameraIcon className="w-12 h-12 text-blue-400 mx-auto mb-4" />
+                            <h3 className="text-white text-lg font-bold mb-2">Video Call Request</h3>
+                            <p className="text-gray-300 text-sm mb-6">{upgradeRequest.fromName} wants to switch to video call.</p>
+                            <div className="flex gap-4">
+                                <button
+                                    onClick={() => setUpgradeRequest(null)}
+                                    className="flex-1 py-3 rounded-xl bg-gray-700 hover:bg-gray-600 text-white font-semibold"
+                                >
+                                    Decline
+                                </button>
+                                <button
+                                    onClick={acceptVideoUpgrade}
+                                    className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold shadow-lg shadow-blue-600/20"
+                                >
+                                    Accept
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         );
     }

@@ -10,8 +10,14 @@ const Login = () => {
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [phone, setPhone] = useState('');
-    const { login } = useContext(AuthContext);
+    const { login, token } = useContext(AuthContext);
     const navigate = useNavigate();
+
+    React.useEffect(() => {
+        if (token) {
+            navigate('/');
+        }
+    }, [token, navigate]);
 
     const isLogin = mode === 'login';
     const isRegister = mode === 'register';

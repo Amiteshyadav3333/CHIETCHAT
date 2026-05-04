@@ -142,6 +142,9 @@ const Home = () => {
                     return [...prev, readableMsg];
                 });
                 scrollToBottom();
+                if (readableMsg.senderId !== user.id) {
+                    socket.emit('mark_read', { chatId: readableMsg.chatId });
+                }
             }
 
             if (!chatsRef.current.some(chat => chat.id === readableMsg.chatId)) {
@@ -155,6 +158,12 @@ const Home = () => {
                 }
                 return c;
             }));
+        });
+
+        socket.on('message_status_update', ({ messageId, chatId, status }) => {
+            if (activeChatRef.current && chatId === activeChatRef.current.id) {
+                setMessages(prev => prev.map(m => m.id === messageId ? { ...m, status } : m));
+            }
         });
 
         socket.on('presence_update', ({ userId, isOnline, lastSeen }) => {
@@ -208,6 +217,7 @@ const Home = () => {
             socket.off('incoming_call');
             socket.off('presence_update');
             socket.off('user_profile_updated');
+            socket.off('message_status_update');
         };
     }, [socket, user, fetchChats, decryptMessageForCurrentUser]);
 
@@ -223,6 +233,7 @@ const Home = () => {
                 scrollToBottom();
 
                 socket?.emit('join_room', { room: activeChat.id });
+                socket?.emit('mark_read', { chatId: activeChat.id });
             } catch (err) {
                 console.error(err);
             }

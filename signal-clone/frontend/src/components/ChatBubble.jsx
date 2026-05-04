@@ -78,9 +78,9 @@ const ChatBubble = ({ message, isOwn, senderName, onDelete, senderAvatar, showAv
     );
 
     const ticks = isOwn && (
-        <span className="text-blue-300 flex items-center">
-            <CheckIcon className="w-3 h-3 -mr-1.5" />
-            <CheckIcon className="w-3 h-3" />
+        <span className={`flex items-center ${message.status === 'read' ? 'text-[#53bdeb]' : 'text-gray-400'}`}>
+            <CheckIcon className={`w-3 h-3 ${message.status === 'sent' ? '' : '-mr-1.5'}`} />
+            {message.status !== 'sent' && <CheckIcon className="w-3 h-3" />}
         </span>
     );
 

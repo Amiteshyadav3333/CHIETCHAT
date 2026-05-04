@@ -49,6 +49,7 @@ class Message(db.Model):
     chat_id = db.Column(db.Integer, db.ForeignKey('chat.id'), nullable=False)
     sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     content = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), default='sent')  # sent | delivered | read
     type = db.Column(db.String(20), default='text')
     timestamp = db.Column(db.DateTime, default=utc_now)
     ttl = db.Column(db.Integer, default=0)

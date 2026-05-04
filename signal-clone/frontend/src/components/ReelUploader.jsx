@@ -1,7 +1,7 @@
 import React, { useState, useRef, useContext, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import axios from 'axios';
-import { XMarkIcon, VideoCameraIcon, MusicalNoteIcon, MagnifyingGlassIcon, PlayIcon, PauseIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, VideoCameraIcon, MusicalNoteIcon, MagnifyingGlassIcon, PlayIcon, PauseIcon, ArrowPathIcon, PlusIcon } from '@heroicons/react/24/outline';
 
 const MAX_DURATION = 20; // 20 seconds
 
@@ -257,7 +257,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                                     onClick={() => fileInputRef.current.click()}
                                     className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center text-white"
                                 >
-                                    <PlusIcon className="w-6 h-6" /> // PlusIcon not imported, wait
+                                    <PlusIcon className="w-6 h-6" />
                                     <VideoCameraIcon className="w-6 h-6" />
                                 </button>
                                 <p className="text-gray-400 text-sm">Upload from Gallery</p>

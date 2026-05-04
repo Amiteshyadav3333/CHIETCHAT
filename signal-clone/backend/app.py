@@ -87,6 +87,10 @@ def ensure_database_schema():
         'last_seen': db.DateTime(),
         'created_at': db.DateTime(),
     })
+    add_missing_columns('reel', {
+        'music_url': db.String(500),
+        'music_name': db.String(200),
+    })
     add_missing_columns('chat', {
         'is_group': db.Boolean(),
         'name': db.String(100),
@@ -811,6 +815,8 @@ def get_reels():
         result.append({
             "id": r.id,
             "videoUrl": r.video_url,
+            "musicUrl": r.music_url,
+            "musicName": r.music_name,
             "caption": r.caption,
             "createdAt": iso_utc(r.created_at),
             "user": serialize_user(r.user),
@@ -831,10 +837,12 @@ def create_reel():
     
     file = request.files['video']
     caption = request.form.get('caption', '')
+    music_url = request.form.get('musicUrl', '')
+    music_name = request.form.get('musicName', '')
     
     try:
         video_url = upload_to_cloudinary(file, folder='chietchat/reels', resource_type='video')
-        new_reel = Reel(user_id=user_id, video_url=video_url, caption=caption)
+        new_reel = Reel(user_id=user_id, video_url=video_url, caption=caption, music_url=music_url, music_name=music_name)
         db.session.add(new_reel)
         db.session.commit()
         return jsonify({"message": "Reel posted", "id": new_reel.id}), 201

@@ -90,6 +90,8 @@ class Reel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     video_url = db.Column(db.String(500), nullable=False)
+    music_url = db.Column(db.String(500), nullable=True)
+    music_name = db.Column(db.String(200), nullable=True)
     caption = db.Column(db.String(500), nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now)
     

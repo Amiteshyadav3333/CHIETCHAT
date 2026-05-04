@@ -85,3 +85,29 @@ class Block(db.Model):
     blocker_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     blocked_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now)
+
+class Reel(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    video_url = db.Column(db.String(500), nullable=False)
+    caption = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, default=utc_now)
+    
+    user = db.relationship('User', backref='reels')
+    likes = db.relationship('ReelLike', backref='reel', lazy=True, cascade='all, delete-orphan')
+    comments = db.relationship('ReelComment', backref='reel', lazy=True, cascade='all, delete-orphan')
+
+class ReelLike(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    reel_id = db.Column(db.Integer, db.ForeignKey('reel.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now)
+    __table_args__ = (db.UniqueConstraint('reel_id', 'user_id', name='uq_reel_user_like'),)
+
+class ReelComment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    reel_id = db.Column(db.Integer, db.ForeignKey('reel.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now)
+    user = db.relationship('User')

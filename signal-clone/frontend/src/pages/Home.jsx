@@ -9,8 +9,9 @@ import IncomingCallModal from '../components/IncomingCallModal';
 import VideoCallModal from '../components/VideoCall';
 import AvatarZoom from '../components/AvatarZoom';
 import StatusSection from '../components/StatusSection';
-import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon, EllipsisVerticalIcon, XMarkIcon, TrashIcon, NoSymbolIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon, EllipsisVerticalIcon, XMarkIcon, TrashIcon, NoSymbolIcon, PlayIcon } from '@heroicons/react/24/outline';
 import { useEncryption } from '../hooks/useEncryption';
+import Reels from './Reels';
 import { decryptEnvelope, encryptForRecipients, isEncryptedPayload } from '../utils/encryption';
 
 const Home = () => {
@@ -28,6 +29,7 @@ const Home = () => {
     const [replyTo, setReplyTo] = useState(null);
     const [showInfoPanel, setShowInfoPanel] = useState(false);
     const [blockedUsers, setBlockedUsers] = useState([]);
+    const [showReels, setShowReels] = useState(false);
 
     // Search Modal States
     const [showSearchModal, setShowSearchModal] = useState(false);
@@ -509,6 +511,21 @@ const Home = () => {
         ? chats.find(chat => chat.id === activeChat.id) || activeChat
         : null;
 
+    if (showReels) {
+        return (
+            <div className="h-[100dvh] w-full bg-black">
+                <Reels 
+                    onBack={() => setShowReels(false)} 
+                    onShareToChat={(reel) => {
+                        setShowReels(false);
+                        // Open a picker or handle direct share logic
+                        alert(`Sharing reel ${reel.id} to chat (Feature coming soon)`);
+                    }}
+                />
+            </div>
+        );
+    }
+
     return (
         <div className="flex h-[100dvh] bg-signal-bg overflow-hidden text-gray-100 font-sans relative">
             {incomingCall && (
@@ -607,6 +624,9 @@ const Home = () => {
                         </div>
                     </div>
                     <div className="flex gap-2">
+                        <button onClick={() => setShowReels(true)} className="p-2 hover:bg-gray-700 rounded-full text-blue-400" title="Watch Reels">
+                            <PlayIcon className="w-6 h-6" />
+                        </button>
                         <button onClick={() => setShowSearchModal(true)} className="p-2 hover:bg-gray-700 rounded-full" title="New Chat">
                             <PlusIcon className="w-6 h-6" />
                         </button>

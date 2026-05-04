@@ -38,10 +38,10 @@ def upload_to_cloudinary(file, folder='chietchat', resource_type='auto'):
 
 try:
     from .config import Config
-    from .models import db, User, Chat, ChatParticipant, Contact, Message, Status, StatusView, Block
+    from .models import db, User, Chat, ChatParticipant, Contact, Message, Status, StatusView, Block, Reel, ReelLike, ReelComment
 except ImportError:
     from config import Config
-    from models import db, User, Chat, ChatParticipant, Contact, Message, Status, StatusView, Block
+    from models import db, User, Chat, ChatParticipant, Contact, Message, Status, StatusView, Block, Reel, ReelLike, ReelComment
 
 static_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
 app = Flask(__name__, static_folder=static_folder)
@@ -80,6 +80,7 @@ def add_missing_columns(table_name, columns):
 
 def ensure_database_schema():
     db.create_all()
+    # Reel tables are created by create_all(), but we check other tables' columns
     add_missing_columns('user', {
         'public_key': db.Text(),
         'avatar': db.String(200),
@@ -791,6 +792,92 @@ def delete_status(status_id):
     db.session.commit()
     return jsonify({"message": "Deleted"})
 
+
+# --- Reel Routes (TikTok Style) ---
+@app.route('/api/reels', methods=['GET'])
+def get_reels():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    reels = Reel.query.order_by(Reel.created_at.desc()).all()
+    result = []
+    for r in reels:
+        is_liked = ReelLike.query.filter_by(reel_id=r.id, user_id=user_id).first() is not None
+        result.append({
+            "id": r.id,
+            "videoUrl": r.video_url,
+            "caption": r.caption,
+            "createdAt": iso_utc(r.created_at),
+            "user": serialize_user(r.user),
+            "likesCount": len(r.likes),
+            "commentsCount": len(r.comments),
+            "isLiked": is_liked
+        })
+    return jsonify(result)
+
+@app.route('/api/reels', methods=['POST'])
+def create_reel():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if 'video' not in request.files:
+        return jsonify({"error": "No video file"}), 400
+    
+    file = request.files['video']
+    caption = request.form.get('caption', '')
+    
+    try:
+        video_url = upload_to_cloudinary(file, folder='chietchat/reels', resource_type='video')
+        new_reel = Reel(user_id=user_id, video_url=video_url, caption=caption)
+        db.session.add(new_reel)
+        db.session.commit()
+        return jsonify({"message": "Reel posted", "id": new_reel.id}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/reels/<int:reel_id>/like', methods=['POST'])
+def like_reel(reel_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    existing = ReelLike.query.filter_by(reel_id=reel_id, user_id=user_id).first()
+    if existing:
+        db.session.delete(existing)
+        db.session.commit()
+        return jsonify({"isLiked": False})
+    
+    db.session.add(ReelLike(reel_id=reel_id, user_id=user_id))
+    db.session.commit()
+    return jsonify({"isLiked": True})
+
+@app.route('/api/reels/<int:reel_id>/comments', methods=['GET'])
+def get_reel_comments(reel_id):
+    comments = ReelComment.query.filter_by(reel_id=reel_id).order_by(ReelComment.created_at.asc()).all()
+    return jsonify([{
+        "id": c.id,
+        "content": c.content,
+        "createdAt": iso_utc(c.created_at),
+        "user": serialize_user(c.user)
+    } for c in comments])
+
+@app.route('/api/reels/<int:reel_id>/comments', methods=['POST'])
+def comment_on_reel(reel_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    data = get_json_data()
+    content = data.get('content', '').strip()
+    if not content:
+        return jsonify({"error": "Comment cannot be empty"}), 400
+    
+    comment = ReelComment(reel_id=reel_id, user_id=user_id, content=content)
+    db.session.add(comment)
+    db.session.commit()
+    return jsonify({"id": comment.id, "message": "Comment added"})
 
 # --- Chat Routes ---
 @app.route('/api/chats', methods=['GET'])

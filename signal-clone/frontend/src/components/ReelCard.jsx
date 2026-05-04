@@ -3,7 +3,7 @@ import { HeartIcon, ChatBubbleOvalLeftIcon, ShareIcon, MusicalNoteIcon, FaceSmil
 import { HeartIcon as HeartOutline } from '@heroicons/react/24/outline';
 import axios from 'axios';
 
-const ReelCard = ({ reel, currentUser, onShare }) => {
+const ReelCard = ({ reel, currentUser, onShare, onProfileClick }) => {
     const [liked, setLiked] = useState(reel.isLiked);
     const [likesCount, setLikesCount] = useState(reel.likesCount);
     const [sharesCount, setSharesCount] = useState(reel.sharesCount || 0);
@@ -181,8 +181,13 @@ const ReelCard = ({ reel, currentUser, onShare }) => {
             {/* User Info Overlay */}
             <div className="absolute left-4 bottom-8 right-16 z-10">
                 <div className="flex items-center gap-3 mb-2">
-                    <img src={reel.user.avatar} className="w-10 h-10 rounded-full border-2 border-white shadow-lg" alt="" />
-                    <span className="text-white font-bold text-sm drop-shadow-md">@{reel.user.username}</span>
+                    <div 
+                        className="flex items-center gap-3 cursor-pointer group"
+                        onClick={(e) => { e.stopPropagation(); onProfileClick(reel.user.id); }}
+                    >
+                        <img src={reel.user.avatar} className="w-10 h-10 rounded-full border-2 border-white shadow-lg group-hover:scale-110 transition-transform object-cover" alt="" />
+                        <span className="text-white font-bold text-sm drop-shadow-md group-hover:underline">@{reel.user.username}</span>
+                    </div>
                     {currentUser.id !== reel.user.id && (
                         <button 
                             onClick={toggleFollow}

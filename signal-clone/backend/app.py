@@ -859,6 +859,46 @@ def toggle_follow(followed_id):
     db.session.commit()
     return jsonify({"isFollowing": True})
 
+
+@app.route('/api/users/<int:uid>/reels', methods=['GET'])
+def get_user_reels(uid):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    user = User.query.get_or_404(uid)
+    reels = Reel.query.filter_by(user_id=uid).order_by(Reel.created_at.desc()).all()
+    
+    follower_count = Follow.query.filter_by(followed_id=uid).count()
+    following_count = Follow.query.filter_by(follower_id=uid).count()
+    is_following = Follow.query.filter_by(follower_id=user_id, followed_id=uid).first() is not None
+
+    result = []
+    for r in reels:
+        is_liked = ReelLike.query.filter_by(reel_id=r.id, user_id=user_id).first() is not None
+        result.append({
+            "id": r.id,
+            "videoUrl": r.video_url,
+            "musicUrl": r.music_url,
+            "musicName": r.music_name,
+            "caption": r.caption,
+            "createdAt": iso_utc(r.created_at),
+            "likesCount": len(r.likes),
+            "commentsCount": len(r.comments),
+            "sharesCount": r.shares_count or 0,
+            "isLiked": is_liked
+        })
+    
+    return jsonify({
+        "user": {
+            **serialize_user(user),
+            "followerCount": follower_count,
+            "followingCount": following_count,
+            "isFollowing": is_following
+        },
+        "reels": result
+    })
+
 @app.route('/api/reels', methods=['POST'])
 def create_reel():
     user_id = get_current_user_id()

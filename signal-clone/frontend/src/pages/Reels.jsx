@@ -4,12 +4,14 @@ import ReelCard from '../components/ReelCard';
 import { AuthContext } from '../context/AuthContext';
 import { ArrowLeftIcon, PlusIcon } from '@heroicons/react/24/outline';
 import ReelUploader from '../components/ReelUploader';
+import ReelProfile from '../components/ReelProfile';
 
 const Reels = ({ onBack, onShareToChat }) => {
     const [reels, setReels] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('foryou'); // 'foryou' | 'following'
     const [showUploader, setShowUploader] = useState(false);
+    const [selectedProfileUserId, setSelectedProfileUserId] = useState(null);
     const { user, token } = useContext(AuthContext);
 
     const fetchReels = async (f = filter) => {
@@ -33,6 +35,19 @@ const Reels = ({ onBack, onShareToChat }) => {
                 <div className="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin mb-4"></div>
                 <p className="animate-pulse">Loading Reels...</p>
             </div>
+        );
+    }
+
+    if (selectedProfileUserId) {
+        return (
+            <ReelProfile 
+                userId={selectedProfileUserId} 
+                onBack={() => setSelectedProfileUserId(null)}
+                onSelectReel={(reel) => {
+                    // Logic to show specific reel (can be improved later)
+                    setSelectedProfileUserId(null);
+                }}
+            />
         );
     }
 
@@ -71,6 +86,7 @@ const Reels = ({ onBack, onShareToChat }) => {
                             reel={reel} 
                             currentUser={user} 
                             onShare={onShareToChat}
+                            onProfileClick={(uid) => setSelectedProfileUserId(uid)}
                         />
                     ))
                 ) : (

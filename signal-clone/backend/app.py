@@ -637,7 +637,7 @@ def get_statuses():
                 "statuses": []
             }
         viewed = StatusView.query.filter_by(status_id=s.id, viewer_id=user_id).first() is not None
-        users_map[uid]["statuses"].append({
+        status_data = {
             "id": s.id,
             "mediaUrl": s.media_url,
             "mediaType": s.media_type,
@@ -649,7 +649,11 @@ def get_statuses():
             "expiresAt": iso_utc(s.expires_at),
             "viewed": viewed,
             "viewCount": len(s.views)
-        })
+        }
+        if uid == user_id:
+            status_data["viewers"] = [serialize_user(v.viewer) for v in s.views]
+        
+        users_map[uid]["statuses"].append(status_data)
     return jsonify(list(users_map.values()))
 
 

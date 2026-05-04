@@ -323,14 +323,33 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, toke
                 )}
             </div>
 
-            {/* Views Modal */}
             {showViews && (
                 <div className="absolute inset-0 bg-black/80 z-30 flex items-end justify-center" onClick={() => setShowViews(false)}>
-                    <div className="bg-gray-900 w-full max-w-sm rounded-t-2xl p-4 max-h-64 overflow-y-auto" onClick={e => e.stopPropagation()}>
-                        <h3 className="text-white font-bold mb-3 flex items-center gap-2">
-                            <EyeIcon className="w-4 h-4" /> {currentStatus.viewCount} Views
-                        </h3>
-                        <p className="text-gray-400 text-sm">View details available in full version.</p>
+                    <div className="bg-[#1c2126] w-full max-w-sm rounded-t-3xl p-5 max-h-[50%] overflow-y-auto shadow-2xl animate-slide-up" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-5">
+                            <h3 className="text-white font-bold text-lg flex items-center gap-2">
+                                <EyeIcon className="w-5 h-5 text-blue-400" /> {currentStatus.viewCount} Views
+                            </h3>
+                            <button onClick={() => setShowViews(false)} className="text-gray-400 hover:text-white">✕</button>
+                        </div>
+                        
+                        <div className="space-y-4">
+                            {currentStatus.viewers && currentStatus.viewers.length > 0 ? (
+                                currentStatus.viewers.map((viewer, idx) => (
+                                    <div key={idx} className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <img src={viewer.avatar} alt="" className="w-10 h-10 rounded-full object-cover" />
+                                            <div>
+                                                <p className="text-white text-sm font-semibold">{viewer.username}</p>
+                                                <p className="text-white/40 text-[10px]">Just now</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <p className="text-gray-500 text-center py-4">No views yet</p>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

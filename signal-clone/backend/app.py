@@ -996,6 +996,18 @@ def delete_reel(reel_id):
     db.session.commit()
     return jsonify({"message": "Reel deleted"})
 
+@app.route('/api/reels/<int:reel_id>', methods=['PUT'])
+def update_reel(reel_id):
+    user_id = get_current_user_id()
+    if not user_id: return jsonify({"error": "Unauthorized"}), 401
+    data = request.json
+    reel = Reel.query.get_or_404(reel_id)
+    if reel.user_id != user_id:
+        return jsonify({"error": "Unauthorized"}), 403
+    reel.caption = data.get('caption', reel.caption)
+    db.session.commit()
+    return jsonify({"message": "Reel updated", "caption": reel.caption})
+
 @app.route('/api/users/profile', methods=['POST'])
 def update_profile():
     user_id = get_current_user_id()

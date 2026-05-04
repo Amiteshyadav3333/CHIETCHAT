@@ -9,8 +9,12 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
     const [sharesCount, setSharesCount] = useState(reel.sharesCount || 0);
     const [viewsCount, setViewsCount] = useState(reel.viewsCount || 0);
     const [isFollowing, setIsFollowing] = useState(reel.user.isFollowing);
+    const [caption, setCaption] = useState(reel.caption);
     const [showComments, setShowComments] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
+    const [showEditCaption, setShowEditCaption] = useState(false);
+    const [newCaption, setNewCaption] = useState(reel.caption);
+    const [isUpdating, setIsUpdating] = useState(false);
     const [comments, setComments] = useState([]);
     const [newComment, setNewComment] = useState('');
     const [showReactions, setShowReactions] = useState(false);
@@ -82,6 +86,18 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
             if (audioRef.current) audioRef.current.pause();
         };
     }, []);
+
+    const handleUpdateCaption = async () => {
+        setIsUpdating(true);
+        try {
+            const res = await axios.put(`/api/reels/${reel.id}`, { caption: newCaption }, {
+                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            });
+            setCaption(res.data.caption);
+            setShowEditCaption(false);
+        } catch (err) { alert("Update failed"); }
+        finally { setIsUpdating(false); }
+    };
 
     const toggleLike = async () => {
         try {
@@ -182,9 +198,14 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
                 {showMenu && (
                     <div className="absolute right-0 top-12 bg-black/80 backdrop-blur-md rounded-xl p-2 min-w-[150px] border border-white/10 animate-slide-left">
                         {currentUser.id === reel.user.id ? (
-                            <button onClick={handleDelete} className="w-full flex items-center gap-3 p-3 text-red-500 hover:bg-white/10 rounded-lg text-sm font-bold">
-                                <TrashIcon className="w-5 h-5" /> Delete Reel
-                            </button>
+                            <>
+                                <button onClick={() => { setShowEditCaption(true); setShowMenu(false); }} className="w-full flex items-center gap-3 p-3 text-white hover:bg-white/10 rounded-lg text-sm font-bold border-b border-white/5">
+                                    <PencilIcon className="w-5 h-5 text-blue-400" /> Edit Caption
+                                </button>
+                                <button onClick={handleDelete} className="w-full flex items-center gap-3 p-3 text-red-500 hover:bg-white/10 rounded-lg text-sm font-bold">
+                                    <TrashIcon className="w-5 h-5" /> Delete Reel
+                                </button>
+                            </>
                         ) : (
                             <button onClick={handleBlock} className="w-full flex items-center gap-3 p-3 text-red-500 hover:bg-white/10 rounded-lg text-sm font-bold">
                                 <NoSymbolIcon className="w-5 h-5" /> Block User
@@ -257,7 +278,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
                         </button>
                     )}
                 </div>
-                <p className="text-white text-sm line-clamp-2 drop-shadow-md mb-2">{reel.caption}</p>
+                <p className="text-white text-sm line-clamp-2 drop-shadow-md mb-2">{caption}</p>
                 <div className="flex items-center gap-3">
                     {reel.musicName && (
                         <div className="flex items-center gap-2 bg-black/30 w-fit px-3 py-1 rounded-full backdrop-blur-sm border border-white/10">
@@ -303,6 +324,33 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
                         />
                         <button type="submit" className="bg-blue-600 text-white px-4 rounded-full font-bold text-sm">Post</button>
                     </form>
+                </div>
+            )}
+
+            {/* Edit Caption Modal */}
+            {showEditCaption && (
+                <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-6" onClick={() => setShowEditCaption(false)}>
+                    <div className="bg-[#1c1c1c] w-full max-w-sm rounded-3xl p-6 space-y-4 border border-white/10 shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-white font-bold text-lg">Edit Caption</h3>
+                        <textarea
+                            value={newCaption}
+                            onChange={(e) => setNewCaption(e.target.value)}
+                            className="w-full bg-gray-900 text-white p-4 rounded-2xl outline-none focus:ring-1 focus:ring-blue-500 text-sm resize-none"
+                            rows={4}
+                            placeholder="Write a new caption..."
+                            maxLength={300}
+                        />
+                        <div className="flex gap-2">
+                            <button onClick={() => setShowEditCaption(false)} className="flex-1 py-3 bg-gray-800 text-white rounded-xl font-bold text-sm">Cancel</button>
+                            <button 
+                                onClick={handleUpdateCaption}
+                                disabled={isUpdating}
+                                className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold text-sm disabled:opacity-50"
+                            >
+                                {isUpdating ? 'Saving...' : 'Save'}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 

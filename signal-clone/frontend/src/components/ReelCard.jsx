@@ -6,6 +6,7 @@ import axios from 'axios';
 const ReelCard = ({ reel, currentUser, onShare }) => {
     const [liked, setLiked] = useState(reel.isLiked);
     const [likesCount, setLikesCount] = useState(reel.likesCount);
+    const [isFollowing, setIsFollowing] = useState(reel.user.isFollowing);
     const [showComments, setShowComments] = useState(false);
     const [comments, setComments] = useState([]);
     const [newComment, setNewComment] = useState('');
@@ -15,6 +16,17 @@ const ReelCard = ({ reel, currentUser, onShare }) => {
     const audioRef = useRef(null);
 
     const reactions = ['❤️', '😂', '🔥', '😮', '😢', '👏'];
+
+    const toggleFollow = async (e) => {
+        e.stopPropagation();
+        if (reel.user.id === currentUser.id) return;
+        try {
+            const res = await axios.post(`/api/users/${reel.user.id}/follow`, {}, {
+                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            });
+            setIsFollowing(res.data.isFollowing);
+        } catch (err) { console.error(err); }
+    };
 
     useEffect(() => {
         const observer = new IntersectionObserver(
@@ -162,7 +174,14 @@ const ReelCard = ({ reel, currentUser, onShare }) => {
                 <div className="flex items-center gap-3 mb-2">
                     <img src={reel.user.avatar} className="w-10 h-10 rounded-full border-2 border-white shadow-lg" alt="" />
                     <span className="text-white font-bold text-sm drop-shadow-md">@{reel.user.username}</span>
-                    <button className="bg-white text-black px-3 py-1 rounded-full text-xs font-bold hover:bg-gray-200 transition-colors">Follow</button>
+                    {currentUser.id !== reel.user.id && (
+                        <button 
+                            onClick={toggleFollow}
+                            className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${isFollowing ? 'bg-transparent border border-white text-white' : 'bg-white text-black hover:bg-gray-200'}`}
+                        >
+                            {isFollowing ? 'Following' : 'Follow'}
+                        </button>
+                    )}
                 </div>
                 <p className="text-white text-sm line-clamp-2 drop-shadow-md">{reel.caption}</p>
                 {reel.musicName && (

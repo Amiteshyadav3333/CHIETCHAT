@@ -8,27 +8,24 @@ import ReelUploader from '../components/ReelUploader';
 const Reels = ({ onBack, onShareToChat }) => {
     const [reels, setReels] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [filter, setFilter] = useState('foryou'); // 'foryou' | 'following'
     const [showUploader, setShowUploader] = useState(false);
     const { user, token } = useContext(AuthContext);
 
-    const fetchReels = async () => {
+    const fetchReels = async (f = filter) => {
         try {
-            const res = await axios.get('/api/reels', {
+            const res = await axios.get(`/api/reels?filter=${f}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setReels(res.data);
         } catch (err) { console.error(err); }
-        finally { setLoading(true); } // Setting true to show initial state but wait, should be false
+        finally { setLoading(false); }
     };
 
     useEffect(() => {
-        const load = async () => {
-            setLoading(true);
-            await fetchReels();
-            setLoading(false);
-        };
-        load();
-    }, [token]);
+        setLoading(true);
+        fetchReels(filter);
+    }, [token, filter]);
 
     if (loading) {
         return (
@@ -46,9 +43,19 @@ const Reels = ({ onBack, onShareToChat }) => {
                 <button onClick={onBack} className="p-2 text-white hover:bg-white/10 rounded-full transition-colors">
                     <ArrowLeftIcon className="w-6 h-6" />
                 </button>
-                <div className="flex gap-4">
-                    <span className="text-white font-bold text-lg border-b-2 border-white pb-1">For You</span>
-                    <span className="text-white/60 font-bold text-lg pb-1">Following</span>
+                <div className="flex gap-6">
+                    <button 
+                        onClick={() => setFilter('foryou')}
+                        className={`font-bold text-lg transition-all ${filter === 'foryou' ? 'text-white border-b-2 border-white' : 'text-white/50'}`}
+                    >
+                        For You
+                    </button>
+                    <button 
+                        onClick={() => setFilter('following')}
+                        className={`font-bold text-lg transition-all ${filter === 'following' ? 'text-white border-b-2 border-white' : 'text-white/50'}`}
+                    >
+                        Following
+                    </button>
                 </div>
                 <button onClick={() => setShowUploader(true)} className="p-2 text-white hover:bg-white/10 rounded-full transition-colors">
                     <PlusIcon className="w-6 h-6" />

@@ -38,10 +38,10 @@ def upload_to_cloudinary(file, folder='chietchat', resource_type='auto'):
 
 try:
     from .config import Config
-    from .models import db, User, Chat, ChatParticipant, Contact, Message, Status, StatusView, Block, Reel, ReelLike, ReelComment
+    from .models import db, User, Chat, ChatParticipant, Contact, Message, Status, StatusView, Block, Reel, ReelLike, ReelComment, Follow
 except ImportError:
     from config import Config
-    from models import db, User, Chat, ChatParticipant, Contact, Message, Status, StatusView, Block, Reel, ReelLike, ReelComment
+    from models import db, User, Chat, ChatParticipant, Contact, Message, Status, StatusView, Block, Reel, ReelLike, ReelComment, Follow
 
 static_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
 app = Flask(__name__, static_folder=static_folder)
@@ -808,10 +808,22 @@ def get_reels():
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
     
-    reels = Reel.query.order_by(Reel.created_at.desc()).all()
+    filter_type = request.args.get('filter', 'foryou')
+    
+    query = Reel.query
+    if filter_type == 'following':
+        followed_ids = [f.followed_id for f in Follow.query.filter_by(follower_id=user_id).all()]
+        query = query.filter(Reel.user_id.in_(followed_ids))
+    
+    reels = query.order_by(Reel.created_at.desc()).all()
     result = []
     for r in reels:
         is_liked = ReelLike.query.filter_by(reel_id=r.id, user_id=user_id).first() is not None
+        is_following = Follow.query.filter_by(follower_id=user_id, followed_id=r.user_id).first() is not None
+        
+        user_data = serialize_user(r.user)
+        user_data["isFollowing"] = is_following
+
         result.append({
             "id": r.id,
             "videoUrl": r.video_url,
@@ -819,12 +831,31 @@ def get_reels():
             "musicName": r.music_name,
             "caption": r.caption,
             "createdAt": iso_utc(r.created_at),
-            "user": serialize_user(r.user),
+            "user": user_data,
             "likesCount": len(r.likes),
             "commentsCount": len(r.comments),
             "isLiked": is_liked
         })
     return jsonify(result)
+
+@app.route('/api/users/<int:followed_id>/follow', methods=['POST'])
+def toggle_follow(followed_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    if user_id == followed_id:
+        return jsonify({"error": "Cannot follow yourself"}), 400
+    
+    existing = Follow.query.filter_by(follower_id=user_id, followed_id=followed_id).first()
+    if existing:
+        db.session.delete(existing)
+        db.session.commit()
+        return jsonify({"isFollowing": False})
+    
+    db.session.add(Follow(follower_id=user_id, followed_id=followed_id))
+    db.session.commit()
+    return jsonify({"isFollowing": True})
 
 @app.route('/api/reels', methods=['POST'])
 def create_reel():

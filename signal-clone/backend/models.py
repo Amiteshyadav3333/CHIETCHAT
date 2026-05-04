@@ -14,6 +14,8 @@ class User(db.Model):
     public_key = db.Column(db.Text, nullable=True)
     avatar = db.Column(db.String(200), default="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix")
     last_seen = db.Column(db.DateTime, default=utc_now)
+    bio = db.Column(db.String(200), nullable=True)
+    website_url = db.Column(db.String(200), nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now)
 
 class Chat(db.Model):
@@ -94,6 +96,7 @@ class Reel(db.Model):
     music_name = db.Column(db.String(200), nullable=True)
     caption = db.Column(db.String(500), nullable=True)
     shares_count = db.Column(db.Integer, default=0)
+    views_count = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=utc_now)
     
     user = db.relationship('User', backref='reels')

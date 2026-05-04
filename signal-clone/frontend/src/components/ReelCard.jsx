@@ -1,20 +1,23 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { HeartIcon, ChatBubbleOvalLeftIcon, ShareIcon, MusicalNoteIcon, FaceSmileIcon, EyeIcon } from '@heroicons/react/24/solid';
-import { HeartIcon as HeartOutline } from '@heroicons/react/24/outline';
+import { HeartIcon, ChatBubbleOvalLeftIcon, ShareIcon, MusicalNoteIcon, FaceSmileIcon, EyeIcon, TrashIcon, NoSymbolIcon } from '@heroicons/react/24/solid';
+import { HeartIcon as HeartOutline, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 
-const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact }) => {
+const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelete }) => {
     const [liked, setLiked] = useState(reel.isLiked);
     const [likesCount, setLikesCount] = useState(reel.likesCount);
     const [sharesCount, setSharesCount] = useState(reel.sharesCount || 0);
+    const [viewsCount, setViewsCount] = useState(reel.viewsCount || 0);
     const [isFollowing, setIsFollowing] = useState(reel.user.isFollowing);
     const [showComments, setShowComments] = useState(false);
+    const [showMenu, setShowMenu] = useState(false);
     const [comments, setComments] = useState([]);
     const [newComment, setNewComment] = useState('');
     const [showReactions, setShowReactions] = useState(false);
     const [floatingEmojis, setFloatingEmojis] = useState([]);
     const videoRef = useRef(null);
     const audioRef = useRef(null);
+    const viewedRef = useRef(false);
 
     const reactions = ['❤️', '😂', '🔥', '😮', '😢', '👏'];
 
@@ -29,12 +32,42 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact }) => {
         } catch (err) { console.error(err); }
     };
 
+    const recordView = async () => {
+        if (viewedRef.current) return;
+        viewedRef.current = true;
+        try {
+            const res = await axios.post(`/api/reels/${reel.id}/view`);
+            setViewsCount(res.data.viewsCount);
+        } catch (err) { console.error(err); }
+    };
+
+    const handleDelete = async () => {
+        if (!window.confirm("Delete this Reel?")) return;
+        try {
+            await axios.delete(`/api/reels/${reel.id}`, {
+                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            });
+            onDelete(reel.id);
+        } catch (err) { alert("Delete failed"); }
+    };
+
+    const handleBlock = async () => {
+        if (!window.confirm(`Block @${reel.user.username}?`)) return;
+        try {
+            await axios.post(`/api/users/${reel.user.id}/block`, {}, {
+                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            });
+            alert("User blocked");
+        } catch (err) { console.error(err); }
+    };
+
     useEffect(() => {
         const observer = new IntersectionObserver(
             ([entry]) => {
                 if (entry.isIntersecting) {
                     videoRef.current?.play().catch(() => {});
                     if (audioRef.current) audioRef.current.play().catch(() => {});
+                    recordView();
                 } else {
                     videoRef.current?.pause();
                     if (audioRef.current) audioRef.current.pause();
@@ -141,6 +174,26 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact }) => {
                 </div>
             ))}
 
+            {/* Menu Toggle */}
+            <div className="absolute top-4 right-4 z-20">
+                <button onClick={() => setShowMenu(!showMenu)} className="p-2 text-white/70 hover:text-white">
+                    <EllipsisVerticalIcon className="w-8 h-8" />
+                </button>
+                {showMenu && (
+                    <div className="absolute right-0 top-12 bg-black/80 backdrop-blur-md rounded-xl p-2 min-w-[150px] border border-white/10 animate-slide-left">
+                        {currentUser.id === reel.user.id ? (
+                            <button onClick={handleDelete} className="w-full flex items-center gap-3 p-3 text-red-500 hover:bg-white/10 rounded-lg text-sm font-bold">
+                                <TrashIcon className="w-5 h-5" /> Delete Reel
+                            </button>
+                        ) : (
+                            <button onClick={handleBlock} className="w-full flex items-center gap-3 p-3 text-red-500 hover:bg-white/10 rounded-lg text-sm font-bold">
+                                <NoSymbolIcon className="w-5 h-5" /> Block User
+                            </button>
+                        )}
+                    </div>
+                )}
+            </div>
+
             {/* Side Actions */}
             <div className="absolute right-4 bottom-24 flex flex-col items-center gap-6 z-10">
                 <div className="flex flex-col items-center">
@@ -204,16 +257,22 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact }) => {
                         </button>
                     )}
                 </div>
-                <p className="text-white text-sm line-clamp-2 drop-shadow-md">{reel.caption}</p>
-                {reel.musicName && (
-                    <div className="mt-3 flex items-center gap-2 bg-black/30 w-fit px-3 py-1 rounded-full backdrop-blur-sm border border-white/10">
-                        <MusicalNoteIcon className="w-3 h-3 text-white animate-spin" style={{ animationDuration: '3s' }} />
-                        <marquee className="text-white text-xs w-24">{reel.musicName}</marquee>
+                <p className="text-white text-sm line-clamp-2 drop-shadow-md mb-2">{reel.caption}</p>
+                <div className="flex items-center gap-3">
+                    {reel.musicName && (
+                        <div className="flex items-center gap-2 bg-black/30 w-fit px-3 py-1 rounded-full backdrop-blur-sm border border-white/10">
+                            <MusicalNoteIcon className="w-3 h-3 text-white animate-spin" style={{ animationDuration: '3s' }} />
+                            <marquee className="text-white text-xs w-20">{reel.musicName}</marquee>
+                        </div>
+                    )}
+                    <div className="flex items-center gap-1 bg-white/10 px-2 py-1 rounded-md">
+                        <PlayIcon className="w-3 h-3 text-white/60" />
+                        <span className="text-white/80 text-[10px] font-bold">{viewsCount} Views</span>
                     </div>
-                )}
+                </div>
             </div>
 
-            {/* Comments Drawer (same as before but styled better) */}
+            {/* Comments Drawer */}
             {showComments && (
                 <div className="absolute inset-x-0 bottom-0 top-1/2 bg-[#1c1c1c] rounded-t-3xl z-30 flex flex-col animate-slide-up border-t border-white/10 shadow-2xl">
                     <div className="w-12 h-1.5 bg-gray-700 rounded-full mx-auto my-3" onClick={() => setShowComments(false)} />

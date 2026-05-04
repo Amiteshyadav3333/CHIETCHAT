@@ -90,6 +90,7 @@ const Reels = ({ onBack, onShareToChat }) => {
                             onShare={onShareToChat}
                             onProfileClick={(uid) => setSelectedProfileUserId(uid)}
                             onReact={(r) => setReactingToReel(r)}
+                            onDelete={(id) => setReels(prev => prev.filter(r => r.id !== id))}
                         />
                     ))
                 ) : (

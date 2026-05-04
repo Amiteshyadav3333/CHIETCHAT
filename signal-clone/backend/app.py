@@ -91,6 +91,11 @@ def ensure_database_schema():
         'music_url': db.String(500),
         'music_name': db.String(200),
         'shares_count': db.Integer(),
+        'views_count': db.Integer(),
+    })
+    add_missing_columns('user', {
+        'bio': db.String(200),
+        'website_url': db.String(200),
     })
     add_missing_columns('chat', {
         'is_group': db.Boolean(),
@@ -273,6 +278,8 @@ def serialize_user(user):
         "phone": user.phone,
         "avatar": user.avatar,
         "publicKey": user.public_key,
+        "bio": user.bio or "",
+        "websiteUrl": user.website_url or "",
         "lastSeen": iso_utc(user.last_seen),
         "isOnline": is_user_online(user.id)
     }
@@ -836,6 +843,7 @@ def get_reels():
             "likesCount": len(r.likes),
             "commentsCount": len(r.comments),
             "sharesCount": r.shares_count or 0,
+            "viewsCount": r.views_count or 0,
             "isLiked": is_liked
         })
     return jsonify(result)
@@ -970,6 +978,34 @@ def share_reel(reel_id):
     reel.shares_count = (reel.shares_count or 0) + 1
     db.session.commit()
     return jsonify({"sharesCount": reel.shares_count})
+
+@app.route('/api/reels/<int:reel_id>/view', methods=['POST'])
+def view_reel(reel_id):
+    reel = Reel.query.get_or_404(reel_id)
+    reel.views_count = (reel.views_count or 0) + 1
+    db.session.commit()
+    return jsonify({"viewsCount": reel.views_count})
+
+@app.route('/api/reels/<int:reel_id>', methods=['DELETE'])
+def delete_reel(reel_id):
+    user_id = get_current_user_id()
+    reel = Reel.query.get_or_404(reel_id)
+    if reel.user_id != user_id:
+        return jsonify({"error": "Unauthorized"}), 403
+    db.session.delete(reel)
+    db.session.commit()
+    return jsonify({"message": "Reel deleted"})
+
+@app.route('/api/users/profile', methods=['POST'])
+def update_profile():
+    user_id = get_current_user_id()
+    if not user_id: return jsonify({"error": "Unauthorized"}), 401
+    data = request.json
+    user = User.query.get(user_id)
+    user.bio = data.get('bio', user.bio)
+    user.website_url = data.get('websiteUrl', user.website_url)
+    db.session.commit()
+    return jsonify(serialize_user(user))
 
 # --- Chat Routes ---
 @app.route('/api/chats', methods=['GET'])

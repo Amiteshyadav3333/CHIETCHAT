@@ -31,7 +31,7 @@ const Home = () => {
 
     // Search Modal States
     const [showSearchModal, setShowSearchModal] = useState(false);
-    const [searchPhone, setSearchPhone] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
     const [searchedUser, setSearchedUser] = useState(null);
     const [searchError, setSearchError] = useState('');
 
@@ -307,8 +307,22 @@ const Home = () => {
         setSearchError('');
         setSearchedUser(null);
 
+        const query = searchQuery.trim();
+        const phoneDigits = query.replace(/\D/g, '');
+        const isPhoneSearch = phoneDigits.length > 0 && phoneDigits.length === query.replace(/\s/g, '').length;
+
+        if (!query) {
+            setSearchError('Enter a 10 digit phone number or a name');
+            return;
+        }
+
+        if (isPhoneSearch && phoneDigits.length !== 10) {
+            setSearchError('Phone number must be exactly 10 digits');
+            return;
+        }
+
         try {
-            const res = await axios.post('/api/user/search', { phone: searchPhone.trim() }, {
+            const res = await axios.post('/api/user/search', { query: isPhoneSearch ? phoneDigits : query }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (res.data.error) {
@@ -404,7 +418,7 @@ const Home = () => {
         if (existingChat) {
             setActiveChat(existingChat);
             setShowSearchModal(false);
-            setSearchPhone('');
+            setSearchQuery('');
             setSearchedUser(null);
             return;
         }
@@ -422,7 +436,7 @@ const Home = () => {
             if (newChat) setActiveChat(newChat);
 
             setShowSearchModal(false);
-            setSearchPhone('');
+            setSearchQuery('');
             setSearchedUser(null);
         } catch (err) {
             console.error(err);
@@ -506,13 +520,13 @@ const Home = () => {
                         </div>
 
                         <form onSubmit={handleSearchUser} className="mb-4">
-                            <label className="block text-xs text-gray-400 mb-1 ml-1">PHONE NUMBER</label>
+                            <label className="block text-xs text-gray-400 mb-1 ml-1">PHONE NUMBER OR NAME</label>
                             <div className="flex gap-2">
                                 <input
                                     type="text"
-                                    value={searchPhone}
-                                    onChange={(e) => setSearchPhone(e.target.value)}
-                                    placeholder="e.g. 9876543210"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    placeholder="9876543210 or Amit"
                                     className="flex-1 bg-signal-input border-none rounded-lg px-4 py-2 focus:ring-1 focus:ring-signal-accent outline-none text-white"
                                     autoFocus
                                 />
@@ -538,7 +552,7 @@ const Home = () => {
                                     </div>
                                     <div>
                                         <h3 className="font-bold">{searchedUser.username}</h3>
-                                        <p className="text-xs text-gray-400">Found</p>
+                                        <p className="text-xs text-gray-400">{searchedUser.phone}</p>
                                     </div>
                                 </div>
                                 <button

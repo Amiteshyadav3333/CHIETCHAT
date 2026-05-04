@@ -138,6 +138,14 @@ def get_json_data():
     return request.get_json(silent=True) or {}
 
 
+def normalize_phone(phone):
+    return ''.join(ch for ch in str(phone or '') if ch.isdigit())
+
+
+def is_valid_phone(phone):
+    return len(phone) == 10
+
+
 def get_current_user_id():
     auth_header = request.headers.get('Authorization', '')
     if not auth_header.startswith('Bearer '):
@@ -218,21 +226,8 @@ def get_contact_user_ids(owner_id):
 
 
 def user_can_access_chat(user_id, chat_id):
-    if not user_is_chat_participant(user_id, chat_id):
-        return False
-
     chat = Chat.query.get(chat_id)
-    if not chat:
-        return False
-
-    other_ids = [
-        participant.user_id
-        for participant in ChatParticipant.query.filter_by(chat_id=chat_id).all()
-        if participant.user_id != user_id
-    ]
-    if not other_ids:
-        return True
-    return all(has_contact(user_id, other_id) for other_id in other_ids)
+    return bool(chat and user_is_chat_participant(user_id, chat_id))
 
 
 def decode_socket_user_id(auth):
@@ -328,11 +323,13 @@ def register():
     try:
         data = get_json_data()
         username = (data.get('username') or '').strip()
-        phone = (data.get('phone') or '').strip()
+        phone = normalize_phone(data.get('phone'))
         password = data.get('password') or ''
 
         if not username or not phone or not password:
             return jsonify({"error": "Username, phone, and password are required"}), 400
+        if not is_valid_phone(phone):
+            return jsonify({"error": "Phone number must be exactly 10 digits"}), 400
 
         if User.query.filter_by(phone=phone).first():
             return jsonify({"error": "Phone number already registered"}), 400
@@ -351,11 +348,13 @@ def register():
 def login():
     try:
         data = get_json_data()
-        phone = (data.get('phone') or '').strip()
+        phone = normalize_phone(data.get('phone'))
         password = data.get('password') or ''
 
         if not phone or not password:
             return jsonify({"error": "Phone and password are required"}), 400
+        if not is_valid_phone(phone):
+            return jsonify({"error": "Phone number must be exactly 10 digits"}), 400
 
         user = User.query.filter_by(phone=phone).first()
         if user and check_password_hash(user.password_hash, password):
@@ -376,12 +375,14 @@ def login():
 def forgot_password():
     try:
         data = get_json_data()
-        phone = (data.get('phone') or '').strip()
+        phone = normalize_phone(data.get('phone'))
         username = (data.get('username') or '').strip()
         new_password = data.get('newPassword') or ''
 
         if not phone or not username or not new_password:
             return jsonify({"error": "Phone, username, and new password are required"}), 400
+        if not is_valid_phone(phone):
+            return jsonify({"error": "Phone number must be exactly 10 digits"}), 400
 
         if len(new_password) < 6:
             return jsonify({"error": "Password must be at least 6 characters"}), 400
@@ -417,10 +418,21 @@ def search_user():
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
     data = get_json_data()
-    phone = (data.get('phone') or '').strip()
-    if not phone:
-        return jsonify({"error": "Phone number is required"}), 400
-    user = User.query.filter_by(phone=phone).first()
+    query = (data.get('query') or data.get('phone') or '').strip()
+    phone = normalize_phone(query)
+    if not query:
+        return jsonify({"error": "Phone number or name is required"}), 400
+
+    if phone:
+        if not is_valid_phone(phone):
+            return jsonify({"error": "Phone number must be exactly 10 digits"}), 400
+        user = User.query.filter_by(phone=phone).first()
+    else:
+        user = User.query.filter(
+            User.id != user_id,
+            User.username.ilike(f"%{query}%")
+        ).order_by(User.username.asc()).first()
+
     if user and user.id == user_id:
         return jsonify({"error": "You cannot add your own number"}), 400
     if user:

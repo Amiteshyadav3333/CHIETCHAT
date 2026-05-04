@@ -16,12 +16,20 @@ const Login = () => {
     const isLogin = mode === 'login';
     const isRegister = mode === 'register';
     const isReset = mode === 'reset';
+    const handlePhoneChange = (e) => {
+        setPhone(e.target.value.replace(/\D/g, '').slice(0, 10));
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        const cleanPhone = phone.trim();
+        const cleanPhone = phone.replace(/\D/g, '');
         const cleanUsername = username.trim();
+
+        if (cleanPhone.length !== 10) {
+            alert('Phone number must be exactly 10 digits');
+            return;
+        }
 
         try {
             if (isLogin) {
@@ -93,7 +101,10 @@ const Login = () => {
                             type="text"
                             placeholder="Phone Number"
                             value={phone}
-                            onChange={(e) => setPhone(e.target.value)}
+                            onChange={handlePhoneChange}
+                            inputMode="numeric"
+                            pattern="\d{10}"
+                            maxLength={10}
                             className="w-full bg-signal-input text-white px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-signal-accent"
                             required
                         />

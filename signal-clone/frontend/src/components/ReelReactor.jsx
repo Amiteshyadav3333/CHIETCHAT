@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import axios from 'axios';
-import { XMarkIcon, VideoCameraIcon, MusicalNoteIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, VideoCameraIcon, MusicalNoteIcon, PlayIcon, PauseIcon } from '@heroicons/react/24/outline';
+import { PlayIcon as PlaySolid, PauseIcon as PauseSolid } from '@heroicons/react/24/solid';
 
 const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
     const { token } = useContext(AuthContext);
     const [recording, setRecording] = useState(false);
+    const [paused, setPaused] = useState(false);
     const [recordTime, setRecordTime] = useState(0);
     const [uploading, setUploading] = useState(false);
     const [cameraReady, setCameraReady] = useState(false);
@@ -48,6 +50,17 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
         }
     };
 
+    const toggleOriginalVideo = () => {
+        if (!recording) return;
+        if (originalVideoRef.current.paused) {
+            originalVideoRef.current.play();
+            setPaused(false);
+        } else {
+            originalVideoRef.current.pause();
+            setPaused(true);
+        }
+    };
+
     const startRecording = async () => {
         if (!cameraReady) return;
 
@@ -68,25 +81,23 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
         
         originalSource.connect(originalGain);
         originalGain.connect(destination);
-        originalGain.connect(audioCtx.destination); // Play original for user to hear
+        originalGain.connect(audioCtx.destination); 
 
         micSource.connect(micGain);
         micGain.connect(destination);
 
-        // Setup Canvas Mixing (Visual)
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
         const draw = () => {
             if (!recording && !mediaRecorderRef.current) return;
             
-            // Draw Split Screen
             ctx.fillStyle = 'black';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            // Original Video (Left/Top half)
+            // Draw original video (if paused, draw current frame)
             ctx.drawImage(originalVideoRef.current, 0, 0, canvas.width / 2, canvas.height);
             
-            // User Camera (Right/Bottom half)
+            // User Camera
             ctx.drawImage(userVideoRef.current, canvas.width / 2, 0, canvas.width / 2, canvas.height);
             
             requestAnimationFrame(draw);
@@ -115,11 +126,12 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
         originalVideoRef.current.currentTime = 0;
         originalVideoRef.current.play();
         setRecording(true);
+        setPaused(false);
         draw();
 
         timerRef.current = setInterval(() => {
             setRecordTime(prev => {
-                if (prev >= 20 || originalVideoRef.current.ended) {
+                if (prev >= 60) { // Increased to 60s for reactions
                     stopRecording();
                     return prev;
                 }
@@ -166,15 +178,21 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
             <div className="flex-1 relative bg-gray-900 flex">
                 {/* Visual Layout (Mirroring the Canvas) */}
                 <div className="flex-1 flex overflow-hidden">
-                    <div className="flex-1 bg-black relative">
+                    <div className="flex-1 bg-black relative group" onClick={toggleOriginalVideo}>
                         <video 
                             ref={originalVideoRef} 
                             src={originalReel.videoUrl} 
                             className="w-full h-full object-cover" 
-                            muted // Mute visual preview, AudioContext handles it
+                            muted 
                             crossOrigin="anonymous"
+                            playsInline
                         />
-                        <div className="absolute top-2 left-2 bg-black/40 px-2 py-1 rounded text-[10px] text-white">Original</div>
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            {paused ? <PlaySolid className="w-16 h-16 text-white/50" /> : <PauseSolid className="w-16 h-16 text-white/50" />}
+                        </div>
+                        <div className="absolute top-2 left-2 bg-black/40 px-2 py-1 rounded text-[10px] text-white">
+                            Original {paused ? '(Paused)' : '(Playing)'}
+                        </div>
                     </div>
                     <div className="flex-1 bg-black relative border-l border-white/20">
                         <video 
@@ -193,7 +211,12 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
 
                 {/* Recording Controls */}
                 <div className="absolute bottom-10 inset-x-0 flex flex-col items-center gap-4 z-50">
-                    {recording && <p className="text-white font-mono text-xl">{recordTime}s / 20s</p>}
+                    {recording && (
+                        <div className="bg-black/60 px-4 py-2 rounded-full border border-white/10 flex flex-col items-center">
+                            <p className="text-white font-mono text-xl">{recordTime}s / 60s</p>
+                            <p className="text-blue-400 text-[10px] font-bold uppercase mt-1">Tap left side to Pause/Play Video</p>
+                        </div>
+                    )}
                     <button 
                         onClick={recording ? stopRecording : startRecording}
                         disabled={uploading}
@@ -201,7 +224,7 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
                     >
                         <div className={`w-full h-full rounded-full ${recording ? 'bg-red-600 scale-75' : 'bg-red-500'} transition-all shadow-lg`} />
                     </button>
-                    <p className="text-white text-sm font-medium">{recording ? 'Stop Recording' : 'Tap to React'}</p>
+                    <p className="text-white text-sm font-medium">{recording ? (paused ? 'Recording (Video Paused)' : 'Recording (Video Playing)') : 'Tap to Start Reaction'}</p>
                 </div>
 
                 {uploading && (

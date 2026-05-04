@@ -154,12 +154,21 @@ const Home = () => {
                 return;
             }
 
-            setChats(prev => prev.map(c => {
-                if (c.id === readableMsg.chatId) {
-                    return { ...c, lastMessage: { ...c.lastMessage, content: readableMsg.type === 'text' ? readableMsg.content : readableMsg.type, timestamp: readableMsg.timestamp } };
+            setChats(prev => {
+                const chatIdx = prev.findIndex(c => c.id === readableMsg.chatId);
+                if (chatIdx === -1) {
+                    fetchChats(); // Fetch if chat not in list
+                    return prev;
                 }
-                return c;
-            }));
+                const updatedChats = [...prev];
+                const [targetChat] = updatedChats.splice(chatIdx, 1);
+                targetChat.lastMessage = {
+                    content: readableMsg.type === 'text' ? readableMsg.content : readableMsg.type,
+                    timestamp: readableMsg.timestamp,
+                    type: readableMsg.type
+                };
+                return [targetChat, ...updatedChats];
+            });
         });
 
         socket.on('message_status_update', ({ messageId, chatId, status }) => {

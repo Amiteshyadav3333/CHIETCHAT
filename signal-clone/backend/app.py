@@ -920,6 +920,9 @@ def get_chats():
                     "type": last_msg.type if last_msg else "text"
                 }
             })
+        
+        # Sort chats: newest first. Chats with no messages (None timestamp) go to the end.
+        result.sort(key=lambda x: x['lastMessage']['timestamp'] or '', reverse=True)
         return jsonify(result)
     except Exception as e:
         print(e)

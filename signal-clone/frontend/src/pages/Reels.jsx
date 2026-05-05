@@ -45,7 +45,7 @@ const Reels = ({ onBack, onShareToChat }) => {
             <ReelProfile 
                 userId={selectedProfileUserId} 
                 onBack={() => setSelectedProfileUserId(null)}
-                onSelectReel={(reel) => {
+                onSelectReel={() => {
                     // Logic to show specific reel (can be improved later)
                     setSelectedProfileUserId(null);
                 }}

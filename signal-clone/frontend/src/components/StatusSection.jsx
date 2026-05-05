@@ -70,7 +70,7 @@ const StatusSection = ({ user, token }) => {
                     </div>
 
                     {/* Other Status Circles */}
-                    {allGroups.map((group, idx) => {
+                    {allGroups.map((group) => {
                         const unviewed = hasUnviewed(group);
                         const isMe = group.user.id === user?.id;
                         const groupIdx = allGroups.indexOf(group);

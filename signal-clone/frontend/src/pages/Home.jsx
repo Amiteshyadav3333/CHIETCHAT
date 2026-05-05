@@ -250,7 +250,7 @@ const Home = () => {
             }
         };
         fetchMessages();
-    }, [activeChat?.id, token, socket, privateKey]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [activeChat?.id, token, socket, privateKey]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

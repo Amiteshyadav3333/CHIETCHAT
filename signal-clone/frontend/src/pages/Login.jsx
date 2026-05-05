@@ -166,7 +166,7 @@ const Login = () => {
                                 setPassword('');
                                 setConfirmPassword('');
                             }}
-                            className="text-gray-400 text-sm hover:text-signal-accent hover:underline"
+                            className="text-gray-400 text-sm hover:text-Cheat-accent hover:underline"
                         >
                             Forgot password?
                         </button>

@@ -303,6 +303,9 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                                 </button>
                             </form>
                             <div className="space-y-2">
+                                {searchingSongs && (
+                                    <p className="text-xs text-gray-400 px-2">Searching songs...</p>
+                                )}
                                 {songResults.map(song => (
                                     <div key={song.id} className="flex items-center gap-3 p-2 bg-white/5 rounded-lg">
                                         <img src={song.artwork} className="w-10 h-10 rounded" alt="" />

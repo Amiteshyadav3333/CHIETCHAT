@@ -78,7 +78,11 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
                 socket.on('ice_candidate', async (data) => {
                     const peerObj = peersRef.current[data.fromSocket];
                     if (peerObj?.pc && data.candidate) {
-                        try { await peerObj.pc.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch (e) { }
+                        try {
+                            await peerObj.pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                        } catch (err) {
+                            console.error(err);
+                        }
                     }
                 });
 
@@ -119,7 +123,7 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
             socket.off('request_video_upgrade');
             socket.off('video_upgrade_accepted');
         };
-    }, [activeChat?.id]); // eslint-disable-line
+    }, [activeChat?.id]);
 
     const createPeer = (remoteSocketId, remoteUserId, stream, isInitiator) => {
         if (peersRef.current[remoteSocketId]) return peersRef.current[remoteSocketId].pc;

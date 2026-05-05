@@ -22,3 +22,50 @@ instance/
 uploads/
 signal-clone/backend/uploads/
 signal-clone/backend/static/
+
+
+# Node
+node_modules/
+dist/
+build/
+.vite/
+.cache/
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Database
+instance/
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs
+*.log
+*.out
+*.err
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Uploads / Media
+uploads/
+
+# Security
+*.pem
+*.key

@@ -1,3 +1,5 @@
+import eventlet
+eventlet.monkey_patch()
 import os
 import jwt
 import datetime
@@ -1502,7 +1504,7 @@ def serve(path):
     elif os.path.exists(os.path.join(static_folder, 'index.html')):
         return send_from_directory(static_folder, 'index.html')
     else:
-        return "Signal Clone Backend Running.", 200
+        return "Cheat Chat Backend Running.", 200
 
 
 if __name__ == '__main__':

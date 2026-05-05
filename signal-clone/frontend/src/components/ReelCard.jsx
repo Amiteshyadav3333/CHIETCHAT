@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { HeartIcon, ChatBubbleOvalLeftIcon, ShareIcon, MusicalNoteIcon, FaceSmileIcon, EyeIcon, TrashIcon, NoSymbolIcon } from '@heroicons/react/24/solid';
-import { HeartIcon as HeartOutline, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
+import { HeartIcon as HeartOutline, EllipsisVerticalIcon, PencilIcon, PlayIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 
 const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelete }) => {

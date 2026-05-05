@@ -1,3 +1,6 @@
+import eventlet
+eventlet.monkey_patch()
+
 try:
     from .app import app, socketio
 except ImportError:

@@ -25,8 +25,7 @@ def upload_to_cloudinary(file, folder='chietchat', resource_type='auto'):
     )
     return result['secure_url']
 
-def add_missing_columns(table_name, columns):
-    inspector = inspect(db.engine)
+def add_missing_columns(inspector, table_name, columns):
     if table_name not in inspector.get_table_names():
         return
 
@@ -40,52 +39,62 @@ def add_missing_columns(table_name, columns):
 
         quoted_column = preparer.quote(column_name)
         compiled_type = column_type.compile(dialect=db.engine.dialect)
-        db.session.execute(text(f'ALTER TABLE {quoted_table} ADD COLUMN {quoted_column} {compiled_type}'))
+        try:
+            db.session.execute(text(f'ALTER TABLE {quoted_table} ADD COLUMN {quoted_column} {compiled_type}'))
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error adding column {column_name} to {table_name}: {e}")
 
 def ensure_database_schema():
-    db.create_all()
-    # Reel tables are created by create_all(), but we check other tables' columns
-    add_missing_columns('user', {
-        'public_key': db.Text(),
-        'avatar': db.String(200),
-        'last_seen': db.DateTime(),
-        'created_at': db.DateTime(),
-    })
-    add_missing_columns('reel', {
-        'music_url': db.String(500),
-        'music_name': db.String(200),
-        'shares_count': db.Integer(),
-        'views_count': db.Integer(),
-    })
-    add_missing_columns('user', {
-        'bio': db.String(200),
-        'website_url': db.String(200),
-    })
-    add_missing_columns('chat', {
-        'is_group': db.Boolean(),
-        'name': db.String(100),
-        'group_admin_id': db.Integer(),
-        'created_at': db.DateTime(),
-    })
-    add_missing_columns('message', {
-        'status': db.String(20),
-        'ttl': db.Integer(),
-        'reply_to_id': db.Integer(),
-        'reply_content': db.Text(),
-        'reply_sender_name': db.String(80),
-    })
-    add_missing_columns('status', {
-        'music_url': db.String(500),
-        'music_name': db.String(200),
-        'duration': db.Integer(),
-    })
+    try:
+        db.create_all()
+        inspector = inspect(db.engine)
+        
+        # Reel tables are created by create_all(), but we check other tables' columns
+        add_missing_columns(inspector, 'user', {
+            'public_key': db.Text(),
+            'avatar': db.String(200),
+            'last_seen': db.DateTime(),
+            'created_at': db.DateTime(),
+        })
+        add_missing_columns(inspector, 'reel', {
+            'music_url': db.String(500),
+            'music_name': db.String(200),
+            'shares_count': db.Integer(),
+            'views_count': db.Integer(),
+        })
+        add_missing_columns(inspector, 'user', {
+            'bio': db.String(200),
+            'website_url': db.String(200),
+        })
+        add_missing_columns(inspector, 'chat', {
+            'is_group': db.Boolean(),
+            'name': db.String(100),
+            'group_admin_id': db.Integer(),
+            'created_at': db.DateTime(),
+        })
+        add_missing_columns(inspector, 'message', {
+            'status': db.String(20),
+            'ttl': db.Integer(),
+            'reply_to_id': db.Integer(),
+            'reply_content': db.Text(),
+            'reply_sender_name': db.String(80),
+        })
+        add_missing_columns(inspector, 'status', {
+            'music_url': db.String(500),
+            'music_name': db.String(200),
+            'duration': db.Integer(),
+        })
 
-    inspector = inspect(db.engine)
-    if 'user' in inspector.get_table_names():
-        user_columns = {column['name'] for column in inspector.get_columns('user')}
-        if {'last_seen', 'created_at'}.issubset(user_columns):
-            db.session.execute(text('UPDATE "user" SET last_seen = created_at WHERE last_seen IS NULL'))
-    db.session.commit()
+        if 'user' in inspector.get_table_names():
+            user_columns = {column['name'] for column in inspector.get_columns('user')}
+            if {'last_seen', 'created_at'}.issubset(user_columns):
+                db.session.execute(text('UPDATE "user" SET last_seen = created_at WHERE last_seen IS NULL'))
+        db.session.commit()
+    except Exception as e:
+        print(f"Database schema check timed out or failed: {e}")
+        db.session.rollback()
 
 def get_json_data():
     return request.get_json(silent=True) or {}

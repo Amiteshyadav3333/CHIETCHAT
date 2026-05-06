@@ -208,49 +208,51 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
     const startRecording = async () => {
         if (!cameraReady) return;
 
-        // Setup Audio Mixing
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        audioContextRef.current = audioCtx;
+        try {
+            // Setup Audio Mixing
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') {
+                await audioCtx.resume();
+            }
+            audioContextRef.current = audioCtx;
 
         const destination = audioCtx.createMediaStreamDestination();
 
-        // Original video audio (low volume, respect mute)
-        if (!isOriginalMuted) {
+        // Original video audio (respect mute via gain)
+        try {
+            const originalSource = audioCtx.createMediaElementSource(originalVideoRef.current);
+            const originalGain = audioCtx.createGain();
+            originalGain.gain.value = isOriginalMuted ? 0 : 0.25;
+            originalSource.connect(originalGain);
+            originalGain.connect(destination);
+            originalGain.connect(audioCtx.destination);
+        } catch (e) { console.warn("Original audio source error:", e); }
+
+        // Background Music (respect mute via gain)
+        if (originalAudioRef.current) {
             try {
-                const originalSource = audioCtx.createMediaElementSource(originalVideoRef.current);
-                const originalGain = audioCtx.createGain();
-                originalGain.gain.value = 0.25;
-                originalSource.connect(originalGain);
-                originalGain.connect(destination);
-                originalGain.connect(audioCtx.destination);
-            } catch (e) { console.warn("Original audio source error:", e); }
-
-            // Background Music (low volume)
-            if (originalAudioRef.current) {
-                try {
-                    const musicSource = audioCtx.createMediaElementSource(originalAudioRef.current);
-                    const musicGain = audioCtx.createGain();
-                    musicGain.gain.value = 0.25;
-                    musicSource.connect(musicGain);
-                    musicGain.connect(destination);
-                    musicGain.connect(audioCtx.destination);
-                } catch (e) { console.warn("Music audio source error:", e); }
-            }
-
-            // Reaction chain audios (medium volume)
-            reactionVideoRefs.current.forEach((ref, i) => {
-                if (ref) {
-                    try {
-                        const src = audioCtx.createMediaElementSource(ref);
-                        const gain = audioCtx.createGain();
-                        gain.gain.value = 0.15;
-                        src.connect(gain);
-                        gain.connect(destination);
-                        gain.connect(audioCtx.destination);
-                    } catch (e) { console.warn("Reaction audio source error:", e); }
-                }
-            });
+                const musicSource = audioCtx.createMediaElementSource(originalAudioRef.current);
+                const musicGain = audioCtx.createGain();
+                musicGain.gain.value = isOriginalMuted ? 0 : 0.25;
+                musicSource.connect(musicGain);
+                musicGain.connect(destination);
+                musicGain.connect(audioCtx.destination);
+            } catch (e) { console.warn("Music audio source error:", e); }
         }
+
+        // Reaction chain audios (respect mute via gain)
+        reactionVideoRefs.current.forEach((ref, i) => {
+            if (ref) {
+                try {
+                    const src = audioCtx.createMediaElementSource(ref);
+                    const gain = audioCtx.createGain();
+                    gain.gain.value = isOriginalMuted ? 0 : 0.15;
+                    src.connect(gain);
+                    gain.connect(destination);
+                    gain.connect(audioCtx.destination);
+                } catch (e) { console.warn("Reaction audio source error:", e); }
+            }
+        });
 
         // New Selected Music for this reaction
         if (selectedSong && userMusicRef.current) {
@@ -410,6 +412,10 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
                 return prev + 1;
             });
         }, 1000);
+        } catch (err) {
+            console.error("Recording error:", err);
+            alert("Could not start recording: " + err.message);
+        }
     };
 
     const drawVideoFit = (ctx, video, x, y, w, h) => {

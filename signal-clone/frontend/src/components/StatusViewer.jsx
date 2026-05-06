@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { XMarkIcon, ChevronLeftIcon, ChevronRightIcon, MusicalNoteIcon, EyeIcon, TrashIcon, PaperAirplaneIcon } from '@heroicons/react/24/solid';
+import { EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 
 const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, token, onClose, onDelete }) => {
@@ -12,6 +13,7 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, toke
     const [replyText, setReplyText] = useState('');
     const [replySending, setReplySending] = useState(false);
     const [replyNotice, setReplyNotice] = useState('');
+    const [showMenu, setShowMenu] = useState(false);
 
     const timerRef = useRef(null);
     const videoRef = useRef(null);
@@ -64,6 +66,7 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, toke
         setProgress(0);
         setReplyText('');
         setReplyNotice('');
+        setShowMenu(false);
         pausedRef.current = false;
         setPaused(false);
 
@@ -182,13 +185,33 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, toke
                             <p className="text-white/60 text-xs">{timeAgo(currentStatus.createdAt)}</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 relative">
                         {isOwn && (
-                            <button onClick={handleDelete} className="text-white/70 hover:text-red-400 p-1">
-                                <TrashIcon className="w-5 h-5" />
-                            </button>
+                            <>
+                                <button 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        const nextState = !showMenu;
+                                        setShowMenu(nextState);
+                                        setViewerPaused(nextState);
+                                    }} 
+                                    className="text-white p-1 hover:bg-white/10 rounded-full transition-colors"
+                                >
+                                    <EllipsisVerticalIcon className="w-6 h-6" />
+                                </button>
+                                {showMenu && (
+                                    <div className="absolute right-8 top-8 bg-[#1c1c1c] border border-white/10 shadow-2xl rounded-xl w-36 overflow-hidden z-50 animate-slide-left">
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); setShowMenu(false); handleDelete(); }}
+                                            className="w-full flex items-center gap-2 px-4 py-3 text-red-500 hover:bg-white/5 font-bold text-sm transition-colors"
+                                        >
+                                            <TrashIcon className="w-4 h-4" /> Delete
+                                        </button>
+                                    </div>
+                                )}
+                            </>
                         )}
-                        <button onClick={onClose} className="text-white p-1">
+                        <button onClick={onClose} className="text-white p-1 hover:bg-white/10 rounded-full transition-colors">
                             <XMarkIcon className="w-6 h-6" />
                         </button>
                     </div>

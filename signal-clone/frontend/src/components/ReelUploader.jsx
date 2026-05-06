@@ -62,6 +62,12 @@ const ReelUploader = ({ onClose, onSuccess }) => {
         }
     }, [mediaStream, facingMode, preview]);
 
+    useEffect(() => {
+        if (mediaStream) {
+            startCamera();
+        }
+    }, [facingMode]);
+
     const stopStream = () => {
         if (mediaStream) {
             mediaStream.getTracks().forEach(track => track.stop());
@@ -241,6 +247,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                                 autoPlay 
                                 muted 
                                 loop 
+                                playsInline
                                 style={{ filter: filters.find(f => f.class === selectedFilter)?.filter }}
                             />
                             <button 

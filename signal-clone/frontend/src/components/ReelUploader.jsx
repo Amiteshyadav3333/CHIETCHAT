@@ -59,6 +59,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
     useEffect(() => {
         if (videoPreviewRef.current && mediaStream) {
             videoPreviewRef.current.srcObject = mediaStream;
+            videoPreviewRef.current.play().catch(e => console.error("Video play error:", e));
         }
     }, [mediaStream, facingMode, preview]);
 
@@ -79,11 +80,14 @@ const ReelUploader = ({ onClose, onSuccess }) => {
         try {
             stopStream();
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
+                video: { 
+                    facingMode: facingMode,
+                    width: { ideal: 1280 }, 
+                    height: { ideal: 720 } 
+                },
                 audio: true
             });
             setMediaStream(stream);
-            if (videoPreviewRef.current) videoPreviewRef.current.srcObject = stream;
         } catch (err) {
             alert('Could not access camera: ' + err.message);
         }
@@ -260,6 +264,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                     ) : mediaStream ? (
                         <>
                             <video 
+                                key={facingMode}
                                 ref={videoPreviewRef} 
                                 className="h-full w-full object-cover" 
                                 autoPlay 

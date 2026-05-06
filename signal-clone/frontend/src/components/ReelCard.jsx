@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { HeartIcon, ChatBubbleOvalLeftIcon, ShareIcon, MusicalNoteIcon, FaceSmileIcon, EyeIcon, TrashIcon, NoSymbolIcon } from '@heroicons/react/24/solid';
+import { HeartIcon, ChatBubbleOvalLeftIcon, ShareIcon, MusicalNoteIcon, FaceSmileIcon, EyeIcon, TrashIcon, NoSymbolIcon, ArrowDownTrayIcon } from '@heroicons/react/24/solid';
 import { HeartIcon as HeartOutline, EllipsisVerticalIcon, PencilIcon, PlayIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 
@@ -136,6 +136,24 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
         }
     };
 
+    const handleDownload = () => {
+        try {
+            let downloadUrl = reel.videoUrl;
+            if (downloadUrl.includes('cloudinary.com')) {
+                // Cloudinary trick to force download
+                downloadUrl = downloadUrl.replace('/upload/', '/upload/fl_attachment/');
+            }
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = `reel-${reel.id}.mp4`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        } catch (error) {
+            window.open(reel.videoUrl, '_blank');
+        }
+    };
+
     const fetchComments = async () => {
         try {
             const res = await axios.get(`/api/reels/${reel.id}/comments`);
@@ -257,6 +275,22 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
                     </button>
                     <span className="text-white text-xs font-bold">{sharesCount}</span>
                 </div>
+
+                <div className="flex flex-col items-center">
+                    <button onClick={handleDownload} className="p-2">
+                        <ArrowDownTrayIcon className="w-8 h-8 text-white" />
+                    </button>
+                    <span className="text-white text-[10px] font-bold mt-1">Save</span>
+                </div>
+
+                {currentUser.id === reel.user.id && (
+                    <div className="flex flex-col items-center">
+                        <button onClick={handleDelete} className="p-2">
+                            <TrashIcon className="w-8 h-8 text-red-500" />
+                        </button>
+                        <span className="text-white text-[10px] font-bold mt-1">Delete</span>
+                    </div>
+                )}
             </div>
 
             {/* User Info Overlay */}

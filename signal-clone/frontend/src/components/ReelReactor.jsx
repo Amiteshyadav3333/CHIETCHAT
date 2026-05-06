@@ -24,7 +24,18 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
     const chunksRef = useRef([]);
     const reactionVideoRefs = useRef([]);
     const originalAudioRef = useRef(null);
+    const userMusicRef = useRef(null);
     const drawingRef = useRef(false);
+
+    // Music States
+    const [selectedSong, setSelectedSong] = useState(null);
+    const [songQuery, setSongQuery] = useState('');
+    const [songResults, setSongResults] = useState([]);
+    const [searchingSongs, setSearchingSongs] = useState(false);
+    const [songSearchOpen, setSongSearchOpen] = useState(false);
+    const [playingSongId, setPlayingSongId] = useState(null);
+    const [isOriginalMuted, setIsOriginalMuted] = useState(false);
+    const previewAudioRef = useRef(null);
 
     // Fetch the reaction chain for this reel
     useEffect(() => {
@@ -59,6 +70,49 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
         if (audioContextRef.current) {
             audioContextRef.current.close().catch(() => {});
         }
+        stopSongPreview();
+    };
+
+    const stopSongPreview = () => {
+        if (previewAudioRef.current) {
+            previewAudioRef.current.pause();
+            previewAudioRef.current = null;
+        }
+        setPlayingSongId(null);
+    };
+
+    const searchSongs = async (e) => {
+        e?.preventDefault();
+        if (songQuery.length < 2) return;
+        setSearchingSongs(true);
+        try {
+            const res = await axios.get('/api/music/search', {
+                params: { q: songQuery },
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setSongResults(res.data.tracks || []);
+        } catch {
+            setSongResults([]);
+        } finally {
+            setSearchingSongs(false);
+        }
+    };
+
+    const toggleSongPreview = (song) => {
+        if (playingSongId === song.id) {
+            stopSongPreview();
+            return;
+        }
+        stopSongPreview();
+        const audio = new Audio(song.previewUrl);
+        previewAudioRef.current = audio;
+        audio.play().then(() => setPlayingSongId(song.id)).catch(() => {});
+    };
+
+    const selectSong = (song) => {
+        stopSongPreview();
+        setSelectedSong(song);
+        setSongSearchOpen(false);
     };
 
     const startCamera = async () => {
@@ -94,10 +148,12 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
         if (originalVideoRef.current.paused) {
             originalVideoRef.current.play();
             if (originalAudioRef.current) originalAudioRef.current.play();
+            if (userMusicRef.current) userMusicRef.current.play();
             setPaused(false);
         } else {
             originalVideoRef.current.pause();
             if (originalAudioRef.current) originalAudioRef.current.pause();
+            if (userMusicRef.current) userMusicRef.current.pause();
             setPaused(true);
         }
     };
@@ -158,41 +214,55 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
 
         const destination = audioCtx.createMediaStreamDestination();
 
-        // Original video audio (low volume)
-        try {
-            const originalSource = audioCtx.createMediaElementSource(originalVideoRef.current);
-            const originalGain = audioCtx.createGain();
-            originalGain.gain.value = 0.25;
-            originalSource.connect(originalGain);
-            originalGain.connect(destination);
-            originalGain.connect(audioCtx.destination);
-        } catch (e) { console.warn("Original audio source error:", e); }
-
-        // Background Music (low volume)
-        if (originalAudioRef.current) {
+        // Original video audio (low volume, respect mute)
+        if (!isOriginalMuted) {
             try {
-                const musicSource = audioCtx.createMediaElementSource(originalAudioRef.current);
-                const musicGain = audioCtx.createGain();
-                musicGain.gain.value = 0.25;
-                musicSource.connect(musicGain);
-                musicGain.connect(destination);
-                musicGain.connect(audioCtx.destination);
-            } catch (e) { console.warn("Music audio source error:", e); }
+                const originalSource = audioCtx.createMediaElementSource(originalVideoRef.current);
+                const originalGain = audioCtx.createGain();
+                originalGain.gain.value = 0.25;
+                originalSource.connect(originalGain);
+                originalGain.connect(destination);
+                originalGain.connect(audioCtx.destination);
+            } catch (e) { console.warn("Original audio source error:", e); }
+
+            // Background Music (low volume)
+            if (originalAudioRef.current) {
+                try {
+                    const musicSource = audioCtx.createMediaElementSource(originalAudioRef.current);
+                    const musicGain = audioCtx.createGain();
+                    musicGain.gain.value = 0.25;
+                    musicSource.connect(musicGain);
+                    musicGain.connect(destination);
+                    musicGain.connect(audioCtx.destination);
+                } catch (e) { console.warn("Music audio source error:", e); }
+            }
+
+            // Reaction chain audios (medium volume)
+            reactionVideoRefs.current.forEach((ref, i) => {
+                if (ref) {
+                    try {
+                        const src = audioCtx.createMediaElementSource(ref);
+                        const gain = audioCtx.createGain();
+                        gain.gain.value = 0.15;
+                        src.connect(gain);
+                        gain.connect(destination);
+                        gain.connect(audioCtx.destination);
+                    } catch (e) { console.warn("Reaction audio source error:", e); }
+                }
+            });
         }
 
-        // Reaction chain audios (medium volume)
-        reactionVideoRefs.current.forEach((ref, i) => {
-            if (ref) {
-                try {
-                    const src = audioCtx.createMediaElementSource(ref);
-                    const gain = audioCtx.createGain();
-                    gain.gain.value = 0.15;
-                    src.connect(gain);
-                    gain.connect(destination);
-                    gain.connect(audioCtx.destination);
-                } catch (e) { console.warn("Reaction audio source error:", e); }
-            }
-        });
+        // New Selected Music for this reaction
+        if (selectedSong && userMusicRef.current) {
+            try {
+                const userMusicSource = audioCtx.createMediaElementSource(userMusicRef.current);
+                const userMusicGain = audioCtx.createGain();
+                userMusicGain.gain.value = 0.6; // High volume for user selected song
+                userMusicSource.connect(userMusicGain);
+                userMusicGain.connect(destination);
+                userMusicGain.connect(audioCtx.destination);
+            } catch (e) { console.warn("User music source error:", e); }
+        }
 
         // Mic (loudest)
         const micSource = audioCtx.createMediaStreamSource(streamRef.current);
@@ -314,6 +384,10 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
             originalAudioRef.current.currentTime = 0;
             originalAudioRef.current.play().catch(() => {});
         }
+        if (userMusicRef.current) {
+            userMusicRef.current.currentTime = 0;
+            userMusicRef.current.play().catch(() => {});
+        }
         reactionVideoRefs.current.forEach(ref => {
             if (ref) {
                 ref.currentTime = 0;
@@ -361,6 +435,7 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
             mediaRecorderRef.current.stop();
             originalVideoRef.current.pause();
             if (originalAudioRef.current) originalAudioRef.current.pause();
+            if (userMusicRef.current) userMusicRef.current.pause();
             reactionVideoRefs.current.forEach(ref => {
                 if (ref) ref.pause();
             });
@@ -376,6 +451,10 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
         formData.append('video', blob, 'reaction.webm');
         formData.append('caption', `Reacting to @${originalReel.user.username}`);
         formData.append('parentReelId', originalReel.id);
+        if (selectedSong) {
+            formData.append('musicUrl', selectedSong.previewUrl);
+            formData.append('musicName', `${selectedSong.title} - ${selectedSong.artist}`);
+        }
 
         try {
             await axios.post('/api/reels', formData, {
@@ -426,13 +505,24 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
                             onClick={source.type === 'original' ? toggleOriginalVideo : undefined}
                         >
                             {source.type === 'camera' ? (
-                                <video
-                                    ref={userVideoRef}
-                                    className="w-full h-full object-cover"
-                                    autoPlay
-                                    muted
-                                    playsInline
-                                />
+                                <>
+                                    <video
+                                        ref={userVideoRef}
+                                        className="w-full h-full object-cover"
+                                        autoPlay
+                                        muted
+                                        playsInline
+                                    />
+                                    {selectedSong && (
+                                        <audio 
+                                            ref={userMusicRef}
+                                            src={selectedSong.previewUrl}
+                                            crossOrigin="anonymous"
+                                            loop
+                                            className="hidden"
+                                        />
+                                    )}
+                                </>
                             ) : source.type === 'original' ? (
                                 <video
                                     ref={originalVideoRef}
@@ -491,6 +581,23 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
 
                 {/* Recording Controls - overlaid at bottom */}
                 <div className="absolute bottom-4 inset-x-0 flex flex-col items-center gap-3 z-50">
+                    {!recording && (
+                        <div className="flex gap-2 mb-2">
+                            <button
+                                onClick={() => setIsOriginalMuted(!isOriginalMuted)}
+                                className={`px-4 py-2 rounded-full text-[10px] font-bold border transition-all ${isOriginalMuted ? 'bg-red-500 border-red-500 text-white' : 'bg-white/10 border-white/20 text-white'}`}
+                            >
+                                {isOriginalMuted ? 'Original Muted' : 'Mute Original'}
+                            </button>
+                            <button
+                                onClick={() => setSongSearchOpen(true)}
+                                className={`px-4 py-2 rounded-full text-[10px] font-bold border border-white/20 bg-purple-600 text-white shadow-lg`}
+                            >
+                                {selectedSong ? `Music: ${selectedSong.title}` : 'Add Music'}
+                            </button>
+                        </div>
+                    )}
+
                     {recording && (
                         <div className="bg-black/70 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 flex flex-col items-center">
                             <div className="flex items-center gap-2">
@@ -518,6 +625,47 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
                 {loadingChain && (
                     <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-[60]">
                         <div className="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin" />
+                    </div>
+                )}
+
+                {/* Song Search Modal */}
+                {songSearchOpen && (
+                    <div className="absolute inset-0 bg-black/90 z-[70] flex flex-col p-4 animate-slide-up">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-white font-bold">Add Music to Reaction</h3>
+                            <button onClick={() => { stopSongPreview(); setSongSearchOpen(false); }} className="text-gray-400 p-2">✕</button>
+                        </div>
+                        <form onSubmit={searchSongs} className="flex gap-2 mb-4">
+                            <input
+                                type="text"
+                                placeholder="Search songs..."
+                                value={songQuery}
+                                onChange={e => setSongQuery(e.target.value)}
+                                className="flex-1 bg-white/10 text-white px-4 py-3 rounded-xl outline-none"
+                            />
+                            <button type="submit" className="bg-purple-600 px-6 rounded-xl text-white font-bold">Search</button>
+                        </form>
+                        <div className="flex-1 overflow-y-auto space-y-3">
+                            {searchingSongs && <p className="text-gray-400 text-center py-4">Searching...</p>}
+                            {songResults.map(song => (
+                                <div key={song.id} className="flex items-center gap-3 p-3 bg-white/5 rounded-xl">
+                                    <img src={song.artwork} className="w-12 h-12 rounded-lg" alt="" />
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-white text-sm font-bold truncate">{song.title}</p>
+                                        <p className="text-gray-400 text-xs truncate">{song.artist}</p>
+                                    </div>
+                                    <button onClick={() => toggleSongPreview(song)} className="text-white p-2">
+                                        {playingSongId === song.id ? <PauseSolid className="w-6 h-6 text-purple-400" /> : <PlaySolid className="w-6 h-6" />}
+                                    </button>
+                                    <button 
+                                        onClick={() => selectSong(song)} 
+                                        className="bg-white text-black px-4 py-1.5 rounded-full text-xs font-bold"
+                                    >
+                                        Select
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 )}
 

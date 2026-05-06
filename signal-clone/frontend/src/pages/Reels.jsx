@@ -80,7 +80,7 @@ const Reels = ({ onBack, onShareToChat }) => {
             </div>
 
             {/* Scroll Container */}
-            <div className="flex-1 overflow-y-auto snap-y snap-mandatory hide-scrollbar">
+            <div className={`flex-1 overflow-y-auto snap-y snap-mandatory hide-scrollbar ${showUploader ? 'hidden' : ''}`}>
                 {reels.length > 0 ? (
                     reels.map(reel => (
                         <ReelCard 

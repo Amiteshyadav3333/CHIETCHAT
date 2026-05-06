@@ -64,6 +64,7 @@ def ensure_database_schema():
             'shares_count': db.Integer(),
             'views_count': db.Integer(),
             'parent_reel_id': db.Integer(),
+            'filter_name': db.String(50),
         })
         add_missing_columns(inspector, 'user', {
             'bio': db.String(200),

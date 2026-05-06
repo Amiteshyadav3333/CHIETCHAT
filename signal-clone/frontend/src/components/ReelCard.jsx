@@ -22,6 +22,21 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
     const videoRef = useRef(null);
     const audioRef = useRef(null);
     const viewedRef = useRef(false);
+    
+    const filters = {
+        'none': '',
+        'grayscale': 'grayscale(100%)',
+        'sepia': 'sepia(100%)',
+        'invert': 'invert(100%)',
+        'blur': 'blur(2px)',
+        'bright': 'brightness(150%)',
+        'contrast': 'contrast(200%)',
+        'vintage': 'sepia(50%) contrast(150%)',
+        'cold': 'hue-rotate(180deg) brightness(120%)',
+        'warm': 'sepia(30%) brightness(110%) saturate(150%)',
+        'dramatic': 'contrast(150%) saturate(50%)',
+        'night': 'brightness(50%) hue-rotate(200deg)'
+    };
 
     const reactions = ['❤️', '😂', '🔥', '😮', '😢', '👏'];
 
@@ -182,6 +197,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
                 loop
                 playsInline
                 muted={!!reel.musicUrl}
+                style={{ filter: filters[reel.filterName] || '' }}
                 onClick={() => {
                     if (videoRef.current.paused) {
                         videoRef.current.play();

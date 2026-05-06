@@ -44,7 +44,8 @@ def get_reels():
             "viewsCount": r.views_count or 0,
             "reactionsCount": reactions_count,
             "isLiked": is_liked,
-            "parentReelId": r.parent_reel_id
+            "parentReelId": r.parent_reel_id,
+            "filterName": r.filter_name
         })
     return jsonify(result)
 
@@ -80,7 +81,8 @@ def get_user_reels(uid):
             "sharesCount": r.shares_count or 0,
             "reactionsCount": reactions_count,
             "isLiked": is_liked,
-            "parentReelId": r.parent_reel_id
+            "parentReelId": r.parent_reel_id,
+            "filterName": r.filter_name
         })
     
     return jsonify({
@@ -110,6 +112,7 @@ def create_reel():
     try:
         video_url = upload_to_cloudinary(file, folder='chietchat/reels', resource_type='video')
         parent_reel_id = request.form.get('parentReelId')
+        filter_name = request.form.get('filterName', '')
         if parent_reel_id == 'null' or not parent_reel_id:
             parent_reel_id = None
         else:
@@ -124,7 +127,8 @@ def create_reel():
             caption=caption, 
             music_url=music_url, 
             music_name=music_name,
-            parent_reel_id=parent_reel_id
+            parent_reel_id=parent_reel_id,
+            filter_name=filter_name
         )
         db.session.add(new_reel)
         db.session.commit()

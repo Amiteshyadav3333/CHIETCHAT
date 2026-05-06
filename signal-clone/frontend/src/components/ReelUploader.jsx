@@ -24,6 +24,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
     const [searchingSongs, setSearchingSongs] = useState(false);
     const [songSearchOpen, setSongSearchOpen] = useState(false);
     const [playingSongId, setPlayingSongId] = useState(null);
+    const [selectedFilter, setSelectedFilter] = useState('none');
     const previewAudioRef = useRef(null);
 
     const fileInputRef = useRef(null);
@@ -32,6 +33,21 @@ const ReelUploader = ({ onClose, onSuccess }) => {
     const chunksRef = useRef([]);
     const timerRef = useRef(null);
 
+    const filters = [
+        { name: 'None', class: 'none', filter: '' },
+        { name: 'Grayscale', class: 'grayscale', filter: 'grayscale(100%)' },
+        { name: 'Sepia', class: 'sepia', filter: 'sepia(100%)' },
+        { name: 'Invert', class: 'invert', filter: 'invert(100%)' },
+        { name: 'Blur', class: 'blur', filter: 'blur(2px)' },
+        { name: 'Bright', class: 'bright', filter: 'brightness(150%)' },
+        { name: 'Contrast', class: 'contrast', filter: 'contrast(200%)' },
+        { name: 'Vintage', class: 'vintage', filter: 'sepia(50%) contrast(150%)' },
+        { name: 'Cold', class: 'cold', filter: 'hue-rotate(180deg) brightness(120%)' },
+        { name: 'Warm', class: 'warm', filter: 'sepia(30%) brightness(110%) saturate(150%)' },
+        { name: 'Dramatic', class: 'dramatic', filter: 'contrast(150%) saturate(50%)' },
+        { name: 'Night', class: 'night', filter: 'brightness(50%) hue-rotate(200deg)' }
+    ];
+
     useEffect(() => {
         return () => {
             stopStream();
@@ -39,6 +55,12 @@ const ReelUploader = ({ onClose, onSuccess }) => {
             if (timerRef.current) clearInterval(timerRef.current);
         };
     }, []);
+
+    useEffect(() => {
+        if (videoPreviewRef.current && mediaStream) {
+            videoPreviewRef.current.srcObject = mediaStream;
+        }
+    }, [mediaStream, facingMode, preview]);
 
     const stopStream = () => {
         if (mediaStream) {
@@ -83,6 +105,12 @@ const ReelUploader = ({ onClose, onSuccess }) => {
         setRecording(true);
         setRecordTime(0);
 
+        if (selectedSong) {
+            const audio = new Audio(selectedSong.previewUrl);
+            previewAudioRef.current = audio;
+            audio.play().catch(err => console.error("Audio play failed:", err));
+        }
+
         timerRef.current = setInterval(() => {
             setRecordTime(prev => {
                 if (prev >= MAX_DURATION) {
@@ -99,6 +127,9 @@ const ReelUploader = ({ onClose, onSuccess }) => {
             mediaRecorderRef.current.stop();
             setRecording(false);
             if (timerRef.current) clearInterval(timerRef.current);
+            if (previewAudioRef.current) {
+                previewAudioRef.current.pause();
+            }
         }
     };
 
@@ -171,6 +202,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
             formData.append('musicUrl', selectedSong.previewUrl);
             formData.append('musicName', musicName);
         }
+        formData.append('filterName', selectedFilter);
 
         try {
             await axios.post('/api/reels', formData, {
@@ -203,7 +235,14 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                 <div className="relative aspect-[9/16] w-full max-w-[320px] mx-auto rounded-2xl overflow-hidden border border-white/10 bg-gray-900">
                     {preview ? (
                         <>
-                            <video src={preview} className="h-full w-full object-cover" autoPlay muted loop />
+                            <video 
+                                src={preview} 
+                                className="h-full w-full object-cover" 
+                                autoPlay 
+                                muted 
+                                loop 
+                                style={{ filter: filters.find(f => f.class === selectedFilter)?.filter }}
+                            />
                             <button 
                                 onClick={() => { setFile(null); setPreview(null); }}
                                 className="absolute top-4 right-4 bg-black/60 p-2 rounded-full text-white"
@@ -213,7 +252,14 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                         </>
                     ) : mediaStream ? (
                         <>
-                            <video ref={videoPreviewRef} className="h-full w-full object-cover" autoPlay muted playsInline />
+                            <video 
+                                ref={videoPreviewRef} 
+                                className="h-full w-full object-cover" 
+                                autoPlay 
+                                muted 
+                                playsInline 
+                                style={{ filter: filters.find(f => f.class === selectedFilter)?.filter }}
+                            />
                             <div className="absolute top-4 left-4 bg-red-600 px-2 py-1 rounded text-[10px] font-bold text-white uppercase animate-pulse">
                                 Live
                             </div>
@@ -265,6 +311,27 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                         </div>
                     )}
                 </div>
+
+                {/* Filters Carousel */}
+                {!preview && (
+                    <div className="flex gap-4 overflow-x-auto pb-2 px-1 hide-scrollbar">
+                        {filters.map(f => (
+                            <button
+                                key={f.class}
+                                onClick={() => setSelectedFilter(f.class)}
+                                className={`flex flex-col items-center gap-2 min-w-[60px] transition-all ${selectedFilter === f.class ? 'scale-110' : 'opacity-60'}`}
+                            >
+                                <div 
+                                    className="w-12 h-12 rounded-full border-2 border-white/20 bg-gray-800 overflow-hidden"
+                                    style={{ filter: f.filter }}
+                                >
+                                    <div className="w-full h-full bg-gradient-to-tr from-purple-500 to-pink-500 opacity-50" />
+                                </div>
+                                <span className="text-[10px] text-white font-medium">{f.name}</span>
+                            </button>
+                        ))}
+                    </div>
+                )}
 
                 <input ref={fileInputRef} type="file" accept="video/*" onChange={handleFileChange} className="hidden" />
 

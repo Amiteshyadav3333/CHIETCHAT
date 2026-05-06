@@ -10,6 +10,7 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
     const [paused, setPaused] = useState(false);
     const [recordTime, setRecordTime] = useState(0);
     const [uploading, setUploading] = useState(false);
+    const [initializing, setInitializing] = useState(false);
     const [cameraReady, setCameraReady] = useState(false);
     const [reactionChain, setReactionChain] = useState([]);
     const [loadingChain, setLoadingChain] = useState(true);
@@ -206,7 +207,8 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
     };
 
     const startRecording = async () => {
-        if (!cameraReady) return;
+        if (!cameraReady || recording || initializing) return;
+        setInitializing(true);
 
         try {
             // Setup Audio Mixing
@@ -397,8 +399,8 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
             }
         });
 
-        recorder.start();
         setRecording(true);
+        setInitializing(false);
         setPaused(false);
         setRecordTime(0);
         draw();
@@ -413,6 +415,7 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
             });
         }, 1000);
         } catch (err) {
+            setInitializing(false);
             console.error("Recording error:", err);
             alert("Could not start recording: " + err.message);
         }
@@ -617,10 +620,10 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
                     )}
                     <button
                         onClick={recording ? stopRecording : startRecording}
-                        disabled={uploading || !cameraReady}
-                        className={`w-20 h-20 rounded-full border-4 border-white flex items-center justify-center p-1.5 transition-all ${uploading || !cameraReady ? 'opacity-50' : 'shadow-lg shadow-red-500/30'}`}
+                        disabled={uploading || !cameraReady || initializing}
+                        className={`w-20 h-20 rounded-full border-4 border-white flex items-center justify-center p-1.5 transition-all ${uploading || !cameraReady || initializing ? 'opacity-50' : 'shadow-lg shadow-red-500/30'}`}
                     >
-                        <div className={`w-full h-full rounded-full transition-all ${recording ? 'bg-red-600 scale-[0.6] rounded-lg' : 'bg-red-500'}`} />
+                        <div className={`w-full h-full rounded-full transition-all ${recording ? 'bg-red-600 scale-[0.6] rounded-lg' : 'bg-red-500'} ${initializing ? 'animate-pulse' : ''}`} />
                     </button>
                     <p className="text-white text-xs font-medium bg-black/50 px-3 py-1 rounded-full">
                         {!cameraReady ? 'Starting camera...' : recording ? (paused ? 'Recording (Video Paused)' : 'Recording...') : 'Tap to Start Reaction'}

@@ -63,6 +63,7 @@ def ensure_database_schema():
             'music_name': db.String(200),
             'shares_count': db.Integer(),
             'views_count': db.Integer(),
+            'parent_reel_id': db.Integer(),
         })
         add_missing_columns(inspector, 'user', {
             'bio': db.String(200),

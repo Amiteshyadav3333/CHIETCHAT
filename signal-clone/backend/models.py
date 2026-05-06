@@ -97,6 +97,7 @@ class Reel(db.Model):
     caption = db.Column(db.String(500), nullable=True)
     shares_count = db.Column(db.Integer, default=0)
     views_count = db.Column(db.Integer, default=0)
+    parent_reel_id = db.Column(db.Integer, db.ForeignKey('reel.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now)
     
     user = db.relationship('User', backref='reels')

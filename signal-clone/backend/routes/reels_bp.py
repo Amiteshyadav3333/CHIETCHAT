@@ -29,6 +29,7 @@ def get_reels():
         user_data = serialize_user(r.user)
         user_data["isFollowing"] = is_following
 
+        reactions_count = Reel.query.filter_by(parent_reel_id=r.id).count()
         result.append({
             "id": r.id,
             "videoUrl": r.video_url,
@@ -41,7 +42,9 @@ def get_reels():
             "commentsCount": len(r.comments),
             "sharesCount": r.shares_count or 0,
             "viewsCount": r.views_count or 0,
-            "isLiked": is_liked
+            "reactionsCount": reactions_count,
+            "isLiked": is_liked,
+            "parentReelId": r.parent_reel_id
         })
     return jsonify(result)
 
@@ -60,7 +63,7 @@ def get_user_reels(uid):
 
     result = []
     for r in reels:
-        is_liked = ReelLike.query.filter_by(reel_id=r.id, user_id=user_id).first() is not None
+        reactions_count = Reel.query.filter_by(parent_reel_id=r.id).count()
         result.append({
             "id": r.id,
             "videoUrl": r.video_url,
@@ -71,7 +74,9 @@ def get_user_reels(uid):
             "likesCount": len(r.likes),
             "commentsCount": len(r.comments),
             "sharesCount": r.shares_count or 0,
-            "isLiked": is_liked
+            "reactionsCount": reactions_count,
+            "isLiked": is_liked,
+            "parentReelId": r.parent_reel_id
         })
     
     return jsonify({
@@ -100,7 +105,23 @@ def create_reel():
     
     try:
         video_url = upload_to_cloudinary(file, folder='chietchat/reels', resource_type='video')
-        new_reel = Reel(user_id=user_id, video_url=video_url, caption=caption, music_url=music_url, music_name=music_name)
+        parent_reel_id = request.form.get('parentReelId')
+        if parent_reel_id == 'null' or not parent_reel_id:
+            parent_reel_id = None
+        else:
+            try:
+                parent_reel_id = int(parent_reel_id)
+            except ValueError:
+                parent_reel_id = None
+
+        new_reel = Reel(
+            user_id=user_id, 
+            video_url=video_url, 
+            caption=caption, 
+            music_url=music_url, 
+            music_name=music_name,
+            parent_reel_id=parent_reel_id
+        )
         db.session.add(new_reel)
         db.session.commit()
         return jsonify({"message": "Reel posted", "id": new_reel.id}), 201

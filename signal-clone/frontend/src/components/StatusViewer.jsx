@@ -177,7 +177,7 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, toke
                 </div>
 
                 {/* Header */}
-                <div className="absolute top-4 left-0 right-0 z-10 flex items-center justify-between px-3 pt-4">
+                <div className="absolute top-4 left-0 right-0 z-30 flex items-center justify-between px-3 pt-4 pointer-events-auto">
                     <div className="flex items-center gap-2">
                         <img src={currentGroup.user.avatar} alt="" className="w-9 h-9 rounded-full border-2 border-white object-cover" />
                         <div>

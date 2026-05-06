@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify
 from models import db, Chat, ChatParticipant, Message, User
 from utils import (
     get_current_user_id, user_can_access_chat, serialize_user, 
-    iso_utc, get_json_data, has_contact
+    iso_utc, get_json_data, has_contact, is_blocked
 )
 
 chats_bp = Blueprint('chats_bp', __name__)
@@ -101,6 +101,11 @@ def create_chat():
     missing_contacts = [uid for uid in other_participant_ids if not has_contact(user_id, uid)]
     if missing_contacts:
         return jsonify({"error": "Add this number to your contacts before starting a chat"}), 403
+
+    if not is_group and len(participant_ids) == 2:
+        other_uid = next(uid for uid in participant_ids if uid != user_id)
+        if is_blocked(user_id, other_uid):
+            return jsonify({"error": "Blocked"}), 403
 
     if not is_group and len(participant_ids) == 2:
         first_user_chats = ChatParticipant.query.filter_by(user_id=participant_ids[0]).all()

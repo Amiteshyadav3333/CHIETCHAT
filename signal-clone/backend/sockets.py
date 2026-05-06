@@ -4,7 +4,7 @@ from models import db, User, ChatParticipant, Message
 from utils import (
     decode_socket_user_id, utc_now, iso_utc, get_socket_user_id,
     user_can_access_chat, is_user_online, emit_to_user_chat_contacts,
-    get_chat_participant_ids
+    get_chat_participant_ids, is_blocked
 )
 from extensions import socket_users, user_connection_counts
 
@@ -113,6 +113,14 @@ def register_socket_events(socketio):
         if not user_can_access_chat(socket_user_id, chat_id):
             emit('message_error', {"error": "Sender is not a chat participant"})
             return
+
+        # Check for blocks in direct chats
+        participants = ChatParticipant.query.filter_by(chat_id=chat_id).all()
+        if len(participants) == 2:
+            other_uid = next(p.user_id for p in participants if p.user_id != socket_user_id)
+            if is_blocked(socket_user_id, other_uid):
+                emit('message_error', {"error": "Message blocked"})
+                return
 
         new_msg = Message(
             chat_id=chat_id,

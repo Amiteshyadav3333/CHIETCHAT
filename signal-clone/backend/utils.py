@@ -7,7 +7,7 @@ import urllib.request
 from flask import request, current_app
 from sqlalchemy import inspect, text
 from extensions import socketio, socket_users, user_connection_counts
-from models import db, User, Chat, ChatParticipant, Contact
+from models import db, User, Chat, ChatParticipant, Contact, Block
 import cloudinary.uploader
 
 def upload_to_cloudinary(file, folder='chietchat', resource_type='auto'):
@@ -178,6 +178,13 @@ def get_contact_user_ids(owner_id):
 def user_can_access_chat(user_id, chat_id):
     chat = Chat.query.get(chat_id)
     return bool(chat and user_is_chat_participant(user_id, chat_id))
+
+def is_blocked(user_a_id, user_b_id):
+    blocked = Block.query.filter(
+        ((Block.blocker_id == user_a_id) & (Block.blocked_id == user_b_id)) |
+        ((Block.blocker_id == user_b_id) & (Block.blocked_id == user_a_id))
+    ).first()
+    return blocked is not None
 
 def decode_socket_user_id(auth, secret_key):
     if not auth:

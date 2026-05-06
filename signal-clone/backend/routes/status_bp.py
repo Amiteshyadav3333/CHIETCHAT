@@ -4,7 +4,8 @@ from werkzeug.utils import secure_filename
 from models import db, Status, StatusView, Message, ChatParticipant
 from utils import (
     get_current_user_id, get_contact_user_ids, utc_now, serialize_user, 
-    iso_utc, upload_to_cloudinary, get_json_data, has_contact, get_or_create_direct_chat
+    iso_utc, upload_to_cloudinary, get_json_data, has_contact, get_or_create_direct_chat,
+    is_blocked
 )
 from extensions import socketio
 
@@ -144,6 +145,8 @@ def reply_to_status(status_id):
         return jsonify({"error": "You cannot reply to your own status"}), 400
     if not has_contact(user_id, status.user_id):
         return jsonify({"error": "You can only reply to your contacts' statuses"}), 403
+    if is_blocked(user_id, status.user_id):
+        return jsonify({"error": "Blocked"}), 403
 
     chat = get_or_create_direct_chat(user_id, status.user_id)
     status_label = status.caption.strip() if status.caption else status.media_type

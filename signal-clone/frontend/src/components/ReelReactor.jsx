@@ -23,6 +23,7 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
     const timerRef = useRef(null);
     const chunksRef = useRef([]);
     const reactionVideoRefs = useRef([]);
+    const originalAudioRef = useRef(null);
     const drawingRef = useRef(false);
 
     // Fetch the reaction chain for this reel
@@ -92,9 +93,11 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
         if (!recording) return;
         if (originalVideoRef.current.paused) {
             originalVideoRef.current.play();
+            if (originalAudioRef.current) originalAudioRef.current.play();
             setPaused(false);
         } else {
             originalVideoRef.current.pause();
+            if (originalAudioRef.current) originalAudioRef.current.pause();
             setPaused(true);
         }
     };
@@ -165,6 +168,18 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
             originalGain.connect(audioCtx.destination);
         } catch (e) { console.warn("Original audio source error:", e); }
 
+        // Background Music (low volume)
+        if (originalAudioRef.current) {
+            try {
+                const musicSource = audioCtx.createMediaElementSource(originalAudioRef.current);
+                const musicGain = audioCtx.createGain();
+                musicGain.gain.value = 0.25;
+                musicSource.connect(musicGain);
+                musicGain.connect(destination);
+                musicGain.connect(audioCtx.destination);
+            } catch (e) { console.warn("Music audio source error:", e); }
+        }
+
         // Reaction chain audios (medium volume)
         reactionVideoRefs.current.forEach((ref, i) => {
             if (ref) {
@@ -215,9 +230,11 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
                 drawVideoFit(ctx, allVideos[0], 0, 0, canvas.width, canvas.height / 2);
                 drawVideoFit(ctx, allVideos[1], 0, canvas.height / 2, canvas.width, canvas.height / 2);
             } else if (count === 3) {
-                // Top row: 2 videos side by side, Bottom: camera full width
+                // Split vertically: top 50% for 2 videos, bottom 50% for camera
+                // Top row (2 videos)
                 drawVideoFit(ctx, allVideos[0], 0, 0, canvas.width / 2, canvas.height / 2);
                 drawVideoFit(ctx, allVideos[1], canvas.width / 2, 0, canvas.width / 2, canvas.height / 2);
+                // Bottom row (Camera)
                 drawVideoFit(ctx, allVideos[2], 0, canvas.height / 2, canvas.width, canvas.height / 2);
             } else if (count === 4) {
                 // 2x2 grid
@@ -290,9 +307,13 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
             uploadReaction(blob);
         };
 
-        // Start all videos playing
+        recorder.start();
         originalVideoRef.current.currentTime = 0;
         originalVideoRef.current.play().catch(() => {});
+        if (originalAudioRef.current) {
+            originalAudioRef.current.currentTime = 0;
+            originalAudioRef.current.play().catch(() => {});
+        }
         reactionVideoRefs.current.forEach(ref => {
             if (ref) {
                 ref.currentTime = 0;
@@ -339,6 +360,7 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
         if (mediaRecorderRef.current && recording) {
             mediaRecorderRef.current.stop();
             originalVideoRef.current.pause();
+            if (originalAudioRef.current) originalAudioRef.current.pause();
             reactionVideoRefs.current.forEach(ref => {
                 if (ref) ref.pause();
             });
@@ -430,6 +452,16 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
                                     crossOrigin="anonymous"
                                     playsInline
                                     loop
+                                />
+                            )}
+
+                            {source.type === 'original' && originalReel.musicUrl && (
+                                <audio 
+                                    ref={originalAudioRef}
+                                    src={originalReel.musicUrl}
+                                    crossOrigin="anonymous"
+                                    loop
+                                    className="hidden"
                                 />
                             )}
 

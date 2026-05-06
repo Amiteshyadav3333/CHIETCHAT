@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
-import { ArrowLeftIcon, PlayIcon, UserCircleIcon, PencilIcon, GlobeAltIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, PlayIcon, UserCircleIcon, PencilIcon, GlobeAltIcon, EllipsisVerticalIcon, TrashIcon } from '@heroicons/react/24/outline';
 
 const ReelProfile = ({ userId, onBack, onSelectReel }) => {
     const { token, user: currentUser } = useContext(AuthContext);
@@ -11,6 +11,7 @@ const ReelProfile = ({ userId, onBack, onSelectReel }) => {
     const [editBio, setEditBio] = useState('');
     const [editWebsite, setEditWebsite] = useState('');
     const [updating, setUpdating] = useState(false);
+    const [activeMenuReelId, setActiveMenuReelId] = useState(null);
 
     useEffect(() => {
         fetchProfile();
@@ -57,6 +58,28 @@ const ReelProfile = ({ userId, onBack, onSelectReel }) => {
             setShowEditModal(false);
         } catch (err) { console.error(err); }
         finally { setUpdating(false); }
+    };
+
+    const handleDeleteReel = async (reelId, e) => {
+        e.stopPropagation();
+        if (!window.confirm("Are you sure you want to delete this Reel?")) {
+            setActiveMenuReelId(null);
+            return;
+        }
+        try {
+            await axios.delete(`/api/reels/${reelId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setProfileData(prev => ({
+                ...prev,
+                reels: prev.reels.filter(r => r.id !== reelId)
+            }));
+        } catch (err) {
+            console.error(err);
+            alert("Failed to delete Reel");
+        } finally {
+            setActiveMenuReelId(null);
+        }
     };
 
     if (loading) {
@@ -147,6 +170,31 @@ const ReelProfile = ({ userId, onBack, onSelectReel }) => {
                             <PlayIcon className="w-3 h-3 text-white" />
                             <span className="text-white text-[10px] font-bold">{reel.likesCount}</span>
                         </div>
+                        
+                        {currentUser.id === user.id && (
+                            <>
+                                <button 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActiveMenuReelId(activeMenuReelId === reel.id ? null : reel.id);
+                                    }}
+                                    className="absolute top-2 right-2 p-1 text-white hover:bg-black/40 rounded-full transition-colors z-10"
+                                >
+                                    <EllipsisVerticalIcon className="w-5 h-5" />
+                                </button>
+                                
+                                {activeMenuReelId === reel.id && (
+                                    <div className="absolute top-8 right-2 bg-[#1c1c1c] border border-white/10 rounded-lg shadow-2xl z-20 overflow-hidden animate-slide-up origin-top-right">
+                                        <button 
+                                            onClick={(e) => handleDeleteReel(reel.id, e)}
+                                            className="flex items-center gap-2 px-4 py-2.5 text-red-500 text-xs font-bold hover:bg-white/5 w-full whitespace-nowrap"
+                                        >
+                                            <TrashIcon className="w-4 h-4" /> Delete Reel
+                                        </button>
+                                    </div>
+                                )}
+                            </>
+                        )}
                     </div>
                 ))}
             </div>

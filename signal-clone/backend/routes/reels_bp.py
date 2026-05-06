@@ -63,7 +63,10 @@ def get_user_reels(uid):
 
     result = []
     for r in reels:
+        is_liked = ReelLike.query.filter_by(reel_id=r.id, user_id=user_id).first() is not None
         reactions_count = Reel.query.filter_by(parent_reel_id=r.id).count()
+        user_data = serialize_user(user)
+        user_data["isFollowing"] = is_following
         result.append({
             "id": r.id,
             "videoUrl": r.video_url,
@@ -71,6 +74,7 @@ def get_user_reels(uid):
             "musicName": r.music_name,
             "caption": r.caption,
             "createdAt": iso_utc(r.created_at),
+            "user": user_data,
             "likesCount": len(r.likes),
             "commentsCount": len(r.comments),
             "sharesCount": r.shares_count or 0,

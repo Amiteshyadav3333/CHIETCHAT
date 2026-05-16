@@ -7,6 +7,7 @@ import { generateKeys } from '../utils/encryption';
 const Login = () => {
     const [mode, setMode] = useState('login');
     const [username, setUsername] = useState('');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [phone, setPhone] = useState('');
@@ -22,6 +23,7 @@ const Login = () => {
     const isLogin = mode === 'login';
     const isRegister = mode === 'register';
     const isReset = mode === 'reset';
+
     const handlePhoneChange = (e) => {
         setPhone(e.target.value.replace(/\D/g, '').slice(0, 10));
     };
@@ -29,32 +31,34 @@ const Login = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
+        const cleanEmail = email.trim().toLowerCase();
         const cleanPhone = phone.replace(/\D/g, '');
         const cleanUsername = username.trim();
 
-        if (cleanPhone.length !== 10) {
+        if (isRegister && cleanPhone.length !== 10) {
             alert('Phone number must be exactly 10 digits');
             return;
         }
 
         try {
             if (isLogin) {
-                const res = await axios.post('/api/login', { phone: cleanPhone, password });
+                const res = await axios.post('/api/login', { email: cleanEmail, password });
                 login(res.data.user, res.data.token);
                 navigate('/');
             } else if (isRegister) {
                 // Register
                 const keys = await generateKeys();
-                await axios.post('/api/register', {
+                const res = await axios.post('/api/register', {
                     username: cleanUsername,
+                    email: cleanEmail,
                     phone: cleanPhone,
                     password,
                     publicKey: keys.publicKeyString
                 });
 
-                // Save keys locally keyed by phone (stable unique identifier)
-                localStorage.setItem(`privKey_${cleanPhone}`, keys.privateKeyString);
-                localStorage.setItem(`pubKey_${cleanPhone}`, keys.publicKeyString);
+                // Save keys locally keyed by user id (stable unique identifier)
+                localStorage.setItem(`privKey_${res.data.user.id}`, keys.privateKeyString);
+                localStorage.setItem(`pubKey_${res.data.user.id}`, keys.publicKeyString);
 
                 alert('Account created! Please login.');
                 setMode('login');
@@ -65,7 +69,7 @@ const Login = () => {
                 }
 
                 const res = await axios.post('/api/forgot-password', {
-                    phone: cleanPhone,
+                    email: cleanEmail,
                     username: cleanUsername,
                     newPassword: password
                 });
@@ -85,7 +89,7 @@ const Login = () => {
         <div className="min-h-[100dvh] bg-signal-bg flex items-center justify-center p-4">
             <div className="bg-signal-secondary p-8 rounded-2xl w-full max-w-md shadow-2xl">
                 <div className="text-center mb-8">
-                    <h1 className="text-3xl font-bold text-signal-text mb-2">Signal</h1>
+                    <h1 className="text-3xl font-bold text-signal-text mb-2">CHEETCHAT</h1>
                     <p className="text-gray-400">Secure Messenger</p>
                 </div>
 
@@ -104,17 +108,29 @@ const Login = () => {
                     )}
                     <div>
                         <input
-                            type="text"
-                            placeholder="Phone Number"
-                            value={phone}
-                            onChange={handlePhoneChange}
-                            inputMode="numeric"
-                            pattern="\d{10}"
-                            maxLength={10}
+                            type="email"
+                            placeholder="Email Address"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
                             className="w-full bg-signal-input text-white px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-signal-accent"
                             required
                         />
                     </div>
+                    {isRegister && (
+                        <div>
+                            <input
+                                type="text"
+                                placeholder="Phone Number"
+                                value={phone}
+                                onChange={handlePhoneChange}
+                                inputMode="numeric"
+                                pattern="\d{10}"
+                                maxLength={10}
+                                className="w-full bg-signal-input text-white px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-signal-accent"
+                                required
+                            />
+                        </div>
+                    )}
                     <div>
                         <input
                             type="password"
@@ -157,7 +173,7 @@ const Login = () => {
                         }}
                         className="text-signal-accent text-sm hover:underline"
                     >
-                        {isLogin ? 'New to Signal? Sign up' : 'Already have an account? Log in'}
+                        {isLogin ? 'New to CHEETCHAT? Sign up' : 'Already have an account? Log in'}
                     </button>
                     {isLogin && (
                         <button

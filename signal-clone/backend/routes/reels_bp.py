@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request
 from models import db, Reel, ReelLike, ReelComment, Follow, User
 from utils import (
     get_current_user_id, iso_utc, serialize_user, upload_to_cloudinary,
-    get_json_data
+    get_json_data, create_notification
 )
 
 reels_bp = Blueprint('reels_bp', __name__)
@@ -150,6 +150,17 @@ def like_reel(reel_id):
     
     db.session.add(ReelLike(reel_id=reel_id, user_id=user_id))
     db.session.commit()
+    
+    reel = Reel.query.get(reel_id)
+    if reel:
+        create_notification(
+            recipient_id=reel.user_id,
+            sender_id=user_id,
+            n_type='like',
+            content="liked your reel",
+            target_id=reel_id
+        )
+    
     return jsonify({"isLiked": True})
 
 @reels_bp.route('/api/reels/<int:reel_id>/comments', methods=['GET'])
@@ -176,6 +187,17 @@ def comment_on_reel(reel_id):
     comment = ReelComment(reel_id=reel_id, user_id=user_id, content=content)
     db.session.add(comment)
     db.session.commit()
+    
+    reel = Reel.query.get(reel_id)
+    if reel:
+        create_notification(
+            recipient_id=reel.user_id,
+            sender_id=user_id,
+            n_type='comment',
+            content=f"commented: {content[:50]}...",
+            target_id=reel_id
+        )
+    
     return jsonify({"id": comment.id, "message": "Comment added"})
 
 @reels_bp.route('/api/reels/<int:reel_id>/share', methods=['POST'])

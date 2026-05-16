@@ -9,6 +9,7 @@ db = SQLAlchemy()
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
     phone = db.Column(db.String(20), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     public_key = db.Column(db.Text, nullable=True)
@@ -126,3 +127,16 @@ class Follow(db.Model):
     followed_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now)
     __table_args__ = (db.UniqueConstraint('follower_id', 'followed_id', name='uq_follow_follower_followed'),)
+
+class Notification(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    recipient_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    type = db.Column(db.String(50), nullable=False)  # like | comment | follow | mention
+    content = db.Column(db.String(500), nullable=True)
+    target_id = db.Column(db.Integer, nullable=True)  # reel_id, chat_id etc
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=utc_now)
+
+    recipient = db.relationship('User', foreign_keys=[recipient_id])
+    sender = db.relationship('User', foreign_keys=[sender_id])

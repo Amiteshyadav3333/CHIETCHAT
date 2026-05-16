@@ -123,6 +123,43 @@ const ChatBubble = ({ message, isOwn, senderName, onDelete, senderAvatar, showAv
                 </div>
             );
         }
+        if (type === 'poll') {
+            try {
+                const poll = JSON.parse(cnt);
+                return (
+                    <div className="flex flex-col gap-3 min-w-[220px] p-1">
+                        <h4 className="font-bold text-sm text-white border-b border-white/10 pb-2">{poll.question}</h4>
+                        <div className="space-y-2">
+                            {poll.options.map((opt, i) => (
+                                <button key={i} className="w-full bg-white/10 hover:bg-white/20 text-left px-3 py-2 rounded-lg text-xs transition-colors border border-white/5">
+                                    {opt}
+                                </button>
+                            ))}
+                        </div>
+                        <p className="text-[10px] text-white/40 italic">Tap an option to vote</p>
+                    </div>
+                );
+            } catch { return <p className="italic text-xs opacity-60 text-red-400">Invalid poll data</p>; }
+        }
+        if (type === 'location') {
+            try {
+                const loc = JSON.parse(cnt);
+                const mapUrl = `https://www.google.com/maps?q=${loc.lat},${loc.lng}`;
+                return (
+                    <a href={mapUrl} target="_blank" rel="noreferrer" className="flex flex-col gap-2 min-w-[180px] group/loc">
+                        <div className="bg-white/10 rounded-xl p-3 flex items-center gap-3 group-hover/loc:bg-white/20 transition-colors">
+                            <div className="p-2 bg-green-500/20 rounded-full">
+                                <CheckIcon className="w-6 h-6 text-green-500" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-bold text-white">Live Location</p>
+                                <p className="text-[10px] text-white/60">Tap to view on Map</p>
+                            </div>
+                        </div>
+                    </a>
+                );
+            } catch { return <p className="italic text-xs opacity-60 text-red-400">Invalid location data</p>; }
+        }
         return <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap">{cnt}</p>;
     };
 

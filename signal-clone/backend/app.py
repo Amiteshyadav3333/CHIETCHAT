@@ -23,6 +23,7 @@ from routes.status_bp import status_bp
 from routes.reels_bp import reels_bp
 from routes.music_bp import music_bp
 from routes.main_bp import main_bp
+from routes.notifications_bp import notifications_bp
 
 # Sockets
 from sockets import register_socket_events
@@ -61,6 +62,7 @@ app.register_blueprint(status_bp)
 app.register_blueprint(reels_bp)
 app.register_blueprint(music_bp)
 app.register_blueprint(main_bp)
+app.register_blueprint(notifications_bp)
 
 # Register Sockets
 register_socket_events(socketio)

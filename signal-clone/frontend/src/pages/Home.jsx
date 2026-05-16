@@ -9,7 +9,9 @@ import IncomingCallModal from '../components/IncomingCallModal';
 import VideoCallModal from '../components/VideoCall';
 import AvatarZoom from '../components/AvatarZoom';
 import StatusSection from '../components/StatusSection';
-import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon, EllipsisVerticalIcon, XMarkIcon, TrashIcon, NoSymbolIcon, PlayIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon, EllipsisVerticalIcon, XMarkIcon, TrashIcon, NoSymbolIcon, PlayIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
+import SettingsModal from '../components/SettingsModal';
+import NotificationPanel from '../components/NotificationPanel';
 import { useEncryption } from '../hooks/useEncryption';
 import Reels from './Reels';
 import { decryptEnvelope, encryptForRecipients, isEncryptedPayload } from '../utils/encryption';
@@ -30,12 +32,16 @@ const Home = () => {
     const [showInfoPanel, setShowInfoPanel] = useState(false);
     const [blockedUsers, setBlockedUsers] = useState([]);
     const [showReels, setShowReels] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
 
     // Search Modal States
     const [showSearchModal, setShowSearchModal] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [searchedUser, setSearchedUser] = useState(null);
     const [searchError, setSearchError] = useState('');
+    const [notifications, setNotifications] = useState([]);
+    const [showNotifications, setShowNotifications] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
 
     // Non-Encrypted Ref
     const messagesEndRef = useRef(null);
@@ -113,7 +119,31 @@ const Home = () => {
         axios.get('/api/user/blocked', { headers: { Authorization: `Bearer ${token}` } })
             .then(r => setBlockedUsers(r.data))
             .catch(() => {});
+        
+        fetchNotifications();
     }, [token]);
+
+    const fetchNotifications = async () => {
+        if (!token) return;
+        try {
+            const res = await axios.get('/api/notifications', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setNotifications(res.data);
+            setUnreadCount(res.data.filter(n => !n.isRead).length);
+        } catch (err) { console.error(err); }
+    };
+
+    const handleMarkAllRead = async () => {
+        if (!token) return;
+        try {
+            await axios.post('/api/notifications/read', {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+            setUnreadCount(0);
+        } catch (err) { console.error(err); }
+    };
 
     // Persist active chat logic
     useEffect(() => {
@@ -221,6 +251,12 @@ const Home = () => {
                         : participant
                 )
             } : prev);
+        });
+
+        socket.on('new_notification', (notification) => {
+            setNotifications(prev => [notification, ...prev]);
+            setUnreadCount(count => count + 1);
+            // Optional: Show a browser notification or toast
         });
 
         return () => {
@@ -636,11 +672,21 @@ const Home = () => {
                         <button onClick={() => setShowReels(true)} className="p-2 hover:bg-gray-700 rounded-full text-blue-400" title="Watch Reels">
                             <PlayIcon className="w-6 h-6" />
                         </button>
-                        <button onClick={() => setShowSearchModal(true)} className="p-2 hover:bg-gray-700 rounded-full" title="New Chat">
+                        <button 
+                            onClick={() => { setShowNotifications(!showNotifications); setUnreadCount(0); handleMarkAllRead(); }} 
+                            className="p-2 hover:bg-gray-700 rounded-full text-gray-400 relative" 
+                            title="Notifications"
+                        >
+                            <BellIcon className="w-6 h-6" />
+                            {unreadCount > 0 && (
+                                <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-signal-secondary animate-pulse" />
+                            )}
+                        </button>
+                        <button onClick={() => setShowSearchModal(true)} className="p-2 hover:bg-gray-700 rounded-full text-signal-accent" title="New Chat">
                             <PlusIcon className="w-6 h-6" />
                         </button>
-                        <button onClick={logout} className="p-2 text-red-400 hover:bg-gray-700 rounded-full text-xs">
-                            Logout
+                        <button onClick={() => setShowSettings(true)} className="p-2 hover:bg-gray-700 rounded-full text-gray-400" title="Settings">
+                            <Cog6ToothIcon className="w-6 h-6" />
                         </button>
                     </div>
                 </div>
@@ -781,9 +827,18 @@ const Home = () => {
                 </div>
             ) : (
                 <div className="hidden md:flex flex-1 items-center justify-center flex-col text-gray-500">
-                    <h2 className="text-2xl font-bold mb-2">Welcome to Signal Clone</h2>
+                    <h2 className="text-2xl font-bold mb-2">Welcome to CHEETCHAT</h2>
                     <p>Select a chat or click + to start messaging.</p>
                 </div>
+            )}
+            {showReels && <Reels onBack={() => setShowReels(false)} />}
+            {showSettings && <SettingsModal user={user} onClose={() => setShowSettings(false)} onLogout={logout} />}
+            {showNotifications && (
+                <NotificationPanel 
+                    notifications={notifications} 
+                    onClose={() => setShowNotifications(false)} 
+                    onMarkRead={handleMarkAllRead} 
+                />
             )}
         </div>
     );

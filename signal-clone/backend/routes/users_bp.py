@@ -4,7 +4,7 @@ from models import db, User, Block, Follow
 from utils import (
     get_current_user_id, get_contact_user_ids, serialize_user, get_json_data,
     normalize_phone, is_valid_phone, add_contact, upload_to_cloudinary,
-    emit_to_user_chat_contacts, has_contact
+    emit_to_user_chat_contacts, has_contact, create_notification
 )
 
 users_bp = Blueprint('users_bp', __name__)
@@ -31,18 +31,15 @@ def search_user():
     if not query:
         return jsonify({"error": "Phone number or name is required"}), 400
 
-    if phone:
-        if not is_valid_phone(phone):
-            return jsonify({"error": "Phone number must be exactly 10 digits"}), 400
-        user = User.query.filter_by(phone=phone).first()
+    # Only treat as phone search if query is exactly 10 digits
+    if query.isdigit() and len(query) == 10:
+        user = User.query.filter_by(phone=query).first()
     else:
+        # Search by username
         user = User.query.filter(
-            User.id != user_id,
             User.username.ilike(f"%{query}%")
         ).order_by(User.username.asc()).first()
 
-    if user and user.id == user_id:
-        return jsonify({"error": "You cannot add your own number"}), 400
     if user:
         added = add_contact(user_id, user.id)
         payload = serialize_user(user)
@@ -192,4 +189,13 @@ def toggle_follow(followed_id):
     
     db.session.add(Follow(follower_id=user_id, followed_id=followed_id))
     db.session.commit()
+    
+    create_notification(
+        recipient_id=followed_id,
+        sender_id=user_id,
+        n_type='follow',
+        content="started following you",
+        target_id=user_id
+    )
+    
     return jsonify({"isFollowing": True})

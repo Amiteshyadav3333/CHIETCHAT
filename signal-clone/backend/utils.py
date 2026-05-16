@@ -51,8 +51,12 @@ def ensure_database_schema():
         db.create_all()
         inspector = inspect(db.engine)
         
-        # Reel tables are created by create_all(), but we check other tables' columns
+        # Notification table is created by create_all(), but we check other tables' columns
+        add_missing_columns(inspector, 'notification', {
+            'target_id': db.Integer(),
+        })
         add_missing_columns(inspector, 'user', {
+            'email': db.String(120),
             'public_key': db.Text(),
             'avatar': db.String(200),
             'last_seen': db.DateTime(),
@@ -236,6 +240,48 @@ def emit_to_user_chat_contacts(user_id, event, payload):
     notified_user_ids.add(user_id)
     for participant_id in notified_user_ids:
         socketio.emit(event, payload, room=f"user_{participant_id}")
+
+def create_notification(recipient_id, sender_id, n_type, content=None, target_id=None):
+    if recipient_id == sender_id:
+        return None
+    
+    # Avoid duplicate notifications for same target/type/sender (e.g. liking multiple times)
+    existing = Notification.query.filter_by(
+        recipient_id=recipient_id,
+        sender_id=sender_id,
+        type=n_type,
+        target_id=target_id,
+        is_read=False
+    ).first()
+    
+    if existing:
+        existing.created_at = utc_now()
+        db.session.commit()
+        return existing
+
+    new_n = Notification(
+        recipient_id=recipient_id,
+        sender_id=sender_id,
+        type=n_type,
+        content=content,
+        target_id=target_id
+    )
+    db.session.add(new_n)
+    db.session.commit()
+    
+    # Real-time emit
+    from extensions import socketio
+    socketio.emit('new_notification', {
+        "id": new_n.id,
+        "type": n_type,
+        "senderName": new_n.sender.username if new_n.sender else "Someone",
+        "senderAvatar": new_n.sender.avatar if new_n.sender else None,
+        "content": content,
+        "targetId": target_id,
+        "createdAt": iso_utc(new_n.created_at)
+    }, room=f"user_{recipient_id}")
+    
+    return new_n
 
 def search_itunes_tracks(query, limit=12):
     params = urllib.parse.urlencode({

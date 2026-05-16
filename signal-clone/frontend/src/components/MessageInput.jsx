@@ -7,7 +7,7 @@ import {
 import { ArrowUturnLeftIcon } from '@heroicons/react/24/outline';
 import EmojiPicker from 'emoji-picker-react';
 
-const MessageInput = ({ onSend, onUpload, replyTo, onCancelReply }) => {
+const MessageInput = ({ onSend, onUpload, onStartLiveLocation, replyTo, onCancelReply }) => {
     const [text, setText] = useState('');
     const [showEmoji, setShowEmoji] = useState(false);
     const [showAttachMenu, setShowAttachMenu] = useState(false);
@@ -205,6 +205,10 @@ const MessageInput = ({ onSend, onUpload, replyTo, onCancelReply }) => {
                     <button onClick={handleShareLocation} className="flex flex-col items-center gap-1 group">
                         <div className="p-3 bg-green-500 rounded-full group-hover:scale-110 transition-transform"><MapPinIcon className="w-6 h-6 text-white" /></div>
                         <span className="text-[10px] text-gray-400">Location</span>
+                    </button>
+                    <button onClick={() => { onStartLiveLocation(); setShowAttachMenu(false); }} className="flex flex-col items-center gap-1 group">
+                        <div className="p-3 bg-red-500 rounded-full group-hover:scale-110 transition-transform animate-pulse"><MapPinIcon className="w-6 h-6 text-white" /></div>
+                        <span className="text-[10px] text-gray-400">Live</span>
                     </button>
                     <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="*/*" />
                 </div>

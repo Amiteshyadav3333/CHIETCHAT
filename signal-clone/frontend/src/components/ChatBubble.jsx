@@ -141,18 +141,18 @@ const ChatBubble = ({ message, isOwn, senderName, onDelete, senderAvatar, showAv
                 );
             } catch { return <p className="italic text-xs opacity-60 text-red-400">Invalid poll data</p>; }
         }
-        if (type === 'location') {
+        if (type === 'location' || type === 'live_location') {
             try {
                 const loc = JSON.parse(cnt);
                 const mapUrl = `https://www.google.com/maps?q=${loc.lat},${loc.lng}`;
                 return (
                     <a href={mapUrl} target="_blank" rel="noreferrer" className="flex flex-col gap-2 min-w-[180px] group/loc">
                         <div className="bg-white/10 rounded-xl p-3 flex items-center gap-3 group-hover/loc:bg-white/20 transition-colors">
-                            <div className="p-2 bg-green-500/20 rounded-full">
-                                <CheckIcon className="w-6 h-6 text-green-500" />
+                            <div className={`p-2 ${type === 'live_location' ? 'bg-red-500/20 animate-pulse' : 'bg-green-500/20'} rounded-full`}>
+                                <CheckIcon className={`w-6 h-6 ${type === 'live_location' ? 'text-red-500' : 'text-green-500'}`} />
                             </div>
                             <div>
-                                <p className="text-sm font-bold text-white">Live Location</p>
+                                <p className="text-sm font-bold text-white">{type === 'live_location' ? 'Live Location' : 'Location'}</p>
                                 <p className="text-[10px] text-white/60">Tap to view on Map</p>
                             </div>
                         </div>

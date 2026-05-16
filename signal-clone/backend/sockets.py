@@ -310,3 +310,18 @@ def register_socket_events(socketio):
                 db.session.commit()
                 msg_payload["status"] = 'delivered'
             socketio.emit('receive_message', msg_payload, room=f"user_{uid}")
+
+    @socketio.on('live_location_update')
+    def on_live_location_update(data):
+        user_id = get_socket_user_id()
+        chat_id = data.get('chatId')
+        if not user_id or not chat_id or not user_can_access_chat(user_id, chat_id):
+            return
+        
+        # Broadcast the update to all participants in the chat
+        socketio.emit('live_location_update', {
+            "chatId": chat_id,
+            "userId": user_id,
+            "lat": data.get('lat'),
+            "lng": data.get('lng')
+        }, room=str(chat_id))

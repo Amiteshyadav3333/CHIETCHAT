@@ -9,7 +9,7 @@ import IncomingCallModal from '../components/IncomingCallModal';
 import VideoCallModal from '../components/VideoCall';
 import AvatarZoom from '../components/AvatarZoom';
 import StatusSection from '../components/StatusSection';
-import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon, EllipsisVerticalIcon, XMarkIcon, TrashIcon, NoSymbolIcon, PlayIcon, Cog6ToothIcon, BellIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon, EllipsisVerticalIcon, XMarkIcon, TrashIcon, NoSymbolIcon, PlayIcon, Cog6ToothIcon, BellIcon, MapPinIcon } from '@heroicons/react/24/outline';
 import SettingsModal from '../components/SettingsModal';
 import NotificationPanel from '../components/NotificationPanel';
 import { useEncryption } from '../hooks/useEncryption';
@@ -42,6 +42,8 @@ const Home = () => {
     const [notifications, setNotifications] = useState([]);
     const [showNotifications, setShowNotifications] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [liveLocationSharing, setLiveLocationSharing] = useState(null); // { chatId, expiry, intervalId }
+    const [timeLeft, setTimeLeft] = useState(null);
 
     // Non-Encrypted Ref
     const messagesEndRef = useRef(null);
@@ -259,6 +261,17 @@ const Home = () => {
             // Optional: Show a browser notification or toast
         });
 
+        socket.on('live_location_update', ({ chatId, userId, lat, lng }) => {
+            if (activeChatRef.current?.id === chatId) {
+                // Update specific message or show on map
+                setMessages(prev => prev.map(m => 
+                    m.type === 'live_location' && m.senderId === userId 
+                    ? { ...m, content: JSON.stringify({ lat, lng }) } 
+                    : m
+                ));
+            }
+        });
+
         return () => {
             socket.off('receive_message');
             socket.off('incoming_call');
@@ -463,6 +476,48 @@ const Home = () => {
 
     const rejectCall = () => {
         setIncomingCall(null);
+    };
+
+    const startLiveLocation = (chatId) => {
+        if (liveLocationSharing) stopLiveLocation();
+
+        const expiry = Date.now() + 30 * 60 * 1000;
+        const intervalId = setInterval(() => {
+            if (Date.now() > expiry) {
+                stopLiveLocation();
+                return;
+            }
+            navigator.geolocation.getCurrentPosition((pos) => {
+                socket.emit('live_location_update', {
+                    chatId,
+                    userId: user.id,
+                    lat: pos.coords.latitude,
+                    lng: pos.coords.longitude
+                });
+                setTimeLeft(Math.max(0, Math.round((expiry - Date.now()) / 1000)));
+            });
+        }, 10000);
+
+        setLiveLocationSharing({ chatId, expiry, intervalId });
+        // Initial send
+        navigator.geolocation.getCurrentPosition((pos) => {
+            handleSendMessage(JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude }), 'live_location');
+        });
+    };
+
+    const stopLiveLocation = () => {
+        if (liveLocationSharing?.intervalId) {
+            clearInterval(liveLocationSharing.intervalId);
+        }
+        setLiveLocationSharing(null);
+        setTimeLeft(null);
+    };
+
+    const formatTimeLeft = (seconds) => {
+        if (!seconds) return "";
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
     const startChat = async () => {
@@ -704,6 +759,25 @@ const Home = () => {
             {/* Chat Room */}
             {visibleActiveChat ? (
                 <div className={`flex-1 flex flex-col h-full bg-black/50 relative ${activeChat ? 'flex' : 'hidden md:flex'}`}>
+                        </div>
+                    </div>
+
+                    {/* Live Location Sharing Banner */}
+                    {liveLocationSharing && liveLocationSharing.chatId === visibleActiveChat.id && (
+                        <div className="bg-signal-accent/20 px-4 py-2 flex justify-between items-center border-b border-signal-accent/30 animate-pulse">
+                            <div className="flex items-center gap-2">
+                                <MapPinIcon className="w-4 h-4 text-signal-accent" />
+                                <span className="text-xs font-bold text-signal-accent">Sharing Live Location ({formatTimeLeft(timeLeft)})</span>
+                            </div>
+                            <button 
+                                onClick={stopLiveLocation}
+                                className="text-[10px] bg-red-500 text-white px-2 py-1 rounded font-bold hover:bg-red-600 transition-colors"
+                            >
+                                STOP SHARING
+                            </button>
+                        </div>
+                    )}
+
                     {/* Chat Header */}
                     <div className="h-16 bg-signal-bg border-b border-gray-800 flex items-center justify-between px-4">
                         <div className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer" onClick={() => setShowInfoPanel(true)}>
@@ -821,6 +895,7 @@ const Home = () => {
                     <MessageInput
                         onSend={(text, type) => handleSendMessage(text, type, replyTo)}
                         onUpload={handleUpload}
+                        onStartLiveLocation={() => startLiveLocation(visibleActiveChat.id)}
                         replyTo={replyTo}
                         onCancelReply={() => setReplyTo(null)}
                     />

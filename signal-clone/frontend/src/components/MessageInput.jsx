@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { 
     PaperAirplaneIcon, FaceSmileIcon, PaperClipIcon, MicrophoneIcon, 
     StopIcon, XMarkIcon, ChartBarIcon, MapPinIcon, DocumentIcon,
-    MusicalNoteIcon, PhotoIcon
+    MusicalNoteIcon, PhotoIcon, CameraIcon, UserCircleIcon
 } from '@heroicons/react/24/solid';
 import { ArrowUturnLeftIcon } from '@heroicons/react/24/outline';
 import EmojiPicker from 'emoji-picker-react';
@@ -19,6 +19,12 @@ const MessageInput = ({ onSend, onUpload, onStartLiveLocation, replyTo, onCancel
     const audioChunksRef = useRef([]);
     const inputRef = useRef(null);
     const fileInputRef = useRef(null);
+
+    const openFilePicker = (accept) => {
+        if (!fileInputRef.current) return;
+        fileInputRef.current.accept = accept;
+        fileInputRef.current.click();
+    };
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -189,27 +195,57 @@ const MessageInput = ({ onSend, onUpload, onStartLiveLocation, replyTo, onCancel
 
             {/* Attachment Menu */}
             {showAttachMenu && (
-                <div className="absolute bottom-full left-10 mb-4 z-50 bg-[#2a3942] rounded-2xl p-4 shadow-2xl border border-gray-700 animate-slide-up grid grid-cols-2 gap-4 w-48">
-                    <button onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center gap-1 group">
-                        <div className="p-3 bg-purple-500 rounded-full group-hover:scale-110 transition-transform"><PhotoIcon className="w-6 h-6 text-white" /></div>
-                        <span className="text-[10px] text-gray-400">Photos</span>
-                    </button>
-                    <button onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center gap-1 group">
-                        <div className="p-3 bg-blue-500 rounded-full group-hover:scale-110 transition-transform"><DocumentIcon className="w-6 h-6 text-white" /></div>
-                        <span className="text-[10px] text-gray-400">Documents</span>
-                    </button>
-                    <button onClick={() => setShowPollCreator(true)} className="flex flex-col items-center gap-1 group">
-                        <div className="p-3 bg-yellow-500 rounded-full group-hover:scale-110 transition-transform"><ChartBarIcon className="w-6 h-6 text-white" /></div>
-                        <span className="text-[10px] text-gray-400">Polls</span>
-                    </button>
-                    <button onClick={handleShareLocation} className="flex flex-col items-center gap-1 group">
-                        <div className="p-3 bg-green-500 rounded-full group-hover:scale-110 transition-transform"><MapPinIcon className="w-6 h-6 text-white" /></div>
-                        <span className="text-[10px] text-gray-400">Location</span>
-                    </button>
-                    <button onClick={() => { onStartLiveLocation(); setShowAttachMenu(false); }} className="flex flex-col items-center gap-1 group">
-                        <div className="p-3 bg-red-500 rounded-full group-hover:scale-110 transition-transform animate-pulse"><MapPinIcon className="w-6 h-6 text-white" /></div>
-                        <span className="text-[10px] text-gray-400">Live</span>
-                    </button>
+                <div className="absolute bottom-full left-2 sm:left-10 mb-3 z-50 w-[calc(100vw-1rem)] max-w-sm rounded-3xl bg-[#233138] p-3 shadow-2xl border border-white/10 animate-slide-up">
+                    <div className="grid grid-cols-4 gap-2">
+                        <AttachOption
+                            label="Gallery"
+                            color="bg-fuchsia-600"
+                            icon={<PhotoIcon className="w-6 h-6 text-white" />}
+                            onClick={() => openFilePicker('image/*,video/*')}
+                        />
+                        <AttachOption
+                            label="Camera"
+                            color="bg-rose-500"
+                            icon={<CameraIcon className="w-6 h-6 text-white" />}
+                            onClick={() => openFilePicker('image/*,video/*')}
+                        />
+                        <AttachOption
+                            label="Document"
+                            color="bg-indigo-500"
+                            icon={<DocumentIcon className="w-6 h-6 text-white" />}
+                            onClick={() => openFilePicker('*/*')}
+                        />
+                        <AttachOption
+                            label="Audio"
+                            color="bg-orange-500"
+                            icon={<MusicalNoteIcon className="w-6 h-6 text-white" />}
+                            onClick={() => openFilePicker('audio/*')}
+                        />
+                        <AttachOption
+                            label="Location"
+                            color="bg-emerald-500"
+                            icon={<MapPinIcon className="w-6 h-6 text-white" />}
+                            onClick={handleShareLocation}
+                        />
+                        <AttachOption
+                            label="Live"
+                            color="bg-red-500"
+                            icon={<MapPinIcon className="w-6 h-6 text-white" />}
+                            onClick={() => { onStartLiveLocation(); setShowAttachMenu(false); }}
+                        />
+                        <AttachOption
+                            label="Poll"
+                            color="bg-yellow-500"
+                            icon={<ChartBarIcon className="w-6 h-6 text-white" />}
+                            onClick={() => setShowPollCreator(true)}
+                        />
+                        <AttachOption
+                            label="Contact"
+                            color="bg-cyan-500"
+                            icon={<UserCircleIcon className="w-6 h-6 text-white" />}
+                            onClick={() => alert('Contact sharing coming soon')}
+                        />
+                    </div>
                     <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="*/*" />
                 </div>
             )}
@@ -279,5 +315,18 @@ const MessageInput = ({ onSend, onUpload, onStartLiveLocation, replyTo, onCancel
         </div>
     );
 };
+
+const AttachOption = ({ label, color, icon, onClick }) => (
+    <button
+        type="button"
+        onClick={onClick}
+        className="flex min-w-0 flex-col items-center gap-1.5 rounded-2xl px-1.5 py-2 hover:bg-white/5 active:scale-95 transition"
+    >
+        <span className={`w-12 h-12 rounded-2xl ${color} flex items-center justify-center shadow-lg`}>
+            {icon}
+        </span>
+        <span className="text-[11px] leading-tight text-gray-200 truncate max-w-full">{label}</span>
+    </button>
+);
 
 export default MessageInput;

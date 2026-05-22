@@ -7,7 +7,7 @@ import urllib.request
 from flask import request, current_app
 from sqlalchemy import inspect, text
 from extensions import socketio, socket_users, user_connection_counts
-from models import db, User, Chat, ChatParticipant, Contact, Block
+from models import db, User, Chat, ChatParticipant, Contact, Block, Notification
 import cloudinary.uploader
 
 def upload_to_cloudinary(file, folder='chietchat', resource_type='auto'):

@@ -140,3 +140,55 @@ class Notification(db.Model):
 
     recipient = db.relationship('User', foreign_keys=[recipient_id])
     sender = db.relationship('User', foreign_keys=[sender_id])
+
+class SocialPost(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    channel_id = db.Column(db.Integer, db.ForeignKey('channel.id'), nullable=True)
+    caption = db.Column(db.String(1000), nullable=True)
+    media_url = db.Column(db.String(500), nullable=True)
+    media_type = db.Column(db.String(20), nullable=True)  # image | video
+    created_at = db.Column(db.DateTime, default=utc_now)
+
+    user = db.relationship('User')
+    channel = db.relationship('Channel', back_populates='posts')
+    likes = db.relationship('SocialPostLike', backref='post', lazy=True, cascade='all, delete-orphan')
+    comments = db.relationship('SocialPostComment', backref='post', lazy=True, cascade='all, delete-orphan')
+
+class SocialPostLike(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(db.Integer, db.ForeignKey('social_post.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now)
+    __table_args__ = (db.UniqueConstraint('post_id', 'user_id', name='uq_social_post_user_like'),)
+
+class SocialPostComment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(db.Integer, db.ForeignKey('social_post.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now)
+    user = db.relationship('User')
+
+class Channel(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    name = db.Column(db.String(120), nullable=False)
+    description = db.Column(db.String(500), nullable=True)
+    cover_url = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, default=utc_now)
+
+    owner = db.relationship('User')
+    memberships = db.relationship('ChannelMembership', backref='channel', lazy=True, cascade='all, delete-orphan')
+    posts = db.relationship('SocialPost', back_populates='channel', lazy=True, cascade='all, delete-orphan')
+
+class ChannelMembership(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    channel_id = db.Column(db.Integer, db.ForeignKey('channel.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    status = db.Column(db.String(20), default='pending')  # pending | approved | rejected
+    created_at = db.Column(db.DateTime, default=utc_now)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
+
+    user = db.relationship('User')
+    __table_args__ = (db.UniqueConstraint('channel_id', 'user_id', name='uq_channel_user_membership'),)

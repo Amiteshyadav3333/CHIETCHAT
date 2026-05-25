@@ -24,6 +24,8 @@ class Chat(db.Model):
     is_group = db.Column(db.Boolean, default=False)
     name = db.Column(db.String(100), nullable=True)
     group_admin_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    is_public = db.Column(db.Boolean, default=False)
+    is_chat_disabled = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=utc_now)
 
     messages = db.relationship('Message', backref='chat', lazy=True)
@@ -34,6 +36,17 @@ class ChatParticipant(db.Model):
     chat_id = db.Column(db.Integer, db.ForeignKey('chat.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     user = db.relationship('User')
+
+class GroupJoinRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    chat_id = db.Column(db.Integer, db.ForeignKey('chat.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    status = db.Column(db.String(20), default='pending')  # pending | approved | rejected
+    created_at = db.Column(db.DateTime, default=utc_now)
+
+    user = db.relationship('User')
+    chat = db.relationship('Chat')
+    __table_args__ = (db.UniqueConstraint('chat_id', 'user_id', name='uq_group_user_request'),)
 
 class Contact(db.Model):
     id = db.Column(db.Integer, primary_key=True)

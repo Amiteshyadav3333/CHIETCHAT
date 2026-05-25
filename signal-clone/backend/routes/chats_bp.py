@@ -36,7 +36,14 @@ def get_chats():
             if not user_can_access_chat(user_id, chat.id):
                 continue
             participants = ChatParticipant.query.filter_by(chat_id=chat.id).all()
-            part_data = [serialize_user(p.user) for p in participants]
+            part_data = []
+            for p in participants:
+                s_user = serialize_user(p.user)
+                if chat.is_group and p.user_id != user_id:
+                    s_user['phone'] = 'Hidden'
+                    s_user['bio'] = ''
+                    s_user['websiteUrl'] = ''
+                part_data.append(s_user)
 
             last_msg = Message.query.filter_by(chat_id=chat.id).order_by(Message.timestamp.desc()).first()
 
@@ -54,6 +61,9 @@ def get_chats():
                 "name": chat_name,
                 "avatar": chat_avatar,
                 "participants": part_data,
+                "groupAdminId": chat.group_admin_id,
+                "isPublic": getattr(chat, 'is_public', False),
+                "isChatDisabled": getattr(chat, 'is_chat_disabled', False),
                 "lastMessage": {
                     "content": last_msg.content if last_msg and last_msg.type == 'text' else (last_msg.type if last_msg else "No messages"),
                     "timestamp": iso_utc(last_msg.timestamp) if last_msg else None,
@@ -166,3 +176,260 @@ def delete_message(message_id):
     db.session.delete(message)
     db.session.commit()
     return jsonify({"message": "Deleted"}), 200
+
+# Create Group
+@chats_bp.route('/api/groups/create', methods=['POST'])
+def create_group():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = get_json_data()
+    name = data.get('name')
+    is_public = data.get('isPublic', False)
+
+    if not name or not name.strip():
+        return jsonify({"error": "Group name is required"}), 400
+
+    try:
+        new_group = Chat(
+            is_group=True,
+            name=name.strip(),
+            group_admin_id=user_id,
+            is_public=is_public,
+            is_chat_disabled=False
+        )
+        db.session.add(new_group)
+        db.session.commit()
+
+        # Add creator as a participant
+        participant = ChatParticipant(chat_id=new_group.id, user_id=user_id)
+        db.session.add(participant)
+        db.session.commit()
+
+        return jsonify({
+            "id": new_group.id,
+            "name": new_group.name,
+            "isGroup": True,
+            "isPublic": new_group.is_public,
+            "isChatDisabled": new_group.is_chat_disabled,
+            "groupAdminId": new_group.group_admin_id
+        }), 201
+    except Exception as e:
+        print(f"Error creating group: {e}")
+        return jsonify({"error": "Failed to create group"}), 500
+
+# Discover Public Groups
+@chats_bp.route('/api/groups/public', methods=['GET'])
+def get_public_groups():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    try:
+        # Get all public groups where the user is not yet a participant
+        subquery = db.session.query(ChatParticipant.chat_id).filter_by(user_id=user_id).subquery()
+        public_groups = Chat.query.filter_by(is_group=True, is_public=True).filter(~Chat.id.in_(subquery)).all()
+
+        return jsonify([{
+            "id": g.id,
+            "name": g.name,
+            "groupAdminId": g.group_admin_id,
+            "isPublic": True,
+            "isChatDisabled": g.is_chat_disabled,
+            "created_at": iso_utc(g.created_at),
+            "membersCount": ChatParticipant.query.filter_by(chat_id=g.id).count()
+        } for g in public_groups])
+    except Exception as e:
+        print(f"Error fetching public groups: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# Search Groups (Public & Private)
+@chats_bp.route('/api/groups/search', methods=['POST'])
+def search_groups():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = get_json_data()
+    query = data.get('query', '').strip()
+
+    if not query:
+        return jsonify([])
+
+    try:
+        subquery = db.session.query(ChatParticipant.chat_id).filter_by(user_id=user_id).subquery()
+        groups = Chat.query.filter(
+            Chat.is_group == True,
+            Chat.name.ilike(f"%{query}%")
+        ).filter(~Chat.id.in_(subquery)).all()
+
+        from models import GroupJoinRequest
+        results = []
+        for g in groups:
+            req = GroupJoinRequest.query.filter_by(chat_id=g.id, user_id=user_id).first()
+            results.append({
+                "id": g.id,
+                "name": g.name,
+                "isPublic": getattr(g, 'is_public', False),
+                "isChatDisabled": getattr(g, 'is_chat_disabled', False),
+                "hasPendingRequest": req.status == 'pending' if req else False,
+                "membersCount": ChatParticipant.query.filter_by(chat_id=g.id).count()
+            })
+        return jsonify(results)
+    except Exception as e:
+        print(f"Error searching groups: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# Join a Group
+@chats_bp.route('/api/groups/<int:chat_id>/join', methods=['POST'])
+def join_group(chat_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    group = Chat.query.get(chat_id)
+    if not group or not group.is_group:
+        return jsonify({"error": "Group not found"}), 404
+
+    # Check if already a participant
+    existing = ChatParticipant.query.filter_by(chat_id=chat_id, user_id=user_id).first()
+    if existing:
+        return jsonify({"error": "Already a participant"}), 400
+
+    user = User.query.get(user_id)
+
+    if getattr(group, 'is_public', False):
+        # Directly join
+        participant = ChatParticipant(chat_id=chat_id, user_id=user_id)
+        db.session.add(participant)
+        db.session.commit()
+        return jsonify({"ok": True, "joined": True})
+    else:
+        # Private group: create request
+        from models import GroupJoinRequest
+        from utils import create_notification
+
+        # Check if request already exists
+        existing_req = GroupJoinRequest.query.filter_by(chat_id=chat_id, user_id=user_id).first()
+        if existing_req:
+            if existing_req.status == 'approved':
+                # Just in case, add as participant
+                participant = ChatParticipant(chat_id=chat_id, user_id=user_id)
+                db.session.add(participant)
+                db.session.commit()
+                return jsonify({"ok": True, "joined": True})
+            return jsonify({"error": f"Join request is already {existing_req.status}"}), 400
+
+        new_req = GroupJoinRequest(chat_id=chat_id, user_id=user_id, status='pending')
+        db.session.add(new_req)
+        db.session.commit()
+
+        # Send notification to group admin
+        if group.group_admin_id:
+            create_notification(
+                recipient_id=group.group_admin_id,
+                sender_id=user_id,
+                n_type='group_request',
+                content=f"{user.username} wants to join group {group.name}",
+                target_id=new_req.id
+            )
+
+        return jsonify({"ok": True, "joined": False, "pending": True})
+
+# List Pending Join Requests (Admin Only)
+@chats_bp.route('/api/groups/<int:chat_id>/requests', methods=['GET'])
+def get_group_requests(chat_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    group = Chat.query.get(chat_id)
+    if not group or not group.is_group:
+        return jsonify({"error": "Group not found"}), 404
+
+    if group.group_admin_id != user_id:
+        return jsonify({"error": "Only group admin can view requests"}), 403
+
+    from models import GroupJoinRequest
+    requests = GroupJoinRequest.query.filter_by(chat_id=chat_id, status='pending').all()
+
+    return jsonify([{
+        "id": r.id,
+        "chatId": r.chat_id,
+        "userId": r.user_id,
+        "username": r.user.username,
+        "avatar": r.user.avatar,
+        "timestamp": iso_utc(r.created_at)
+    } for r in requests])
+
+# Respond to Join Request (Admin Only)
+@chats_bp.route('/api/groups/requests/<int:request_id>/respond', methods=['POST'])
+def respond_group_request(request_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    from models import GroupJoinRequest
+    join_req = GroupJoinRequest.query.get(request_id)
+    if not join_req:
+        return jsonify({"error": "Request not found"}), 404
+
+    group = Chat.query.get(join_req.chat_id)
+    if not group or group.group_admin_id != user_id:
+        return jsonify({"error": "Only group admin can respond to requests"}), 403
+
+    data = get_json_data()
+    action = data.get('action')  # approve | reject
+
+    if action not in ['approve', 'reject']:
+        return jsonify({"error": "Invalid action. Must be 'approve' or 'reject'"}), 400
+
+    try:
+        if action == 'approve':
+            join_req.status = 'approved'
+            # Add user to participants
+            existing = ChatParticipant.query.filter_by(chat_id=join_req.chat_id, user_id=join_req.user_id).first()
+            if not existing:
+                db.session.add(ChatParticipant(chat_id=join_req.chat_id, user_id=join_req.user_id))
+            db.session.commit()
+            
+            # Delete the request record
+            db.session.delete(join_req)
+            db.session.commit()
+        else:
+            join_req.status = 'rejected'
+            # Delete the request record
+            db.session.delete(join_req)
+            db.session.commit()
+
+        return jsonify({"ok": True})
+    except Exception as e:
+        print(f"Error responding to group request: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# Toggle Mute Group (Admin Only)
+@chats_bp.route('/api/groups/<int:chat_id>/toggle-chat', methods=['POST'])
+def toggle_group_chat(chat_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    group = Chat.query.get(chat_id)
+    if not group or not group.is_group:
+        return jsonify({"error": "Group not found"}), 404
+
+    if group.group_admin_id != user_id:
+        return jsonify({"error": "Only group admin can mute/unmute group"}), 403
+
+    try:
+        group.is_chat_disabled = not getattr(group, 'is_chat_disabled', False)
+        db.session.commit()
+        return jsonify({
+            "chatId": group.id,
+            "isChatDisabled": group.is_chat_disabled
+        })
+    except Exception as e:
+        print(f"Error toggling group chat: {e}")
+        return jsonify({"error": str(e)}), 500
+

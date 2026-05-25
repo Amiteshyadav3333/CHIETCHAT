@@ -78,6 +78,8 @@ def ensure_database_schema():
             'is_group': db.Boolean(),
             'name': db.String(100),
             'group_admin_id': db.Integer(),
+            'is_public': db.Boolean(),
+            'is_chat_disabled': db.Boolean(),
             'created_at': db.DateTime(),
         })
         add_missing_columns(inspector, 'message', {

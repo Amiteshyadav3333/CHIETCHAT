@@ -1,6 +1,6 @@
 from flask import request, current_app
 from flask_socketio import emit, join_room, leave_room
-from models import db, User, ChatParticipant, Message
+from models import db, User, Chat, ChatParticipant, Message
 from utils import (
     decode_socket_user_id, utc_now, iso_utc, get_socket_user_id,
     user_can_access_chat, is_user_online, emit_to_user_chat_contacts,
@@ -113,6 +113,12 @@ def register_socket_events(socketio):
         if not user_can_access_chat(socket_user_id, chat_id):
             emit('message_error', {"error": "Sender is not a chat participant"})
             return
+
+        chat = Chat.query.get(chat_id)
+        if chat and chat.is_group and getattr(chat, 'is_chat_disabled', False):
+            if chat.group_admin_id != socket_user_id:
+                emit('message_error', {"error": "Only admins can send messages in this group"})
+                return
 
         # Check for blocks in direct chats
         participants = ChatParticipant.query.filter_by(chat_id=chat_id).all()

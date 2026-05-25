@@ -36,7 +36,8 @@ const GlobeIcon = ({ className }) => (
 
 const MessageInput = ({ 
     onSend, onUpload, onStartLiveLocation, replyTo, onCancelReply, 
-    onTranslate, chatId, chatTranslationLang, onChangeTranslationLang 
+    onTranslate, chatId, chatTranslationLang, onChangeTranslationLang,
+    disabled = false, placeholderOverride = ""
 }) => {
     const [text, setText] = useState('');
     const [showEmoji, setShowEmoji] = useState(false);
@@ -376,7 +377,7 @@ const MessageInput = ({
 
             <div className="flex items-end gap-2 px-3 py-2">
                 {/* Emoji + Attach */}
-                {!isRecording && (
+                {!isRecording && !disabled && (
                     <div className="flex items-center gap-1 flex-shrink-0 pb-1">
                         <button
                             type="button"
@@ -411,7 +412,11 @@ const MessageInput = ({
 
                 {/* Input */}
                 <form onSubmit={handleSubmit} className="flex-1 flex items-end gap-2">
-                    {isRecording ? (
+                    {disabled ? (
+                        <div className="flex-1 flex items-center bg-[#1c2429]/50 border border-gray-800 rounded-3xl px-4 py-3 text-center justify-center">
+                            <span className="text-gray-500 text-sm font-medium select-none">{placeholderOverride || "Only admins can send messages in this group"}</span>
+                        </div>
+                    ) : isRecording ? (
                         <div className="flex-1 flex items-center gap-3 bg-[#2a3942] rounded-3xl px-4 py-3">
                             <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
                             <span className="text-red-400 text-sm font-medium">Recording voice message...</span>

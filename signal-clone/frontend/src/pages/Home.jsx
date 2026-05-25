@@ -58,6 +58,10 @@ const Home = () => {
     const [loadingGroups, setLoadingGroups] = useState(false);
     const [groupRequests, setGroupRequests] = useState([]);
 
+    const visibleActiveChat = activeChat
+        ? chats.find(chat => chat.id === activeChat.id) || activeChat
+        : null;
+
     // Non-Encrypted Ref
     const messagesEndRef = useRef(null);
     const avatarInputRef = useRef(null);
@@ -791,10 +795,6 @@ const Home = () => {
         if (otherParticipant.isOnline) return "Online";
         return formatLastSeen(otherParticipant.lastSeen);
     };
-
-    const visibleActiveChat = activeChat
-        ? chats.find(chat => chat.id === activeChat.id) || activeChat
-        : null;
 
     const openNotifications = () => {
         setShowNotifications(prev => !prev);

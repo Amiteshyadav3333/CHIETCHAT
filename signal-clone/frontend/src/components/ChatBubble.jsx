@@ -3,14 +3,86 @@ import { format, isToday, isYesterday } from 'date-fns';
 import { TrashIcon, DocumentIcon, ArrowUturnLeftIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { CheckIcon } from '@heroicons/react/24/solid';
 
+const LANGUAGES = [
+    { code: 'hi', name: 'Hindi (हिंदी)' },
+    { code: 'en', name: 'English' },
+    { code: 'es', name: 'Spanish (Español)' },
+    { code: 'fr', name: 'French (Français)' },
+    { code: 'de', name: 'German (Deutsch)' },
+    { code: 'ar', name: 'Arabic (العربية)' },
+    { code: 'zh-CN', name: 'Chinese (中文)' },
+    { code: 'ja', name: 'Japanese (日本語)' },
+    { code: 'ru', name: 'Russian (Русский)' },
+    { code: 'pt', name: 'Portuguese (Português)' },
+    { code: 'bn', name: 'Bengali (বাংলা)' },
+    { code: 'pa', name: 'Punjabi (ਪੰਜਾਬੀ)' },
+    { code: 'mr', name: 'Marathi (मराठी)' },
+    { code: 'gu', name: 'Gujarati (ગુજરાતી)' },
+    { code: 'ta', name: 'Tamil (தமிழ்)' },
+    { code: 'te', name: 'Telugu (తెలుగు)' },
+    { code: 'kn', name: 'Kannada (ಕನ್ನಡ)' },
+    { code: 'ml', name: 'Malayalam (മലയാളം)' }
+];
+
+const GlobeIcon = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-.778.099-1.533.284-2.253" />
+    </svg>
+);
+
 const SWIPE_THRESHOLD = 60;
 
-const ChatBubble = ({ message, isOwn, senderName, onDelete, senderAvatar, showAvatar, onReply, replyTo }) => {
+const ChatBubble = ({ 
+    message, isOwn, senderName, onDelete, senderAvatar, showAvatar, 
+    onReply, replyTo, onTranslate, chatId, chatTranslationLang 
+}) => {
     const [showDelete, setShowDelete] = useState(false);
     const [swipeX, setSwipeX] = useState(0);
     const [swiping, setSwiping] = useState(false);
+    
+    const [translatedText, setTranslatedText] = useState('');
+    const [showTranslatorMenu, setShowTranslatorMenu] = useState(false);
+    const [isTranslating, setIsTranslating] = useState(false);
+    
+    // localTargetLang acts as a manual override for this specific message bubble
+    const [localTargetLang, setLocalTargetLang] = useState('');
+    const targetLang = localTargetLang || chatTranslationLang || localStorage.getItem('preferred_translation_language') || 'en';
+    
     const touchStartX = useRef(null);
     const content = message.content || '';
+
+    const isMedia = ['image', 'video'].includes(message.type) ||
+        content.match(/\.(jpg|jpeg|png|gif|webp|mp4|webm|ogg)$/i);
+
+    const isTextMessage = (!message.type || message.type === 'text') && !isMedia;
+
+    React.useEffect(() => {
+        const autoTranslate = async () => {
+            if (!isTextMessage || !content || !onTranslate || !chatId) {
+                setTranslatedText('');
+                return;
+            }
+            // Auto translate if chatTranslationLang is active and message is incoming (!isOwn)
+            // Or if localTargetLang (manual bubble translation) is set
+            const activeLang = localTargetLang || ( (!isOwn) ? chatTranslationLang : '' );
+            if (activeLang) {
+                setIsTranslating(true);
+                try {
+                    const translated = await onTranslate(content, activeLang);
+                    if (translated) {
+                        setTranslatedText(translated);
+                    }
+                } catch (err) {
+                    console.error("Auto translation error:", err);
+                } finally {
+                    setIsTranslating(false);
+                }
+            } else {
+                setTranslatedText('');
+            }
+        };
+        autoTranslate();
+    }, [content, isOwn, isTextMessage, onTranslate, chatId, chatTranslationLang, localTargetLang]);
 
     const handleDownload = async (url) => {
         try {
@@ -53,6 +125,25 @@ const ChatBubble = ({ message, isOwn, senderName, onDelete, senderAvatar, showAv
         setSwiping(false);
         touchStartX.current = null;
     };
+
+    const handleTranslateMessage = async () => {
+        if (!content || !onTranslate) return;
+        setIsTranslating(true);
+        try {
+            const translated = await onTranslate(content, targetLang);
+            if (translated) {
+                setTranslatedText(translated);
+                setLocalTargetLang(targetLang);
+                localStorage.setItem('preferred_translation_language', targetLang);
+            }
+        } catch (err) {
+            console.error("Translation error:", err);
+            alert("Translation failed. Please try again.");
+        } finally {
+            setIsTranslating(false);
+        }
+    };
+
 
     const renderContent = (cnt, type) => {
         if (type === 'image' || cnt.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
@@ -163,8 +254,7 @@ const ChatBubble = ({ message, isOwn, senderName, onDelete, senderAvatar, showAv
         return <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap">{cnt}</p>;
     };
 
-    const isMedia = ['image', 'video'].includes(message.type) ||
-        content.match(/\.(jpg|jpeg|png|gif|webp|mp4|webm|ogg)$/i);
+
 
     const timestamp = (
         <span className={`text-[11px] select-none whitespace-nowrap ${isOwn ? 'text-white/60' : 'text-gray-400'}`}>
@@ -224,6 +314,16 @@ const ChatBubble = ({ message, isOwn, senderName, onDelete, senderAvatar, showAv
                         <ArrowUturnLeftIcon className="w-4 h-4" />
                     </button>
 
+                    {isTextMessage && (
+                        <button
+                            onClick={() => setShowTranslatorMenu(v => !v)}
+                            className={`opacity-0 group-hover/bubble:opacity-100 transition-opacity p-1 text-gray-500 hover:text-blue-400 mb-1 flex-shrink-0 ${isOwn ? 'order-first' : 'order-last'}`}
+                            title="Translate"
+                        >
+                            <GlobeIcon className="w-4 h-4" />
+                        </button>
+                    )}
+
                     {isOwn && showDelete && onDelete && (
                         <button
                             onClick={() => onDelete(message.id)}
@@ -250,6 +350,60 @@ const ChatBubble = ({ message, isOwn, senderName, onDelete, senderAvatar, showAv
                         )}
 
                         {renderContent(content, message.type)}
+
+                        {/* Translation container */}
+                        {((showTranslatorMenu || translatedText || isTranslating) && isTextMessage) && (
+                            <div className="mt-2 pt-2 border-t border-white/10 text-xs text-gray-200 min-w-[140px] font-sans">
+                                {isTranslating ? (
+                                    <div className="flex items-center gap-1.5 py-1 opacity-70">
+                                        <span className="animate-spin rounded-full h-3 w-3 border border-white/30 border-t-white" />
+                                        <span>Translating...</span>
+                                    </div>
+                                ) : translatedText ? (
+                                    <div className="space-y-1">
+                                        <div className="flex items-center justify-between gap-2 opacity-60 text-[10px]">
+                                            <span>Translated ({LANGUAGES.find(l => l.code === targetLang)?.name || targetLang}):</span>
+                                            <button 
+                                                onClick={() => { setTranslatedText(''); setLocalTargetLang(''); setShowTranslatorMenu(false); }} 
+                                                className="hover:text-white"
+                                            >
+                                                Hide
+                                            </button>
+                                        </div>
+                                        <p className="text-[14px] leading-relaxed break-words whitespace-pre-wrap text-green-300 font-medium font-sans">
+                                            {translatedText}
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-1.5 py-1">
+                                        <select
+                                            value={targetLang}
+                                            onChange={(e) => {
+                                                setLocalTargetLang(e.target.value);
+                                                localStorage.setItem('preferred_translation_language', e.target.value);
+                                            }}
+                                            className="bg-[#111b21] text-[11px] text-white px-1.5 py-0.5 rounded border border-gray-600 outline-none cursor-pointer"
+                                        >
+                                            {LANGUAGES.map(lang => (
+                                                <option key={lang.code} value={lang.code}>{lang.name}</option>
+                                            ))}
+                                        </select>
+                                        <button
+                                            onClick={handleTranslateMessage}
+                                            className="bg-signal-accent hover:bg-signal-accentHover text-white px-2 py-0.5 rounded font-bold text-[10px] active:scale-95"
+                                        >
+                                            Translate
+                                        </button>
+                                        <button
+                                            onClick={() => setShowTranslatorMenu(false)}
+                                            className="text-gray-400 hover:text-white text-[10px] ml-auto"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         <div className={`flex items-center gap-1 justify-end mt-0.5 ${isMedia ? 'absolute bottom-2 right-2 bg-black/40 rounded-full px-1.5 py-0.5' : ''}`}>
                             {timestamp}

@@ -7,7 +7,37 @@ import {
 import { ArrowUturnLeftIcon } from '@heroicons/react/24/outline';
 import EmojiPicker from 'emoji-picker-react';
 
-const MessageInput = ({ onSend, onUpload, onStartLiveLocation, replyTo, onCancelReply }) => {
+const LANGUAGES = [
+    { code: 'hi', name: 'Hindi (हिंदी)' },
+    { code: 'en', name: 'English' },
+    { code: 'es', name: 'Spanish (Español)' },
+    { code: 'fr', name: 'French (Français)' },
+    { code: 'de', name: 'German (Deutsch)' },
+    { code: 'ar', name: 'Arabic (العربية)' },
+    { code: 'zh-CN', name: 'Chinese (中文)' },
+    { code: 'ja', name: 'Japanese (日本語)' },
+    { code: 'ru', name: 'Russian (Русский)' },
+    { code: 'pt', name: 'Portuguese (Português)' },
+    { code: 'bn', name: 'Bengali (বাংলা)' },
+    { code: 'pa', name: 'Punjabi (ਪੰਜਾਬੀ)' },
+    { code: 'mr', name: 'Marathi (मराठी)' },
+    { code: 'gu', name: 'Gujarati (ગુજરાતી)' },
+    { code: 'ta', name: 'Tamil (தமிழ்)' },
+    { code: 'te', name: 'Telugu (తెలుగు)' },
+    { code: 'kn', name: 'Kannada (ಕನ್ನಡ)' },
+    { code: 'ml', name: 'Malayalam (മലയാളം)' }
+];
+
+const GlobeIcon = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-.778.099-1.533.284-2.253" />
+    </svg>
+);
+
+const MessageInput = ({ 
+    onSend, onUpload, onStartLiveLocation, replyTo, onCancelReply, 
+    onTranslate, chatId, chatTranslationLang, onChangeTranslationLang 
+}) => {
     const [text, setText] = useState('');
     const [showEmoji, setShowEmoji] = useState(false);
     const [showAttachMenu, setShowAttachMenu] = useState(false);
@@ -15,10 +45,32 @@ const MessageInput = ({ onSend, onUpload, onStartLiveLocation, replyTo, onCancel
     const [showPollCreator, setShowPollCreator] = useState(false);
     const [pollData, setPollData] = useState({ question: '', options: ['', ''] });
     
+    const showTranslator = chatTranslationLang !== '';
+    const targetLang = chatTranslationLang || 'hi';
+    const [isTranslating, setIsTranslating] = useState(false);
+
+    const toggleTranslator = () => {
+        if (showTranslator) {
+            localStorage.removeItem(`chat_translation_lang_${chatId}`);
+            onChangeTranslationLang('');
+        } else {
+            const defaultLang = localStorage.getItem('preferred_translation_language') || 'hi';
+            localStorage.setItem(`chat_translation_lang_${chatId}`, defaultLang);
+            onChangeTranslationLang(defaultLang);
+        }
+    };
+
+    const handleTargetLangChange = (val) => {
+        localStorage.setItem(`chat_translation_lang_${chatId}`, val);
+        localStorage.setItem('preferred_translation_language', val);
+        onChangeTranslationLang(val);
+    };
+    
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
     const inputRef = useRef(null);
     const fileInputRef = useRef(null);
+
 
     const openFilePicker = (accept) => {
         if (!fileInputRef.current) return;
@@ -26,13 +78,28 @@ const MessageInput = ({ onSend, onUpload, onStartLiveLocation, replyTo, onCancel
         fileInputRef.current.click();
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        if (text.trim()) {
-            onSend(text.trim(), 'text');
-            setText('');
-            setShowEmoji(false);
+        const trimmed = text.trim();
+        if (!trimmed) return;
+
+        let finalWord = trimmed;
+        if (showTranslator && onTranslate) {
+            setIsTranslating(true);
+            try {
+                const translated = await onTranslate(trimmed, targetLang);
+                if (translated) {
+                    finalWord = translated;
+                }
+            } catch (err) {
+                console.error("Auto translate error on send", err);
+            } finally {
+                setIsTranslating(false);
+            }
         }
+        onSend(finalWord, 'text');
+        setText('');
+        setShowEmoji(false);
     };
 
     const handleKeyDown = (e) => {
@@ -113,6 +180,23 @@ const MessageInput = ({ onSend, onUpload, onStartLiveLocation, replyTo, onCancel
         setIsRecording(false);
     };
 
+    const handleTranslateText = async () => {
+        if (!text.trim() || !onTranslate) return;
+        setIsTranslating(true);
+        try {
+            const translated = await onTranslate(text.trim(), targetLang);
+            if (translated) {
+                setText(translated);
+                localStorage.setItem('preferred_translation_language', targetLang);
+            }
+        } catch (err) {
+            console.error("Translation error:", err);
+            alert("Translation failed. Please try again.");
+        } finally {
+            setIsTranslating(false);
+        }
+    };
+
     return (
         <div className="relative bg-[#202c33] border-t border-gray-800">
             {/* Poll Creator Modal */}
@@ -175,6 +259,46 @@ const MessageInput = ({ onSend, onUpload, onStartLiveLocation, replyTo, onCancel
                     <button onClick={onCancelReply} className="text-gray-400 hover:text-white flex-shrink-0">
                         <XMarkIcon className="w-4 h-4" />
                     </button>
+                </div>
+            )}
+
+            {/* Translation Bar */}
+            {showTranslator && (
+                <div className="flex items-center justify-between gap-3 px-4 py-2 bg-[#2a3942] border-b border-gray-700 animate-slide-up">
+                    <div className="flex items-center gap-2">
+                        <GlobeIcon className="w-4 h-4 text-signal-accent" />
+                        <span className="text-xs text-gray-300 font-medium">Translate to:</span>
+                        <select
+                            value={targetLang}
+                            onChange={(e) => handleTargetLangChange(e.target.value)}
+                            className="bg-[#111b21] text-xs text-white px-2 py-1 rounded-md border border-gray-600 outline-none focus:border-signal-accent cursor-pointer font-sans"
+                        >
+                            {LANGUAGES.map(lang => (
+                                <option key={lang.code} value={lang.code}>{lang.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={handleTranslateText}
+                            disabled={isTranslating || !text.trim()}
+                            className={`text-xs px-3 py-1 rounded-md font-bold text-white transition-all shadow-md ${
+                                isTranslating || !text.trim()
+                                    ? 'bg-gray-600 cursor-not-allowed opacity-50'
+                                    : 'bg-signal-accent hover:bg-signal-accentHover active:scale-95'
+                            }`}
+                        >
+                            {isTranslating ? 'Translating...' : 'Translate Input'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={toggleTranslator}
+                            className="text-gray-400 hover:text-white"
+                        >
+                            <XMarkIcon className="w-4 h-4" />
+                        </button>
+                    </div>
                 </div>
             )}
 
@@ -255,16 +379,32 @@ const MessageInput = ({ onSend, onUpload, onStartLiveLocation, replyTo, onCancel
                 {!isRecording && (
                     <div className="flex items-center gap-1 flex-shrink-0 pb-1">
                         <button
+                            type="button"
                             onClick={() => { setShowEmoji(v => !v); setShowAttachMenu(false); }}
                             className={`p-2 rounded-full transition-colors ${showEmoji ? 'text-blue-400' : 'text-gray-400 hover:text-gray-200'}`}
+                            title="Emojis"
                         >
                             <FaceSmileIcon className="w-6 h-6" />
                         </button>
                         <button 
+                            type="button"
                             onClick={() => { setShowAttachMenu(v => !v); setShowEmoji(false); }}
                             className={`p-2 rounded-full transition-colors ${showAttachMenu ? 'text-blue-400 rotate-45' : 'text-gray-400 hover:text-gray-200'}`}
+                            title="Attachments"
                         >
                             <PaperClipIcon className="w-6 h-6" />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                toggleTranslator();
+                                setShowEmoji(false);
+                                setShowAttachMenu(false);
+                            }}
+                            className={`p-2 rounded-full transition-colors ${showTranslator ? 'text-blue-400' : 'text-gray-400 hover:text-gray-200'}`}
+                            title="Translate"
+                        >
+                            <GlobeIcon className="w-6 h-6" />
                         </button>
                     </div>
                 )}

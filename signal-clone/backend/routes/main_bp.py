@@ -26,7 +26,32 @@ def upload_file():
     except Exception as e:
         return jsonify({"error": f"Upload failed: {str(e)}"}), 500
 
+@main_bp.route('/api/translate', methods=['POST'])
+def translate_text():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    text = data.get('text')
+    target_lang = data.get('target_lang')
+    source_lang = data.get('source_lang', 'auto')
+
+    if not text:
+        return jsonify({"error": "Missing 'text' parameter"}), 400
+    if not target_lang:
+        return jsonify({"error": "Missing 'target_lang' parameter"}), 400
+
+    try:
+        from deep_translator import GoogleTranslator
+        translated = GoogleTranslator(source=source_lang, target=target_lang).translate(text)
+        return jsonify({"translatedText": translated})
+    except Exception as e:
+        print(f"Translation error: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @main_bp.route('/', defaults={'path': ''})
+
 @main_bp.route('/<path:path>')
 def serve(path):
     static_folder = current_app.static_folder

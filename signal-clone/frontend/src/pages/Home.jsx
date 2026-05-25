@@ -47,6 +47,7 @@ const Home = () => {
     const [unreadCount, setUnreadCount] = useState(0);
     const [liveLocationSharing, setLiveLocationSharing] = useState(null); // { chatId, expiry, intervalId }
     const [timeLeft, setTimeLeft] = useState(null);
+    const [chatTranslationLang, setChatTranslationLang] = useState('');
 
     // Non-Encrypted Ref
     const messagesEndRef = useRef(null);
@@ -156,6 +157,15 @@ const Home = () => {
             localStorage.setItem('activeChatId', activeChat.id);
         }
     }, [activeChat]);
+
+    useEffect(() => {
+        if (activeChat) {
+            const stored = localStorage.getItem(`chat_translation_lang_${activeChat.id}`) || '';
+            setChatTranslationLang(stored);
+        } else {
+            setChatTranslationLang('');
+        }
+    }, [activeChat?.id]);
 
     useEffect(() => {
         if (!socket) return;
@@ -307,6 +317,16 @@ const Home = () => {
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
+
+    useEffect(() => {
+        if (messages.length > 0) {
+            scrollToBottom();
+            const timer = setTimeout(() => {
+                scrollToBottom();
+            }, 100);
+            return () => clearTimeout(timer);
+        }
+    }, [messages]);
 
     const handleSendMessage = async (text, type = 'text', replyMsg = null) => {
         if (!activeChat || !socket) return;
@@ -515,6 +535,23 @@ const Home = () => {
         setLiveLocationSharing(null);
         setTimeLeft(null);
     };
+
+    const handleTranslate = useCallback(async (text, targetLang, sourceLang = 'auto') => {
+        if (!token) return '';
+        try {
+            const res = await axios.post('/api/translate', {
+                text,
+                target_lang: targetLang,
+                source_lang: sourceLang
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            return res.data.translatedText;
+        } catch (err) {
+            console.error("Translation error", err);
+            throw err;
+        }
+    }, [token]);
 
     const formatTimeLeft = (seconds) => {
         if (!seconds) return "";
@@ -976,6 +1013,9 @@ const Home = () => {
                                         onDelete={handleDeleteMessage}
                                         onReply={(m) => setReplyTo({ ...m, senderName: sender?.username || 'You' })}
                                         replyTo={replyData}
+                                        onTranslate={handleTranslate}
+                                        chatId={visibleActiveChat.id}
+                                        chatTranslationLang={chatTranslationLang}
                                     />
                                 </React.Fragment>
                             );
@@ -990,6 +1030,10 @@ const Home = () => {
                         onStartLiveLocation={() => startLiveLocation(visibleActiveChat.id)}
                         replyTo={replyTo}
                         onCancelReply={() => setReplyTo(null)}
+                        onTranslate={handleTranslate}
+                        chatId={visibleActiveChat.id}
+                        chatTranslationLang={chatTranslationLang}
+                        onChangeTranslationLang={setChatTranslationLang}
                     />
                 </div>
             ) : (

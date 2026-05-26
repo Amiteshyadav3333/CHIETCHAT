@@ -4,7 +4,7 @@ from werkzeug.utils import secure_filename
 
 from models import (
     db, User, Follow, SocialPost, SocialPostLike, SocialPostComment,
-    Channel, ChannelMembership
+    Channel, ChannelMembership, CommentReply
 )
 from utils import (
     get_current_user_id, get_json_data, iso_utc, serialize_user,
@@ -25,6 +25,7 @@ def media_type_for(filename):
 def serialize_post(post, current_user_id):
     is_liked = SocialPostLike.query.filter_by(post_id=post.id, user_id=current_user_id).first() is not None
     is_following = Follow.query.filter_by(follower_id=current_user_id, followed_id=post.user_id).first() is not None
+    is_retweeted = SocialPost.query.filter_by(retweet_of_id=post.id, user_id=current_user_id).first() is not None
     user_data = serialize_user(post.user)
     user_data["isFollowing"] = is_following
     channel_data = None
@@ -34,6 +35,23 @@ def serialize_post(post, current_user_id):
             "name": post.channel.name,
             "ownerId": post.channel.owner_id
         }
+    # Original post data if this is a retweet
+    original_post = None
+    if post.retweet_of_id and post.retweet_of:
+        orig = post.retweet_of
+        orig_user = serialize_user(orig.user)
+        original_post = {
+            "id": orig.id,
+            "caption": orig.caption or "",
+            "mediaUrl": orig.media_url,
+            "mediaType": orig.media_type,
+            "createdAt": iso_utc(orig.created_at),
+            "user": orig_user,
+            "likesCount": len(orig.likes),
+            "commentsCount": len(orig.comments),
+            "retweetCount": SocialPost.query.filter_by(retweet_of_id=orig.id).count()
+        }
+    retweet_count = SocialPost.query.filter_by(retweet_of_id=post.id).count()
     return {
         "id": post.id,
         "caption": post.caption or "",
@@ -44,8 +62,31 @@ def serialize_post(post, current_user_id):
         "channel": channel_data,
         "likesCount": len(post.likes),
         "commentsCount": len(post.comments),
+        "retweetCount": retweet_count,
+        "shareCount": post.share_count or 0,
         "isLiked": is_liked,
+        "isRetweeted": is_retweeted,
+        "isRetweet": post.retweet_of_id is not None,
+        "originalPost": original_post,
         "canDelete": post.user_id == current_user_id or (post.channel and post.channel.owner_id == current_user_id)
+    }
+
+def serialize_comment(comment, current_user_id):
+    replies = CommentReply.query.filter_by(comment_id=comment.id).order_by(CommentReply.created_at.asc()).all()
+    return {
+        "id": comment.id,
+        "content": comment.content,
+        "createdAt": iso_utc(comment.created_at),
+        "user": serialize_user(comment.user),
+        "replies": [serialize_reply(r) for r in replies]
+    }
+
+def serialize_reply(reply):
+    return {
+        "id": reply.id,
+        "content": reply.content,
+        "createdAt": iso_utc(reply.created_at),
+        "user": serialize_user(reply.user)
     }
 
 def get_channel_role(channel, user_id):
@@ -79,6 +120,8 @@ def serialize_channel(channel, current_user_id, include_pending=False):
             "user": serialize_user(item.user)
         } for item in pending]
     return payload
+
+# ─── POSTS ────────────────────────────────────────────────────────────────────
 
 @social_bp.route('/api/social/posts', methods=['GET'])
 def get_social_posts():
@@ -127,10 +170,65 @@ def create_social_post():
     if not caption and not media_url:
         return jsonify({"error": "Write something or choose a photo/video"}), 400
 
-    post = SocialPost(user_id=user_id, channel_id=channel.id if channel else None, caption=caption, media_url=media_url, media_type=media_type)
+    post = SocialPost(
+        user_id=user_id,
+        channel_id=channel.id if channel else None,
+        caption=caption,
+        media_url=media_url,
+        media_type=media_type
+    )
     db.session.add(post)
     db.session.commit()
     return jsonify(serialize_post(post, user_id)), 201
+
+# ─── RETWEET ──────────────────────────────────────────────────────────────────
+
+@social_bp.route('/api/social/posts/<int:post_id>/retweet', methods=['POST'])
+def retweet_post(post_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    original = SocialPost.query.get_or_404(post_id)
+    # Prevent retweeting a retweet (retweet the original instead)
+    if original.retweet_of_id:
+        post_id = original.retweet_of_id
+        original = SocialPost.query.get_or_404(post_id)
+
+    # Toggle retweet
+    existing = SocialPost.query.filter_by(retweet_of_id=post_id, user_id=user_id).first()
+    if existing:
+        db.session.delete(existing)
+        db.session.commit()
+        return jsonify({"isRetweeted": False, "retweetCount": SocialPost.query.filter_by(retweet_of_id=post_id).count()})
+
+    retweet = SocialPost(
+        user_id=user_id,
+        channel_id=None,
+        caption=None,
+        media_url=None,
+        media_type=None,
+        retweet_of_id=post_id
+    )
+    db.session.add(retweet)
+    db.session.commit()
+    if original.user_id != user_id:
+        create_notification(original.user_id, user_id, 'retweet', 'retweeted your post', post_id)
+    return jsonify({"isRetweeted": True, "retweetCount": SocialPost.query.filter_by(retweet_of_id=post_id).count()})
+
+# ─── SHARE ────────────────────────────────────────────────────────────────────
+
+@social_bp.route('/api/social/posts/<int:post_id>/share', methods=['POST'])
+def share_post(post_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    post = SocialPost.query.get_or_404(post_id)
+    post.share_count = (post.share_count or 0) + 1
+    db.session.commit()
+    return jsonify({"shareCount": post.share_count})
+
+# ─── LIKE ─────────────────────────────────────────────────────────────────────
 
 @social_bp.route('/api/social/posts/<int:post_id>/like', methods=['POST'])
 def toggle_social_post_like(post_id):
@@ -149,16 +247,14 @@ def toggle_social_post_like(post_id):
     create_notification(post.user_id, user_id, 'like', 'liked your post', post_id)
     return jsonify({"isLiked": True, "likesCount": SocialPostLike.query.filter_by(post_id=post_id).count()})
 
+# ─── COMMENTS ─────────────────────────────────────────────────────────────────
+
 @social_bp.route('/api/social/posts/<int:post_id>/comments', methods=['GET'])
 def get_social_post_comments(post_id):
     SocialPost.query.get_or_404(post_id)
     comments = SocialPostComment.query.filter_by(post_id=post_id).order_by(SocialPostComment.created_at.asc()).all()
-    return jsonify([{
-        "id": comment.id,
-        "content": comment.content,
-        "createdAt": iso_utc(comment.created_at),
-        "user": serialize_user(comment.user)
-    } for comment in comments])
+    user_id = get_current_user_id()
+    return jsonify([serialize_comment(c, user_id) for c in comments])
 
 @social_bp.route('/api/social/posts/<int:post_id>/comments', methods=['POST'])
 def create_social_post_comment(post_id):
@@ -173,7 +269,26 @@ def create_social_post_comment(post_id):
     db.session.add(comment)
     db.session.commit()
     create_notification(post.user_id, user_id, 'comment', f"commented: {content[:50]}", post_id)
-    return jsonify({"id": comment.id, "message": "Comment added"}), 201
+    return jsonify(serialize_comment(comment, user_id)), 201
+
+# ─── COMMENT REPLIES ──────────────────────────────────────────────────────────
+
+@social_bp.route('/api/social/comments/<int:comment_id>/replies', methods=['POST'])
+def reply_to_comment(comment_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    comment = SocialPostComment.query.get_or_404(comment_id)
+    content = get_json_data().get('content', '').strip()
+    if not content:
+        return jsonify({"error": "Reply cannot be empty"}), 400
+    reply = CommentReply(comment_id=comment_id, user_id=user_id, content=content)
+    db.session.add(reply)
+    db.session.commit()
+    create_notification(comment.user_id, user_id, 'comment_reply', f"replied: {content[:50]}", comment.post_id)
+    return jsonify(serialize_reply(reply)), 201
+
+# ─── DELETE POST ──────────────────────────────────────────────────────────────
 
 @social_bp.route('/api/social/posts/<int:post_id>', methods=['DELETE'])
 def delete_social_post(post_id):
@@ -186,6 +301,37 @@ def delete_social_post(post_id):
     db.session.delete(post)
     db.session.commit()
     return jsonify({"message": "Post deleted"})
+
+# ─── USER PROFILE ─────────────────────────────────────────────────────────────
+
+@social_bp.route('/api/social/users/<int:profile_user_id>', methods=['GET'])
+def get_user_profile(profile_user_id):
+    current_user_id = get_current_user_id()
+    if not current_user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    profile_user = User.query.get_or_404(profile_user_id)
+    followers_count = Follow.query.filter_by(followed_id=profile_user_id).count()
+    following_count = Follow.query.filter_by(follower_id=profile_user_id).count()
+    posts_count = SocialPost.query.filter_by(user_id=profile_user_id, channel_id=None, retweet_of_id=None).count()
+    is_following = Follow.query.filter_by(follower_id=current_user_id, followed_id=profile_user_id).first() is not None
+
+    user_data = serialize_user(profile_user)
+    user_data["followersCount"] = followers_count
+    user_data["followingCount"] = following_count
+    user_data["postsCount"] = posts_count
+    user_data["isFollowing"] = is_following
+    user_data["bio"] = profile_user.bio or ""
+    user_data["websiteUrl"] = profile_user.website_url or ""
+    user_data["joinedAt"] = iso_utc(profile_user.created_at)
+
+    posts = SocialPost.query.filter_by(user_id=profile_user_id, channel_id=None).order_by(SocialPost.created_at.desc()).limit(30).all()
+    return jsonify({
+        "user": user_data,
+        "posts": [serialize_post(p, current_user_id) for p in posts]
+    })
+
+# ─── CHANNELS ─────────────────────────────────────────────────────────────────
 
 @social_bp.route('/api/social/channels', methods=['GET'])
 def get_channels():

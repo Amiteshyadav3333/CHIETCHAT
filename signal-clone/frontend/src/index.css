@@ -22,3 +22,31 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #555; 
 }
+
+/* ── Notification post highlight pulse ── */
+@keyframes pulse-once {
+  0%   { box-shadow: 0 0 0 0 rgba(99,179,237,0.6); }
+  40%  { box-shadow: 0 0 0 12px rgba(99,179,237,0); }
+  100% { box-shadow: 0 0 0 0 rgba(99,179,237,0); }
+}
+.animate-pulse-once {
+  animation: pulse-once 2s ease-out 2;
+}
+
+/* ── Notification panel slide in ── */
+@keyframes slide-in-left {
+  from { transform: translateX(-100%); opacity: 0; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+.animate-slide-in-left {
+  animation: slide-in-left 0.25s ease-out forwards;
+}
+
+/* ── Fade in ── */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out forwards;
+}

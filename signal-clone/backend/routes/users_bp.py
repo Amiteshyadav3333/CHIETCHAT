@@ -167,10 +167,16 @@ def update_profile():
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
     data = request.json
     user = User.query.get(user_id)
+    if data.get('username'):
+        user.username = data['username'].strip()
     user.bio = data.get('bio', user.bio)
     user.website_url = data.get('websiteUrl', user.website_url)
     db.session.commit()
-    return jsonify(serialize_user(user))
+    payload = serialize_user(user)
+    payload['bio'] = user.bio or ''
+    payload['websiteUrl'] = user.website_url or ''
+    emit_to_user_chat_contacts(user_id, 'user_profile_updated', {"user": payload})
+    return jsonify(payload)
 
 @users_bp.route('/api/users/<int:followed_id>/follow', methods=['POST'])
 def toggle_follow(followed_id):

@@ -94,6 +94,10 @@ def ensure_database_schema():
             'music_name': db.String(200),
             'duration': db.Integer(),
         })
+        add_missing_columns(inspector, 'social_post', {
+            'retweet_of_id': db.Integer(),
+            'share_count': db.Integer(),
+        })
 
         if 'user' in inspector.get_table_names():
             user_columns = {column['name'] for column in inspector.get_columns('user')}
@@ -271,6 +275,14 @@ def create_notification(recipient_id, sender_id, n_type, content=None, target_id
     db.session.add(new_n)
     db.session.commit()
     
+    # Build post preview for socket push
+    post_preview = None
+    if n_type in ('like', 'comment', 'comment_reply', 'retweet', 'share') and target_id:
+        from models import SocialPost
+        post = SocialPost.query.get(target_id)
+        if post and post.caption:
+            post_preview = post.caption[:80] + ('…' if len(post.caption) > 80 else '')
+
     # Real-time emit
     from extensions import socketio
     socketio.emit('new_notification', {
@@ -278,8 +290,15 @@ def create_notification(recipient_id, sender_id, n_type, content=None, target_id
         "type": n_type,
         "senderName": new_n.sender.username if new_n.sender else "Someone",
         "senderAvatar": new_n.sender.avatar if new_n.sender else None,
+        "sender": {
+            "id": new_n.sender.id if new_n.sender else None,
+            "username": new_n.sender.username if new_n.sender else "Someone",
+            "avatar": new_n.sender.avatar if new_n.sender else None,
+        },
         "content": content,
         "targetId": target_id,
+        "postPreview": post_preview,
+        "isRead": False,
         "createdAt": iso_utc(new_n.created_at)
     }, room=f"user_{recipient_id}")
     

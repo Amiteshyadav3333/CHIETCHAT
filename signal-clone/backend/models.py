@@ -161,12 +161,15 @@ class SocialPost(db.Model):
     caption = db.Column(db.String(1000), nullable=True)
     media_url = db.Column(db.String(500), nullable=True)
     media_type = db.Column(db.String(20), nullable=True)  # image | video
+    retweet_of_id = db.Column(db.Integer, db.ForeignKey('social_post.id'), nullable=True)
+    share_count = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=utc_now)
 
     user = db.relationship('User')
     channel = db.relationship('Channel', back_populates='posts')
     likes = db.relationship('SocialPostLike', backref='post', lazy=True, cascade='all, delete-orphan')
     comments = db.relationship('SocialPostComment', backref='post', lazy=True, cascade='all, delete-orphan')
+    retweet_of = db.relationship('SocialPost', remote_side='SocialPost.id', foreign_keys='SocialPost.retweet_of_id', backref='retweets')
 
 class SocialPostLike(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -178,6 +181,15 @@ class SocialPostLike(db.Model):
 class SocialPostComment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     post_id = db.Column(db.Integer, db.ForeignKey('social_post.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now)
+    user = db.relationship('User')
+    replies = db.relationship('CommentReply', backref='comment', lazy=True, cascade='all, delete-orphan')
+
+class CommentReply(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    comment_id = db.Column(db.Integer, db.ForeignKey('social_post_comment.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now)

@@ -34,6 +34,7 @@ const Home = () => {
     const [blockedUsers, setBlockedUsers] = useState([]);
     const [showReels, setShowReels] = useState(false);
     const [showSocial, setShowSocial] = useState(false);
+    const [socialDeepLink, setSocialDeepLink] = useState(null); // { type: 'post'|'profile', id }
     const [showSettings, setShowSettings] = useState(false);
     const [navPeekOpen, setNavPeekOpen] = useState(false);
 
@@ -285,6 +286,40 @@ const Home = () => {
         } catch (err) { console.error(err); }
     };
 
+    const handleMarkSingleRead = async (notifId) => {
+        try {
+            await axios.post(`/api/notifications/${notifId}/read`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, isRead: true } : n));
+            setUnreadCount(prev => Math.max(0, prev - 1));
+        } catch (err) { console.error(err); }
+    };
+
+    // Navigate to the activity from a notification click
+    const handleNotificationNavigate = (notification) => {
+        setShowNotifications(false);
+        const { type, targetId } = notification;
+
+        // Social-related activities → open Social page with deep link
+        if (['like', 'comment', 'comment_reply', 'retweet', 'share'].includes(type)) {
+            // targetId is post_id
+            setSocialDeepLink({ type: 'post', id: targetId });
+            setShowSocial(true);
+        } else if (type === 'follow') {
+            // targetId is the follower's user_id
+            setSocialDeepLink({ type: 'profile', id: notification.sender?.id || targetId });
+            setShowSocial(true);
+        } else if (type === 'channel_request') {
+            // targetId is channel_id
+            setSocialDeepLink({ type: 'channel', id: targetId });
+            setShowSocial(true);
+        } else {
+            // Default: just open social feed
+            setShowSocial(true);
+        }
+    };
+
     // Persist active chat logic
     useEffect(() => {
         if (activeChat) {
@@ -414,10 +449,25 @@ const Home = () => {
             } : prev);
         });
 
-        socket.on('new_notification', (notification) => {
-            setNotifications(prev => [notification, ...prev]);
+
+        socket.on('new_notification', (data) => {
+            // Normalize the payload into the same shape as the REST API returns
+            const normalized = {
+                id: data.id,
+                type: data.type,
+                content: data.content,
+                targetId: data.targetId,
+                postPreview: data.postPreview || null,
+                isRead: false,
+                createdAt: data.createdAt,
+                sender: data.sender || {
+                    id: null,
+                    username: data.senderName || 'Someone',
+                    avatar: data.senderAvatar || null,
+                }
+            };
+            setNotifications(prev => [normalized, ...prev]);
             setUnreadCount(count => count + 1);
-            // Optional: Show a browser notification or toast
         });
 
         socket.on('live_location_update', ({ chatId, userId, lat, lng }) => {
@@ -854,7 +904,11 @@ const Home = () => {
     if (showSocial) {
         return (
             <div className="h-[100dvh] w-full bg-[#0b0f14]">
-                <Social onBack={() => setShowSocial(false)} />
+                <Social
+                    onBack={() => { setShowSocial(false); setSocialDeepLink(null); }}
+                    deepLink={socialDeepLink}
+                    onDeepLinkConsumed={() => setSocialDeepLink(null)}
+                />
             </div>
         );
     }
@@ -1424,10 +1478,12 @@ const Home = () => {
             {showReels && <Reels onBack={() => setShowReels(false)} />}
             {showSettings && <SettingsModal user={user} onClose={() => setShowSettings(false)} onLogout={logout} />}
             {showNotifications && (
-                <NotificationPanel 
-                    notifications={notifications} 
-                    onClose={() => setShowNotifications(false)} 
-                    onMarkRead={handleMarkAllRead} 
+                <NotificationPanel
+                    notifications={notifications}
+                    onClose={() => setShowNotifications(false)}
+                    onMarkRead={handleMarkSingleRead}
+                    onMarkAllRead={handleMarkAllRead}
+                    onNavigate={handleNotificationNavigate}
                 />
             )}
 

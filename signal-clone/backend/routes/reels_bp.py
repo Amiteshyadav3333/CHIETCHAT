@@ -35,6 +35,7 @@ def get_reels():
             "videoUrl": r.video_url,
             "musicUrl": r.music_url,
             "musicName": r.music_name,
+            "musicVolume": r.music_volume if r.music_volume is not None else 0.8,
             "caption": r.caption,
             "createdAt": iso_utc(r.created_at),
             "user": user_data,
@@ -73,6 +74,7 @@ def get_user_reels(uid):
             "videoUrl": r.video_url,
             "musicUrl": r.music_url,
             "musicName": r.music_name,
+            "musicVolume": r.music_volume if r.music_volume is not None else 0.8,
             "caption": r.caption,
             "createdAt": iso_utc(r.created_at),
             "user": user_data,
@@ -108,6 +110,11 @@ def create_reel():
     caption = request.form.get('caption', '')
     music_url = request.form.get('musicUrl', '')
     music_name = request.form.get('musicName', '')
+    try:
+        music_volume = float(request.form.get('musicVolume', 0.8))
+        music_volume = min(max(music_volume, 0), 1)
+    except (TypeError, ValueError):
+        music_volume = 0.8
     
     try:
         video_url = upload_to_cloudinary(file, folder='chietchat/reels', resource_type='video')
@@ -127,6 +134,7 @@ def create_reel():
             caption=caption, 
             music_url=music_url, 
             music_name=music_name,
+            music_volume=music_volume,
             parent_reel_id=parent_reel_id,
             filter_name=filter_name
         )

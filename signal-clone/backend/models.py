@@ -13,10 +13,22 @@ class User(db.Model):
     phone = db.Column(db.String(20), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     public_key = db.Column(db.Text, nullable=True)
+    email_verified = db.Column(db.Boolean, default=False)
+    failed_login_attempts = db.Column(db.Integer, default=0)
+    password_login_locked = db.Column(db.Boolean, default=False)
     avatar = db.Column(db.String(200), default="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix")
     last_seen = db.Column(db.DateTime, default=utc_now)
     bio = db.Column(db.String(200), nullable=True)
     website_url = db.Column(db.String(200), nullable=True)
+    created_at = db.Column(db.DateTime, default=utc_now)
+
+class PendingRegistration(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    phone = db.Column(db.String(20), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    public_key = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now)
 
 class Chat(db.Model):
@@ -108,6 +120,7 @@ class Reel(db.Model):
     video_url = db.Column(db.String(500), nullable=False)
     music_url = db.Column(db.String(500), nullable=True)
     music_name = db.Column(db.String(200), nullable=True)
+    music_volume = db.Column(db.Float, default=0.8)
     caption = db.Column(db.String(500), nullable=True)
     shares_count = db.Column(db.Integer, default=0)
     views_count = db.Column(db.Integer, default=0)

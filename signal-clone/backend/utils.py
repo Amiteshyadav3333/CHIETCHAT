@@ -65,6 +65,7 @@ def ensure_database_schema():
         add_missing_columns(inspector, 'reel', {
             'music_url': db.String(500),
             'music_name': db.String(200),
+            'music_volume': db.Float(),
             'shares_count': db.Integer(),
             'views_count': db.Integer(),
             'parent_reel_id': db.Integer(),
@@ -73,7 +74,21 @@ def ensure_database_schema():
         add_missing_columns(inspector, 'user', {
             'bio': db.String(200),
             'website_url': db.String(200),
+            'email_verified': db.Boolean(),
+            'failed_login_attempts': db.Integer(),
+            'password_login_locked': db.Boolean(),
         })
+        if 'user' in inspector.get_table_names():
+            user_columns = {column['name'] for column in inspector.get_columns('user')}
+            updates = []
+            if 'email_verified' in user_columns:
+                updates.append('email_verified = COALESCE(email_verified, TRUE)')
+            if 'failed_login_attempts' in user_columns:
+                updates.append('failed_login_attempts = COALESCE(failed_login_attempts, 0)')
+            if 'password_login_locked' in user_columns:
+                updates.append('password_login_locked = COALESCE(password_login_locked, FALSE)')
+            if updates:
+                db.session.execute(text(f'UPDATE "user" SET {", ".join(updates)}'))
         add_missing_columns(inspector, 'chat', {
             'is_group': db.Boolean(),
             'name': db.String(100),

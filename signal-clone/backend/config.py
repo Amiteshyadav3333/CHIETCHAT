@@ -15,6 +15,9 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'jwt-secret-key-change-this'
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=7)
+    SUPABASE_URL = (os.environ.get('SUPABASE_URL') or '').rstrip('/')
+    SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY') or ''
+    FRONTEND_URL = (os.environ.get('FRONTEND_URL') or 'http://127.0.0.1:3000').rstrip('/')
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
     MAX_UPLOAD_BYTES = int(os.environ.get('MAX_UPLOAD_BYTES', 100 * 1024 * 1024))
     MAX_CONTENT_LENGTH = MAX_UPLOAD_BYTES

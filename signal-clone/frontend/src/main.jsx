@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import Login from './pages/Login';
+import ResetPassword from './pages/ResetPassword';
 import Home from './pages/Home';
 import './index.css';
 import axios from 'axios';
@@ -21,11 +22,12 @@ const ProtectedRoute = ({ children }) => {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode>
-        <BrowserRouter>
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <AuthProvider>
                 <SocketProvider>
                     <Routes>
                         <Route path="/login" element={<Login />} />
+                        <Route path="/reset-password" element={<ResetPassword />} />
                         <Route path="/" element={
                             <ProtectedRoute>
                                 <Home />

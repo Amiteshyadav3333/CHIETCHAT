@@ -102,6 +102,12 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
         };
     }, []);
 
+    useEffect(() => {
+        if (audioRef.current) {
+            audioRef.current.volume = Math.min(Math.max(reel.musicVolume ?? 0.8, 0), 1);
+        }
+    }, [reel.musicVolume]);
+
     const handleUpdateCaption = async () => {
         setIsUpdating(true);
         try {

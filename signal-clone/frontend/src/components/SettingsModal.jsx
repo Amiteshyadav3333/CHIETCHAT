@@ -1,7 +1,17 @@
-import React from 'react';
-import { XMarkIcon, ShieldCheckIcon, LockClosedIcon, SparklesIcon, IdentificationIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline';
+import React, { useState } from 'react';
+import { XMarkIcon, ShieldCheckIcon, LockClosedIcon, SparklesIcon, IdentificationIcon, ArrowRightOnRectangleIcon, ChartBarIcon, CheckBadgeIcon, ShoppingBagIcon, ChatBubbleBottomCenterTextIcon, EyeSlashIcon, KeyIcon } from '@heroicons/react/24/outline';
 
-const SettingsModal = ({ user, onClose, onLogout }) => {
+const SettingsModal = ({ user, onClose, onLogout, theme, wallpaper, onThemeChange, onWallpaperChange }) => {
+    const [hideLastSeen, setHideLastSeen] = useState(() => localStorage.getItem('hide_last_seen') === '1');
+    const [incognitoKeyboard, setIncognitoKeyboard] = useState(() => localStorage.getItem('incognito_keyboard') === '1');
+    const [twoStep, setTwoStep] = useState(() => localStorage.getItem('two_step_verification') === '1');
+
+    const toggleStored = (key, value, setter) => {
+        const next = !value;
+        localStorage.setItem(key, next ? '1' : '0');
+        setter(next);
+    };
+
     return (
         <div className="fixed inset-0 bg-black/90 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
             <div className="bg-[#111b21] w-full max-w-2xl h-[85vh] rounded-2xl shadow-2xl border border-gray-800 flex flex-col overflow-hidden">
@@ -64,6 +74,9 @@ const SettingsModal = ({ user, onClose, onLogout }) => {
                                         </p>
                                     </div>
                                 </div>
+                                <ToggleRow icon={<KeyIcon className="w-5 h-5 text-yellow-400" />} label="Two-step verification" value={twoStep} onClick={() => toggleStored('two_step_verification', twoStep, setTwoStep)} />
+                                <ToggleRow icon={<EyeSlashIcon className="w-5 h-5 text-purple-400" />} label="Hide last seen" value={hideLastSeen} onClick={() => toggleStored('hide_last_seen', hideLastSeen, setHideLastSeen)} />
+                                <ToggleRow icon={<ShieldCheckIcon className="w-5 h-5 text-cyan-400" />} label="Incognito keyboard" value={incognitoKeyboard} onClick={() => toggleStored('incognito_keyboard', incognitoKeyboard, setIncognitoKeyboard)} />
                             </div>
                         </div>
 
@@ -95,6 +108,28 @@ const SettingsModal = ({ user, onClose, onLogout }) => {
                         </div>
                     </div>
 
+                    <section className="grid md:grid-cols-2 gap-6">
+                        <div className="bg-[#202c33]/50 p-4 rounded-xl border border-gray-800 space-y-3">
+                            <div className="flex items-center gap-2 text-signal-accent font-bold text-sm uppercase tracking-widest">
+                                <SparklesIcon className="w-5 h-5" />
+                                <span>Themes</span>
+                            </div>
+                            <Segmented value={theme} onChange={onThemeChange} options={[['dark', 'Dark'], ['midnight', 'Midnight'], ['business', 'Business']]} />
+                            <Segmented value={wallpaper} onChange={onWallpaperChange} options={[['gradient', 'Gradient'], ['dots', 'Dots'], ['emerald', 'Emerald']]} />
+                        </div>
+
+                        <div className="bg-[#202c33]/50 p-4 rounded-xl border border-gray-800 space-y-3">
+                            <div className="flex items-center gap-2 text-signal-accent font-bold text-sm uppercase tracking-widest">
+                                <CheckBadgeIcon className="w-5 h-5" />
+                                <span>Business</span>
+                            </div>
+                            <BusinessRow icon={<CheckBadgeIcon className="w-5 h-5" />} title="Business profile" value={`${user?.username || 'Profile'} · Verified badge ready`} />
+                            <BusinessRow icon={<ShoppingBagIcon className="w-5 h-5" />} title="Catalog / Products" value="3 demo products prepared" />
+                            <BusinessRow icon={<ChatBubbleBottomCenterTextIcon className="w-5 h-5" />} title="Auto reply / Chatbot" value="Instant welcome reply enabled" />
+                            <BusinessRow icon={<ChartBarIcon className="w-5 h-5" />} title="Analytics dashboard" value="Views, replies, conversion cards" />
+                        </div>
+                    </section>
+
                     {/* App Info */}
                     <div className="pt-4">
                         <div className="bg-gradient-to-br from-signal-accent/10 to-transparent p-6 rounded-2xl border border-signal-accent/20">
@@ -120,5 +155,34 @@ const SettingsModal = ({ user, onClose, onLogout }) => {
         </div>
     );
 };
+
+const ToggleRow = ({ icon, label, value, onClick }) => (
+    <button onClick={onClick} className="flex w-full items-center justify-between gap-3 border-t border-gray-800 pt-4 text-left">
+        <span className="flex items-center gap-3 text-sm text-gray-200">{icon}{label}</span>
+        <span className={`h-6 w-11 rounded-full p-0.5 transition ${value ? 'bg-signal-accent' : 'bg-gray-700'}`}>
+            <span className={`block h-5 w-5 rounded-full bg-white transition ${value ? 'translate-x-5' : ''}`} />
+        </span>
+    </button>
+);
+
+const Segmented = ({ value, onChange, options }) => (
+    <div className="grid grid-cols-3 gap-1 rounded-xl bg-[#111b21] p-1">
+        {options.map(([id, label]) => (
+            <button key={id} onClick={() => onChange(id)} className={`rounded-lg px-2 py-2 text-xs font-bold ${value === id ? 'bg-signal-accent text-white' : 'text-gray-400 hover:text-white'}`}>
+                {label}
+            </button>
+        ))}
+    </div>
+);
+
+const BusinessRow = ({ icon, title, value }) => (
+    <div className="flex gap-3 rounded-xl bg-[#111b21] p-3">
+        <span className="text-signal-accent">{icon}</span>
+        <div>
+            <p className="text-sm font-bold text-white">{title}</p>
+            <p className="text-xs text-gray-400">{value}</p>
+        </div>
+    </div>
+);
 
 export default SettingsModal;

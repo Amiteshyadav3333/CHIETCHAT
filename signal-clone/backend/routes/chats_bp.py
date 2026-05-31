@@ -1,11 +1,17 @@
+import json
 from flask import Blueprint, jsonify
 from models import db, Chat, ChatParticipant, Message, User
+from extensions import socketio
 from utils import (
     get_current_user_id, user_can_access_chat, serialize_user, 
-    iso_utc, get_json_data, has_contact, is_blocked
+    iso_utc, get_json_data, has_contact, is_blocked, utc_now
 )
 
 chats_bp = Blueprint('chats_bp', __name__)
+
+def emit_message_update(chat_id, event, payload):
+    for participant in ChatParticipant.query.filter_by(chat_id=chat_id).all():
+        socketio.emit(event, payload, room=f"user_{participant.user_id}")
 
 @chats_bp.route('/api/chats/<int:chat_id>', methods=['DELETE'])
 def delete_chat(chat_id):
@@ -146,18 +152,33 @@ def get_messages(chat_id):
     if not user_can_access_chat(user_id, chat_id):
         return jsonify({"error": "Forbidden"}), 403
 
+    now = utc_now()
+    expired = []
+    for message in Message.query.filter(Message.chat_id == chat_id, Message.ttl > 0).all():
+        if (now - message.timestamp).total_seconds() > message.ttl:
+            expired.append(message)
+    for message in expired:
+        db.session.delete(message)
+    if expired:
+        db.session.commit()
+
     messages = Message.query.filter_by(chat_id=chat_id).order_by(Message.timestamp.asc()).all()
     return jsonify([{
         "id": m.id,
         "senderId": m.sender_id,
-        "content": m.content,
+        "content": "This message was deleted" if m.deleted_at else m.content,
         "status": m.status or 'sent',
         "type": m.type,
         "timestamp": iso_utc(m.timestamp),
         "ttl": m.ttl,
         "replyToId": m.reply_to_id,
         "replyContent": m.reply_content,
-        "replySenderName": m.reply_sender_name
+        "replySenderName": m.reply_sender_name,
+        "editedAt": iso_utc(m.edited_at),
+        "deletedAt": iso_utc(m.deleted_at),
+        "readAt": iso_utc(m.read_at),
+        "reactions": m.reactions_dict(),
+        "isPinned": bool(m.is_pinned)
     } for m in messages])
 
 @chats_bp.route('/api/messages/<int:message_id>', methods=['DELETE'])
@@ -173,9 +194,83 @@ def delete_message(message_id):
     if message.sender_id != user_id:
         return jsonify({"error": "Forbidden"}), 403
 
-    db.session.delete(message)
+    message.content = ''
+    message.type = 'deleted'
+    message.deleted_at = utc_now()
     db.session.commit()
-    return jsonify({"message": "Deleted"}), 200
+    payload = {
+        "message": "Deleted",
+        "id": message.id,
+        "chatId": message.chat_id,
+        "deletedAt": iso_utc(message.deleted_at)
+    }
+    emit_message_update(message.chat_id, 'message_deleted', payload)
+    return jsonify(payload), 200
+
+@chats_bp.route('/api/messages/<int:message_id>', methods=['PUT'])
+def edit_message(message_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    message = Message.query.get(message_id)
+    if not message:
+        return jsonify({"error": "Message not found"}), 404
+    if message.sender_id != user_id or message.deleted_at:
+        return jsonify({"error": "Forbidden"}), 403
+
+    data = get_json_data()
+    content = data.get('content')
+    if content is None:
+        return jsonify({"error": "Content is required"}), 400
+
+    message.content = content
+    message.edited_at = utc_now()
+    db.session.commit()
+    payload = {
+        "id": message.id,
+        "chatId": message.chat_id,
+        "content": message.content,
+        "editedAt": iso_utc(message.edited_at)
+    }
+    emit_message_update(message.chat_id, 'message_edited', payload)
+    return jsonify(payload)
+
+@chats_bp.route('/api/messages/<int:message_id>/react', methods=['POST'])
+def react_message(message_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    message = Message.query.get(message_id)
+    if not message or not user_can_access_chat(user_id, message.chat_id):
+        return jsonify({"error": "Message not found"}), 404
+    data = get_json_data()
+    emoji = (data.get('emoji') or '').strip()
+    reactions = message.reactions_dict()
+    key = str(user_id)
+    if not emoji or reactions.get(key) == emoji:
+        reactions.pop(key, None)
+    else:
+        reactions[key] = emoji[:12]
+    message.reactions = json.dumps(reactions)
+    db.session.commit()
+    payload = {"id": message.id, "chatId": message.chat_id, "reactions": reactions}
+    emit_message_update(message.chat_id, 'message_reaction_update', payload)
+    return jsonify(payload)
+
+@chats_bp.route('/api/messages/<int:message_id>/pin', methods=['POST'])
+def pin_message(message_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    message = Message.query.get(message_id)
+    if not message or not user_can_access_chat(user_id, message.chat_id):
+        return jsonify({"error": "Message not found"}), 404
+    message.is_pinned = not bool(message.is_pinned)
+    db.session.commit()
+    payload = {"id": message.id, "chatId": message.chat_id, "isPinned": bool(message.is_pinned)}
+    emit_message_update(message.chat_id, 'message_pin_update', payload)
+    return jsonify(payload)
 
 # Create Group
 @chats_bp.route('/api/groups/create', methods=['POST'])
@@ -432,4 +527,3 @@ def toggle_group_chat(chat_id):
     except Exception as e:
         print(f"Error toggling group chat: {e}")
         return jsonify({"error": str(e)}), 500
-

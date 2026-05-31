@@ -3,7 +3,7 @@ import { SocketContext } from '../context/SocketContext';
 import { AuthContext } from '../context/AuthContext';
 import {
     VideoCameraIcon, VideoCameraSlashIcon, XMarkIcon,
-    MicrophoneIcon, SpeakerXMarkIcon, ArrowsPointingOutIcon, ArrowPathIcon
+    MicrophoneIcon, SpeakerXMarkIcon, ArrowsPointingOutIcon, ArrowPathIcon, ComputerDesktopIcon
 } from '@heroicons/react/24/solid';
 
 const MAX_PARTICIPANTS = 10;
@@ -24,6 +24,8 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
     const [mainView, setMainView] = useState('remote'); // 'remote' | socketId of peer | 'me'
     const [localStream, setLocalStream] = useState(null);
     const [facingMode, setFacingMode] = useState('user');
+    const [isScreenSharing, setIsScreenSharing] = useState(false);
+    const cameraTrackRef = useRef(null);
     const controlsTimerRef = useRef(null);
     const facingModeRef = useRef('user');
 
@@ -48,6 +50,7 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
 
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 streamRef.current = stream;
+                cameraTrackRef.current = stream.getVideoTracks()[0] || null;
                 setLocalStream(stream);
                 socket.emit('join_call', { chatId: activeChat.id, userId: user.id });
 
@@ -239,6 +242,7 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
                 audio: false
             });
             const nextVideoTrack = nextStream.getVideoTracks()[0];
+            cameraTrackRef.current = nextVideoTrack;
             const currentStream = streamRef.current;
             const oldVideoTracks = currentStream?.getVideoTracks() || [];
 
@@ -260,6 +264,64 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
         } catch (err) {
             console.error(err);
             alert('Could not switch camera. This device may not have another camera.');
+        }
+    };
+
+    const toggleScreenShare = async () => {
+        if (isScreenSharing) {
+            const cameraTrack = cameraTrackRef.current;
+            if (!cameraTrack) return;
+            Object.values(peersRef.current).forEach(({ pc }) => {
+                const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+                sender?.replaceTrack(cameraTrack);
+            });
+            streamRef.current?.getVideoTracks().forEach(track => {
+                if (track !== cameraTrack) {
+                    streamRef.current.removeTrack(track);
+                    track.stop();
+                }
+            });
+            if (!streamRef.current?.getVideoTracks().includes(cameraTrack)) {
+                streamRef.current?.addTrack(cameraTrack);
+            }
+            setLocalStream(new MediaStream(streamRef.current.getTracks()));
+            setIsScreenSharing(false);
+            Object.keys(peersRef.current).forEach(socketId => socket.emit('screen_share_stopped', { to: socketId, fromSocket: socket.id }));
+            return;
+        }
+
+        try {
+            const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+            const screenTrack = displayStream.getVideoTracks()[0];
+            const currentVideo = streamRef.current?.getVideoTracks()[0];
+            if (currentVideo && !cameraTrackRef.current) cameraTrackRef.current = currentVideo;
+
+            Object.values(peersRef.current).forEach(({ pc }) => {
+                const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+                sender?.replaceTrack(screenTrack);
+            });
+            streamRef.current?.getVideoTracks().forEach(track => streamRef.current.removeTrack(track));
+            streamRef.current?.addTrack(screenTrack);
+            setLocalStream(new MediaStream(streamRef.current.getTracks()));
+            setCurrentCallType('video');
+            setIsVideoOff(false);
+            setIsScreenSharing(true);
+            Object.keys(peersRef.current).forEach(socketId => socket.emit('screen_share_started', { to: socketId, fromSocket: socket.id }));
+            screenTrack.onended = () => {
+                const cameraTrack = cameraTrackRef.current;
+                if (cameraTrack && streamRef.current) {
+                    Object.values(peersRef.current).forEach(({ pc }) => {
+                        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+                        sender?.replaceTrack(cameraTrack);
+                    });
+                    streamRef.current.getVideoTracks().forEach(track => streamRef.current.removeTrack(track));
+                    streamRef.current.addTrack(cameraTrack);
+                    setLocalStream(new MediaStream(streamRef.current.getTracks()));
+                }
+                setIsScreenSharing(false);
+            };
+        } catch (err) {
+            console.error(err);
         }
     };
 
@@ -338,6 +400,9 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
                     </ControlBtn>
                     <ControlBtn onClick={switchToVideo} activeColor="bg-blue-600" label="Video">
                         <VideoCameraIcon className="w-6 h-6" />
+                    </ControlBtn>
+                    <ControlBtn onClick={toggleScreenShare} active={isScreenSharing} activeColor="bg-blue-600" label="Screen Share">
+                        <ComputerDesktopIcon className="w-6 h-6" />
                     </ControlBtn>
                     <ControlBtn onClick={flipCamera} activeColor="bg-gray-700" label="Switch Camera">
                         <ArrowPathIcon className="w-6 h-6" />
@@ -484,6 +549,10 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
 
                 <ControlBtn onClick={flipCamera} activeColor="bg-gray-700" label="Switch Camera">
                     <ArrowPathIcon className="w-6 h-6" />
+                </ControlBtn>
+
+                <ControlBtn onClick={toggleScreenShare} active={isScreenSharing} activeColor="bg-blue-600" label="Screen Share">
+                    <ComputerDesktopIcon className="w-6 h-6" />
                 </ControlBtn>
 
                 <button

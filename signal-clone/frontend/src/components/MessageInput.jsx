@@ -37,6 +37,7 @@ const GlobeIcon = ({ className }) => (
 const MessageInput = ({ 
     onSend, onUpload, onStartLiveLocation, replyTo, onCancelReply, 
     onTranslate, chatId, chatTranslationLang, onChangeTranslationLang,
+    onTyping,
     disabled = false, placeholderOverride = ""
 }) => {
     const [text, setText] = useState('');
@@ -45,6 +46,7 @@ const MessageInput = ({
     const [isRecording, setIsRecording] = useState(false);
     const [showPollCreator, setShowPollCreator] = useState(false);
     const [pollData, setPollData] = useState({ question: '', options: ['', ''] });
+    const [disappearingTtl, setDisappearingTtl] = useState(0);
     
     const showTranslator = chatTranslationLang !== '';
     const targetLang = chatTranslationLang || 'hi';
@@ -71,6 +73,11 @@ const MessageInput = ({
     const audioChunksRef = useRef([]);
     const inputRef = useRef(null);
     const fileInputRef = useRef(null);
+    const typingTimerRef = useRef(null);
+
+    React.useEffect(() => {
+        return () => clearTimeout(typingTimerRef.current);
+    }, []);
 
 
     const openFilePicker = (accept) => {
@@ -98,9 +105,10 @@ const MessageInput = ({
                 setIsTranslating(false);
             }
         }
-        onSend(finalWord, 'text');
+        onSend(finalWord, 'text', disappearingTtl);
         setText('');
         setShowEmoji(false);
+        onTyping?.(false);
     };
 
     const handleKeyDown = (e) => {
@@ -133,7 +141,7 @@ const MessageInput = ({
         }
         navigator.geolocation.getCurrentPosition((position) => {
             const { latitude, longitude } = position.coords;
-            onSend(JSON.stringify({ lat: latitude, lng: longitude }), 'location');
+            onSend(JSON.stringify({ lat: latitude, lng: longitude }), 'location', disappearingTtl);
             setShowAttachMenu(false);
         }, () => {
             alert("Unable to retrieve your location");
@@ -145,10 +153,28 @@ const MessageInput = ({
             alert("Please fill in the question and all options");
             return;
         }
-        onSend(JSON.stringify(pollData), 'poll');
+        onSend(JSON.stringify(pollData), 'poll', disappearingTtl);
         setShowPollCreator(false);
         setPollData({ question: '', options: ['', ''] });
         setShowAttachMenu(false);
+    };
+
+    const sendContactCard = () => {
+        const name = prompt('Contact name');
+        if (!name) return;
+        const phone = prompt('Phone number') || '';
+        onSend(JSON.stringify({ name, phone }), 'contact', disappearingTtl);
+        setShowAttachMenu(false);
+    };
+
+    const sendMiniGame = () => {
+        onSend('Tap Race', 'game', 0);
+        setShowAttachMenu(false);
+    };
+
+    const sendSticker = (sticker) => {
+        onSend(sticker, 'sticker', disappearingTtl);
+        setShowEmoji(false);
     };
 
     const startRecording = async () => {
@@ -305,7 +331,7 @@ const MessageInput = ({
 
             {/* Emoji Picker */}
             {showEmoji && (
-                <div className="absolute bottom-full left-0 z-50">
+                <div className="absolute bottom-full left-0 z-50 flex gap-2 rounded-2xl bg-[#202c33] p-2 shadow-2xl">
                     <EmojiPicker
                         onEmojiClick={handleEmojiClick}
                         theme="dark"
@@ -315,6 +341,14 @@ const MessageInput = ({
                         skinTonesDisabled
                         previewConfig={{ showPreview: false }}
                     />
+                    <div className="hidden w-24 flex-col gap-2 sm:flex">
+                        <p className="px-1 text-[11px] font-bold uppercase tracking-wider text-gray-400">Stickers</p>
+                        {['🔥', '🎉', '✅', '💎', '🚀'].map(item => (
+                            <button key={item} onClick={() => sendSticker(item)} className="rounded-xl bg-white/5 p-2 text-3xl hover:bg-white/10">
+                                {item}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             )}
 
@@ -368,7 +402,19 @@ const MessageInput = ({
                             label="Contact"
                             color="bg-cyan-500"
                             icon={<UserCircleIcon className="w-6 h-6 text-white" />}
-                            onClick={() => alert('Contact sharing coming soon')}
+                            onClick={sendContactCard}
+                        />
+                        <AttachOption
+                            label="GIF"
+                            color="bg-pink-500"
+                            icon={<FaceSmileIcon className="w-6 h-6 text-white" />}
+                            onClick={() => openFilePicker('image/gif')}
+                        />
+                        <AttachOption
+                            label="Game"
+                            color="bg-violet-500"
+                            icon={<ChartBarIcon className="w-6 h-6 text-white" />}
+                            onClick={sendMiniGame}
                         />
                     </div>
                     <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="*/*" />
@@ -425,13 +471,19 @@ const MessageInput = ({
                         <textarea
                             ref={inputRef}
                             value={text}
-                            onChange={e => setText(e.target.value)}
+                            onChange={e => {
+                                setText(e.target.value);
+                                onTyping?.(e.target.value.length > 0);
+                                clearTimeout(typingTimerRef.current);
+                                typingTimerRef.current = setTimeout(() => onTyping?.(false), 1400);
+                            }}
                             onKeyDown={handleKeyDown}
                             placeholder="Type a message..."
                             rows={1}
                             className="flex-1 bg-[#2a3942] text-gray-100 placeholder-gray-500 rounded-3xl px-4 py-3 text-[15px] focus:outline-none resize-none max-h-32 overflow-y-auto leading-relaxed"
                             style={{ scrollbarWidth: 'none' }}
                             onClick={() => { setShowEmoji(false); setShowAttachMenu(false); }}
+                            onBlur={() => onTyping?.(false)}
                         />
                     )}
 
@@ -457,6 +509,21 @@ const MessageInput = ({
                     )}
                 </form>
             </div>
+            {!disabled && (
+                <div className="flex items-center gap-2 px-4 pb-2 text-[11px] text-gray-400">
+                    <span>Disappearing</span>
+                    <select
+                        value={disappearingTtl}
+                        onChange={e => setDisappearingTtl(Number(e.target.value))}
+                        className="rounded-md border border-gray-700 bg-[#111b21] px-2 py-1 text-gray-200 outline-none"
+                    >
+                        <option value={0}>Off</option>
+                        <option value={60}>1 min</option>
+                        <option value={3600}>1 hour</option>
+                        <option value={86400}>24 hours</option>
+                    </select>
+                </div>
+            )}
         </div>
     );
 };

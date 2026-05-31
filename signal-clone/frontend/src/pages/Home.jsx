@@ -49,6 +49,12 @@ const Home = () => {
     const [liveLocationSharing, setLiveLocationSharing] = useState(null); // { chatId, expiry, intervalId }
     const [timeLeft, setTimeLeft] = useState(null);
     const [chatTranslationLang, setChatTranslationLang] = useState('');
+    const [typingUsers, setTypingUsers] = useState({});
+    const [editingMessage, setEditingMessage] = useState(null);
+    const [editText, setEditText] = useState('');
+    const [forwardMessage, setForwardMessage] = useState(null);
+    const [theme, setTheme] = useState(() => localStorage.getItem('chat_theme') || 'dark');
+    const [wallpaper, setWallpaper] = useState(() => localStorage.getItem('chat_wallpaper') || 'gradient');
 
     // Group states
     const [searchModalTab, setSearchModalTab] = useState('search_user'); // 'search_user' | 'create_group' | 'discover_groups'
@@ -73,6 +79,8 @@ const Home = () => {
     useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
     useEffect(() => { chatsRef.current = chats; }, [chats]);
     useEffect(() => { showCallModalRef.current = showCallModal; }, [showCallModal]);
+    useEffect(() => { localStorage.setItem('chat_theme', theme); }, [theme]);
+    useEffect(() => { localStorage.setItem('chat_wallpaper', wallpaper); }, [wallpaper]);
 
     const fetchChats = useCallback(async ({ restoreActive = false } = {}) => {
         if (!token) return [];
@@ -397,10 +405,46 @@ const Home = () => {
             });
         });
 
-        socket.on('message_status_update', ({ messageId, chatId, status }) => {
+        socket.on('message_status_update', ({ messageId, chatId, status, readAt }) => {
             if (activeChatRef.current && chatId === activeChatRef.current.id) {
-                setMessages(prev => prev.map(m => m.id === messageId ? { ...m, status } : m));
+                setMessages(prev => prev.map(m => m.id === messageId ? { ...m, status, readAt: readAt || m.readAt } : m));
             }
+        });
+
+        socket.on('message_edited', async ({ id, chatId, content, editedAt }) => {
+            if (activeChatRef.current?.id === chatId) {
+                const readableContent = isEncryptedPayload(content) && privateKey && user
+                    ? await decryptEnvelope(privateKey, user.id, content)
+                    : content;
+                setMessages(prev => prev.map(m => m.id === id ? { ...m, content: readableContent, editedAt } : m));
+            }
+        });
+
+        socket.on('message_deleted', ({ id, chatId, deletedAt }) => {
+            if (activeChatRef.current?.id === chatId) {
+                setMessages(prev => prev.map(m => m.id === id ? { ...m, content: '', type: 'deleted', deletedAt } : m));
+            }
+        });
+
+        socket.on('message_reaction_update', ({ id, chatId, reactions }) => {
+            if (activeChatRef.current?.id === chatId) {
+                setMessages(prev => prev.map(m => m.id === id ? { ...m, reactions } : m));
+            }
+        });
+
+        socket.on('message_pin_update', ({ id, chatId, isPinned }) => {
+            if (activeChatRef.current?.id === chatId) {
+                setMessages(prev => prev.map(m => m.id === id ? { ...m, isPinned } : m));
+            }
+        });
+
+        socket.on('typing_update', ({ chatId, userId, username, isTyping }) => {
+            setTypingUsers(prev => {
+                const chatTyping = { ...(prev[chatId] || {}) };
+                if (isTyping) chatTyping[userId] = username;
+                else delete chatTyping[userId];
+                return { ...prev, [chatId]: chatTyping };
+            });
         });
 
         socket.on('presence_update', ({ userId, isOnline, lastSeen }) => {
@@ -487,6 +531,11 @@ const Home = () => {
             socket.off('presence_update');
             socket.off('user_profile_updated');
             socket.off('message_status_update');
+            socket.off('message_edited');
+            socket.off('message_deleted');
+            socket.off('message_reaction_update');
+            socket.off('message_pin_update');
+            socket.off('typing_update');
         };
     }, [socket, user, fetchChats, decryptMessageForCurrentUser]);
 
@@ -524,7 +573,7 @@ const Home = () => {
         }
     }, [messages]);
 
-    const handleSendMessage = async (text, type = 'text', replyMsg = null) => {
+    const handleSendMessage = async (text, type = 'text', replyMsg = null, ttl = 0) => {
         if (!activeChat || !socket) return;
 
         if (!privateKey || !publicKey) {
@@ -553,7 +602,7 @@ const Home = () => {
             senderId: user.id,
             content: encryptedContent,
             type,
-            ttl: 0,
+            ttl,
             replyToId: replyMsg?.id || null,
             replyContent: replyMsg ? (replyMsg.type !== 'text' ? replyMsg.type : replyMsg.content) : null,
             replySenderName: replyMsg?.senderName || null
@@ -672,13 +721,96 @@ const Home = () => {
 
     const handleDeleteMessage = async (messageId) => {
         try {
-            await axios.delete(`/api/messages/${messageId}`, {
+            const res = await axios.delete(`/api/messages/${messageId}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setMessages(prev => prev.filter(m => m.id !== messageId));
+            setMessages(prev => prev.map(m => m.id === messageId ? { ...m, content: '', type: 'deleted', deletedAt: res.data.deletedAt } : m));
         } catch (err) {
             console.error(err);
         }
+    };
+
+    const handleCopyMessage = async (message) => {
+        try {
+            await navigator.clipboard.writeText(message.content || '');
+        } catch {
+            alert('Could not copy message');
+        }
+    };
+
+    const openEditMessage = (message) => {
+        setEditingMessage(message);
+        setEditText(message.content || '');
+    };
+
+    const submitEditMessage = async (e) => {
+        e.preventDefault();
+        if (!editingMessage || !editText.trim()) return;
+        try {
+            const encryptedContent = await encryptForRecipients(
+                Object.fromEntries(activeChat.participants.map(p => [p.id, p.id === user.id ? publicKey : p.publicKey])),
+                editText.trim()
+            );
+            const res = await axios.put(`/api/messages/${editingMessage.id}`, { content: encryptedContent }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setMessages(prev => prev.map(m => m.id === editingMessage.id ? { ...m, content: editText.trim(), editedAt: res.data.editedAt } : m));
+            setEditingMessage(null);
+            setEditText('');
+        } catch (err) {
+            console.error(err);
+            alert('Could not edit message');
+        }
+    };
+
+    const handleReactMessage = async (message, emoji) => {
+        try {
+            const res = await axios.post(`/api/messages/${message.id}/react`, { emoji }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setMessages(prev => prev.map(m => m.id === message.id ? { ...m, reactions: res.data.reactions } : m));
+        } catch (err) { console.error(err); }
+    };
+
+    const handlePinMessage = async (message) => {
+        try {
+            const res = await axios.post(`/api/messages/${message.id}/pin`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setMessages(prev => prev.map(m => m.id === message.id ? { ...m, isPinned: res.data.isPinned } : m));
+        } catch (err) { console.error(err); }
+    };
+
+    const handleForwardToChat = async (targetChat) => {
+        if (!forwardMessage || !socket) return;
+        try {
+            const recipientPublicKeys = {};
+            for (const participant of targetChat.participants) {
+                const participantPublicKey = participant.id === user.id ? publicKey : participant.publicKey;
+                if (!participantPublicKey) return alert(`${participant.username} does not have an encryption key yet.`);
+                recipientPublicKeys[participant.id] = participantPublicKey;
+            }
+            const encryptedContent = await encryptForRecipients(recipientPublicKeys, forwardMessage.content);
+            socket.emit('send_message', {
+                chatId: targetChat.id,
+                senderId: user.id,
+                content: encryptedContent,
+                type: forwardMessage.type || 'text',
+                ttl: 0,
+                replyToId: null,
+                replyContent: null,
+                replySenderName: null
+            });
+            setForwardMessage(null);
+        } catch (err) {
+            console.error(err);
+            alert('Could not forward message');
+        }
+    };
+
+    const handleTyping = (isTyping) => {
+        if (!socket || !visibleActiveChat) return;
+        socket.emit('typing', { chatId: visibleActiveChat.id, isTyping });
     };
 
     const acceptCall = () => {
@@ -837,12 +969,15 @@ const Home = () => {
     };
 
     const getChatStatus = (chat) => {
+        const typers = Object.values(typingUsers[chat.id] || {});
+        if (typers.length > 0) return `${typers.join(', ')} typing...`;
         if (chat.isGroup) {
             return `${chat.participants?.length || 0} members • ${chat.isPublic ? 'Public' : 'Private'}`;
         }
         const otherParticipant = getOtherParticipant(chat);
         if (!otherParticipant) return "Tap to open chat";
         if (otherParticipant.isOnline) return "Online";
+        if (localStorage.getItem('hide_last_seen') === '1') return "Last seen hidden";
         return formatLastSeen(otherParticipant.lastSeen);
     };
 
@@ -881,6 +1016,11 @@ const Home = () => {
     const featureOverlayOpen = showSearchModal || showNotifications || showSettings || showCallModal || incomingCall;
     const appNavHidden = featureOverlayOpen || Boolean(activeChat);
     const appNavVisible = !appNavHidden || navPeekOpen;
+    const chatBackground = wallpaper === 'dots'
+        ? 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.12) 1px, transparent 0), #0b141a'
+        : wallpaper === 'emerald'
+            ? 'linear-gradient(135deg, #06251f, #111b21 55%, #17212b)'
+            : 'linear-gradient(to bottom, #0b141a, #0d1b22)';
 
     useEffect(() => {
         if (!appNavHidden) setNavPeekOpen(false);
@@ -924,6 +1064,43 @@ const Home = () => {
             )}
 
             {showCallModal && <VideoCallModal activeChat={activeChat} onClose={() => setShowCallModal(false)} callType={callType} />}
+
+            {editingMessage && (
+                <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4">
+                    <form onSubmit={submitEditMessage} className="w-full max-w-sm rounded-2xl border border-gray-700 bg-[#111b21] p-4 shadow-2xl">
+                        <h3 className="mb-3 text-lg font-bold text-white">Edit message</h3>
+                        <textarea
+                            value={editText}
+                            onChange={e => setEditText(e.target.value)}
+                            className="h-28 w-full resize-none rounded-xl bg-[#202c33] p-3 text-sm text-white outline-none ring-1 ring-white/10 focus:ring-signal-accent"
+                            autoFocus
+                        />
+                        <div className="mt-3 flex justify-end gap-2">
+                            <button type="button" onClick={() => setEditingMessage(null)} className="rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/10">Cancel</button>
+                            <button type="submit" className="rounded-lg bg-signal-accent px-4 py-2 text-sm font-bold text-white">Save</button>
+                        </div>
+                    </form>
+                </div>
+            )}
+
+            {forwardMessage && (
+                <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4">
+                    <div className="w-full max-w-sm rounded-2xl border border-gray-700 bg-[#111b21] p-4 shadow-2xl">
+                        <div className="mb-3 flex items-center justify-between">
+                            <h3 className="text-lg font-bold text-white">Forward to</h3>
+                            <button onClick={() => setForwardMessage(null)} className="text-gray-400 hover:text-white">Close</button>
+                        </div>
+                        <div className="max-h-80 space-y-2 overflow-y-auto">
+                            {chats.filter(c => c.id !== visibleActiveChat?.id).map(chat => (
+                                <button key={chat.id} onClick={() => handleForwardToChat(chat)} className="flex w-full items-center gap-3 rounded-xl p-3 text-left hover:bg-white/10">
+                                    <AvatarZoom src={chat.avatar || null} name={chat.name} size="w-10 h-10" />
+                                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white">{chat.name}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
 
 
             {showSearchModal && (
@@ -1400,6 +1577,15 @@ const Home = () => {
                                                 {isBlocked ? `Unblock ${other.username}` : `Block ${other.username}`}
                                             </button>
                                         )}
+                                        {other && (
+                                            <button
+                                                onClick={() => alert(`Report submitted for ${other.username}. Our moderation team will review this chat.`)}
+                                                className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-yellow-400 hover:bg-yellow-500/10 transition-colors"
+                                            >
+                                                <NoSymbolIcon className="w-5 h-5" />
+                                                Report User
+                                            </button>
+                                        )}
                                         <button
                                             onClick={() => { setShowInfoPanel(false); handleDeleteChat(visibleActiveChat.id); }}
                                             className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors"
@@ -1416,7 +1602,7 @@ const Home = () => {
                     {/* Messages Area - WhatsApp style background */}
                     <div
                         className="flex-1 overflow-y-auto px-4 py-3 space-y-0.5"
-                        style={{ background: 'linear-gradient(to bottom, #0b141a, #0d1b22)' }}
+                        style={{ background: chatBackground, backgroundSize: wallpaper === 'dots' ? '18px 18px' : undefined }}
                     >
                         {messages.map((msg, idx) => {
                             const prevMsg = messages[idx - 1];
@@ -1424,7 +1610,7 @@ const Home = () => {
                             const prevDate = prevMsg ? new Date(prevMsg.timestamp).toDateString() : null;
                             const showDate = currDate !== prevDate;
                             const prevSenderId = prevMsg?.senderId;
-                            const showAvatar = !msg.senderId === user.id && prevSenderId !== msg.senderId;
+                            const showAvatar = msg.senderId !== user.id && prevSenderId !== msg.senderId;
                             const sender = visibleActiveChat.participants.find(p => p.id === msg.senderId);
                             const replyData = msg.replyToId ? {
                                 content: msg.replyContent,
@@ -1443,6 +1629,11 @@ const Home = () => {
                                         showAvatar={showAvatar || prevSenderId !== msg.senderId}
                                         onDelete={handleDeleteMessage}
                                         onReply={(m) => setReplyTo({ ...m, senderName: sender?.username || 'You' })}
+                                        onEdit={openEditMessage}
+                                        onCopy={handleCopyMessage}
+                                        onForward={setForwardMessage}
+                                        onReact={handleReactMessage}
+                                        onPin={handlePinMessage}
                                         replyTo={replyData}
                                         onTranslate={handleTranslate}
                                         chatId={visibleActiveChat.id}
@@ -1451,12 +1642,22 @@ const Home = () => {
                                 </React.Fragment>
                             );
                         })}
+                        {Object.values(typingUsers[visibleActiveChat.id] || {}).length > 0 && (
+                            <div className="ml-10 mt-2 inline-flex items-center gap-2 rounded-full bg-[#202c33] px-3 py-1 text-xs text-gray-300">
+                                <span>{Object.values(typingUsers[visibleActiveChat.id]).join(', ')} typing</span>
+                                <span className="flex gap-0.5">
+                                    <i className="h-1 w-1 rounded-full bg-gray-400 animate-bounce" />
+                                    <i className="h-1 w-1 rounded-full bg-gray-400 animate-bounce [animation-delay:120ms]" />
+                                    <i className="h-1 w-1 rounded-full bg-gray-400 animate-bounce [animation-delay:240ms]" />
+                                </span>
+                            </div>
+                        )}
                         <div ref={messagesEndRef} />
                     </div>
 
                     {/* Input Area */}
                     <MessageInput
-                        onSend={(text, type) => handleSendMessage(text, type, replyTo)}
+                        onSend={(text, type, ttl) => handleSendMessage(text, type, replyTo, ttl)}
                         onUpload={handleUpload}
                         onStartLiveLocation={() => startLiveLocation(visibleActiveChat.id)}
                         replyTo={replyTo}
@@ -1465,6 +1666,7 @@ const Home = () => {
                         chatId={visibleActiveChat.id}
                         chatTranslationLang={chatTranslationLang}
                         onChangeTranslationLang={setChatTranslationLang}
+                        onTyping={handleTyping}
                         disabled={visibleActiveChat.isChatDisabled && visibleActiveChat.groupAdminId !== user?.id}
                         placeholderOverride={visibleActiveChat.isChatDisabled && visibleActiveChat.groupAdminId !== user?.id ? "Only admins can send messages in this group" : ""}
                     />
@@ -1476,7 +1678,7 @@ const Home = () => {
                 </div>
             )}
             {showReels && <Reels onBack={() => setShowReels(false)} />}
-            {showSettings && <SettingsModal user={user} onClose={() => setShowSettings(false)} onLogout={logout} />}
+            {showSettings && <SettingsModal user={user} onClose={() => setShowSettings(false)} onLogout={logout} theme={theme} wallpaper={wallpaper} onThemeChange={setTheme} onWallpaperChange={setWallpaper} />}
             {showNotifications && (
                 <NotificationPanel
                     notifications={notifications}

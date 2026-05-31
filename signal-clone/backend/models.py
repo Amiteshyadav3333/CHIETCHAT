@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import json
 from flask_sqlalchemy import SQLAlchemy
 
 def utc_now():
@@ -84,8 +85,19 @@ class Message(db.Model):
     reply_to_id = db.Column(db.Integer, nullable=True)
     reply_content = db.Column(db.Text, nullable=True)
     reply_sender_name = db.Column(db.String(80), nullable=True)
+    edited_at = db.Column(db.DateTime, nullable=True)
+    deleted_at = db.Column(db.DateTime, nullable=True)
+    read_at = db.Column(db.DateTime, nullable=True)
+    reactions = db.Column(db.Text, default='{}')
+    is_pinned = db.Column(db.Boolean, default=False)
 
     sender = db.relationship('User')
+
+    def reactions_dict(self):
+        try:
+            return json.loads(self.reactions or '{}')
+        except Exception:
+            return {}
 
 class Status(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -107,6 +119,16 @@ class StatusView(db.Model):
     viewer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     viewed_at = db.Column(db.DateTime, default=utc_now)
     viewer = db.relationship('User')
+
+class StatusReaction(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    status_id = db.Column(db.Integer, db.ForeignKey('status.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    emoji = db.Column(db.String(12), nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now)
+    user = db.relationship('User')
+    status = db.relationship('Status', backref='reactions')
+    __table_args__ = (db.UniqueConstraint('status_id', 'user_id', name='uq_status_user_reaction'),)
 
 class Block(db.Model):
     id = db.Column(db.Integer, primary_key=True)

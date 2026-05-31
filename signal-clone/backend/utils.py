@@ -2,9 +2,11 @@ import os
 import jwt
 import datetime
 import json
+import uuid
 import urllib.parse
 import urllib.request
 from flask import request, current_app
+from werkzeug.utils import secure_filename
 from sqlalchemy import inspect, text
 from extensions import socketio, socket_users, user_connection_counts
 from models import db, User, Chat, ChatParticipant, Contact, Block, Notification
@@ -16,7 +18,13 @@ def upload_to_cloudinary(file, folder='chietchat', resource_type='auto'):
         os.environ.get('CLOUDINARY_API_KEY'),
         os.environ.get('CLOUDINARY_API_SECRET')
     ]):
-        raise RuntimeError("Cloudinary environment variables are not configured")
+        upload_folder = current_app.config['UPLOAD_FOLDER']
+        os.makedirs(upload_folder, exist_ok=True)
+        filename = secure_filename(file.filename or 'upload')
+        ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else 'bin'
+        local_name = f"{uuid.uuid4().hex}.{ext}"
+        file.save(os.path.join(upload_folder, local_name))
+        return f"/uploads/{local_name}"
 
     result = cloudinary.uploader.upload(
         file,
@@ -103,6 +111,11 @@ def ensure_database_schema():
             'reply_to_id': db.Integer(),
             'reply_content': db.Text(),
             'reply_sender_name': db.String(80),
+            'edited_at': db.DateTime(),
+            'deleted_at': db.DateTime(),
+            'read_at': db.DateTime(),
+            'reactions': db.Text(),
+            'is_pinned': db.Boolean(),
         })
         add_missing_columns(inspector, 'status', {
             'music_url': db.String(500),

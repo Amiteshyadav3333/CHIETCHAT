@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { format, isToday, isYesterday } from 'date-fns';
-import { TrashIcon, DocumentIcon, ArrowUturnLeftIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { TrashIcon, DocumentIcon, ArrowUturnLeftIcon, ArrowDownTrayIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon, EllipsisVerticalIcon, MapPinIcon } from '@heroicons/react/24/outline';
 import { CheckIcon } from '@heroicons/react/24/solid';
 
 const LANGUAGES = [
@@ -31,12 +31,16 @@ const GlobeIcon = ({ className }) => (
 );
 
 const SWIPE_THRESHOLD = 60;
+const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
 const ChatBubble = ({ 
     message, isOwn, senderName, onDelete, senderAvatar, showAvatar, 
-    onReply, replyTo, onTranslate, chatId, chatTranslationLang 
+    onReply, replyTo, onTranslate, chatId, chatTranslationLang,
+    onEdit, onCopy, onForward, onReact, onPin
 }) => {
     const [showDelete, setShowDelete] = useState(false);
+    const [showActions, setShowActions] = useState(false);
+    const [showReactions, setShowReactions] = useState(false);
     const [swipeX, setSwipeX] = useState(0);
     const [swiping, setSwiping] = useState(false);
     
@@ -50,6 +54,7 @@ const ChatBubble = ({
     
     const touchStartX = useRef(null);
     const content = message.content || '';
+    const isDeleted = message.type === 'deleted' || message.deletedAt;
 
     const isMedia = ['image', 'video'].includes(message.type) ||
         content.match(/\.(jpg|jpeg|png|gif|webp|mp4|webm|ogg)$/i);
@@ -167,8 +172,12 @@ const ChatBubble = ({
         }
         if (type === 'audio' || cnt.match(/\.(mp3|wav|m4a|aac|oga|webm)$/i)) {
             return (
-                <div className="flex flex-col gap-1">
-                    <audio controls src={cnt} className="w-full h-8 accent-blue-500 min-w-[200px]" />
+                <div className="flex min-w-[240px] flex-col gap-2">
+                    <audio controls src={cnt} className="w-full h-9 accent-blue-500" preload="metadata" />
+                    <div className="flex items-center justify-between text-[10px] text-white/55">
+                        <span>Voice message</span>
+                        <span>Drag the bar to seek</span>
+                    </div>
                     <button
                         onClick={() => handleDownload(cnt)}
                         className="text-[10px] text-white/60 hover:text-white flex items-center gap-1 self-end px-1"
@@ -240,7 +249,7 @@ const ChatBubble = ({
                     <a href={mapUrl} target="_blank" rel="noreferrer" className="flex flex-col gap-2 min-w-[180px] group/loc">
                         <div className="bg-white/10 rounded-xl p-3 flex items-center gap-3 group-hover/loc:bg-white/20 transition-colors">
                             <div className={`p-2 ${type === 'live_location' ? 'bg-red-500/20 animate-pulse' : 'bg-green-500/20'} rounded-full`}>
-                                <CheckIcon className={`w-6 h-6 ${type === 'live_location' ? 'text-red-500' : 'text-green-500'}`} />
+                                <MapPinIcon className={`w-6 h-6 ${type === 'live_location' ? 'text-red-500' : 'text-green-500'}`} />
                             </div>
                             <div>
                                 <p className="text-sm font-bold text-white">{type === 'live_location' ? 'Live Location' : 'Location'}</p>
@@ -250,6 +259,24 @@ const ChatBubble = ({
                     </a>
                 );
             } catch { return <p className="italic text-xs opacity-60 text-red-400">Invalid location data</p>; }
+        }
+        if (type === 'contact') {
+            try {
+                const contact = JSON.parse(cnt);
+                return (
+                    <div className="min-w-[210px]">
+                        <p className="text-xs uppercase tracking-wider text-white/50">Contact</p>
+                        <p className="text-sm font-bold">{contact.name}</p>
+                        <p className="text-xs text-white/70">{contact.phone}</p>
+                    </div>
+                );
+            } catch { return <p className="text-sm">{cnt}</p>; }
+        }
+        if (type === 'game') {
+            return <MiniGameCard game={cnt} isOwn={isOwn} />;
+        }
+        if (type === 'sticker') {
+            return <div className="text-5xl leading-none py-2">{cnt}</div>;
         }
         return <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap">{cnt}</p>;
     };
@@ -314,7 +341,7 @@ const ChatBubble = ({
                         <ArrowUturnLeftIcon className="w-4 h-4" />
                     </button>
 
-                    {isTextMessage && (
+                    {!isDeleted && isTextMessage && (
                         <button
                             onClick={() => setShowTranslatorMenu(v => !v)}
                             className={`opacity-0 group-hover/bubble:opacity-100 transition-opacity p-1 text-gray-500 hover:text-blue-400 mb-1 flex-shrink-0 ${isOwn ? 'order-first' : 'order-last'}`}
@@ -324,7 +351,17 @@ const ChatBubble = ({
                         </button>
                     )}
 
-                    {isOwn && showDelete && onDelete && (
+                    {!isDeleted && (
+                        <button
+                            onClick={() => setShowActions(v => !v)}
+                            className={`opacity-0 group-hover/bubble:opacity-100 transition-opacity p-1 text-gray-500 hover:text-gray-300 mb-1 flex-shrink-0 ${isOwn ? 'order-first' : 'order-last'}`}
+                            title="More"
+                        >
+                            <EllipsisVerticalIcon className="w-4 h-4" />
+                        </button>
+                    )}
+
+                    {isOwn && showDelete && onDelete && !isDeleted && (
                         <button
                             onClick={() => onDelete(message.id)}
                             className="opacity-0 group-hover/bubble:opacity-100 transition-opacity p-1 text-gray-500 hover:text-red-400 mb-1 flex-shrink-0"
@@ -349,7 +386,15 @@ const ChatBubble = ({
                             </div>
                         )}
 
-                        {renderContent(content, message.type)}
+                        {message.isPinned && (
+                            <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-yellow-300">Pinned</div>
+                        )}
+
+                        {isDeleted ? (
+                            <p className="text-sm italic text-white/55">This message was deleted</p>
+                        ) : (
+                            renderContent(content, message.type)
+                        )}
 
                         {/* Translation container */}
                         {((showTranslatorMenu || translatedText || isTranslating) && isTextMessage) && (
@@ -407,10 +452,68 @@ const ChatBubble = ({
 
                         <div className={`flex items-center gap-1 justify-end mt-0.5 ${isMedia ? 'absolute bottom-2 right-2 bg-black/40 rounded-full px-1.5 py-0.5' : ''}`}>
                             {timestamp}
+                            {message.editedAt && <span className={`text-[10px] ${isOwn ? 'text-white/50' : 'text-gray-500'}`}>edited</span>}
                             {ticks}
                         </div>
+                        {Object.keys(message.reactions || {}).length > 0 && (
+                            <div className={`absolute -bottom-5 ${isOwn ? 'left-2' : 'right-2'} rounded-full bg-[#111b21] px-2 py-0.5 text-xs shadow border border-white/10`}>
+                                {Object.values(message.reactions).join(' ')}
+                            </div>
+                        )}
+                        {isOwn && message.readAt && (
+                            <div className="mt-1 text-right text-[10px] text-[#53bdeb]">
+                                Seen {format(new Date(message.readAt), 'HH:mm')}
+                            </div>
+                        )}
+
+                        {showReactions && (
+                            <div className={`absolute z-30 -top-10 ${isOwn ? 'right-0' : 'left-0'} flex gap-1 rounded-full bg-[#111b21] p-1 shadow-xl border border-white/10`}>
+                                {QUICK_REACTIONS.map(emoji => (
+                                    <button
+                                        key={emoji}
+                                        type="button"
+                                        onClick={() => { onReact?.(message, emoji); setShowReactions(false); }}
+                                        className="h-8 w-8 rounded-full hover:bg-white/10 text-lg"
+                                    >
+                                        {emoji}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
+                        {showActions && (
+                            <div className={`absolute z-40 top-8 ${isOwn ? 'right-0' : 'left-0'} w-44 overflow-hidden rounded-xl bg-[#111b21] shadow-2xl border border-white/10`}>
+                                <ActionRow icon={<ClipboardDocumentIcon className="w-4 h-4" />} label="Copy" onClick={() => { onCopy?.(message); setShowActions(false); }} />
+                                <ActionRow icon={<ForwardIcon className="w-4 h-4" />} label="Forward" onClick={() => { onForward?.(message); setShowActions(false); }} />
+                                <ActionRow icon={<span className="text-sm">😊</span>} label="React" onClick={() => { setShowReactions(true); setShowActions(false); }} />
+                                <ActionRow icon={<span className="text-sm">📌</span>} label={message.isPinned ? 'Unpin' : 'Pin'} onClick={() => { onPin?.(message); setShowActions(false); }} />
+                                {isOwn && isTextMessage && <ActionRow icon={<PencilSquareIcon className="w-4 h-4" />} label="Edit" onClick={() => { onEdit?.(message); setShowActions(false); }} />}
+                            </div>
+                        )}
                     </div>
                 </div>
+            </div>
+        </div>
+    );
+};
+
+const ActionRow = ({ icon, label, onClick }) => (
+    <button type="button" onClick={onClick} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-gray-200 hover:bg-white/10">
+        {icon}
+        <span>{label}</span>
+    </button>
+);
+
+const MiniGameCard = ({ game, isOwn }) => {
+    const [score, setScore] = useState(0);
+    return (
+        <div className="min-w-[210px] space-y-2">
+            <p className="text-xs uppercase tracking-wider text-white/50">Mini game</p>
+            <div className={`rounded-xl p-3 ${isOwn ? 'bg-white/10' : 'bg-blue-500/10'}`}>
+                <p className="text-sm font-bold">{game || 'Tap Race'}</p>
+                <button onClick={() => setScore(s => s + 1)} className="mt-2 w-full rounded-lg bg-white/15 px-3 py-2 text-sm font-bold hover:bg-white/25">
+                    Tap score: {score}
+                </button>
             </div>
         </div>
     );

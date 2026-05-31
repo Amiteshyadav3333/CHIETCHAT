@@ -14,6 +14,8 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, toke
     const [replySending, setReplySending] = useState(false);
     const [replyNotice, setReplyNotice] = useState('');
     const [showMenu, setShowMenu] = useState(false);
+    const [reactionCounts, setReactionCounts] = useState({});
+    const [myReaction, setMyReaction] = useState('');
 
     const timerRef = useRef(null);
     const videoRef = useRef(null);
@@ -67,6 +69,8 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, toke
         setReplyText('');
         setReplyNotice('');
         setShowMenu(false);
+        setReactionCounts(currentStatus.reactions || {});
+        setMyReaction(currentStatus.myReaction || '');
         pausedRef.current = false;
         setPaused(false);
 
@@ -110,6 +114,21 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, toke
             } else {
                 audioRef.current.play().then(() => setMusicBlocked(false)).catch(() => setMusicBlocked(true));
             }
+        }
+    };
+
+    const reactToStatus = async (emoji) => {
+        if (isOwn) return;
+        try {
+            const res = await axios.post(`/api/status/${currentStatus.id}/react`, { emoji }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setReactionCounts(res.data.reactions || {});
+            setMyReaction(res.data.myReaction || '');
+            setReplyNotice('Reaction sent');
+            setTimeout(() => setReplyNotice(''), 1200);
+        } catch {
+            setReplyNotice('Could not react');
         }
     };
 
@@ -261,10 +280,28 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, toke
 
                     {/* Caption */}
                     {currentStatus.caption && (
-                        <div className="absolute bottom-16 left-0 right-0 px-4">
+                        <div className="absolute bottom-24 left-0 right-0 px-4">
                             <p className="text-white text-center text-sm font-medium bg-black/40 rounded-lg px-3 py-2 backdrop-blur-sm">
                                 {currentStatus.caption}
                             </p>
+                        </div>
+                    )}
+                    {!isOwn && (
+                        <div className="absolute bottom-16 left-0 right-0 flex justify-center gap-2 px-4">
+                            {['❤️', '😂', '🔥', '👏', '😮'].map(emoji => (
+                                <button
+                                    key={emoji}
+                                    onClick={(e) => { e.stopPropagation(); reactToStatus(emoji); }}
+                                    className={`h-9 w-9 rounded-full bg-black/45 text-lg backdrop-blur hover:bg-white/20 ${myReaction === emoji ? 'ring-2 ring-white' : ''}`}
+                                >
+                                    {emoji}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                    {Object.keys(reactionCounts).length > 0 && (
+                        <div className="absolute right-4 bottom-16 rounded-full bg-black/50 px-2 py-1 text-xs text-white">
+                            {Object.entries(reactionCounts).map(([emoji, count]) => `${emoji} ${count}`).join('  ')}
                         </div>
                     )}
 

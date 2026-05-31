@@ -1,7 +1,7 @@
 import datetime
 from flask import Blueprint, jsonify, request
 from werkzeug.utils import secure_filename
-from models import db, Status, StatusView, Message, ChatParticipant
+from models import db, Status, StatusView, StatusReaction, Message, ChatParticipant
 from utils import (
     get_current_user_id, get_contact_user_ids, utc_now, serialize_user, 
     iso_utc, upload_to_cloudinary, get_json_data, has_contact, get_or_create_direct_chat,
@@ -47,8 +47,13 @@ def get_statuses():
             "createdAt": iso_utc(s.created_at),
             "expiresAt": iso_utc(s.expires_at),
             "viewed": viewed,
-            "viewCount": len(s.views)
+            "viewCount": len(s.views),
+            "reactions": {}
         }
+        for reaction in s.reactions:
+            status_data["reactions"][reaction.emoji] = status_data["reactions"].get(reaction.emoji, 0) + 1
+            if reaction.user_id == user_id:
+                status_data["myReaction"] = reaction.emoji
         if uid == user_id:
             status_data["viewers"] = [serialize_user(v.viewer) for v in s.views]
         
@@ -124,6 +129,38 @@ def view_status(status_id):
         db.session.add(StatusView(status_id=status_id, viewer_id=user_id))
         db.session.commit()
     return jsonify({"ok": True})
+
+@status_bp.route('/api/status/<int:status_id>/react', methods=['POST'])
+def react_to_status(status_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = get_json_data()
+    emoji = (data.get('emoji') or '').strip()[:12]
+    status = Status.query.get(status_id)
+    if not status or status.expires_at <= utc_now():
+        return jsonify({"error": "Status not found"}), 404
+    if status.user_id != user_id and not has_contact(user_id, status.user_id):
+        return jsonify({"error": "Forbidden"}), 403
+
+    existing = StatusReaction.query.filter_by(status_id=status_id, user_id=user_id).first()
+    active_reaction = emoji
+    if not emoji or (existing and existing.emoji == emoji):
+        if existing:
+            db.session.delete(existing)
+        active_reaction = ''
+    elif existing:
+        existing.emoji = emoji
+        existing.created_at = utc_now()
+    else:
+        db.session.add(StatusReaction(status_id=status_id, user_id=user_id, emoji=emoji))
+    db.session.commit()
+
+    counts = {}
+    for reaction in StatusReaction.query.filter_by(status_id=status_id).all():
+        counts[reaction.emoji] = counts.get(reaction.emoji, 0) + 1
+    return jsonify({"ok": True, "reactions": counts, "myReaction": active_reaction})
 
 @status_bp.route('/api/status/<int:status_id>/reply', methods=['POST'])
 def reply_to_status(status_id):

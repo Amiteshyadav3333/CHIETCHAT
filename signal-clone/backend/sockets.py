@@ -149,9 +149,15 @@ def register_socket_events(socketio):
             "type": new_msg.type,
             "timestamp": iso_utc(new_msg.timestamp),
             "chatId": chat_id,
+            "ttl": new_msg.ttl,
             "replyToId": new_msg.reply_to_id,
             "replyContent": new_msg.reply_content,
-            "replySenderName": new_msg.reply_sender_name
+            "replySenderName": new_msg.reply_sender_name,
+            "editedAt": None,
+            "deletedAt": None,
+            "readAt": None,
+            "reactions": {},
+            "isPinned": False
         }
 
         participants = ChatParticipant.query.filter_by(chat_id=chat_id).all()
@@ -179,12 +185,28 @@ def register_socket_events(socketio):
 
         for m in unread:
             m.status = 'read'
+            m.read_at = utc_now()
             db.session.commit()
             socketio.emit('message_status_update', {
                 "messageId": m.id,
                 "chatId": m.chat_id,
-                "status": 'read'
+                "status": 'read',
+                "readAt": iso_utc(m.read_at)
             }, room=f"user_{m.sender_id}")
+
+    @socketio.on('typing')
+    def on_typing(data):
+        user_id = get_socket_user_id()
+        chat_id = data.get('chatId')
+        if not user_id or not chat_id or not user_can_access_chat(user_id, chat_id):
+            return
+        user = User.query.get(user_id)
+        socketio.emit('typing_update', {
+            "chatId": chat_id,
+            "userId": user_id,
+            "username": user.username if user else "Someone",
+            "isTyping": bool(data.get('isTyping'))
+        }, room=str(chat_id), include_self=False)
 
     @socketio.on('join_call')
     def on_join_call(data):
@@ -264,6 +286,18 @@ def register_socket_events(socketio):
         if not data.get('to'):
             return
         socketio.emit('video_upgrade_accepted', data, room=data['to'])
+
+    @socketio.on('screen_share_started')
+    def on_screen_share_started(data):
+        if not get_socket_user_id() or not data.get('to'):
+            return
+        socketio.emit('screen_share_started', data, room=data['to'])
+
+    @socketio.on('screen_share_stopped')
+    def on_screen_share_stopped(data):
+        if not get_socket_user_id() or not data.get('to'):
+            return
+        socketio.emit('screen_share_stopped', data, room=data['to'])
 
     @socketio.on('notify_ring')
     def on_notify_ring(data):

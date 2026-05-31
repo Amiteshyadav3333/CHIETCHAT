@@ -9,6 +9,7 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
     const [preview, setPreview] = useState(null);
     const [mediaType, setMediaType] = useState('image');
     const [caption, setCaption] = useState('');
+    const [textStatus, setTextStatus] = useState('');
     const [musicFile, setMusicFile] = useState(null);
     const [musicName, setMusicName] = useState('');
     const [selectedSong, setSelectedSong] = useState(null);
@@ -155,14 +156,19 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
     };
 
     const handleSubmit = async () => {
-        if (!file) { setError('Please select a photo or video'); return; }
+        let statusFile = file;
+        if (!statusFile && textStatus.trim()) {
+            statusFile = await createTextStatusImage(textStatus.trim());
+            setMediaType('image');
+        }
+        if (!statusFile) { setError('Please select a photo/video or write a text status'); return; }
         setUploading(true);
         setError('');
 
         try {
             const formData = new FormData();
-            formData.append('media', file);
-            formData.append('caption', caption);
+            formData.append('media', statusFile);
+            formData.append('caption', caption || textStatus);
             formData.append('duration', videoDuration || 15);
 
             if (selectedSong?.previewUrl) {
@@ -220,9 +226,10 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
                             <img src={preview} alt="" className="w-full h-full object-contain" />
                         )
                     ) : (
-                        <div className="flex flex-col items-center gap-3 text-gray-500">
+                        <div className="flex flex-col items-center gap-3 text-gray-500 px-6 text-center">
                             <PhotoIcon className="w-16 h-16" />
                             <p className="text-sm">Tap to add photo or video</p>
+                            <p className="text-xs text-gray-600">Or write a text status below</p>
                             <p className="text-xs text-gray-600">Max 15 seconds for video</p>
                         </div>
                     )}
@@ -250,6 +257,13 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
                         onChange={e => setCaption(e.target.value)}
                         maxLength={300}
                         className="w-full bg-gray-800 text-white text-sm px-3 py-2 rounded-lg outline-none focus:ring-1 focus:ring-blue-500 placeholder-gray-500"
+                    />
+                    <textarea
+                        placeholder="Text status..."
+                        value={textStatus}
+                        onChange={e => setTextStatus(e.target.value)}
+                        maxLength={180}
+                        className="h-20 w-full resize-none rounded-lg bg-gray-800 px-3 py-2 text-sm text-white outline-none placeholder-gray-500 focus:ring-1 focus:ring-blue-500"
                     />
 
                     {/* Music */}
@@ -359,7 +373,7 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
 
                     <button
                         onClick={handleSubmit}
-                        disabled={uploading || !file}
+                        disabled={uploading || (!file && !textStatus.trim())}
                         className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl transition-colors"
                     >
                         {uploading ? 'Posting...' : 'Post Status'}
@@ -369,5 +383,38 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
         </div>
     );
 };
+
+const createTextStatusImage = (text) => new Promise((resolve) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1080;
+    canvas.height = 1920;
+    const ctx = canvas.getContext('2d');
+    const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+    gradient.addColorStop(0, '#0f766e');
+    gradient.addColorStop(0.55, '#111827');
+    gradient.addColorStop(1, '#2563eb');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '700 78px Inter, Arial, sans-serif';
+    const words = text.split(/\s+/);
+    const lines = [];
+    let line = '';
+    words.forEach(word => {
+        const next = `${line} ${word}`.trim();
+        if (ctx.measureText(next).width > 820 && line) {
+            lines.push(line);
+            line = word;
+        } else {
+            line = next;
+        }
+    });
+    if (line) lines.push(line);
+    const startY = canvas.height / 2 - ((lines.length - 1) * 92) / 2;
+    lines.slice(0, 8).forEach((item, idx) => ctx.fillText(item, canvas.width / 2, startY + idx * 92));
+    canvas.toBlob(blob => resolve(new File([blob], `text-status-${Date.now()}.png`, { type: 'image/png' })), 'image/png');
+});
 
 export default StatusUploader;

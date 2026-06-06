@@ -38,6 +38,7 @@ const MessageInput = ({
     onSend, onUpload, onStartLiveLocation, replyTo, onCancelReply, 
     onTranslate, chatId, chatTranslationLang, onChangeTranslationLang,
     onTyping,
+    disappearingTtl = 0,
     disabled = false, placeholderOverride = ""
 }) => {
     const [text, setText] = useState('');
@@ -46,7 +47,6 @@ const MessageInput = ({
     const [isRecording, setIsRecording] = useState(false);
     const [showPollCreator, setShowPollCreator] = useState(false);
     const [pollData, setPollData] = useState({ question: '', options: ['', ''] });
-    const [disappearingTtl, setDisappearingTtl] = useState(0);
     
     const showTranslator = chatTranslationLang !== '';
     const targetLang = chatTranslationLang || 'hi';
@@ -509,21 +509,6 @@ const MessageInput = ({
                     )}
                 </form>
             </div>
-            {!disabled && (
-                <div className="flex items-center gap-2 px-4 pb-2 text-[11px] text-gray-400">
-                    <span>Disappearing</span>
-                    <select
-                        value={disappearingTtl}
-                        onChange={e => setDisappearingTtl(Number(e.target.value))}
-                        className="rounded-md border border-gray-700 bg-[#111b21] px-2 py-1 text-gray-200 outline-none"
-                    >
-                        <option value={0}>Off</option>
-                        <option value={60}>1 min</option>
-                        <option value={3600}>1 hour</option>
-                        <option value={86400}>24 hours</option>
-                    </select>
-                </div>
-            )}
         </div>
     );
 };

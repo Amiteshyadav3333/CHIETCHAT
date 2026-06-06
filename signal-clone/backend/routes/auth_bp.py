@@ -6,8 +6,13 @@ import json
 import urllib.error
 import urllib.parse
 import urllib.request
-from models import db, User, PendingRegistration
-from utils import get_json_data, normalize_phone, is_valid_phone, utc_now, serialize_user
+from models import (
+    db, User, PendingRegistration, Chat, ChatParticipant, GroupJoinRequest,
+    Contact, Message, Status, StatusView, StatusReaction, Block, Reel,
+    ReelLike, ReelComment, Follow, Notification, SocialPost, SocialPostLike,
+    SocialPostComment, CommentReply, Channel, ChannelMembership
+)
+from utils import get_json_data, get_current_user_id, normalize_phone, is_valid_phone, utc_now, serialize_user
 
 auth_bp = Blueprint('auth_bp', __name__)
 MAX_PASSWORD_ATTEMPTS = 3
@@ -298,3 +303,122 @@ def reset_password():
         print(f"Reset Password Error: {e}")
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+@auth_bp.route('/api/account/change-password', methods=['POST'])
+def change_password():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    try:
+        data = get_json_data()
+        current_password = data.get('currentPassword') or ''
+        new_password = data.get('newPassword') or ''
+
+        if not current_password or not new_password:
+            return jsonify({"error": "Current password and new password are required"}), 400
+        if len(new_password) < 8:
+            return jsonify({"error": "New password must be at least 8 characters"}), 400
+        if current_password == new_password:
+            return jsonify({"error": "New password must be different from your current password"}), 400
+
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        if not check_password_hash(user.password_hash, current_password):
+            return jsonify({"error": "Current password is incorrect"}), 403
+
+        user.password_hash = generate_password_hash(new_password)
+        user.failed_login_attempts = 0
+        user.password_login_locked = False
+        db.session.commit()
+        return jsonify({"message": "Password changed successfully"}), 200
+    except Exception as e:
+        print(f"Change Password Error: {e}")
+        db.session.rollback()
+        return jsonify({"error": "Unable to change password right now"}), 500
+
+def delete_user_account_data(user):
+    user_id = user.id
+
+    owned_status_ids = [row.id for row in Status.query.filter_by(user_id=user_id).all()]
+    if owned_status_ids:
+        StatusReaction.query.filter(StatusReaction.status_id.in_(owned_status_ids)).delete(synchronize_session=False)
+    StatusView.query.filter_by(viewer_id=user_id).delete(synchronize_session=False)
+    StatusReaction.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+    for row in Status.query.filter_by(user_id=user_id).all():
+        db.session.delete(row)
+
+    for row in Reel.query.filter_by(user_id=user_id).all():
+        db.session.delete(row)
+    ReelLike.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+    ReelComment.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+
+    owned_post_ids = [row.id for row in SocialPost.query.filter_by(user_id=user_id).all()]
+    if owned_post_ids:
+        SocialPost.query.filter(SocialPost.retweet_of_id.in_(owned_post_ids)).update(
+            {SocialPost.retweet_of_id: None}, synchronize_session=False
+        )
+    SocialPostLike.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+
+    own_comment_ids = [row.id for row in SocialPostComment.query.filter_by(user_id=user_id).all()]
+    if own_comment_ids:
+        CommentReply.query.filter(CommentReply.comment_id.in_(own_comment_ids)).delete(synchronize_session=False)
+    CommentReply.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+    SocialPostComment.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+
+    for row in SocialPost.query.filter_by(user_id=user_id).all():
+        db.session.delete(row)
+
+    for row in Channel.query.filter_by(owner_id=user_id).all():
+        db.session.delete(row)
+    ChannelMembership.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+
+    Message.query.filter_by(sender_id=user_id).delete(synchronize_session=False)
+    GroupJoinRequest.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+    ChatParticipant.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+    Chat.query.filter_by(group_admin_id=user_id).update({Chat.group_admin_id: None}, synchronize_session=False)
+
+    Contact.query.filter(
+        (Contact.owner_id == user_id) | (Contact.contact_user_id == user_id)
+    ).delete(synchronize_session=False)
+    Block.query.filter(
+        (Block.blocker_id == user_id) | (Block.blocked_id == user_id)
+    ).delete(synchronize_session=False)
+    Follow.query.filter(
+        (Follow.follower_id == user_id) | (Follow.followed_id == user_id)
+    ).delete(synchronize_session=False)
+    Notification.query.filter(
+        (Notification.recipient_id == user_id) | (Notification.sender_id == user_id)
+    ).delete(synchronize_session=False)
+
+    db.session.delete(user)
+
+@auth_bp.route('/api/account', methods=['DELETE'])
+def delete_account():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    try:
+        data = get_json_data()
+        password = data.get('password') or ''
+        confirmation = (data.get('confirmation') or '').strip()
+        user = User.query.get(user_id)
+
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        if not password or not confirmation:
+            return jsonify({"error": "Password and username confirmation are required"}), 400
+        if confirmation != user.username:
+            return jsonify({"error": "Type your exact username to confirm deletion"}), 400
+        if not check_password_hash(user.password_hash, password):
+            return jsonify({"error": "Password is incorrect"}), 403
+
+        delete_user_account_data(user)
+        db.session.commit()
+        return jsonify({"message": "Your account and associated data were permanently deleted"}), 200
+    except Exception as e:
+        print(f"Delete Account Error: {e}")
+        db.session.rollback()
+        return jsonify({"error": "Unable to delete account right now"}), 500

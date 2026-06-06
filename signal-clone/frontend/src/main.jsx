@@ -6,6 +6,7 @@ import { SocketProvider } from './context/SocketContext';
 import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
 import Home from './pages/Home';
+import LegalPage from './pages/LegalPage';
 import './index.css';
 import axios from 'axios';
 
@@ -28,6 +29,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                     <Routes>
                         <Route path="/login" element={<Login />} />
                         <Route path="/reset-password" element={<ResetPassword />} />
+                        <Route path="/terms" element={<LegalPage type="terms" />} />
+                        <Route path="/privacy" element={<LegalPage type="privacy" />} />
                         <Route path="/" element={
                             <ProtectedRoute>
                                 <Home />

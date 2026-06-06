@@ -54,7 +54,8 @@ const Home = () => {
     const [editText, setEditText] = useState('');
     const [forwardMessage, setForwardMessage] = useState(null);
     const [theme, setTheme] = useState(() => localStorage.getItem('chat_theme') || 'dark');
-    const [wallpaper, setWallpaper] = useState(() => localStorage.getItem('chat_wallpaper') || 'gradient');
+    const [wallpaper, setWallpaper] = useState(() => localStorage.getItem('chat_wallpaper') || 'white');
+    const [disappearingTtl, setDisappearingTtl] = useState(0);
 
     // Group states
     const [searchModalTab, setSearchModalTab] = useState('search_user'); // 'search_user' | 'create_group' | 'discover_groups'
@@ -339,10 +340,18 @@ const Home = () => {
         if (activeChat) {
             const stored = localStorage.getItem(`chat_translation_lang_${activeChat.id}`) || '';
             setChatTranslationLang(stored);
+            setDisappearingTtl(Number(localStorage.getItem(`chat_disappearing_ttl_${activeChat.id}`) || 0));
         } else {
             setChatTranslationLang('');
+            setDisappearingTtl(0);
         }
     }, [activeChat?.id]);
+
+    const updateDisappearingTtl = (value) => {
+        const ttl = Number(value);
+        setDisappearingTtl(ttl);
+        if (visibleActiveChat) localStorage.setItem(`chat_disappearing_ttl_${visibleActiveChat.id}`, String(ttl));
+    };
 
     useEffect(() => {
         if (showInfoPanel && visibleActiveChat?.isGroup && visibleActiveChat.groupAdminId === user?.id) {
@@ -634,7 +643,7 @@ const Home = () => {
             else if (file.type.startsWith('audio/') || url.match(/\.(mp3|wav|m4a|aac|oga)$/i)) type = 'audio';
             else if (file.type.startsWith('video/') || url.match(/\.(mp4|webm|ogg)$/i)) type = 'video';
 
-            handleSendMessage(url, type);
+            handleSendMessage(url, type, null, disappearingTtl);
         } catch (err) {
             console.error(err);
             alert("Upload failed: " + (err.response?.statusText || err.message));
@@ -1020,7 +1029,9 @@ const Home = () => {
         ? 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.12) 1px, transparent 0), #0b141a'
         : wallpaper === 'emerald'
             ? 'linear-gradient(135deg, #06251f, #111b21 55%, #17212b)'
-            : 'linear-gradient(to bottom, #0b141a, #0d1b22)';
+            : wallpaper === 'white'
+                ? '#ffffff'
+                : 'linear-gradient(to bottom, #0b141a, #0d1b22)';
 
     useEffect(() => {
         if (!appNavHidden) setNavPeekOpen(false);
@@ -1457,6 +1468,12 @@ const Home = () => {
                                         </div>
 
                                         <div className="flex-1 overflow-y-auto flex flex-col min-h-0" style={{ scrollbarWidth: 'thin' }}>
+                                            <ChatPreferences
+                                                wallpaper={wallpaper}
+                                                onWallpaperChange={setWallpaper}
+                                                disappearingTtl={disappearingTtl}
+                                                onDisappearingChange={updateDisappearingTtl}
+                                            />
                                             {/* Admin controls */}
                                             {isAdmin && (
                                                 <div className="px-4 py-3 flex items-center justify-between border-b border-gray-800 bg-white/5">
@@ -1568,6 +1585,12 @@ const Home = () => {
                                         </p>
                                     </div>
                                     <div className="flex flex-col gap-1 p-3">
+                                        <ChatPreferences
+                                            wallpaper={wallpaper}
+                                            onWallpaperChange={setWallpaper}
+                                            disappearingTtl={disappearingTtl}
+                                            onDisappearingChange={updateDisappearingTtl}
+                                        />
                                         {other && (
                                             <button
                                                 onClick={() => isBlocked ? handleUnblockUser(other.id) : handleBlockUser(other.id)}
@@ -1667,6 +1690,7 @@ const Home = () => {
                         chatTranslationLang={chatTranslationLang}
                         onChangeTranslationLang={setChatTranslationLang}
                         onTyping={handleTyping}
+                        disappearingTtl={disappearingTtl}
                         disabled={visibleActiveChat.isChatDisabled && visibleActiveChat.groupAdminId !== user?.id}
                         placeholderOverride={visibleActiveChat.isChatDisabled && visibleActiveChat.groupAdminId !== user?.id ? "Only admins can send messages in this group" : ""}
                     />
@@ -1678,7 +1702,7 @@ const Home = () => {
                 </div>
             )}
             {showReels && <Reels onBack={() => setShowReels(false)} />}
-            {showSettings && <SettingsModal user={user} onClose={() => setShowSettings(false)} onLogout={logout} theme={theme} wallpaper={wallpaper} onThemeChange={setTheme} onWallpaperChange={setWallpaper} />}
+            {showSettings && <SettingsModal user={user} token={token} onClose={() => setShowSettings(false)} onLogout={logout} onUserUpdate={updateUser} theme={theme} wallpaper={wallpaper} onThemeChange={setTheme} onWallpaperChange={setWallpaper} />}
             {showNotifications && (
                 <NotificationPanel
                     notifications={notifications}
@@ -1692,5 +1716,42 @@ const Home = () => {
         </div>
     );
 };
+
+const ChatPreferences = ({ wallpaper, onWallpaperChange, disappearingTtl, onDisappearingChange }) => (
+    <div className="border-b border-gray-800 bg-[#111b21] px-4 py-4">
+        <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-[#00a884]">Chat settings</h4>
+        <label className="mb-4 block">
+            <span className="mb-2 block text-sm font-medium text-white">Disappearing messages</span>
+            <select
+                value={disappearingTtl}
+                onChange={e => onDisappearingChange(e.target.value)}
+                className="w-full rounded-lg border border-gray-700 bg-[#202c33] px-3 py-2 text-sm text-white outline-none focus:border-[#00a884]"
+            >
+                <option value={0}>Off</option>
+                <option value={60}>1 minute</option>
+                <option value={3600}>1 hour</option>
+                <option value={86400}>24 hours</option>
+                <option value={604800}>7 days</option>
+            </select>
+            <span className="mt-1 block text-[11px] leading-4 text-gray-500">New messages will disappear after the selected time.</span>
+        </label>
+        <div>
+            <span className="mb-2 block text-sm font-medium text-white">Chat wallpaper</span>
+            <div className="grid grid-cols-4 gap-2">
+                {[
+                    ['white', 'White', 'bg-white'],
+                    ['gradient', 'Dark', 'bg-[#0b141a]'],
+                    ['dots', 'Dots', 'bg-gray-700'],
+                    ['emerald', 'Green', 'bg-emerald-800'],
+                ].map(([id, label, color]) => (
+                    <button key={id} onClick={() => onWallpaperChange(id)} className={`rounded-lg border p-2 text-center ${wallpaper === id ? 'border-[#00a884]' : 'border-gray-700'}`}>
+                        <span className={`mx-auto mb-1 block h-8 w-full rounded ${color}`} />
+                        <span className="text-[10px] text-gray-300">{label}</span>
+                    </button>
+                ))}
+            </div>
+        </div>
+    </div>
+);
 
 export default Home;

@@ -89,8 +89,11 @@ def register():
         phone = normalize_phone(data.get('phone'))
         password = data.get('password') or ''
 
-        if not username or not email or not phone or not password:
-            return jsonify({"error": "Username, email, phone, and password are required"}), 400
+        if not email or not phone or not password:
+            return jsonify({"error": "Email, phone, and password are required"}), 400
+        # Auto-generate username from email prefix if not provided
+        if not username:
+            username = email.split('@')[0]
         if not is_valid_phone(phone):
             return jsonify({"error": "Phone number must be exactly 10 digits"}), 400
         
@@ -154,12 +157,25 @@ def verify_registration_otp():
             email_verified=True,
             failed_login_attempts=0,
             password_login_locked=False,
+            profile_setup_done=False,
             last_seen=utc_now()
         )
         db.session.add(user)
         db.session.delete(pending)
+        db.session.flush()  # Get the user.id before commit
+        # Auto-generate unique platform_id from name
+        import re
+        name_slug = re.sub(r'[^a-z0-9]+', '_', pending.username.lower()).strip('_')
+        if not name_slug:
+            name_slug = 'user'
+        user.platform_id = f"{name_slug}_{user.id}"
         db.session.commit()
-        return jsonify({"message": "Email verified", "token": create_token(user), "user": serialize_user(user)}), 201
+        return jsonify({
+            "message": "Email verified",
+            "token": create_token(user),
+            "user": serialize_user(user),
+            "needsProfileSetup": True
+        }), 201
     except Exception as e:
         print(f"Register OTP Error: {e}")
         db.session.rollback()

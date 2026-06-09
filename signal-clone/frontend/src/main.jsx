@@ -7,6 +7,7 @@ import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
 import Home from './pages/Home';
 import LegalPage from './pages/LegalPage';
+import ProfileSetup from './pages/ProfileSetup';
 import './index.css';
 import axios from 'axios';
 
@@ -31,6 +32,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                         <Route path="/reset-password" element={<ResetPassword />} />
                         <Route path="/terms" element={<LegalPage type="terms" />} />
                         <Route path="/privacy" element={<LegalPage type="privacy" />} />
+                        <Route path="/setup-profile" element={
+                            <ProtectedRoute>
+                                <ProfileSetup />
+                            </ProtectedRoute>
+                        } />
                         <Route path="/" element={
                             <ProtectedRoute>
                                 <Home />

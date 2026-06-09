@@ -20,7 +20,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     const [message, setMessage] = useState(null);
     const [busy, setBusy] = useState(false);
     const [businessTitle, setBusinessTitle] = useState('Business tools');
-    const [profile, setProfile] = useState({ username: user?.username || '', bio: user?.bio || '', websiteUrl: user?.websiteUrl || '' });
+    const [profile, setProfile] = useState({ username: user?.username || '', bio: user?.bio || '', websiteUrl: user?.websiteUrl || '', platformId: user?.platformId || '' });
     const [passwords, setPasswords] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
     const [deletion, setDeletion] = useState({ password: '', confirmation: '' });
     const [prefs, setPrefs] = useState(() => ({
@@ -140,6 +140,9 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                         <h3 className="truncate text-lg font-semibold text-white">{user?.username}</h3>
                                         <CheckBadgeIcon className="h-5 w-5 text-[#53bdeb]" />
                                     </div>
+                                    {user?.platformId && (
+                                        <p className="text-xs font-medium text-violet-400">@{user.platformId}</p>
+                                    )}
                                     <p className="truncate text-sm text-gray-400">{user?.bio || 'Hey there! I am using CHEETCHAT.'}</p>
                                 </div>
                                 <ChevronRightIcon className="h-5 w-5 text-gray-500" />
@@ -174,6 +177,22 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                         <SettingsForm onSubmit={submitProfile}>
                             <Hero icon={<UserCircleIcon />} title="Edit your profile" text="Keep your public profile accurate and professional." />
                             <Field label="Username" value={profile.username} onChange={value => setProfile({ ...profile, username: value })} required />
+                            <div>
+                                <label className="block">
+                                    <span className="mb-2 block text-sm font-medium text-gray-200">Platform Handle (@ID)</span>
+                                    <div className="relative">
+                                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-semibold">@</span>
+                                        <input
+                                            type="text"
+                                            value={profile.platformId}
+                                            onChange={e => setProfile({ ...profile, platformId: e.target.value.replace(/[^a-z0-9_]/gi, '').toLowerCase().slice(0, 30) })}
+                                            placeholder="yourhandle"
+                                            className="w-full rounded-lg border border-gray-700 bg-[#202c33] py-3 pl-7 pr-4 text-sm text-white outline-none placeholder:text-gray-600 focus:border-violet-500"
+                                        />
+                                    </div>
+                                    <p className="mt-1 text-xs text-gray-500">3–30 chars, letters/numbers/underscores. Others can find you with @handle.</p>
+                                </label>
+                            </div>
                             <Field label="Bio" value={profile.bio} onChange={value => setProfile({ ...profile, bio: value })} />
                             <Field label="Website" value={profile.websiteUrl} onChange={value => setProfile({ ...profile, websiteUrl: value })} placeholder="https://example.com" />
                             <PrimaryButton busy={busy}>Save profile</PrimaryButton>

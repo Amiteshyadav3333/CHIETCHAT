@@ -21,6 +21,8 @@ class User(db.Model):
     last_seen = db.Column(db.DateTime, default=utc_now)
     bio = db.Column(db.String(200), nullable=True)
     website_url = db.Column(db.String(200), nullable=True)
+    platform_id = db.Column(db.String(30), unique=True, nullable=True)  # unique @handle, e.g. 'amitesh_123'
+    profile_setup_done = db.Column(db.Boolean, default=False)  # True once user completes profile setup
     created_at = db.Column(db.DateTime, default=utc_now)
 
 class PendingRegistration(db.Model):

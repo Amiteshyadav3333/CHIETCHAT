@@ -85,6 +85,8 @@ def ensure_database_schema():
             'email_verified': db.Boolean(),
             'failed_login_attempts': db.Integer(),
             'password_login_locked': db.Boolean(),
+            'platform_id': db.String(30),
+            'profile_setup_done': db.Boolean(),
         })
         if 'user' in inspector.get_table_names():
             user_columns = {column['name'] for column in inspector.get_columns('user')}
@@ -260,6 +262,8 @@ def serialize_user(user):
         "publicKey": user.public_key,
         "bio": user.bio or "",
         "websiteUrl": user.website_url or "",
+        "platformId": user.platform_id or "",
+        "profileSetupDone": bool(user.profile_setup_done),
         "lastSeen": iso_utc(user.last_seen),
         "isOnline": is_user_online(user.id)
     }

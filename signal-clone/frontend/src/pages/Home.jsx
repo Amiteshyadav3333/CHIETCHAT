@@ -656,11 +656,12 @@ const Home = () => {
         setSearchedUser(null);
 
         const query = searchQuery.trim();
+        const isHandleSearch = query.startsWith('@');
         const phoneDigits = query.replace(/\D/g, '');
-        const isPhoneSearch = phoneDigits.length > 0 && phoneDigits.length === query.replace(/\s/g, '').length;
+        const isPhoneSearch = !isHandleSearch && phoneDigits.length > 0 && phoneDigits.length === query.replace(/\s/g, '').length;
 
         if (!query) {
-            setSearchError('Enter a 10 digit phone number or a name');
+            setSearchError('Enter a phone number, @handle, or name');
             return;
         }
 
@@ -669,8 +670,10 @@ const Home = () => {
             return;
         }
 
+        const searchPayload = isPhoneSearch ? phoneDigits : query;
+
         try {
-            const res = await axios.post('/api/user/search', { query: isPhoneSearch ? phoneDigits : query }, {
+            const res = await axios.post('/api/user/search', { query: searchPayload }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (res.data.error) {
@@ -1151,13 +1154,13 @@ const Home = () => {
                         {searchModalTab === 'search_user' && (
                             <div>
                                 <form onSubmit={handleSearchUser} className="mb-4">
-                                    <label className="block text-xs text-gray-400 mb-1 ml-1">PHONE NUMBER OR NAME</label>
+                                    <label className="block text-xs text-gray-400 mb-1 ml-1">SEARCH BY PHONE NUMBER OR @USERID</label>
                                     <div className="flex gap-2">
                                         <input
                                             type="text"
                                             value={searchQuery}
                                             onChange={(e) => setSearchQuery(e.target.value)}
-                                            placeholder="9876543210 or Amit"
+                                            placeholder="9876543210 or @userid"
                                             className="flex-1 bg-signal-input border-none rounded-lg px-4 py-2 focus:ring-1 focus:ring-signal-accent outline-none text-white text-sm"
                                             autoFocus
                                         />
@@ -1177,17 +1180,20 @@ const Home = () => {
                                     <div className="bg-signal-input rounded-xl p-4 flex items-center justify-between animate-fade-in border border-signal-accent/30">
                                         <div className="flex items-center gap-3">
                                             <div className="relative">
-                                                <img src={searchedUser.avatar} className="w-12 h-12 rounded-full" alt="" />
-                                                <div className="absolute bottom-0 right-0 w-3 h-3 bg-gray-500 rounded-full border-2 border-signal-input"></div>
+                                                <img src={searchedUser.avatar} className="w-12 h-12 rounded-full object-cover" alt="" />
+                                                <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-signal-input ${searchedUser.isOnline ? 'bg-emerald-500' : 'bg-gray-500'}`} />
                                             </div>
                                             <div>
-                                                <h3 className="font-bold text-sm">{searchedUser.username}</h3>
-                                                <p className="text-xs text-gray-400">{searchedUser.phone}</p>
+                                                <h3 className="font-bold text-sm text-white">{searchedUser.username}</h3>
+                                                {searchedUser.platformId && (
+                                                    <p className="text-xs font-medium text-violet-400">@{searchedUser.platformId}</p>
+                                                )}
+                                                <p className="text-xs text-gray-500">{searchedUser.phone}</p>
                                             </div>
                                         </div>
                                         <button
                                             onClick={startChat}
-                                            className="bg-signal-accent hover:bg-signal-accentHover text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg animate-pulse"
+                                            className="bg-signal-accent hover:bg-signal-accentHover text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg"
                                         >
                                             Chat
                                         </button>

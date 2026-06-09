@@ -23,7 +23,14 @@ const Login = () => {
 
     React.useEffect(() => {
         if (token) {
-            navigate('/');
+            // Don't redirect if we're about to navigate somewhere specific (like /setup-profile)
+            const pendingNav = sessionStorage.getItem('pending_nav');
+            if (pendingNav) {
+                sessionStorage.removeItem('pending_nav');
+                navigate(pendingNav);
+            } else {
+                navigate('/');
+            }
         }
     }, [token, navigate]);
 
@@ -45,13 +52,15 @@ const Login = () => {
         setPendingKeys(null);
     };
 
-    const finishLogin = (userData, authToken, keysToStore = null) => {
+    const finishLogin = (userData, authToken, keysToStore = null, needsProfileSetup = false) => {
         if (keysToStore) {
             localStorage.setItem(`privKey_${userData.id}`, keysToStore.privateKeyString);
             localStorage.setItem(`pubKey_${userData.id}`, keysToStore.publicKeyString);
         }
+        if (needsProfileSetup) {
+            sessionStorage.setItem('pending_nav', '/setup-profile');
+        }
         login(userData, authToken);
-        navigate('/');
     };
 
     const handlePhoneChange = (e) => {
@@ -79,7 +88,6 @@ const Login = () => {
         e.preventDefault();
 
         const cleanPhone = phone.replace(/\D/g, '');
-        const cleanUsername = username.trim();
         setMessage('');
         setSubmitting(true);
 
@@ -104,14 +112,14 @@ const Login = () => {
 
             if (isRegister && isOtpStep) {
                 const res = await axios.post('/api/register/verify-otp', { email: cleanEmail, otp });
-                finishLogin(res.data.user, res.data.token, pendingKeys);
+                finishLogin(res.data.user, res.data.token, pendingKeys, res.data.needsProfileSetup || true);
                 return;
             }
 
             if (isRegister) {
                 const keys = await generateKeys();
                 const res = await axios.post('/api/register', {
-                    username: cleanUsername,
+                    username: username.trim(),
                     email: cleanEmail,
                     phone: cleanPhone,
                     password,
@@ -234,7 +242,7 @@ const Login = () => {
                         {isRegister && !isOtpStep && (
                             <input
                                 type="text"
-                                placeholder="Username"
+                                placeholder="Full Name"
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
                                 className="w-full rounded-lg border border-white/10 bg-signal-input px-4 py-3 text-white outline-none transition focus:border-signal-accent focus:ring-2 focus:ring-signal-accent/30"

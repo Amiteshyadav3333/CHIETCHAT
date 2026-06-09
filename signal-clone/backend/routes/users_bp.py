@@ -29,16 +29,17 @@ def search_user():
     query = (data.get('query') or data.get('phone') or '').strip()
     phone = normalize_phone(query)
     if not query:
-        return jsonify({"error": "Phone number or name is required"}), 400
+        return jsonify({"error": "Enter a phone number or @userid"}), 400
 
-    # Only treat as phone search if query is exactly 10 digits
+    # Phone search — exactly 10 digits
     if query.isdigit() and len(query) == 10:
         user = User.query.filter_by(phone=query).first()
     else:
-        # Search by username
+        # Search by platform_id (with or without @)
+        handle = query.lstrip('@').strip().lower()
         user = User.query.filter(
-            User.username.ilike(f"%{query}%")
-        ).order_by(User.username.asc()).first()
+            db.func.lower(User.platform_id) == handle
+        ).first()
 
     if user:
         added = add_contact(user_id, user.id)
@@ -46,7 +47,76 @@ def search_user():
         payload["isContact"] = True
         payload["contactAdded"] = added
         return jsonify(payload)
-    return jsonify({"error": "User not registered with this number"}), 200
+    return jsonify({"error": "User not found"}), 200
+
+
+@users_bp.route('/api/user/check-platform-id/<string:handle>', methods=['GET'])
+def check_platform_id(handle):
+    """Check if a @handle is available (real-time, no auth needed for UX)."""
+    import re
+    handle = handle.lstrip('@').strip().lower()
+    if not re.match(r'^[a-z0-9_]{3,30}$', handle):
+        return jsonify({"available": False, "error": "Handle must be 3-30 characters: letters, numbers, underscores only"})
+    existing = User.query.filter(
+        db.func.lower(User.platform_id) == handle
+    ).first()
+    return jsonify({"available": existing is None, "handle": handle})
+
+
+@users_bp.route('/api/user/setup-profile', methods=['POST'])
+def setup_profile():
+    """First-time profile setup: platform_id (handle), avatar, bio, website."""
+    import re
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    # Handle multipart or JSON
+    platform_id = (request.form.get('platformId') or '').strip().lstrip('@').lower()
+    bio = (request.form.get('bio') or '').strip()
+    website_url = (request.form.get('websiteUrl') or '').strip()
+    display_name = (request.form.get('username') or '').strip()
+
+    # Validate handle only if provided (it's auto-generated during registration)
+    if platform_id:
+        if not re.match(r'^[a-z0-9_]{3,30}$', platform_id):
+            return jsonify({"error": "Handle must be 3-30 chars: letters, numbers, underscores only"}), 400
+        # Uniqueness check (exclude current user)
+        existing = User.query.filter(
+            db.func.lower(User.platform_id) == platform_id,
+            User.id != user_id
+        ).first()
+        if existing:
+            return jsonify({"error": "This handle is already taken. Try another one."}), 409
+        user.platform_id = platform_id
+
+    # Optional avatar upload
+    if 'avatar' in request.files:
+        file = request.files['avatar']
+        if file and file.filename:
+            filename = file.filename
+            extension = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+            if extension in {'jpg', 'jpeg', 'png', 'gif', 'webp'}:
+                try:
+                    url = upload_to_cloudinary(file, folder='chietchat/avatars', resource_type='image')
+                    user.avatar = url
+                except Exception as e:
+                    return jsonify({"error": f"Avatar upload failed: {str(e)}"}), 500
+
+    if display_name:
+        user.username = display_name
+    user.bio = bio or user.bio
+    user.website_url = website_url or user.website_url
+    user.profile_setup_done = True
+    db.session.commit()
+
+    payload = serialize_user(user)
+    emit_to_user_chat_contacts(user_id, 'user_profile_updated', {"user": payload})
+    return jsonify({"user": payload, "message": "Profile setup complete!"}), 200
 
 @users_bp.route('/api/user/avatar', methods=['POST'])
 def update_avatar():
@@ -163,6 +233,7 @@ def get_blocked():
 
 @users_bp.route('/api/users/profile', methods=['POST'])
 def update_profile():
+    import re
     user_id = get_current_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
     data = request.json
@@ -171,12 +242,23 @@ def update_profile():
         user.username = data['username'].strip()
     user.bio = data.get('bio', user.bio)
     user.website_url = data.get('websiteUrl', user.website_url)
+    # Update platform handle if provided
+    new_platform_id = (data.get('platformId') or '').strip().lstrip('@').lower()
+    if new_platform_id and new_platform_id != (user.platform_id or ''):
+        if not re.match(r'^[a-z0-9_]{3,30}$', new_platform_id):
+            return jsonify({"error": "Handle must be 3-30 chars: letters, numbers, underscores only"}), 400
+        existing = User.query.filter(
+            db.func.lower(User.platform_id) == new_platform_id,
+            User.id != user_id
+        ).first()
+        if existing:
+            return jsonify({"error": "This handle is already taken"}), 409
+        user.platform_id = new_platform_id
     db.session.commit()
     payload = serialize_user(user)
-    payload['bio'] = user.bio or ''
-    payload['websiteUrl'] = user.website_url or ''
     emit_to_user_chat_contacts(user_id, 'user_profile_updated', {"user": payload})
     return jsonify(payload)
+
 
 @users_bp.route('/api/users/<int:followed_id>/follow', methods=['POST'])
 def toggle_follow(followed_id):

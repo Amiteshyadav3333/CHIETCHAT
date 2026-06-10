@@ -1,18 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
     ArrowLeftIcon, ArrowRightOnRectangleIcon, BellIcon, ChartBarIcon,
     ChatBubbleBottomCenterTextIcon, CheckBadgeIcon, ChevronRightIcon,
     ComputerDesktopIcon, ExclamationTriangleIcon, EyeSlashIcon, KeyIcon,
     LifebuoyIcon, LockClosedIcon, QuestionMarkCircleIcon, ShieldCheckIcon,
-    ShoppingBagIcon, TrashIcon, UserCircleIcon, XMarkIcon
+    ShoppingBagIcon, TrashIcon, UserCircleIcon, XMarkIcon, NoSymbolIcon,
+    HeartIcon, ChatBubbleOvalLeftIcon, FilmIcon, PhotoIcon
 } from '@heroicons/react/24/outline';
+import { HeartIcon as HeartSolid } from '@heroicons/react/24/solid';
 
 const TITLES = {
     settings: 'Settings', profile: 'Profile', account: 'Account', privacy: 'Privacy',
     chats: 'Chats', notifications: 'Notifications', storage: 'Storage and data',
     business: 'Business tools', help: 'Help center', password: 'Change password',
-    delete: 'Delete account',
+    delete: 'Delete account', activity: 'Your Activity',
+};
+
+const timeAgo = (dateStr) => {
+    if (!dateStr) return '';
+    const now = new Date();
+    const date = new Date(dateStr);
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}d ago`;
+    const diffWeeks = Math.floor(diffDays / 7);
+    if (diffWeeks < 5) return `${diffWeeks}w ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
 const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wallpaper, onThemeChange, onWallpaperChange }) => {
@@ -22,6 +41,11 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     const [businessTitle, setBusinessTitle] = useState('Business tools');
     const [profile, setProfile] = useState({ username: user?.username || '', bio: user?.bio || '', websiteUrl: user?.websiteUrl || '', platformId: user?.platformId || '' });
     const [passwords, setPasswords] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    // Activity state
+    const [activityTab, setActivityTab] = useState('blocked');
+    const [activityLoading, setActivityLoading] = useState(false);
+    const [blockedUsers, setBlockedUsers] = useState([]);
+    const [activityData, setActivityData] = useState({ likedReels: [], likedPosts: [], reelComments: [], postComments: [] });
     const [deletion, setDeletion] = useState({ password: '', confirmation: '' });
     const [prefs, setPrefs] = useState(() => ({
         hideLastSeen: localStorage.getItem('hide_last_seen') === '1',
@@ -52,6 +76,26 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     const openBusiness = (title) => {
         setBusinessTitle(title);
         go('business');
+    };
+
+    const fetchActivity = async () => {
+        setActivityLoading(true);
+        try {
+            const [blockedRes, activityRes] = await Promise.all([
+                axios.get('/api/user/blocked-details', { headers: { Authorization: `Bearer ${token}` } }),
+                axios.get('/api/user/activity', { headers: { Authorization: `Bearer ${token}` } })
+            ]);
+            setBlockedUsers(blockedRes.data);
+            setActivityData(activityRes.data);
+        } catch (err) { console.error(err); }
+        finally { setActivityLoading(false); }
+    };
+
+    const handleUnblockFromActivity = async (userId) => {
+        try {
+            await axios.post('/api/user/unblock', { userId }, { headers: { Authorization: `Bearer ${token}` } });
+            setBlockedUsers(prev => prev.filter(b => b.user.id !== userId));
+        } catch (err) { console.error(err); }
     };
 
     const submitProfile = async (event) => {
@@ -115,7 +159,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
             <div className="flex h-[100dvh] w-full max-w-3xl flex-col overflow-hidden bg-[#111b21] shadow-2xl sm:h-[88vh] sm:rounded-xl sm:border sm:border-gray-800">
                 <header className="flex h-16 shrink-0 items-center gap-3 border-b border-white/5 bg-[#202c33] px-4">
                     {screen !== 'settings' && (
-                        <button onClick={() => go(screen === 'password' || screen === 'delete' ? 'help' : 'settings')} title="Back" className="rounded-full p-2 text-gray-300 hover:bg-white/10">
+                        <button onClick={() => go(screen === 'password' || screen === 'delete' ? 'help' : screen === 'activity' ? 'settings' : 'settings')} title="Back" className="rounded-full p-2 text-gray-300 hover:bg-white/10">
                             <ArrowLeftIcon className="h-5 w-5" />
                         </button>
                     )}
@@ -153,6 +197,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 <SettingsRow icon={<ChatBubbleBottomCenterTextIcon />} title="Chats" subtitle="Theme and wallpapers" onClick={() => go('chats')} />
                                 <SettingsRow icon={<BellIcon />} title="Notifications" subtitle="Messages, calls and desktop alerts" onClick={() => go('notifications')} />
                                 <SettingsRow icon={<ComputerDesktopIcon />} title="Storage and data" subtitle="Auto-download and data saver" onClick={() => go('storage')} />
+                                <SettingsRow icon={<ChartBarIcon />} title="Your Activity" subtitle="Likes, comments, blocked accounts" onClick={() => { go('activity'); fetchActivity(); }} />
                             </SettingsGroup>
                             <SectionLabel>Business tools</SectionLabel>
                             <SettingsGroup>
@@ -271,6 +316,19 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                         </>
                     )}
 
+                    {screen === 'activity' && (
+                        <ActivityScreen
+                            token={token}
+                            activityTab={activityTab}
+                            setActivityTab={setActivityTab}
+                            activityLoading={activityLoading}
+                            blockedUsers={blockedUsers}
+                            setBlockedUsers={setBlockedUsers}
+                            activityData={activityData}
+                            onUnblock={handleUnblockFromActivity}
+                        />
+                    )}
+
                     {screen === 'help' && (
                         <>
                             <Hero icon={<LifebuoyIcon />} title="How can we help?" text="Manage account access and sensitive account actions from one secure place." />
@@ -328,5 +386,239 @@ const SettingsToggle = ({ icon, title, subtitle, value, onClick }) => <button on
 const ChoiceRow = ({ title, value, onChange, options }) => <div className="border-b border-gray-800/70 px-5 py-4 last:border-b-0"><p className="mb-3 text-sm font-medium text-white">{title}</p><div className="flex flex-wrap gap-2">{options.map(([id, label]) => <button type="button" key={id} onClick={() => onChange(id)} className={`rounded-full border px-3 py-1.5 text-xs ${value === id ? 'border-[#00a884] bg-[#00a884]/15 text-[#00a884]' : 'border-gray-700 text-gray-400 hover:border-gray-500'}`}>{label}</button>)}</div></div>;
 const InfoRow = ({ title, text }) => <div className="border-b border-gray-800/70 px-5 py-4 last:border-b-0"><p className="text-sm font-medium text-white">{title}</p><p className="mt-1 text-xs leading-5 text-gray-500">{text}</p></div>;
 const Stat = ({ label, value }) => <div className="rounded-xl border border-gray-800 bg-[#202c33] p-4"><p className="text-xs text-gray-500">{label}</p><p className="mt-2 text-lg font-semibold text-white">{value}</p></div>;
+
+const ActivityScreen = ({ token, activityTab, setActivityTab, activityLoading, blockedUsers, setBlockedUsers, activityData, onUnblock }) => {
+    const tabs = [
+        { id: 'blocked', label: 'Blocked', icon: <NoSymbolIcon className="h-4 w-4" />, count: blockedUsers.length },
+        { id: 'likes', label: 'Likes', icon: <HeartSolid className="h-4 w-4" />, count: (activityData.likedReels?.length || 0) + (activityData.likedPosts?.length || 0) },
+        { id: 'comments', label: 'Comments', icon: <ChatBubbleOvalLeftIcon className="h-4 w-4" />, count: (activityData.reelComments?.length || 0) + (activityData.postComments?.length || 0) },
+    ];
+
+    if (activityLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center py-20">
+                <div className="w-10 h-10 border-3 border-gray-700 border-t-[#00a884] rounded-full animate-spin mb-4"></div>
+                <p className="text-gray-500 text-sm">Loading your activity...</p>
+            </div>
+        );
+    }
+
+    return (
+        <>
+            {/* Stats Overview */}
+            <div className="grid grid-cols-3 gap-3 p-5">
+                <div className="rounded-xl border border-gray-800 bg-[#202c33] p-3 text-center">
+                    <NoSymbolIcon className="h-5 w-5 text-red-400 mx-auto mb-1" />
+                    <p className="text-lg font-bold text-white">{blockedUsers.length}</p>
+                    <p className="text-[10px] text-gray-500 font-medium">Blocked</p>
+                </div>
+                <div className="rounded-xl border border-gray-800 bg-[#202c33] p-3 text-center">
+                    <HeartSolid className="h-5 w-5 text-red-500 mx-auto mb-1" />
+                    <p className="text-lg font-bold text-white">{(activityData.likedReels?.length || 0) + (activityData.likedPosts?.length || 0)}</p>
+                    <p className="text-[10px] text-gray-500 font-medium">Likes</p>
+                </div>
+                <div className="rounded-xl border border-gray-800 bg-[#202c33] p-3 text-center">
+                    <ChatBubbleOvalLeftIcon className="h-5 w-5 text-blue-400 mx-auto mb-1" />
+                    <p className="text-lg font-bold text-white">{(activityData.reelComments?.length || 0) + (activityData.postComments?.length || 0)}</p>
+                    <p className="text-[10px] text-gray-500 font-medium">Comments</p>
+                </div>
+            </div>
+
+            {/* Tab Switcher */}
+            <div className="flex mx-5 mb-4 rounded-xl bg-[#202c33] p-1 border border-gray-800">
+                {tabs.map(tab => (
+                    <button
+                        key={tab.id}
+                        onClick={() => setActivityTab(tab.id)}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-semibold transition-all ${
+                            activityTab === tab.id
+                                ? 'bg-[#00a884] text-white shadow-lg shadow-[#00a884]/20'
+                                : 'text-gray-400 hover:text-white'
+                        }`}
+                    >
+                        {tab.icon}
+                        {tab.label}
+                        {tab.count > 0 && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                                activityTab === tab.id ? 'bg-white/20' : 'bg-gray-700'
+                            }`}>{tab.count}</span>
+                        )}
+                    </button>
+                ))}
+            </div>
+
+            {/* Blocked Tab */}
+            {activityTab === 'blocked' && (
+                <div className="px-5 pb-5 space-y-2">
+                    {blockedUsers.length === 0 ? (
+                        <EmptyState icon={<NoSymbolIcon className="h-10 w-10" />} title="No blocked accounts" subtitle="Accounts you block won't be able to contact you or see your content." />
+                    ) : blockedUsers.map(item => (
+                        <div key={item.id} className="flex items-center gap-3 rounded-xl border border-gray-800 bg-[#1a2429] p-3 hover:bg-[#202c33] transition-colors">
+                            <img src={item.user.avatar} alt="" className="h-11 w-11 rounded-full object-cover border border-gray-700" />
+                            <div className="min-w-0 flex-1">
+                                <p className="text-sm font-semibold text-white truncate">{item.user.username}</p>
+                                {item.user.platformId && <p className="text-[11px] text-violet-400 font-medium">@{item.user.platformId}</p>}
+                                <p className="text-[10px] text-gray-600 mt-0.5">Blocked {timeAgo(item.blockedAt)}</p>
+                            </div>
+                            <button
+                                onClick={() => onUnblock(item.user.id)}
+                                className="px-3 py-1.5 rounded-lg border border-red-500/30 bg-red-500/10 text-red-400 text-xs font-semibold hover:bg-red-500/20 transition-colors"
+                            >
+                                Unblock
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Likes Tab */}
+            {activityTab === 'likes' && (
+                <div className="px-5 pb-5 space-y-4">
+                    {/* Liked Reels */}
+                    {activityData.likedReels?.length > 0 && (
+                        <>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-[#00a884] flex items-center gap-1.5">
+                                <FilmIcon className="h-3.5 w-3.5" /> Liked Reels
+                            </p>
+                            <div className="space-y-2">
+                                {activityData.likedReels.map(item => (
+                                    <div key={item.id} className="flex items-center gap-3 rounded-xl border border-gray-800 bg-[#1a2429] p-3 hover:bg-[#202c33] transition-colors">
+                                        <div className="relative h-14 w-10 rounded-lg overflow-hidden bg-gray-800 shrink-0 border border-gray-700">
+                                            <video src={item.videoUrl} className="h-full w-full object-cover" muted preload="metadata" />
+                                            <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                                                <HeartSolid className="h-4 w-4 text-red-500" />
+                                            </div>
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-2">
+                                                <img src={item.user.avatar} alt="" className="h-5 w-5 rounded-full object-cover" />
+                                                <p className="text-xs font-semibold text-white truncate">@{item.user.platformId || item.user.username}</p>
+                                            </div>
+                                            <p className="text-xs text-gray-400 mt-1 line-clamp-1">{item.caption || 'No caption'}</p>
+                                        </div>
+                                        <p className="text-[10px] text-gray-600 shrink-0">{timeAgo(item.likedAt)}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    )}
+
+                    {/* Liked Posts */}
+                    {activityData.likedPosts?.length > 0 && (
+                        <>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-[#00a884] flex items-center gap-1.5 mt-2">
+                                <PhotoIcon className="h-3.5 w-3.5" /> Liked Posts
+                            </p>
+                            <div className="space-y-2">
+                                {activityData.likedPosts.map(item => (
+                                    <div key={item.id} className="flex items-center gap-3 rounded-xl border border-gray-800 bg-[#1a2429] p-3 hover:bg-[#202c33] transition-colors">
+                                        {item.mediaUrl ? (
+                                            <div className="relative h-12 w-12 rounded-lg overflow-hidden bg-gray-800 shrink-0 border border-gray-700">
+                                                {item.mediaType === 'video' ? (
+                                                    <video src={item.mediaUrl} className="h-full w-full object-cover" muted preload="metadata" />
+                                                ) : (
+                                                    <img src={item.mediaUrl} alt="" className="h-full w-full object-cover" />
+                                                )}
+                                                <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                                                    <HeartSolid className="h-4 w-4 text-red-500" />
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-pink-500/20 to-red-500/20 flex items-center justify-center shrink-0 border border-gray-700">
+                                                <HeartSolid className="h-5 w-5 text-red-500" />
+                                            </div>
+                                        )}
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-2">
+                                                <img src={item.user.avatar} alt="" className="h-5 w-5 rounded-full object-cover" />
+                                                <p className="text-xs font-semibold text-white truncate">@{item.user.platformId || item.user.username}</p>
+                                            </div>
+                                            <p className="text-xs text-gray-400 mt-1 line-clamp-1">{item.caption || 'No caption'}</p>
+                                        </div>
+                                        <p className="text-[10px] text-gray-600 shrink-0">{timeAgo(item.likedAt)}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    )}
+
+                    {(activityData.likedReels?.length || 0) + (activityData.likedPosts?.length || 0) === 0 && (
+                        <EmptyState icon={<HeartIcon className="h-10 w-10" />} title="No likes yet" subtitle="Posts and reels you like will appear here." />
+                    )}
+                </div>
+            )}
+
+            {/* Comments Tab */}
+            {activityTab === 'comments' && (
+                <div className="px-5 pb-5 space-y-4">
+                    {/* Reel Comments */}
+                    {activityData.reelComments?.length > 0 && (
+                        <>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-[#00a884] flex items-center gap-1.5">
+                                <FilmIcon className="h-3.5 w-3.5" /> Reel Comments
+                            </p>
+                            <div className="space-y-2">
+                                {activityData.reelComments.map(item => (
+                                    <div key={item.id} className="rounded-xl border border-gray-800 bg-[#1a2429] p-3 hover:bg-[#202c33] transition-colors">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <img src={item.reelUser.avatar} alt="" className="h-5 w-5 rounded-full object-cover" />
+                                            <p className="text-xs font-semibold text-white truncate">on @{item.reelUser.platformId || item.reelUser.username}'s reel</p>
+                                            <p className="text-[10px] text-gray-600 ml-auto shrink-0">{timeAgo(item.commentedAt)}</p>
+                                        </div>
+                                        <div className="flex items-start gap-2.5">
+                                            <ChatBubbleOvalLeftIcon className="h-4 w-4 text-blue-400 mt-0.5 shrink-0" />
+                                            <p className="text-sm text-gray-200 leading-relaxed">"{item.content}"</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    )}
+
+                    {/* Post Comments */}
+                    {activityData.postComments?.length > 0 && (
+                        <>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-[#00a884] flex items-center gap-1.5 mt-2">
+                                <PhotoIcon className="h-3.5 w-3.5" /> Post Comments
+                            </p>
+                            <div className="space-y-2">
+                                {activityData.postComments.map(item => (
+                                    <div key={item.id} className="rounded-xl border border-gray-800 bg-[#1a2429] p-3 hover:bg-[#202c33] transition-colors">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <img src={item.postUser.avatar} alt="" className="h-5 w-5 rounded-full object-cover" />
+                                            <p className="text-xs font-semibold text-white truncate">on @{item.postUser.platformId || item.postUser.username}'s post</p>
+                                            <p className="text-[10px] text-gray-600 ml-auto shrink-0">{timeAgo(item.commentedAt)}</p>
+                                        </div>
+                                        <div className="flex items-start gap-2.5">
+                                            <ChatBubbleOvalLeftIcon className="h-4 w-4 text-blue-400 mt-0.5 shrink-0" />
+                                            <p className="text-sm text-gray-200 leading-relaxed">"{item.content}"</p>
+                                        </div>
+                                        {item.postCaption && (
+                                            <p className="text-[11px] text-gray-600 mt-2 ml-6.5 line-clamp-1 italic">Post: {item.postCaption}</p>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    )}
+
+                    {(activityData.reelComments?.length || 0) + (activityData.postComments?.length || 0) === 0 && (
+                        <EmptyState icon={<ChatBubbleOvalLeftIcon className="h-10 w-10" />} title="No comments yet" subtitle="Comments you make on posts and reels will appear here." />
+                    )}
+                </div>
+            )}
+        </>
+    );
+};
+
+const EmptyState = ({ icon, title, subtitle }) => (
+    <div className="flex flex-col items-center justify-center py-12 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-gray-800/50 border border-gray-700 flex items-center justify-center mb-4 text-gray-600">
+            {icon}
+        </div>
+        <p className="text-sm font-semibold text-white mb-1">{title}</p>
+        <p className="text-xs text-gray-500 max-w-[220px] leading-relaxed">{subtitle}</p>
+    </div>
+);
 
 export default SettingsModal;

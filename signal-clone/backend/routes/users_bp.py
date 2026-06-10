@@ -4,7 +4,7 @@ from models import db, User, Block, Follow
 from utils import (
     get_current_user_id, get_contact_user_ids, serialize_user, get_json_data,
     normalize_phone, is_valid_phone, add_contact, upload_to_cloudinary,
-    emit_to_user_chat_contacts, has_contact, create_notification
+    emit_to_user_chat_contacts, has_contact, create_notification, iso_utc
 )
 
 users_bp = Blueprint('users_bp', __name__)
@@ -230,6 +230,102 @@ def get_blocked():
         return jsonify({"error": "Unauthorized"}), 401
     blocked = Block.query.filter_by(blocker_id=user_id).all()
     return jsonify([b.blocked_id for b in blocked])
+
+@users_bp.route('/api/user/blocked-details', methods=['GET'])
+def get_blocked_details():
+    """Returns blocked users with full user details for the activity screen."""
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    blocks = Block.query.filter_by(blocker_id=user_id).order_by(Block.created_at.desc()).all()
+    result = []
+    for b in blocks:
+        blocked_user = User.query.get(b.blocked_id)
+        if blocked_user:
+            result.append({
+                "id": b.id,
+                "user": serialize_user(blocked_user),
+                "blockedAt": iso_utc(b.created_at)
+            })
+    return jsonify(result)
+
+@users_bp.route('/api/user/activity', methods=['GET'])
+def get_user_activity():
+    """Instagram-style activity: liked reels, liked posts, reel comments, post comments."""
+    from models import ReelLike, Reel, ReelComment, SocialPostLike, SocialPost, SocialPostComment
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    # Liked Reels
+    reel_likes = ReelLike.query.filter_by(user_id=user_id).order_by(ReelLike.created_at.desc()).limit(50).all()
+    liked_reels = []
+    for rl in reel_likes:
+        reel = Reel.query.get(rl.reel_id)
+        if reel:
+            liked_reels.append({
+                "id": rl.id,
+                "reelId": reel.id,
+                "videoUrl": reel.video_url,
+                "caption": reel.caption or "",
+                "user": serialize_user(reel.user),
+                "likedAt": iso_utc(rl.created_at)
+            })
+
+    # Liked Posts
+    post_likes = SocialPostLike.query.filter_by(user_id=user_id).order_by(SocialPostLike.created_at.desc()).limit(50).all()
+    liked_posts = []
+    for pl in post_likes:
+        post = SocialPost.query.get(pl.post_id)
+        if post:
+            liked_posts.append({
+                "id": pl.id,
+                "postId": post.id,
+                "caption": post.caption or "",
+                "mediaUrl": post.media_url,
+                "mediaType": post.media_type,
+                "user": serialize_user(post.user),
+                "likedAt": iso_utc(pl.created_at)
+            })
+
+    # Reel Comments
+    reel_comments = ReelComment.query.filter_by(user_id=user_id).order_by(ReelComment.created_at.desc()).limit(50).all()
+    my_reel_comments = []
+    for rc in reel_comments:
+        reel = Reel.query.get(rc.reel_id)
+        if reel:
+            my_reel_comments.append({
+                "id": rc.id,
+                "reelId": reel.id,
+                "content": rc.content,
+                "videoUrl": reel.video_url,
+                "reelCaption": reel.caption or "",
+                "reelUser": serialize_user(reel.user),
+                "commentedAt": iso_utc(rc.created_at)
+            })
+
+    # Post Comments
+    post_comments = SocialPostComment.query.filter_by(user_id=user_id).order_by(SocialPostComment.created_at.desc()).limit(50).all()
+    my_post_comments = []
+    for pc in post_comments:
+        post = SocialPost.query.get(pc.post_id)
+        if post:
+            my_post_comments.append({
+                "id": pc.id,
+                "postId": post.id,
+                "content": pc.content,
+                "postCaption": post.caption or "",
+                "mediaUrl": post.media_url,
+                "postUser": serialize_user(post.user),
+                "commentedAt": iso_utc(pc.created_at)
+            })
+
+    return jsonify({
+        "likedReels": liked_reels,
+        "likedPosts": liked_posts,
+        "reelComments": my_reel_comments,
+        "postComments": my_post_comments
+    })
 
 @users_bp.route('/api/users/profile', methods=['POST'])
 def update_profile():

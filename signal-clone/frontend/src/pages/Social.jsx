@@ -536,20 +536,26 @@ const PostCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onDele
 
             {/* Media */}
             {(displayPost.mediaUrl || post.mediaUrl) && (
-                <div className="bg-black relative group/postmedia">
+                <div className="bg-black relative group/postmedia rounded-xl overflow-hidden border border-white/5">
                     {(displayPost.mediaType || post.mediaType) === 'video' ? (
-                        <>
-                            <video src={displayPost.mediaUrl || post.mediaUrl} controls className="w-full max-h-[70vh] object-contain" />
-                            <button
-                                onClick={() => setZoomedMedia({ src: displayPost.mediaUrl || post.mediaUrl, type: 'video' })}
-                                className="absolute top-2 right-2 p-2 bg-black/60 hover:bg-black/85 rounded-full text-white opacity-0 group-hover/postmedia:opacity-100 transition-opacity z-10"
-                                title="Expand to Full Screen"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75v4.5m0-4.5h-4.5m4.5 0L15 9m5.25 11.25v-4.5m0 4.5h-4.5m4.5 0L15 15" />
-                                </svg>
-                            </button>
-                        </>
+                        <div 
+                            className="relative cursor-pointer w-full flex items-center justify-center"
+                            onClick={() => setZoomedMedia({ src: displayPost.mediaUrl || post.mediaUrl, type: 'video' })}
+                        >
+                            <video 
+                                src={displayPost.mediaUrl || post.mediaUrl} 
+                                className="w-full max-h-[70vh] object-contain pointer-events-none block" 
+                                preload="metadata" 
+                            />
+                            {/* Glassmorphic Play Icon Overlay */}
+                            <div className="absolute inset-0 bg-black/20 flex items-center justify-center group-hover/postmedia:bg-black/35 transition-colors">
+                                <div className="p-4 bg-black/45 backdrop-blur-md rounded-full text-white group-hover/postmedia:scale-110 transition-transform shadow-lg border border-white/10">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 fill-white">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
                     ) : (
                         <img 
                             src={displayPost.mediaUrl || post.mediaUrl} 

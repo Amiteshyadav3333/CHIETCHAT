@@ -6,7 +6,7 @@ import FullscreenMediaModal from './FullscreenMediaModal';
 
 const renderClickableText = (text) => {
     if (!text) return '';
-    const regex = /(https?:\/\/[^\s]+)|(\+?\d{1,3}[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/gi;
+    const regex = /(https?:\/\/[^\s]+)|(www\.[a-zA-Z0-9-]+\.[^\s]+)|([a-zA-Z0-9-]+\.(?:com|net|org|in|co|io|xyz|info|us|app|dev|me|ai)\b[^\s]*)|(\+?\d{1,3}[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})|(\b\d{10}\b)/gi;
     const elements = [];
     let lastIndex = 0;
     let match;
@@ -17,11 +17,18 @@ const renderClickableText = (text) => {
         if (matchIndex > lastIndex) {
             elements.push(text.substring(lastIndex, matchIndex));
         }
-        if (matchText.match(/^https?:\/\//i)) {
+        
+        // Match group 1, 2, or 3 means it's a URL
+        const isUrl = match[1] || match[2] || match[3];
+        if (isUrl) {
+            let hrefVal = matchText;
+            if (!hrefVal.match(/^https?:\/\//i)) {
+                hrefVal = `https://${hrefVal}`;
+            }
             elements.push(
                 <a 
                     key={`url-${matchIndex}`}
-                    href={matchText}
+                    href={hrefVal}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-[#53bdeb] hover:underline break-all inline font-semibold"
@@ -243,17 +250,21 @@ const ChatBubble = ({
         }
         if (type === 'video' || cnt.match(/\.(mp4|webm|ogg)$/i)) {
             return (
-                <div className="relative group/media">
-                    <video controls src={cnt} className="rounded-xl max-w-[260px] max-h-[300px] w-full object-cover" />
-                    <button
-                        onClick={(e) => { e.stopPropagation(); setZoomedMedia({ src: cnt, type: 'video' }); }}
-                        className="absolute top-2 left-2 p-1.5 bg-black/50 hover:bg-black/70 rounded-full text-white opacity-0 group-hover/media:opacity-100 transition-opacity"
-                        title="Fullscreen"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75v4.5m0-4.5h-4.5m4.5 0L15 9m5.25 11.25v-4.5m0 4.5h-4.5m4.5 0L15 15" />
-                        </svg>
-                    </button>
+                <div 
+                    className="relative group/media cursor-pointer rounded-xl overflow-hidden"
+                    onClick={() => setZoomedMedia({ src: cnt, type: 'video' })}
+                >
+                    <video src={cnt} className="rounded-xl max-w-[260px] max-h-[300px] w-full object-cover block" preload="metadata" />
+                    
+                    {/* Play Icon Overlay */}
+                    <div className="absolute inset-0 bg-black/20 flex items-center justify-center group-hover/media:bg-black/35 transition-colors">
+                        <div className="p-3 bg-black/40 backdrop-blur-md rounded-full text-white group-hover/media:scale-110 transition-transform shadow-lg border border-white/10">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 fill-white">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+                            </svg>
+                        </div>
+                    </div>
+
                     <button
                         onClick={(e) => { e.stopPropagation(); handleDownload(cnt); }}
                         className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 rounded-full text-white opacity-0 group-hover/media:opacity-100 transition-opacity"

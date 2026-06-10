@@ -290,6 +290,15 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
             return;
         }
 
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+            if (!window.isSecureContext) {
+                alert("Screen sharing requires a secure connection (HTTPS). Please open the site via HTTPS to enable screen sharing.");
+            } else {
+                alert("Screen sharing is not supported by this browser/device. Please use a desktop browser (like Chrome, Firefox, or Safari) to share your screen.");
+            }
+            return;
+        }
+
         try {
             const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
             const screenTrack = displayStream.getVideoTracks()[0];
@@ -322,6 +331,7 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
             };
         } catch (err) {
             console.error(err);
+            alert("Could not start screen sharing: " + (err.name === 'NotAllowedError' ? 'Permission denied by user or browser.' : err.message || err));
         }
     };
 

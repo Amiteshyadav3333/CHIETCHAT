@@ -30,6 +30,12 @@ const GlobeIcon = ({ className }) => (
     </svg>
 );
 
+const ClockIcon = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+    </svg>
+);
+
 const SWIPE_THRESHOLD = 60;
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
@@ -290,9 +296,15 @@ const ChatBubble = ({
     );
 
     const ticks = isOwn && (
-        <span className={`flex items-center ${message.status === 'read' ? 'text-[#53bdeb]' : 'text-gray-400'}`}>
-            <CheckIcon className={`w-3 h-3 ${message.status === 'sent' ? '' : '-mr-1.5'}`} />
-            {message.status !== 'sent' && <CheckIcon className="w-3 h-3" />}
+        <span className="flex items-center">
+            {message.status === 'sending' ? (
+                <ClockIcon className="w-3 h-3 text-white/55 animate-pulse" />
+            ) : (
+                <span className={`flex items-center ${message.status === 'read' ? 'text-[#53bdeb]' : 'text-gray-400'}`}>
+                    <CheckIcon className={`w-3 h-3 ${message.status === 'sent' ? '' : '-mr-1.5'}`} />
+                    {message.status !== 'sent' && <CheckIcon className="w-3 h-3" />}
+                </span>
+            )}
         </span>
     );
 

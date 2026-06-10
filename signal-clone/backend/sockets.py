@@ -26,6 +26,7 @@ def register_socket_events(socketio):
             
             # Mark all pending messages as delivered
             chats = ChatParticipant.query.filter_by(user_id=user_id).all()
+            has_updates = False
             for c in chats:
                 undelivered = Message.query.filter(
                     Message.chat_id == c.chat_id,
@@ -34,12 +35,14 @@ def register_socket_events(socketio):
                 ).all()
                 for m in undelivered:
                     m.status = 'delivered'
-                    db.session.commit()
+                    has_updates = True
                     socketio.emit('message_status_update', {
                         "messageId": m.id,
                         "chatId": m.chat_id,
                         "status": 'delivered'
                     }, room=f"user_{m.sender_id}")
+            if has_updates:
+                db.session.commit()
 
             emit_to_user_chat_contacts(user_id, 'presence_update', {
                 "userId": user_id,
@@ -161,13 +164,18 @@ def register_socket_events(socketio):
         }
 
         participants = ChatParticipant.query.filter_by(chat_id=chat_id).all()
+        any_recipient_online = False
         for participant in participants:
-            # Check if recipient is online
             if participant.user_id != socket_user_id and is_user_online(participant.user_id):
-                new_msg.status = 'delivered'
-                db.session.commit()
-                payload["status"] = 'delivered'
-            
+                any_recipient_online = True
+                break
+
+        if any_recipient_online:
+            new_msg.status = 'delivered'
+            db.session.commit()
+            payload["status"] = 'delivered'
+
+        for participant in participants:
             socketio.emit('receive_message', payload, room=f"user_{participant.user_id}")
 
     @socketio.on('mark_read')
@@ -183,16 +191,17 @@ def register_socket_events(socketio):
             Message.status != 'read'
         ).all()
 
-        for m in unread:
-            m.status = 'read'
-            m.read_at = utc_now()
+        if unread:
+            for m in unread:
+                m.status = 'read'
+                m.read_at = utc_now()
+                socketio.emit('message_status_update', {
+                    "messageId": m.id,
+                    "chatId": m.chat_id,
+                    "status": 'read',
+                    "readAt": iso_utc(m.read_at)
+                }, room=f"user_{m.sender_id}")
             db.session.commit()
-            socketio.emit('message_status_update', {
-                "messageId": m.id,
-                "chatId": m.chat_id,
-                "status": 'read',
-                "readAt": iso_utc(m.read_at)
-            }, room=f"user_{m.sender_id}")
 
     @socketio.on('typing')
     def on_typing(data):
@@ -344,11 +353,18 @@ def register_socket_events(socketio):
             "timestamp": iso_utc(new_msg.timestamp),
             "chatId": chat_id
         }
+        any_recipient_online = False
         for uid in participant_ids:
-            if is_user_online(uid) and uid != caller_id:
-                new_msg.status = 'delivered'
-                db.session.commit()
-                msg_payload["status"] = 'delivered'
+            if uid != caller_id and is_user_online(uid):
+                any_recipient_online = True
+                break
+
+        if any_recipient_online:
+            new_msg.status = 'delivered'
+            db.session.commit()
+            msg_payload["status"] = 'delivered'
+
+        for uid in participant_ids:
             socketio.emit('receive_message', msg_payload, room=f"user_{uid}")
 
     @socketio.on('live_location_update')

@@ -3,8 +3,9 @@ import { HeartIcon, ChatBubbleOvalLeftIcon, ShareIcon, MusicalNoteIcon, FaceSmil
 import { HeartIcon as HeartOutline, EllipsisVerticalIcon, PencilIcon, PlayIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 
-const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelete }) => {
+const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelete, active }) => {
     const [liked, setLiked] = useState(reel.isLiked);
+    const [isIntersecting, setIsIntersecting] = useState(false);
     const [likesCount, setLikesCount] = useState(reel.likesCount);
     const [sharesCount, setSharesCount] = useState(reel.sharesCount || 0);
     const [viewsCount, setViewsCount] = useState(reel.viewsCount || 0);
@@ -83,13 +84,9 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
     useEffect(() => {
         const observer = new IntersectionObserver(
             ([entry]) => {
+                setIsIntersecting(entry.isIntersecting);
                 if (entry.isIntersecting) {
-                    videoRef.current?.play().catch(() => {});
-                    if (audioRef.current) audioRef.current.play().catch(() => {});
                     recordView();
-                } else {
-                    videoRef.current?.pause();
-                    if (audioRef.current) audioRef.current.pause();
                 }
             },
             { threshold: 0.6 }
@@ -98,9 +95,18 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
         if (videoRef.current) observer.observe(videoRef.current);
         return () => {
             observer.disconnect();
-            if (audioRef.current) audioRef.current.pause();
         };
     }, []);
+
+    useEffect(() => {
+        if (active && isIntersecting) {
+            videoRef.current?.play().catch(() => {});
+            if (audioRef.current) audioRef.current.play().catch(() => {});
+        } else {
+            videoRef.current?.pause();
+            if (audioRef.current) audioRef.current.pause();
+        }
+    }, [active, isIntersecting]);
 
     useEffect(() => {
         if (audioRef.current) {
@@ -202,6 +208,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
                 className="h-full w-full object-contain cursor-pointer"
                 loop
                 playsInline
+                preload="auto"
                 muted={!!reel.musicUrl}
                 style={{ filter: filters[reel.filterName] || '' }}
                 onClick={() => {

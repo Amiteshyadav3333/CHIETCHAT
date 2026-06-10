@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import axios from 'axios';
 import ReelCard from '../components/ReelCard';
 import { AuthContext } from '../context/AuthContext';
@@ -7,35 +7,94 @@ import ReelUploader from '../components/ReelUploader';
 import ReelProfile from '../components/ReelProfile';
 import ReelReactor from '../components/ReelReactor';
 
-const Reels = ({ onBack, onShareToChat }) => {
-    const [reels, setReels] = useState([]);
-    const [loading, setLoading] = useState(true);
+const REELS_CACHE_KEY = 'reels_cache';
+
+const Reels = ({ active, onBack, onShareToChat }) => {
+    const [reels, setReels] = useState(() => {
+        // Load from cache instantly — no loading delay
+        try {
+            const cached = sessionStorage.getItem(REELS_CACHE_KEY);
+            return cached ? JSON.parse(cached) : [];
+        } catch { return []; }
+    });
+    const [loading, setLoading] = useState(() => {
+        // Only show loading spinner if no cached data exists
+        try {
+            return !sessionStorage.getItem(REELS_CACHE_KEY);
+        } catch { return true; }
+    });
     const [filter, setFilter] = useState('foryou'); // 'foryou' | 'following'
     const [showUploader, setShowUploader] = useState(false);
     const [selectedProfileUserId, setSelectedProfileUserId] = useState(null);
     const [reactingToReel, setReactingToReel] = useState(null);
     const { user, token } = useContext(AuthContext);
+    const hasFetched = useRef(false);
 
-    const fetchReels = async (f = filter) => {
+    const fetchReels = async (f = filter, silent = false) => {
+        if (!silent) setLoading(true);
         try {
             const res = await axios.get(`/api/reels?filter=${f}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setReels(res.data);
+            // Cache for instant load next time
+            if (f === 'foryou') {
+                try { sessionStorage.setItem(REELS_CACHE_KEY, JSON.stringify(res.data)); } catch {}
+            }
         } catch (err) { console.error(err); }
         finally { setLoading(false); }
     };
 
     useEffect(() => {
-        setLoading(true);
-        fetchReels(filter);
-    }, [token, filter]);
+        if (!hasFetched.current) {
+            hasFetched.current = true;
+            // If we have cached data, do a silent background refresh
+            if (reels.length > 0) {
+                fetchReels(filter, true); // silent — no spinner
+            } else {
+                fetchReels(filter, false); // first time — show spinner
+            }
+        }
+    }, [token]);
 
-    if (loading) {
+    // When filter changes, always fetch fresh
+    useEffect(() => {
+        if (hasFetched.current) {
+            fetchReels(filter, reels.length > 0);
+        }
+    }, [filter]);
+
+    if (loading && reels.length === 0) {
         return (
-            <div className="h-full w-full bg-black flex flex-col items-center justify-center text-white">
-                <div className="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin mb-4"></div>
-                <p className="animate-pulse">Loading Reels...</p>
+            <div className="h-full w-full bg-black flex flex-col items-center justify-center text-white relative overflow-hidden">
+                {/* Skeleton shimmer instead of boring spinner */}
+                <div className="absolute inset-0 flex flex-col">
+                    <div className="flex-1 bg-gray-900 animate-pulse relative">
+                        {/* Fake video area */}
+                        <div className="absolute inset-0 bg-gradient-to-b from-gray-800/50 via-transparent to-gray-900/80" />
+                        {/* Fake side actions */}
+                        <div className="absolute right-4 bottom-32 flex flex-col items-center gap-6">
+                            <div className="w-9 h-9 rounded-full bg-gray-700 animate-pulse" />
+                            <div className="w-8 h-8 rounded-full bg-gray-700 animate-pulse" />
+                            <div className="w-8 h-8 rounded-full bg-gray-700 animate-pulse" />
+                            <div className="w-8 h-8 rounded-full bg-gray-700 animate-pulse" />
+                        </div>
+                        {/* Fake user info */}
+                        <div className="absolute left-4 bottom-8 right-16">
+                            <div className="flex items-center gap-3 mb-3">
+                                <div className="w-10 h-10 rounded-full bg-gray-700 animate-pulse" />
+                                <div className="w-24 h-4 rounded bg-gray-700 animate-pulse" />
+                                <div className="w-16 h-6 rounded-full bg-gray-700 animate-pulse" />
+                            </div>
+                            <div className="w-48 h-3 rounded bg-gray-700 animate-pulse mb-2" />
+                            <div className="w-32 h-3 rounded bg-gray-700 animate-pulse" />
+                        </div>
+                    </div>
+                </div>
+                <div className="relative z-10 flex flex-col items-center">
+                    <div className="w-10 h-10 border-3 border-white/10 border-t-white rounded-full animate-spin mb-3"></div>
+                    <p className="text-white/40 text-xs font-medium">Loading Reels...</p>
+                </div>
             </div>
         );
     }
@@ -91,6 +150,7 @@ const Reels = ({ onBack, onShareToChat }) => {
                             onProfileClick={(uid) => setSelectedProfileUserId(uid)}
                             onReact={(r) => setReactingToReel(r)}
                             onDelete={(id) => setReels(prev => prev.filter(r => r.id !== id))}
+                            active={active}
                         />
                     ))
                 ) : (

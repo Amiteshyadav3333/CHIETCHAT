@@ -389,6 +389,21 @@ const Home = () => {
 
             if (activeChatRef.current && readableMsg.chatId === activeChatRef.current.id) {
                 setMessages(prev => {
+                    // Replace optimistic message from same sender, or skip if already exists
+                    if (readableMsg.senderId === user.id) {
+                        const hasOptimistic = prev.some(m => m._isOptimistic && m.senderId === user.id && m.chatId === readableMsg.chatId);
+                        if (hasOptimistic) {
+                            // Replace the oldest optimistic msg from this user
+                            let replaced = false;
+                            return prev.map(m => {
+                                if (!replaced && m._isOptimistic && m.senderId === user.id && m.chatId === readableMsg.chatId) {
+                                    replaced = true;
+                                    return readableMsg;
+                                }
+                                return m;
+                            });
+                        }
+                    }
                     if (prev.some(message => message.id === readableMsg.id)) return prev;
                     return [...prev, readableMsg];
                 });
@@ -596,33 +611,70 @@ const Home = () => {
             return;
         }
 
-        const recipientPublicKeys = {};
-        for (const participant of activeChat.participants) {
-            const participantPublicKey = participant.id === user.id
-                ? publicKey
-                : participant.publicKey;
-
-            if (!participantPublicKey) {
-                alert(`${participant.username} does not have an encryption key yet. Ask them to login once, then try again.`);
-                return;
-            }
-
-            recipientPublicKeys[participant.id] = participantPublicKey;
-        }
-
-        const encryptedContent = await encryptForRecipients(recipientPublicKeys, text);
-
-        socket.emit('send_message', {
+        // Optimistic UI: show message instantly before encryption/server round trip
+        const tempId = `temp_${Date.now()}_${Math.random()}`;
+        const optimisticMsg = {
+            id: tempId,
             chatId: activeChat.id,
             senderId: user.id,
-            content: encryptedContent,
+            senderName: user.username,
+            content: type === 'text' ? text : type,
             type,
-            ttl,
+            status: 'sending',
+            timestamp: new Date().toISOString(),
             replyToId: replyMsg?.id || null,
             replyContent: replyMsg ? (replyMsg.type !== 'text' ? replyMsg.type : replyMsg.content) : null,
-            replySenderName: replyMsg?.senderName || null
-        });
+            replySenderName: replyMsg?.senderName || null,
+            reactions: '{}',
+            isPinned: false,
+            _isOptimistic: true
+        };
+        setMessages(prev => [...prev, optimisticMsg]);
+        scrollToBottom();
         setReplyTo(null);
+
+        // Update chat list preview immediately
+        setChats(prev => {
+            const chatIdx = prev.findIndex(c => c.id === activeChat.id);
+            if (chatIdx === -1) return prev;
+            const updatedChats = [...prev];
+            const [targetChat] = updatedChats.splice(chatIdx, 1);
+            targetChat.lastMessage = {
+                content: type === 'text' ? text : type,
+                timestamp: optimisticMsg.timestamp,
+                type
+            };
+            return [targetChat, ...updatedChats];
+        });
+
+        // Encrypt and send in background
+        try {
+            const recipientPublicKeys = {};
+            for (const participant of activeChat.participants) {
+                const participantPublicKey = participant.id === user.id
+                    ? publicKey
+                    : participant.publicKey;
+                if (!participantPublicKey) return;
+                recipientPublicKeys[participant.id] = participantPublicKey;
+            }
+
+            const encryptedContent = await encryptForRecipients(recipientPublicKeys, text);
+
+            socket.emit('send_message', {
+                chatId: activeChat.id,
+                senderId: user.id,
+                content: encryptedContent,
+                type,
+                ttl,
+                replyToId: replyMsg?.id || null,
+                replyContent: replyMsg ? (replyMsg.type !== 'text' ? replyMsg.type : replyMsg.content) : null,
+                replySenderName: replyMsg?.senderName || null
+            });
+        } catch (err) {
+            // Mark as failed if encryption/send fails
+            setMessages(prev => prev.map(m => m.id === tempId ? { ...m, status: 'failed' } : m));
+            console.error('Send failed:', err);
+        }
     };
 
     const handleUpload = async (file) => {
@@ -1047,33 +1099,6 @@ const Home = () => {
     useEffect(() => {
         if (!appNavHidden) setNavPeekOpen(false);
     }, [appNavHidden]);
-
-    if (showReels) {
-        return (
-            <div className="h-[100dvh] w-full bg-black">
-                <Reels 
-                    onBack={() => setShowReels(false)} 
-                    onShareToChat={(reel) => {
-                        setShowReels(false);
-                        // Open a picker or handle direct share logic
-                        alert(`Sharing reel ${reel.id} to chat (Feature coming soon)`);
-                    }}
-                />
-            </div>
-        );
-    }
-
-    if (showSocial) {
-        return (
-            <div className="h-[100dvh] w-full bg-[#0b0f14]">
-                <Social
-                    onBack={() => { setShowSocial(false); setSocialDeepLink(null); }}
-                    deepLink={socialDeepLink}
-                    onDeepLinkConsumed={() => setSocialDeepLink(null)}
-                />
-            </div>
-        );
-    }
 
     return (
         <div className="flex h-[100dvh] bg-signal-bg overflow-hidden text-gray-100 font-sans relative">
@@ -1715,7 +1740,29 @@ const Home = () => {
                     <p>Select a chat or click + to start messaging.</p>
                 </div>
             )}
-            {showReels && <Reels onBack={() => setShowReels(false)} />}
+            {/* Reels Overlay */}
+            <div className={`fixed inset-0 z-50 bg-black transition-opacity duration-200 ${showReels ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+                <Reels 
+                    active={showReels}
+                    onBack={() => setShowReels(false)} 
+                    onShareToChat={(reel) => {
+                        setShowReels(false);
+                        // Open a picker or handle direct share logic
+                        alert(`Sharing reel ${reel.id} to chat (Feature coming soon)`);
+                    }}
+                />
+            </div>
+
+            {/* Social Overlay */}
+            <div className={`fixed inset-0 z-50 bg-[#0b0f14] transition-opacity duration-200 ${showSocial ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+                <Social
+                    active={showSocial}
+                    onBack={() => { setShowSocial(false); setSocialDeepLink(null); }}
+                    deepLink={socialDeepLink}
+                    onDeepLinkConsumed={() => setSocialDeepLink(null)}
+                />
+            </div>
+
             {showSettings && <SettingsModal user={user} token={token} onClose={() => setShowSettings(false)} onLogout={logout} onUserUpdate={updateUser} theme={theme} wallpaper={wallpaper} onThemeChange={setTheme} onWallpaperChange={setWallpaper} />}
             {showNotifications && (
                 <NotificationPanel

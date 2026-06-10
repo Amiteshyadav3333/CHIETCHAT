@@ -1107,16 +1107,6 @@ const Home = () => {
 
     return (
         <div className="flex h-[100dvh] bg-signal-bg overflow-hidden text-gray-100 font-sans relative">
-            {incomingCall && (
-                <IncomingCallModal
-                    callerName={incomingCall.callerName}
-                    onAccept={acceptCall}
-                    onReject={rejectCall}
-                />
-            )}
-
-            {showCallModal && <VideoCallModal activeChat={activeChat} onClose={() => setShowCallModal(false)} callType={callType} />}
-
             {editingMessage && (
                 <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4">
                     <form onSubmit={submitEditMessage} className="w-full max-w-sm rounded-2xl border border-gray-700 bg-[#111b21] p-4 shadow-2xl">
@@ -1785,7 +1775,7 @@ const Home = () => {
             {/* Reels Overlay */}
             <div className={`fixed inset-0 z-50 bg-black transition-opacity duration-200 ${showReels ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
                 <Reels 
-                    active={showReels}
+                    active={showReels && !incomingCall && !showCallModal}
                     onBack={() => setShowReels(false)} 
                     onShareToChat={(reel) => {
                         setShowReels(false);
@@ -1798,7 +1788,7 @@ const Home = () => {
             {/* Social Overlay */}
             <div className={`fixed inset-0 z-50 bg-[#0b0f14] transition-opacity duration-200 ${showSocial ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
                 <Social
-                    active={showSocial}
+                    active={showSocial && !incomingCall && !showCallModal}
                     onBack={() => { setShowSocial(false); setSocialDeepLink(null); }}
                     deepLink={socialDeepLink}
                     onDeepLinkConsumed={() => setSocialDeepLink(null)}
@@ -1815,6 +1805,16 @@ const Home = () => {
                     onNavigate={handleNotificationNavigate}
                 />
             )}
+
+            {incomingCall && (
+                <IncomingCallModal
+                    callerName={incomingCall.callerName}
+                    onAccept={acceptCall}
+                    onReject={rejectCall}
+                />
+            )}
+
+            {showCallModal && <VideoCallModal activeChat={activeChat} onClose={() => setShowCallModal(false)} callType={callType} />}
 
         </div>
     );

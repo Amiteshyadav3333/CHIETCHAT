@@ -72,19 +72,16 @@ const MessageInput = ({
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
     const inputRef = useRef(null);
-    const fileInputRef = useRef(null);
+    const galleryInputRef = useRef(null);
+    const cameraInputRef = useRef(null);
+    const documentInputRef = useRef(null);
+    const audioInputRef = useRef(null);
+    const gifInputRef = useRef(null);
     const typingTimerRef = useRef(null);
 
     React.useEffect(() => {
         return () => clearTimeout(typingTimerRef.current);
     }, []);
-
-
-    const openFilePicker = (accept) => {
-        if (!fileInputRef.current) return;
-        fileInputRef.current.accept = accept;
-        fileInputRef.current.click();
-    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -360,25 +357,25 @@ const MessageInput = ({
                             label="Gallery"
                             color="bg-fuchsia-600"
                             icon={<PhotoIcon className="w-6 h-6 text-white" />}
-                            onClick={() => openFilePicker('image/*,video/*')}
+                            onClick={() => galleryInputRef.current?.click()}
                         />
                         <AttachOption
                             label="Camera"
                             color="bg-rose-500"
                             icon={<CameraIcon className="w-6 h-6 text-white" />}
-                            onClick={() => openFilePicker('image/*,video/*')}
+                            onClick={() => cameraInputRef.current?.click()}
                         />
                         <AttachOption
                             label="Document"
                             color="bg-indigo-500"
                             icon={<DocumentIcon className="w-6 h-6 text-white" />}
-                            onClick={() => openFilePicker('*/*')}
+                            onClick={() => documentInputRef.current?.click()}
                         />
                         <AttachOption
                             label="Audio"
                             color="bg-orange-500"
                             icon={<MusicalNoteIcon className="w-6 h-6 text-white" />}
-                            onClick={() => openFilePicker('audio/*')}
+                            onClick={() => audioInputRef.current?.click()}
                         />
                         <AttachOption
                             label="Location"
@@ -408,7 +405,7 @@ const MessageInput = ({
                             label="GIF"
                             color="bg-pink-500"
                             icon={<FaceSmileIcon className="w-6 h-6 text-white" />}
-                            onClick={() => openFilePicker('image/gif')}
+                            onClick={() => gifInputRef.current?.click()}
                         />
                         <AttachOption
                             label="Game"
@@ -417,7 +414,11 @@ const MessageInput = ({
                             onClick={sendMiniGame}
                         />
                     </div>
-                    <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="*/*" />
+                    <input ref={galleryInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="image/*,video/*" />
+                    <input ref={cameraInputRef} type="file" className="hidden" onChange={handleFileChange} accept="image/*,video/*" capture="environment" />
+                    <input ref={documentInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="*/*" />
+                    <input ref={audioInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="audio/*" />
+                    <input ref={gifInputRef} type="file" className="hidden" onChange={handleFileChange} accept="image/gif" />
                 </div>
             )}
 

@@ -650,6 +650,9 @@ const PostCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onDele
                                 <PaperAirplaneIcon className="w-4 h-4" />
                             </button>
                         </div>
+                    </form>
+                </div>
+            )}
             {zoomedMedia && (
                 <FullscreenMediaModal 
                     src={zoomedMedia.src} 

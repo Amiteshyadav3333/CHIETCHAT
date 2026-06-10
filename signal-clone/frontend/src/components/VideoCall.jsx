@@ -355,7 +355,7 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
     if (isVoiceOnly) {
         return (
             <div
-                className="fixed inset-0 z-50 flex flex-col"
+                className="fixed inset-0 z-[100] flex flex-col"
                 style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)' }}
                 onClick={() => setShowControls(true)}
             >
@@ -443,7 +443,7 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
     // Video call UI — WhatsApp style
     return (
         <div
-            className="fixed inset-0 z-50 bg-black flex flex-col select-none"
+            className="fixed inset-0 z-[100] bg-black flex flex-col select-none"
             onClick={() => setShowControls(v => !v)}
         >
             {/* ── MAIN VIDEO (full screen) ── */}

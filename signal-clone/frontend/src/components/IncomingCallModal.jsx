@@ -77,7 +77,7 @@ const IncomingCallModal = ({ callerName, onAccept, onReject }) => {
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4">
             <div className="bg-gray-800 p-6 rounded-2xl shadow-2xl w-full max-w-sm flex flex-col items-center animate-bounce-short">
                 <div className="w-20 h-20 bg-gray-700 rounded-full flex items-center justify-center mb-4 border-4 border-gray-600">
                     <span className="text-3xl">👤</span>

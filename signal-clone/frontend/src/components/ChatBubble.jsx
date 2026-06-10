@@ -2,6 +2,53 @@ import React, { useState, useRef } from 'react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { TrashIcon, DocumentIcon, ArrowUturnLeftIcon, ArrowDownTrayIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon, EllipsisVerticalIcon, MapPinIcon } from '@heroicons/react/24/outline';
 import { CheckIcon } from '@heroicons/react/24/solid';
+import FullscreenMediaModal from './FullscreenMediaModal';
+
+const renderClickableText = (text) => {
+    if (!text) return '';
+    const regex = /(https?:\/\/[^\s]+)|(\+?\d{1,3}[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/gi;
+    const elements = [];
+    let lastIndex = 0;
+    let match;
+    regex.lastIndex = 0;
+    while ((match = regex.exec(text)) !== null) {
+        const matchIndex = match.index;
+        const matchText = match[0];
+        if (matchIndex > lastIndex) {
+            elements.push(text.substring(lastIndex, matchIndex));
+        }
+        if (matchText.match(/^https?:\/\//i)) {
+            elements.push(
+                <a 
+                    key={`url-${matchIndex}`}
+                    href={matchText}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#53bdeb] hover:underline break-all inline font-semibold"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {matchText}
+                </a>
+            );
+        } else {
+            elements.push(
+                <a 
+                    key={`phone-${matchIndex}`}
+                    href={`tel:${matchText.replace(/[-.\s()]/g, '')}`}
+                    className="text-[#53bdeb] hover:underline break-all inline font-semibold"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {matchText}
+                </a>
+            );
+        }
+        lastIndex = regex.lastIndex;
+    }
+    if (lastIndex < text.length) {
+        elements.push(text.substring(lastIndex));
+    }
+    return elements.length > 0 ? elements : text;
+};
 
 const LANGUAGES = [
     { code: 'hi', name: 'Hindi (हिंदी)' },
@@ -49,6 +96,7 @@ const ChatBubble = ({
     const [showReactions, setShowReactions] = useState(false);
     const [swipeX, setSwipeX] = useState(0);
     const [swiping, setSwiping] = useState(false);
+    const [zoomedMedia, setZoomedMedia] = useState(null);
     
     const [translatedText, setTranslatedText] = useState('');
     const [showTranslatorMenu, setShowTranslatorMenu] = useState(false);
@@ -164,7 +212,7 @@ const ChatBubble = ({
                         src={cnt}
                         alt="sent"
                         className="rounded-xl max-w-[260px] max-h-[300px] w-full object-cover cursor-pointer block"
-                        onClick={() => window.open(cnt, '_blank')}
+                        onClick={() => setZoomedMedia({ src: cnt, type: 'image' })}
                     />
                     <button
                         onClick={(e) => { e.stopPropagation(); handleDownload(cnt); }}
@@ -197,6 +245,15 @@ const ChatBubble = ({
             return (
                 <div className="relative group/media">
                     <video controls src={cnt} className="rounded-xl max-w-[260px] max-h-[300px] w-full object-cover" />
+                    <button
+                        onClick={(e) => { e.stopPropagation(); setZoomedMedia({ src: cnt, type: 'video' }); }}
+                        className="absolute top-2 left-2 p-1.5 bg-black/50 hover:bg-black/70 rounded-full text-white opacity-0 group-hover/media:opacity-100 transition-opacity"
+                        title="Fullscreen"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75v4.5m0-4.5h-4.5m4.5 0L15 9m5.25 11.25v-4.5m0 4.5h-4.5m4.5 0L15 15" />
+                        </svg>
+                    </button>
                     <button
                         onClick={(e) => { e.stopPropagation(); handleDownload(cnt); }}
                         className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 rounded-full text-white opacity-0 group-hover/media:opacity-100 transition-opacity"
@@ -284,7 +341,7 @@ const ChatBubble = ({
         if (type === 'sticker') {
             return <div className="text-5xl leading-none py-2">{cnt}</div>;
         }
-        return <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap">{cnt}</p>;
+        return <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap">{renderClickableText(cnt)}</p>;
     };
 
 
@@ -505,6 +562,13 @@ const ChatBubble = ({
                     </div>
                 </div>
             </div>
+            {zoomedMedia && (
+                <FullscreenMediaModal 
+                    src={zoomedMedia.src} 
+                    type={zoomedMedia.type} 
+                    onClose={() => setZoomedMedia(null)} 
+                />
+            )}
         </div>
     );
 };

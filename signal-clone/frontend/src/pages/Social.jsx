@@ -8,6 +8,7 @@ import {
     PencilIcon, LinkIcon, CalendarIcon, ArrowUpTrayIcon, UserCircleIcon
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartSolidIcon, ArrowPathRoundedSquareIcon as RetweetSolidIcon } from '@heroicons/react/24/solid';
+import FullscreenMediaModal from '../components/FullscreenMediaModal';
 
 const authHeaders = (token) => ({ Authorization: `Bearer ${token}` });
 
@@ -445,6 +446,7 @@ const PostCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onDele
     const [comment, setComment] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [showRetweetConfirm, setShowRetweetConfirm] = useState(false);
+    const [zoomedMedia, setZoomedMedia] = useState(null);
 
     const fetchComments = async () => {
         try {
@@ -534,11 +536,27 @@ const PostCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onDele
 
             {/* Media */}
             {(displayPost.mediaUrl || post.mediaUrl) && (
-                <div className="bg-black">
+                <div className="bg-black relative group/postmedia">
                     {(displayPost.mediaType || post.mediaType) === 'video' ? (
-                        <video src={displayPost.mediaUrl || post.mediaUrl} controls className="w-full max-h-[70vh] object-contain" />
+                        <>
+                            <video src={displayPost.mediaUrl || post.mediaUrl} controls className="w-full max-h-[70vh] object-contain" />
+                            <button
+                                onClick={() => setZoomedMedia({ src: displayPost.mediaUrl || post.mediaUrl, type: 'video' })}
+                                className="absolute top-2 right-2 p-2 bg-black/60 hover:bg-black/85 rounded-full text-white opacity-0 group-hover/postmedia:opacity-100 transition-opacity z-10"
+                                title="Expand to Full Screen"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75v4.5m0-4.5h-4.5m4.5 0L15 9m5.25 11.25v-4.5m0 4.5h-4.5m4.5 0L15 15" />
+                                </svg>
+                            </button>
+                        </>
                     ) : (
-                        <img src={displayPost.mediaUrl || post.mediaUrl} alt="" className="w-full max-h-[70vh] object-contain" />
+                        <img 
+                            src={displayPost.mediaUrl || post.mediaUrl} 
+                            alt="" 
+                            className="w-full max-h-[70vh] object-contain cursor-pointer" 
+                            onClick={() => setZoomedMedia({ src: displayPost.mediaUrl || post.mediaUrl, type: 'image' })}
+                        />
                     )}
                 </div>
             )}
@@ -626,8 +644,12 @@ const PostCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onDele
                                 <PaperAirplaneIcon className="w-4 h-4" />
                             </button>
                         </div>
-                    </form>
-                </div>
+            {zoomedMedia && (
+                <FullscreenMediaModal 
+                    src={zoomedMedia.src} 
+                    type={zoomedMedia.type} 
+                    onClose={() => setZoomedMedia(null)} 
+                />
             )}
         </article>
     );

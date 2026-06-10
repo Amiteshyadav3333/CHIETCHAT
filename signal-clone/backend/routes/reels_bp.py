@@ -144,6 +144,39 @@ def create_reel():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@reels_bp.route('/api/reels/<int:reel_id>/public', methods=['GET'])
+def get_public_reel(reel_id):
+    """Public endpoint — no auth required. Returns a single reel for shared links."""
+    reel = Reel.query.get(reel_id)
+    if not reel:
+        return jsonify({"error": "Reel not found"}), 404
+
+    # Increment view count
+    reel.views_count = (reel.views_count or 0) + 1
+    db.session.commit()
+
+    user_data = serialize_user(reel.user)
+    reactions_count = Reel.query.filter_by(parent_reel_id=reel.id).count()
+
+    return jsonify({
+        "id": reel.id,
+        "videoUrl": reel.video_url,
+        "musicUrl": reel.music_url,
+        "musicName": reel.music_name,
+        "musicVolume": reel.music_volume if reel.music_volume is not None else 0.8,
+        "caption": reel.caption,
+        "createdAt": iso_utc(reel.created_at),
+        "user": user_data,
+        "likesCount": len(reel.likes),
+        "commentsCount": len(reel.comments),
+        "sharesCount": reel.shares_count or 0,
+        "viewsCount": reel.views_count or 0,
+        "reactionsCount": reactions_count,
+        "isLiked": False,
+        "parentReelId": reel.parent_reel_id,
+        "filterName": reel.filter_name
+    })
+
 @reels_bp.route('/api/reels/<int:reel_id>/like', methods=['POST'])
 def like_reel(reel_id):
     user_id = get_current_user_id()

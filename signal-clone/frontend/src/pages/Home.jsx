@@ -32,10 +32,10 @@ const Home = () => {
     const [replyTo, setReplyTo] = useState(null);
     const [showInfoPanel, setShowInfoPanel] = useState(false);
     const [blockedUsers, setBlockedUsers] = useState([]);
-    const [showReels, setShowReels] = useState(false);
-    const [showSocial, setShowSocial] = useState(false);
+    const [showReels, setShowReels] = useState(() => localStorage.getItem('activeView') === 'reels');
+    const [showSocial, setShowSocial] = useState(() => localStorage.getItem('activeView') === 'social');
     const [socialDeepLink, setSocialDeepLink] = useState(null); // { type: 'post'|'profile', id }
-    const [showSettings, setShowSettings] = useState(false);
+    const [showSettings, setShowSettings] = useState(() => localStorage.getItem('activeView') === 'settings');
     const [navPeekOpen, setNavPeekOpen] = useState(false);
 
     // Search Modal States
@@ -82,6 +82,12 @@ const Home = () => {
     useEffect(() => { showCallModalRef.current = showCallModal; }, [showCallModal]);
     useEffect(() => { localStorage.setItem('chat_theme', theme); }, [theme]);
     useEffect(() => { localStorage.setItem('chat_wallpaper', wallpaper); }, [wallpaper]);
+
+    // Persist active view for refresh survival
+    useEffect(() => {
+        const view = showReels ? 'reels' : showSocial ? 'social' : showSettings ? 'settings' : 'chats';
+        localStorage.setItem('activeView', view);
+    }, [showReels, showSocial, showSettings]);
 
     const fetchChats = useCallback(async ({ restoreActive = false } = {}) => {
         if (!token) return [];
@@ -1014,12 +1020,14 @@ const Home = () => {
             active: !showSocial && !showReels,
             action: () => {
                 hideAppNavForFeature();
+                setShowReels(false);
+                setShowSocial(false);
                 setActiveChat(null);
                 localStorage.removeItem('activeChatId');
             }
         },
-        { label: 'Reels', icon: PlayIcon, active: false, action: () => { hideAppNavForFeature(); setShowReels(true); } },
-        { label: 'Social', icon: PhotoIcon, active: false, action: () => { hideAppNavForFeature(); setShowSocial(true); } },
+        { label: 'Reels', icon: PlayIcon, active: false, action: () => { hideAppNavForFeature(); setShowSocial(false); setShowReels(true); } },
+        { label: 'Social', icon: PhotoIcon, active: false, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(true); } },
         { label: 'Notify', icon: BellIcon, active: showNotifications, action: openNotifications, badge: unreadCount },
         { label: 'New', icon: PlusIcon, active: showSearchModal, action: () => { setShowNotifications(false); setShowSettings(false); setShowSearchModal(true); } },
         { label: 'Settings', icon: Cog6ToothIcon, active: showSettings, action: () => { setShowNotifications(false); setShowSearchModal(false); setShowSettings(true); } }

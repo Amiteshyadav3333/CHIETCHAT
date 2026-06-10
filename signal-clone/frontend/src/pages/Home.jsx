@@ -37,6 +37,7 @@ const Home = () => {
     const [socialDeepLink, setSocialDeepLink] = useState(null); // { type: 'post'|'profile', id }
     const [showSettings, setShowSettings] = useState(() => localStorage.getItem('activeView') === 'settings');
     const [navPeekOpen, setNavPeekOpen] = useState(false);
+    const [sidebarSearchQuery, setSidebarSearchQuery] = useState('');
 
     // Search Modal States
     const [showSearchModal, setShowSearchModal] = useState(false);
@@ -69,6 +70,10 @@ const Home = () => {
     const visibleActiveChat = activeChat
         ? chats.find(chat => chat.id === activeChat.id) || activeChat
         : null;
+
+    const filteredChats = chats.filter(chat => 
+        chat.name?.toLowerCase().includes(sidebarSearchQuery.toLowerCase())
+    );
 
     // Non-Encrypted Ref
     const messagesEndRef = useRef(null);
@@ -1412,17 +1417,54 @@ const Home = () => {
                             <p className="text-xs text-green-500">Online</p>
                         </div>
                     </div>
-                    <div className="flex gap-2 md:hidden">
-                        <button onClick={() => setShowSearchModal(true)} className="p-2 hover:bg-gray-700 rounded-full text-signal-accent" title="New Chat">
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={() => {
+                                setShowNotifications(false);
+                                setShowSearchModal(false);
+                                setShowSettings(false);
+                                setShowSearchModal(true);
+                            }} 
+                            className="p-2 hover:bg-gray-700/55 rounded-full text-signal-accent transition-colors" 
+                            title="New Chat"
+                        >
                             <PlusIcon className="w-6 h-6" />
                         </button>
+                    </div>
+                </div>
+
+                {/* Sidebar Search Bar */}
+                <div className="p-3 bg-signal-secondary border-b border-gray-800 flex gap-2">
+                    <div className="relative flex-1">
+                        <input
+                            type="text"
+                            value={sidebarSearchQuery}
+                            onChange={(e) => setSidebarSearchQuery(e.target.value)}
+                            placeholder="Search or start new chat..."
+                            className="w-full bg-signal-input border-none rounded-xl pl-10 pr-10 py-2 focus:ring-1 focus:ring-signal-accent outline-none text-white text-sm"
+                        />
+                        <span className="absolute left-3 top-2.5 text-gray-500">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.604 10.604Z" />
+                            </svg>
+                        </span>
+                        {sidebarSearchQuery && (
+                            <button
+                                onClick={() => setSidebarSearchQuery('')}
+                                className="absolute right-3 top-2.5 text-gray-400 hover:text-white"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        )}
                     </div>
                 </div>
 
                 {/* Contacts */}
                 <StatusSection user={user} token={token} />
                 <ContactList
-                    chats={chats}
+                    chats={filteredChats}
                     activeChat={activeChat}
                     onSelectChat={setActiveChat}
                     loading={loadingChats}

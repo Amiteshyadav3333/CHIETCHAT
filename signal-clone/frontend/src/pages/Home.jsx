@@ -140,11 +140,29 @@ const Home = () => {
     const decryptMessageForCurrentUser = useCallback(async (message) => {
         if (!privateKey || !user) return message;
 
-        return {
-            ...message,
-            encryptedContent: isEncryptedPayload(message.content),
-            content: await decryptEnvelope(privateKey, user.id, message.content)
-        };
+        const isEncrypted = isEncryptedPayload(message.content);
+        if (!isEncrypted) {
+            return {
+                ...message,
+                encryptedContent: false
+            };
+        }
+
+        try {
+            const decrypted = await decryptEnvelope(privateKey, user.id, message.content);
+            return {
+                ...message,
+                encryptedContent: true,
+                content: decrypted
+            };
+        } catch (err) {
+            console.error("Failed to decrypt message:", message.id, err);
+            return {
+                ...message,
+                encryptedContent: true,
+                content: "[Decryption failed]"
+            };
+        }
     }, [privateKey, user]);
 
     const decryptMessagesForCurrentUser = useCallback(async (incomingMessages) => {

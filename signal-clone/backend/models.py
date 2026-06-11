@@ -226,6 +226,7 @@ class SocialPostComment(db.Model):
     created_at = db.Column(db.DateTime, default=utc_now)
     user = db.relationship('User')
     replies = db.relationship('SocialPostComment', backref=db.backref('parent', remote_side=[id]), lazy=True, cascade='all, delete-orphan')
+    legacy_replies = db.relationship('CommentReply', backref='comment', lazy=True, cascade='all, delete-orphan')
 
 class CommentReply(db.Model):
     id = db.Column(db.Integer, primary_key=True)

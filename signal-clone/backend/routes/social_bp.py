@@ -297,6 +297,20 @@ def reply_to_comment(comment_id):
     create_notification(comment.user_id, user_id, 'comment_reply', f"replied: {content[:50]}", comment.post_id)
     return jsonify(serialize_comment(reply, user_id)), 201
 
+@social_bp.route('/api/social/comments/<int:comment_id>', methods=['DELETE'])
+def delete_social_comment(comment_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    comment = SocialPostComment.query.get_or_404(comment_id)
+    post = SocialPost.query.get(comment.post_id)
+    if comment.user_id != user_id and (post and post.user_id != user_id):
+        return jsonify({"error": "Forbidden"}), 403
+    db.session.delete(comment)
+    db.session.commit()
+    return jsonify({"message": "Comment deleted"})
+
+
 
 # ─── DELETE POST ──────────────────────────────────────────────────────────────
 

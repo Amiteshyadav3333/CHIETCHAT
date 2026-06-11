@@ -212,6 +212,19 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
         }
     };
 
+    const handleDeleteComment = async (commentId) => {
+        if (!window.confirm("Delete this comment?")) return;
+        try {
+            await axios.delete(`/api/reels/comments/${commentId}`, {
+                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            });
+            fetchComments();
+        } catch (err) {
+            console.error("Failed to delete comment:", err);
+            alert("Could not delete comment");
+        }
+    };
+
     return (
         <div className="relative h-full w-full bg-black snap-start flex items-center justify-center overflow-hidden">
             <video
@@ -382,6 +395,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
                                 key={c.id}
                                 comment={c}
                                 onReply={handleReplyToComment}
+                                onDelete={handleDeleteComment}
                                 currentUser={currentUser}
                                 onProfileClick={onProfileClick}
                             />

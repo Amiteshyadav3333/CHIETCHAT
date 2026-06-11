@@ -208,7 +208,7 @@ class SocialPost(db.Model):
     channel = db.relationship('Channel', back_populates='posts')
     likes = db.relationship('SocialPostLike', backref='post', lazy=True, cascade='all, delete-orphan')
     comments = db.relationship('SocialPostComment', backref='post', lazy=True, cascade='all, delete-orphan')
-    retweet_of = db.relationship('SocialPost', remote_side='SocialPost.id', foreign_keys='SocialPost.retweet_of_id', backref='retweets')
+    retweet_of = db.relationship('SocialPost', remote_side='SocialPost.id', foreign_keys='SocialPost.retweet_of_id', backref=db.backref('retweets', cascade='all, delete-orphan'))
 
 class SocialPostLike(db.Model):
     id = db.Column(db.Integer, primary_key=True)

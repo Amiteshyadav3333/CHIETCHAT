@@ -482,6 +482,19 @@ const PostCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onDele
         }
     };
 
+    const handleDeleteComment = async (commentId) => {
+        if (!window.confirm("Delete this comment?")) return;
+        try {
+            await axios.delete(`/api/social/comments/${commentId}`, {
+                headers: authHeaders(localStorage.getItem('token') || token)
+            });
+            fetchComments();
+        } catch (err) {
+            console.error("Failed to delete comment:", err);
+            alert("Could not delete comment");
+        }
+    };
+
     const handleRetweetClick = () => {
         if (post.isRetweeted) {
             onRetweet(); // undo
@@ -641,6 +654,7 @@ const PostCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onDele
                             key={item.id}
                             comment={item}
                             onReply={handleReplyToComment}
+                            onDelete={handleDeleteComment}
                             currentUser={currentUser}
                             onProfileClick={onOpenProfile}
                         />

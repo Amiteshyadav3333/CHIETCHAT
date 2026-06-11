@@ -278,6 +278,20 @@ def reply_to_reel_comment(comment_id):
     
     return jsonify(serialize_reel_comment(reply, user_id)), 201
 
+@reels_bp.route('/api/reels/comments/<int:comment_id>', methods=['DELETE'])
+def delete_reel_comment(comment_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    comment = ReelComment.query.get_or_404(comment_id)
+    reel = Reel.query.get(comment.reel_id)
+    if comment.user_id != user_id and (reel and reel.user_id != user_id):
+        return jsonify({"error": "Forbidden"}), 403
+    db.session.delete(comment)
+    db.session.commit()
+    return jsonify({"message": "Comment deleted"})
+
+
 
 @reels_bp.route('/api/reels/<int:reel_id>/share', methods=['POST'])
 def share_reel(reel_id):

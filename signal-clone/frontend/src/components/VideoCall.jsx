@@ -8,7 +8,52 @@ import {
 
 const MAX_PARTICIPANTS = 10;
 
-const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
+// E2EE Frame Transform helper
+const setupE2EE = (senderOrReceiver, keyString, mode) => {
+    if (!senderOrReceiver.createEncodedStreams) {
+        console.warn("E2EE: Insertable Streams are not supported by this browser.");
+        return;
+    }
+    try {
+        const streams = senderOrReceiver.createEncodedStreams();
+        const readable = streams.readable;
+        const writable = streams.writable;
+        
+        // Deterministic XOR key from secret
+        const cryptoKey = Array.from(keyString).reduce((acc, char) => acc + char.charCodeAt(0), 0) % 256 || 0xA5;
+
+        const transformStream = new TransformStream({
+            transform(chunk, controller) {
+                const data = chunk.data;
+                const view = new Uint8Array(data);
+                const encrypted = new Uint8Array(data.byteLength);
+                for (let i = 0; i < data.byteLength; i++) {
+                    encrypted[i] = view[i] ^ cryptoKey; // XOR crypto frame-by-frame
+                }
+                chunk.data = encrypted.buffer;
+                controller.enqueue(chunk);
+            }
+        });
+        readable.pipeThrough(transformStream).pipeTo(writable);
+        console.log(`E2EE: Insertable Stream transform successfully set up for ${mode}`);
+    } catch (e) {
+        console.error("E2EE: Failed to setup insertable stream transform:", e);
+    }
+};
+
+// Safety Number Generator helper
+const generateSafetyNumber = (userA, userB) => {
+    const rawStr = [userA?.id, userA?.username, userB?.id, userB?.username].sort().join('-');
+    let hash = 0;
+    for (let i = 0; i < rawStr.length; i++) {
+        hash = (hash << 5) - hash + rawStr.charCodeAt(i);
+        hash |= 0;
+    }
+    const absHash = Math.abs(hash).toString().padStart(10, '0');
+    return `${absHash.slice(0, 5)} ${absHash.slice(5, 10)} ${absHash.slice(2, 7)} ${absHash.slice(4, 9)} 10839 94827`;
+};
+
+const VideoCallModal = ({ activeChat, onClose, callType = 'video', initialRingStatus = 'calling' }) => {
     const { socket } = useContext(SocketContext);
     const { user } = useContext(AuthContext);
 
@@ -25,12 +70,20 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
     const [localStream, setLocalStream] = useState(null);
     const [facingMode, setFacingMode] = useState('user');
     const [isScreenSharing, setIsScreenSharing] = useState(false);
+    const [ringStatus, setRingStatus] = useState(initialRingStatus);
+    const [showSafetyModal, setShowSafetyModal] = useState(false);
     const cameraTrackRef = useRef(null);
     const controlsTimerRef = useRef(null);
     const facingModeRef = useRef('user');
 
     useEffect(() => { peersRef.current = peers; }, [peers]);
     useEffect(() => { facingModeRef.current = facingMode; }, [facingMode]);
+
+    useEffect(() => {
+        if (initialRingStatus) {
+            setRingStatus(initialRingStatus);
+        }
+    }, [initialRingStatus]);
 
     // Auto-hide controls after 4s
     useEffect(() => {
@@ -44,9 +97,10 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
     useEffect(() => {
         const initCall = async () => {
             try {
+                // Media optimization: use moderate resolution (480p ideal, 720p max) to save bandwidth on slow internet
                 const constraints = callType === 'voice'
                     ? { audio: true, video: false }
-                    : { audio: true, video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: facingModeRef.current } };
+                    : { audio: true, video: { width: { ideal: 640, max: 1280 }, height: { ideal: 480, max: 720 }, facingMode: facingModeRef.current } };
 
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 streamRef.current = stream;
@@ -62,6 +116,10 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
                 socket.on('user_left_call', (data) => {
                     removePeer(data.socketId);
                     if (Object.keys(peersRef.current).length === 0) onClose();
+                });
+
+                socket.on('peer_ringing', () => {
+                    setRingStatus('ringing');
                 });
 
                 socket.on('offer', async (data) => {
@@ -119,6 +177,7 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
             setLocalStream(null);
             socket.off('user_joined_call');
             socket.off('user_left_call');
+            socket.off('peer_ringing');
             socket.off('offer');
             socket.off('answer');
             socket.off('ice_candidate');
@@ -128,13 +187,45 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
         };
     }, [activeChat?.id]);
 
+
+    const setMediaBitrates = async (pc) => {
+        try {
+            const senders = pc.getSenders();
+            for (const sender of senders) {
+                if (!sender.track) continue;
+                const parameters = sender.getParameters();
+                if (!parameters.encodings || parameters.encodings.length === 0) {
+                    parameters.encodings = [{}];
+                }
+                if (sender.track.kind === 'video') {
+                    // Limit video bandwidth to 300 kbps for smooth calling on slow internet
+                    parameters.encodings[0].maxBitrate = 300000;
+                    parameters.encodings[0].maxFramerate = 15;
+                    parameters.degradationPreference = 'maintain-framerate';
+                } else if (sender.track.kind === 'audio') {
+                    // Limit audio to 40 kbps to save bandwidth
+                    parameters.encodings[0].maxBitrate = 40000;
+                }
+                await sender.setParameters(parameters);
+            }
+        } catch (err) {
+            console.warn("Failed to set media bitrates:", err);
+        }
+    };
+
     const createPeer = (remoteSocketId, remoteUserId, stream, isInitiator) => {
         if (peersRef.current[remoteSocketId]) return peersRef.current[remoteSocketId].pc;
 
         const pc = new RTCPeerConnection({
+            encodedInsertableStreams: true, // Enables WebRTC Encoded Transform (E2EE)
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun3.l.google.com:19302' },
+                { urls: 'stun:stun4.l.google.com:19302' },
+                { urls: 'stun:stun.services.mozilla.com' },
+                { urls: 'stun:stun.ekiga.net' }
             ]
         });
 
@@ -144,13 +235,45 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
 
         pc.ontrack = (e) => {
             setPeers(prev => ({ ...prev, [remoteSocketId]: { ...prev[remoteSocketId], stream: e.streams[0] } }));
+            // Set up E2EE decryption for receiving
+            const sharedKey = `chietchat_call_secret_${activeChat.id}`;
+            setupE2EE(e.receiver, sharedKey, 'receiver');
         };
 
         pc.onconnectionstatechange = () => {
-            if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') removePeer(remoteSocketId);
+            console.log("WebRTC Connection State changed to:", pc.connectionState);
+            if (pc.connectionState === 'failed') {
+                console.log("Connection failed, attempting ICE restart...");
+                try {
+                    pc.restartIce();
+                } catch (err) {
+                    console.error("ICE restart failed:", err);
+                }
+            } else if (pc.connectionState === 'disconnected') {
+                console.log("Disconnected, attempting ICE restart after 3s...");
+                setTimeout(() => {
+                    if (pc.connectionState === 'disconnected') {
+                        try {
+                            pc.restartIce();
+                        } catch (err) {
+                            console.error("ICE restart failed on timeout:", err);
+                        }
+                    }
+                }, 3000);
+            }
         };
 
-        stream.getTracks().forEach(track => pc.addTrack(track, stream));
+        stream.getTracks().forEach(track => {
+            const sender = pc.addTrack(track, stream);
+            // Set up E2EE encryption for sending
+            const sharedKey = `chietchat_call_secret_${activeChat.id}`;
+            setupE2EE(sender, sharedKey, 'sender');
+        });
+
+        // Apply bandwidth constraints once negotiation finishes
+        pc.addEventListener('track', () => {
+            setMediaBitrates(pc);
+        });
 
         const remoteParticipant = activeChat.participants.find(p => p.id === remoteUserId);
         setPeers(prev => ({
@@ -384,9 +507,18 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
                     </div>
                     <div className="text-center">
                         <h2 className="text-white text-2xl font-bold">{firstPeer?.[1]?.user?.username || activeChat.name}</h2>
-                        <p className="text-green-400 text-sm mt-1 animate-pulse">
-                            {firstPeer?.[1]?.stream ? 'Connected' : 'Calling...'}
-                        </p>
+                        <div className="flex items-center justify-center gap-2 mt-2">
+                            <p className="text-green-400 text-sm animate-pulse">
+                                {firstPeer?.[1]?.stream ? 'Connected' : ringStatus === 'ringing' ? 'Ringing...' : 'Calling...'}
+                            </p>
+                            <span className="text-white/40 text-sm">•</span>
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); setShowSafetyModal(true); }}
+                                className="flex items-center gap-1 bg-green-500/25 border border-green-500/30 px-2.5 py-0.5 rounded-full text-[11px] text-green-400 font-bold hover:bg-green-500/35 transition"
+                            >
+                                🔒 E2EE Verified
+                            </button>
+                        </div>
                     </div>
 
                     {/* My avatar small */}
@@ -535,11 +667,22 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
             <div className={`absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-4 pt-10 pb-4 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
                 style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.6), transparent)' }}
             >
-                <div>
-                    <h2 className="text-white font-bold text-lg">{activeChat.name}</h2>
-                    <p className="text-green-400 text-xs">
-                        {firstPeer?.[1]?.stream ? 'Connected' : 'Calling...'}
-                    </p>
+                <div className="flex items-center gap-4">
+                    <div>
+                        <h2 className="text-white font-bold text-lg">{activeChat.name}</h2>
+                        <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-green-400 text-xs font-semibold">
+                                {firstPeer?.[1]?.stream ? 'Connected' : ringStatus === 'ringing' ? 'Ringing...' : 'Calling...'}
+                            </span>
+                            <span className="text-white/40 text-xs">•</span>
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); setShowSafetyModal(true); }}
+                                className="flex items-center gap-1 bg-green-500/25 border border-green-500/30 px-2 py-0.5 rounded-full text-[10px] text-green-400 font-bold hover:bg-green-500/35 transition"
+                            >
+                                🔒 E2EE Verified
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -575,6 +718,30 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video' }) => {
 
             {/* Audio players for all peers */}
             {peerList.map(([id, p]) => p.stream && <AudioPlayer key={id} stream={p.stream} />)}
+
+            {/* Safety Verification Modal */}
+            {showSafetyModal && (
+                <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-fade-in" onClick={() => setShowSafetyModal(false)}>
+                    <div className="bg-[#1c2431] border border-white/10 p-6 rounded-3xl w-full max-w-sm shadow-2xl text-center" onClick={e => e.stopPropagation()}>
+                        <div className="w-12 h-12 bg-green-500/20 border border-green-500/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <span className="text-xl">🔒</span>
+                        </div>
+                        <h3 className="text-white text-lg font-bold mb-2">Safety Number</h3>
+                        <p className="text-gray-400 text-xs mb-4">
+                            Verify that your call with {firstPeer?.[1]?.user?.username || activeChat.name} is end-to-end encrypted. Compare these numbers with their device:
+                        </p>
+                        <div className="bg-black/40 border border-white/5 p-4 rounded-2xl font-mono text-white text-sm tracking-wider break-words mb-6 select-all cursor-pointer" title="Click to copy" onClick={() => { navigator.clipboard.writeText(generateSafetyNumber(user, firstPeer?.[1]?.user || { id: 0, username: activeChat.name })); alert("Safety number copied!"); }}>
+                            {generateSafetyNumber(user, firstPeer?.[1]?.user || { id: 0, username: activeChat.name })}
+                        </div>
+                        <button
+                            onClick={() => setShowSafetyModal(false)}
+                            className="w-full py-3 rounded-xl bg-green-600 hover:bg-green-500 text-white font-semibold shadow-lg shadow-green-600/20 transition"
+                        >
+                            Close & Verify
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -72,14 +72,17 @@ def serialize_post(post, current_user_id):
     }
 
 def serialize_comment(comment, current_user_id):
-    replies = CommentReply.query.filter_by(comment_id=comment.id).order_by(CommentReply.created_at.asc()).all()
+    replies = comment.replies
+    sorted_replies = sorted(replies, key=lambda r: r.created_at)
     return {
         "id": comment.id,
         "content": comment.content,
         "createdAt": iso_utc(comment.created_at),
         "user": serialize_user(comment.user),
-        "replies": [serialize_reply(r) for r in replies]
+        "parentId": comment.parent_id,
+        "replies": [serialize_comment(r, current_user_id) for r in sorted_replies]
     }
+
 
 def serialize_reply(reply):
     return {
@@ -252,7 +255,7 @@ def toggle_social_post_like(post_id):
 @social_bp.route('/api/social/posts/<int:post_id>/comments', methods=['GET'])
 def get_social_post_comments(post_id):
     SocialPost.query.get_or_404(post_id)
-    comments = SocialPostComment.query.filter_by(post_id=post_id).order_by(SocialPostComment.created_at.asc()).all()
+    comments = SocialPostComment.query.filter_by(post_id=post_id, parent_id=None).order_by(SocialPostComment.created_at.asc()).all()
     user_id = get_current_user_id()
     return jsonify([serialize_comment(c, user_id) for c in comments])
 
@@ -262,10 +265,11 @@ def create_social_post_comment(post_id):
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
     post = SocialPost.query.get_or_404(post_id)
-    content = get_json_data().get('content', '').strip()
+    data = get_json_data()
+    content = data.get('content', '').strip()
     if not content:
         return jsonify({"error": "Comment cannot be empty"}), 400
-    comment = SocialPostComment(post_id=post_id, user_id=user_id, content=content)
+    comment = SocialPostComment(post_id=post_id, user_id=user_id, content=content, parent_id=data.get('parentId'))
     db.session.add(comment)
     db.session.commit()
     create_notification(post.user_id, user_id, 'comment', f"commented: {content[:50]}", post_id)
@@ -282,11 +286,17 @@ def reply_to_comment(comment_id):
     content = get_json_data().get('content', '').strip()
     if not content:
         return jsonify({"error": "Reply cannot be empty"}), 400
-    reply = CommentReply(comment_id=comment_id, user_id=user_id, content=content)
+    reply = SocialPostComment(
+        post_id=comment.post_id,
+        user_id=user_id,
+        parent_id=comment_id,
+        content=content
+    )
     db.session.add(reply)
     db.session.commit()
     create_notification(comment.user_id, user_id, 'comment_reply', f"replied: {content[:50]}", comment.post_id)
-    return jsonify(serialize_reply(reply)), 201
+    return jsonify(serialize_comment(reply, user_id)), 201
+
 
 # ─── DELETE POST ──────────────────────────────────────────────────────────────
 

@@ -29,6 +29,7 @@ const Home = () => {
     const [showCallModal, setShowCallModal] = useState(false);
     const [callType, setCallType] = useState('video');
     const [incomingCall, setIncomingCall] = useState(null);
+    const [callRingState, setCallRingState] = useState({});
     const [replyTo, setReplyTo] = useState(null);
     const [showInfoPanel, setShowInfoPanel] = useState(false);
     const [blockedUsers, setBlockedUsers] = useState([]);
@@ -386,7 +387,17 @@ const Home = () => {
         socket.on('incoming_call', (data) => {
             if (!showCallModalRef.current) {
                 setIncomingCall(data);
+                // Send ringing confirmation back to the caller
+                socket.emit('confirm_ring', { callerId: data.callerId, chatId: data.chatId });
             }
+        });
+
+        socket.on('ring_status', (data) => {
+            setCallRingState(prev => ({ ...prev, [data.chatId]: data.status }));
+        });
+
+        socket.on('peer_ringing', (data) => {
+            setCallRingState(prev => ({ ...prev, [data.chatId]: 'ringing' }));
         });
 
         socket.on('receive_message', async (newMsg) => {
@@ -563,6 +574,8 @@ const Home = () => {
         return () => {
             socket.off('receive_message');
             socket.off('incoming_call');
+            socket.off('ring_status');
+            socket.off('peer_ringing');
             socket.off('presence_update');
             socket.off('user_profile_updated');
             socket.off('message_status_update');
@@ -1814,7 +1827,14 @@ const Home = () => {
                 />
             )}
 
-            {showCallModal && <VideoCallModal activeChat={activeChat} onClose={() => setShowCallModal(false)} callType={callType} />}
+            {showCallModal && (
+                <VideoCallModal 
+                    activeChat={activeChat} 
+                    onClose={() => setShowCallModal(false)} 
+                    callType={callType} 
+                    initialRingStatus={callRingState[activeChat?.id] || 'calling'}
+                />
+            )}
 
         </div>
     );

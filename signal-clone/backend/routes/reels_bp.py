@@ -204,15 +204,23 @@ def like_reel(reel_id):
     
     return jsonify({"isLiked": True})
 
+def serialize_reel_comment(comment, current_user_id):
+    replies = comment.replies
+    sorted_replies = sorted(replies, key=lambda r: r.created_at)
+    return {
+        "id": comment.id,
+        "content": comment.content,
+        "createdAt": iso_utc(comment.created_at),
+        "user": serialize_user(comment.user),
+        "parentId": comment.parent_id,
+        "replies": [serialize_reel_comment(r, current_user_id) for r in sorted_replies]
+    }
+
 @reels_bp.route('/api/reels/<int:reel_id>/comments', methods=['GET'])
 def get_reel_comments(reel_id):
-    comments = ReelComment.query.filter_by(reel_id=reel_id).order_by(ReelComment.created_at.asc()).all()
-    return jsonify([{
-        "id": c.id,
-        "content": c.content,
-        "createdAt": iso_utc(c.created_at),
-        "user": serialize_user(c.user)
-    } for c in comments])
+    comments = ReelComment.query.filter_by(reel_id=reel_id, parent_id=None).order_by(ReelComment.created_at.asc()).all()
+    user_id = get_current_user_id()
+    return jsonify([serialize_reel_comment(c, user_id) for c in comments])
 
 @reels_bp.route('/api/reels/<int:reel_id>/comments', methods=['POST'])
 def comment_on_reel(reel_id):
@@ -225,7 +233,7 @@ def comment_on_reel(reel_id):
     if not content:
         return jsonify({"error": "Comment cannot be empty"}), 400
     
-    comment = ReelComment(reel_id=reel_id, user_id=user_id, content=content)
+    comment = ReelComment(reel_id=reel_id, user_id=user_id, content=content, parent_id=data.get('parentId'))
     db.session.add(comment)
     db.session.commit()
     
@@ -239,7 +247,37 @@ def comment_on_reel(reel_id):
             target_id=reel_id
         )
     
-    return jsonify({"id": comment.id, "message": "Comment added"})
+    return jsonify({"id": comment.id, "message": "Comment added", "comment": serialize_reel_comment(comment, user_id)})
+
+@reels_bp.route('/api/reels/comments/<int:comment_id>/replies', methods=['POST'])
+def reply_to_reel_comment(comment_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    parent_comment = ReelComment.query.get_or_404(comment_id)
+    content = get_json_data().get('content', '').strip()
+    if not content:
+        return jsonify({"error": "Reply cannot be empty"}), 400
+    
+    reply = ReelComment(
+        reel_id=parent_comment.reel_id,
+        user_id=user_id,
+        parent_id=comment_id,
+        content=content
+    )
+    db.session.add(reply)
+    db.session.commit()
+    
+    create_notification(
+        recipient_id=parent_comment.user_id,
+        sender_id=user_id,
+        n_type='comment_reply',
+        content=f"replied to your comment: {content[:50]}...",
+        target_id=parent_comment.reel_id
+    )
+    
+    return jsonify(serialize_reel_comment(reply, user_id)), 201
+
 
 @reels_bp.route('/api/reels/<int:reel_id>/share', methods=['POST'])
 def share_reel(reel_id):

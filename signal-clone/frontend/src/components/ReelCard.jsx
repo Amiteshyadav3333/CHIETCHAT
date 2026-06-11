@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { HeartIcon, ChatBubbleOvalLeftIcon, ShareIcon, MusicalNoteIcon, FaceSmileIcon, EyeIcon, TrashIcon, NoSymbolIcon, ArrowDownTrayIcon } from '@heroicons/react/24/solid';
 import { HeartIcon as HeartOutline, EllipsisVerticalIcon, PencilIcon, PlayIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
+import NestedComment from './NestedComment';
 
 const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelete, active }) => {
     const [liked, setLiked] = useState(reel.isLiked);
@@ -200,6 +201,17 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
         } catch (err) { console.error(err); }
     };
 
+    const handleReplyToComment = async (commentId, content) => {
+        try {
+            await axios.post(`/api/reels/comments/${commentId}/replies`, { content }, {
+                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            });
+            fetchComments();
+        } catch (err) {
+            console.error("Failed to post reply:", err);
+        }
+    };
+
     return (
         <div className="relative h-full w-full bg-black snap-start flex items-center justify-center overflow-hidden">
             <video
@@ -366,13 +378,13 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
                     </div>
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
                         {comments.length > 0 ? comments.map(c => (
-                            <div key={c.id} className="flex gap-3">
-                                <img src={c.user.avatar} className="w-8 h-8 rounded-full border border-white/10" alt="" />
-                                <div className="flex-1">
-                                    <p className="text-gray-400 text-[11px] font-bold">@{c.user.username}</p>
-                                    <p className="text-gray-100 text-sm mt-0.5">{c.content}</p>
-                                </div>
-                            </div>
+                            <NestedComment
+                                key={c.id}
+                                comment={c}
+                                onReply={handleReplyToComment}
+                                currentUser={currentUser}
+                                onProfileClick={onProfileClick}
+                            />
                         )) : (
                             <p className="text-gray-500 text-center py-10 text-sm">No comments yet. Start the conversation!</p>
                         )}

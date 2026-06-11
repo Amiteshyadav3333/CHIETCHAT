@@ -167,9 +167,11 @@ class ReelComment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     reel_id = db.Column(db.Integer, db.ForeignKey('reel.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    parent_id = db.Column(db.Integer, db.ForeignKey('reel_comment.id'), nullable=True)
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now)
     user = db.relationship('User')
+    replies = db.relationship('ReelComment', backref=db.backref('parent', remote_side=[id]), lazy=True, cascade='all, delete-orphan')
 
 class Follow(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -219,10 +221,11 @@ class SocialPostComment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     post_id = db.Column(db.Integer, db.ForeignKey('social_post.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    parent_id = db.Column(db.Integer, db.ForeignKey('social_post_comment.id'), nullable=True)
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now)
     user = db.relationship('User')
-    replies = db.relationship('CommentReply', backref='comment', lazy=True, cascade='all, delete-orphan')
+    replies = db.relationship('SocialPostComment', backref=db.backref('parent', remote_side=[id]), lazy=True, cascade='all, delete-orphan')
 
 class CommentReply(db.Model):
     id = db.Column(db.Integer, primary_key=True)

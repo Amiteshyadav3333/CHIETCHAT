@@ -9,6 +9,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartSolidIcon, ArrowPathRoundedSquareIcon as RetweetSolidIcon } from '@heroicons/react/24/solid';
 import FullscreenMediaModal from '../components/FullscreenMediaModal';
+import NestedComment from '../components/NestedComment';
 
 const authHeaders = (token) => ({ Authorization: `Bearer ${token}` });
 
@@ -470,6 +471,17 @@ const PostCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onDele
         }
     };
 
+    const handleReplyToComment = async (commentId, content) => {
+        try {
+            await axios.post(`/api/social/comments/${commentId}/replies`, { content }, {
+                headers: authHeaders(localStorage.getItem('token') || token)
+            });
+            fetchComments();
+        } catch (err) {
+            console.error("Failed to post reply:", err);
+        }
+    };
+
     const handleRetweetClick = () => {
         if (post.isRetweeted) {
             onRetweet(); // undo
@@ -625,12 +637,12 @@ const PostCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onDele
                 <div className="px-4 pb-4 space-y-3 border-t border-white/5 pt-3">
                     {comments.length === 0 && <p className="text-sm text-gray-500 text-center py-2">No comments yet. Be first!</p>}
                     {comments.map(item => (
-                        <CommentItem
+                        <NestedComment
                             key={item.id}
                             comment={item}
-                            token={token}
+                            onReply={handleReplyToComment}
                             currentUser={currentUser}
-                            onOpenProfile={onOpenProfile}
+                            onProfileClick={onOpenProfile}
                         />
                     ))}
                     <form onSubmit={submitComment} className="flex gap-2 pt-1">
@@ -676,94 +688,7 @@ const ActionBtn = ({ icon, count, onClick, active, activeColor, label }) => (
     </button>
 );
 
-// ─── COMMENT ITEM (with reply) ─────────────────────────────────────────────
-const CommentItem = ({ comment, token, currentUser, onOpenProfile }) => {
-    const [showReplyBox, setShowReplyBox] = useState(false);
-    const [replyText, setReplyText] = useState('');
-    const [localReplies, setLocalReplies] = useState(comment.replies || []);
-    const [submitting, setSubmitting] = useState(false);
-    const [showReplies, setShowReplies] = useState(false);
-
-    const submitReply = async (e) => {
-        e.preventDefault();
-        if (!replyText.trim()) return;
-        setSubmitting(true);
-        try {
-            const res = await axios.post(`/api/social/comments/${comment.id}/replies`, { content: replyText }, {
-                headers: authHeaders(token || localStorage.getItem('token'))
-            });
-            setLocalReplies(p => [...p, res.data]);
-            setReplyText('');
-            setShowReplyBox(false);
-            setShowReplies(true);
-        } catch { /* silent */ } finally {
-            setSubmitting(false);
-        }
-    };
-
-    return (
-        <div className="flex gap-2 text-sm">
-            <button onClick={() => onOpenProfile(comment.user.id)} className="flex-shrink-0">
-                <img src={comment.user.avatar} alt="" className="w-8 h-8 rounded-full object-cover hover:ring-2 hover:ring-signal-accent/50 transition" />
-            </button>
-            <div className="flex-1 min-w-0">
-                <div className="bg-white/5 rounded-2xl px-3 py-2">
-                    <button onClick={() => onOpenProfile(comment.user.id)} className="font-bold text-xs hover:underline">{comment.user.username}</button>
-                    <p className="text-gray-200 text-sm mt-0.5 leading-relaxed">{comment.content}</p>
-                </div>
-                <div className="flex items-center gap-3 mt-1 px-1">
-                    <span className="text-xs text-gray-500">{new Date(comment.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    <button onClick={() => setShowReplyBox(p => !p)} className="text-xs text-gray-400 hover:text-white transition font-medium">Reply</button>
-                    {localReplies.length > 0 && (
-                        <button onClick={() => setShowReplies(p => !p)} className="text-xs text-signal-accent hover:underline font-medium">
-                            {showReplies ? 'Hide' : `${localReplies.length} repl${localReplies.length > 1 ? 'ies' : 'y'}`}
-                        </button>
-                    )}
-                </div>
-
-                {/* Replies */}
-                {showReplies && localReplies.length > 0 && (
-                    <div className="mt-2 space-y-2 pl-3 border-l-2 border-white/10">
-                        {localReplies.map(reply => (
-                            <div key={reply.id} className="flex gap-2">
-                                <button onClick={() => onOpenProfile(reply.user.id)}>
-                                    <img src={reply.user.avatar} alt="" className="w-6 h-6 rounded-full object-cover" />
-                                </button>
-                                <div className="bg-white/5 rounded-2xl px-3 py-2 flex-1">
-                                    <button onClick={() => onOpenProfile(reply.user.id)} className="font-bold text-xs hover:underline">{reply.user.username}</button>
-                                    <p className="text-gray-300 text-xs mt-0.5">{reply.content}</p>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-                {/* Reply box */}
-                {showReplyBox && (
-                    <form onSubmit={submitReply} className="mt-2 flex gap-2">
-                        <img src={currentUser?.avatar} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0 mt-1" />
-                        <div className="flex-1 flex gap-2">
-                            <input
-                                value={replyText}
-                                onChange={e => setReplyText(e.target.value)}
-                                placeholder={`Reply to ${comment.user.username}...`}
-                                className="flex-1 bg-signal-input rounded-full px-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-signal-accent"
-                                autoFocus
-                            />
-                            <button
-                                type="submit"
-                                disabled={submitting || !replyText.trim()}
-                                className="p-1.5 rounded-full bg-signal-accent disabled:bg-gray-700 hover:bg-signal-accentHover transition"
-                            >
-                                <PaperAirplaneIcon className="w-3 h-3" />
-                            </button>
-                        </div>
-                    </form>
-                )}
-            </div>
-        </div>
-    );
-};
+// CommentItem deprecated, replaced by NestedComment
 
 // ─── USER PROFILE VIEW ─────────────────────────────────────────────────────────
 const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpenProfile, onLike, onRetweet, onShare, onDelete, onFollow }) => {

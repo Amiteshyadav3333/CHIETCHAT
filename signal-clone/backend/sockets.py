@@ -323,6 +323,17 @@ def register_socket_events(socketio):
 
         caller = User.query.get(caller_id)
         participant_ids = get_chat_participant_ids(chat_id)
+        
+        # Check receiver presence
+        other_uids = [uid for uid in participant_ids if uid != caller_id]
+        is_recipient_online = any(is_user_online(uid) for uid in other_uids) if other_uids else False
+        
+        # Emit ring status to caller immediately
+        emit('ring_status', {
+            "chatId": chat_id,
+            "status": "ringing" if is_recipient_online else "calling"
+        })
+
         for uid in participant_ids:
             if uid != caller_id:
                 socketio.emit('incoming_call', {
@@ -366,6 +377,17 @@ def register_socket_events(socketio):
 
         for uid in participant_ids:
             socketio.emit('receive_message', msg_payload, room=f"user_{uid}")
+
+    @socketio.on('confirm_ring')
+    def on_confirm_ring(data):
+        caller_id = data.get('callerId')
+        chat_id = data.get('chatId')
+        if caller_id and chat_id:
+            socketio.emit('peer_ringing', {
+                "chatId": chat_id,
+                "peerId": get_socket_user_id()
+            }, room=f"user_{caller_id}")
+
 
     @socketio.on('live_location_update')
     def on_live_location_update(data):

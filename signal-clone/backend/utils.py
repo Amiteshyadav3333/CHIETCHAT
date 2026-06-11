@@ -128,6 +128,13 @@ def ensure_database_schema():
             'retweet_of_id': db.Integer(),
             'share_count': db.Integer(),
         })
+        add_missing_columns(inspector, 'social_post_comment', {
+            'parent_id': db.Integer(),
+        })
+        add_missing_columns(inspector, 'reel_comment', {
+            'parent_id': db.Integer(),
+        })
+
 
         if 'user' in inspector.get_table_names():
             user_columns = {column['name'] for column in inspector.get_columns('user')}

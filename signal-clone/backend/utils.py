@@ -20,14 +20,24 @@ def upload_to_cloudinary(file, folder='chietchat', resource_type='auto'):
     ]):
         upload_folder = current_app.config['UPLOAD_FOLDER']
         os.makedirs(upload_folder, exist_ok=True)
-        filename = secure_filename(file.filename or 'upload')
+        filename = secure_filename(getattr(file, 'filename', None) or 'upload')
         ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else 'bin'
         local_name = f"{uuid.uuid4().hex}.{ext}"
-        file.save(os.path.join(upload_folder, local_name))
+        if isinstance(file, (bytes, bytearray)):
+            with open(os.path.join(upload_folder, local_name), 'wb') as f:
+                f.write(file)
+        else:
+            file.save(os.path.join(upload_folder, local_name))
         return f"/uploads/{local_name}"
 
+    # If file object, read bytes first for reliable upload
+    if not isinstance(file, (bytes, bytearray)):
+        file_data = file.read()
+    else:
+        file_data = file
+
     result = cloudinary.uploader.upload(
-        file,
+        file_data,
         folder=folder,
         resource_type=resource_type
     )

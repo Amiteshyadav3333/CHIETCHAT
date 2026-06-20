@@ -154,9 +154,8 @@ export const decryptEnvelope = async (privateKey, userId, encryptedPayload) => {
     }
 
     const encryptedKey = envelope.recipients[String(userId)];
-    if (!encryptedKey) {
-        return "Encrypted message";
-    }
+    if (!encryptedKey) return "🔒 Encrypted message";
+    if (!privateKey) return "🔒 Encrypted message";
 
     try {
         const rawAesKey = await window.crypto.subtle.decrypt(
@@ -181,8 +180,8 @@ export const decryptEnvelope = async (privateKey, userId, encryptedPayload) => {
 
         return new TextDecoder().decode(decrypted);
     } catch (e) {
-        console.error("Envelope decryption failed", e);
-        return "Unable to decrypt message";
+        console.warn("Envelope decryption failed", e);
+        return "🔒 Message";
     }
 };
 

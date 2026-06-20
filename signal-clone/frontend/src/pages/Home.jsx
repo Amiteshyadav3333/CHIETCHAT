@@ -714,6 +714,8 @@ const Home = () => {
     };
 
     const handleUpload = async (file) => {
+        if (!token) { logout(); return; }
+
         const maxSize = 100 * 1024 * 1024;
         if (file.size > maxSize) {
             alert("File is too large (Max 100MB)");
@@ -740,7 +742,8 @@ const Home = () => {
             handleSendMessage(url, type, null, disappearingTtl);
         } catch (err) {
             console.error(err);
-            alert("Upload failed: " + (err.response?.statusText || err.message));
+            const msg = err.response?.data?.error || err.response?.statusText || err.message;
+            alert("Upload failed: " + msg);
         }
     };
 

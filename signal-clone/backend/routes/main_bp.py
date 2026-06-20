@@ -20,11 +20,49 @@ def upload_file():
     if file.filename == '':
         return jsonify({"error": "No selection"}), 400
 
+    from werkzeug.utils import secure_filename
+    filename = secure_filename(file.filename or 'upload')
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+
+    image_exts = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
+    video_exts = {'mp4', 'mov', 'avi', 'mkv'}
+    audio_exts = {'mp3', 'wav', 'm4a', 'aac', 'oga', 'ogg', 'flac', 'webm'}
+
+    if ext in image_exts:
+        resource_type = 'image'
+    elif ext in video_exts:
+        resource_type = 'video'
+    elif ext in audio_exts:
+        resource_type = 'video'  # Cloudinary uses 'video' for audio too
+    else:
+        resource_type = 'raw'
+
     try:
-        url = upload_to_cloudinary(file, folder='chietchat/uploads', resource_type='auto')
-        return jsonify({"url": url})
+        file_bytes = file.read()
+        import cloudinary.uploader
+        result = cloudinary.uploader.upload(
+            file_bytes,
+            folder='chietchat/uploads',
+            resource_type=resource_type,
+            public_id=f"{user_id}_{filename}"
+        )
+        return jsonify({"url": result['secure_url']})
     except Exception as e:
-        return jsonify({"error": f"Upload failed: {str(e)}"}), 500
+        print(f"Cloudinary upload error [{resource_type}] [{ext}]: {e}")
+        # Fallback: try with raw if typed upload failed
+        try:
+            file.seek(0) if hasattr(file, 'seek') else None
+            import cloudinary.uploader, io
+            result = cloudinary.uploader.upload(
+                file_bytes,
+                folder='chietchat/uploads',
+                resource_type='raw',
+                public_id=f"{user_id}_{filename}"
+            )
+            return jsonify({"url": result['secure_url']})
+        except Exception as e2:
+            print(f"Cloudinary fallback error: {e2}")
+            return jsonify({"error": f"Upload failed: {str(e)}"}), 500
 
 @main_bp.route('/api/translate', methods=['POST'])
 def translate_text():

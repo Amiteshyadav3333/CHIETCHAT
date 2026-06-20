@@ -13,35 +13,57 @@ from models import db, User, Chat, ChatParticipant, Contact, Block, Notification
 import cloudinary.uploader
 
 def upload_to_cloudinary(file, folder='chietchat', resource_type='auto'):
-    if not all([
-        os.environ.get('CLOUDINARY_CLOUD_NAME'),
-        os.environ.get('CLOUDINARY_API_KEY'),
-        os.environ.get('CLOUDINARY_API_SECRET')
-    ]):
-        upload_folder = current_app.config['UPLOAD_FOLDER']
-        os.makedirs(upload_folder, exist_ok=True)
-        filename = secure_filename(getattr(file, 'filename', None) or 'upload')
-        ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else 'bin'
-        local_name = f"{uuid.uuid4().hex}.{ext}"
-        if isinstance(file, (bytes, bytearray)):
-            with open(os.path.join(upload_folder, local_name), 'wb') as f:
-                f.write(file)
-        else:
-            file.save(os.path.join(upload_folder, local_name))
-        return f"/uploads/{local_name}"
+    cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME')
+    api_key = os.environ.get('CLOUDINARY_API_KEY')
+    api_secret = os.environ.get('CLOUDINARY_API_SECRET')
 
-    # If file object, read bytes first for reliable upload
+    if not all([cloud_name, api_key, api_secret]):
+        return _save_locally(file)
+
     if not isinstance(file, (bytes, bytearray)):
         file_data = file.read()
     else:
         file_data = file
 
-    result = cloudinary.uploader.upload(
-        file_data,
-        folder=folder,
-        resource_type=resource_type
-    )
-    return result['secure_url']
+    try:
+        result = cloudinary.uploader.upload(
+            file_data,
+            folder=folder,
+            resource_type=resource_type
+        )
+        return result['secure_url']
+    except Exception as e:
+        err_str = str(e).lower()
+        # If uploading disabled or quota exceeded, fallback to local
+        if 'disabled' in err_str or 'quota' in err_str or 'limit' in err_str or 'upgrade' in err_str:
+            print(f"Cloudinary unavailable ({e}), falling back to local storage")
+            return _save_locally(file_data, getattr(file, 'filename', 'upload'))
+        raise
+
+
+def _save_locally(file, filename=None):
+    upload_folder = current_app.config['UPLOAD_FOLDER']
+    os.makedirs(upload_folder, exist_ok=True)
+    if filename is None:
+        filename = getattr(file, 'filename', None) or 'upload'
+    filename = secure_filename(filename)
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else 'bin'
+    local_name = f"{uuid.uuid4().hex}.{ext}"
+    path = os.path.join(upload_folder, local_name)
+    if isinstance(file, (bytes, bytearray)):
+        with open(path, 'wb') as f:
+            f.write(file)
+    else:
+        file.save(path)
+    # Return absolute URL using request host
+    from flask import request as flask_request
+    base = os.environ.get('BACKEND_URL', '').rstrip('/')
+    if not base:
+        try:
+            base = flask_request.host_url.rstrip('/')
+        except Exception:
+            base = 'http://localhost:5001'
+    return f"{base}/uploads/{local_name}"
 
 def add_missing_columns(inspector, table_name, columns):
     if table_name not in inspector.get_table_names():

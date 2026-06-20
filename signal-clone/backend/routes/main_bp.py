@@ -38,31 +38,11 @@ def upload_file():
         resource_type = 'raw'
 
     try:
-        file_bytes = file.read()
-        import cloudinary.uploader
-        result = cloudinary.uploader.upload(
-            file_bytes,
-            folder='chietchat/uploads',
-            resource_type=resource_type,
-            public_id=f"{user_id}_{filename}"
-        )
-        return jsonify({"url": result['secure_url']})
+        url = upload_to_cloudinary(file, folder='chietchat/uploads', resource_type=resource_type)
+        return jsonify({"url": url})
     except Exception as e:
-        print(f"Cloudinary upload error [{resource_type}] [{ext}]: {e}")
-        # Fallback: try with raw if typed upload failed
-        try:
-            file.seek(0) if hasattr(file, 'seek') else None
-            import cloudinary.uploader, io
-            result = cloudinary.uploader.upload(
-                file_bytes,
-                folder='chietchat/uploads',
-                resource_type='raw',
-                public_id=f"{user_id}_{filename}"
-            )
-            return jsonify({"url": result['secure_url']})
-        except Exception as e2:
-            print(f"Cloudinary fallback error: {e2}")
-            return jsonify({"error": f"Upload failed: {str(e)}"}), 500
+        print(f"Upload error [{ext}]: {e}")
+        return jsonify({"error": f"Upload failed: {str(e)}"}), 500
 
 @main_bp.route('/api/translate', methods=['POST'])
 def translate_text():

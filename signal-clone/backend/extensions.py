@@ -3,7 +3,7 @@ from flask_cors import CORS
 
 # Initialize extensions without binding to app
 socketio = SocketIO(cors_allowed_origins="*")
-cors = CORS(resources={r"/*": {"origins": "*"}})
+cors = CORS(resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
 # Global states
 socket_users = {}

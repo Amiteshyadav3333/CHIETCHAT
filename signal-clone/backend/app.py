@@ -45,9 +45,26 @@ app = Flask(__name__, static_folder=static_folder)
 app.config.from_object(Config)
 
 # Initialize extensions
-cors.init_app(app)
+cors.init_app(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 db.init_app(app)
 socketio.init_app(app)
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    return response
+
+@app.before_request
+def handle_preflight():
+    from flask import request, Response
+    if request.method == 'OPTIONS':
+        res = Response()
+        res.headers['Access-Control-Allow-Origin'] = '*'
+        res.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        res.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        return res, 200
 
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])

@@ -5,7 +5,7 @@ from models import db, Status, StatusView, StatusReaction, Message, ChatParticip
 from utils import (
     get_current_user_id, get_contact_user_ids, utc_now, serialize_user, 
     iso_utc, upload_to_cloudinary, get_json_data, has_contact, get_or_create_direct_chat,
-    is_blocked
+    is_blocked, is_user_online
 )
 from extensions import socketio
 
@@ -160,6 +160,58 @@ def react_to_status(status_id):
     counts = {}
     for reaction in StatusReaction.query.filter_by(status_id=status_id).all():
         counts[reaction.emoji] = counts.get(reaction.emoji, 0) + 1
+
+    if active_reaction:
+        try:
+            chat = get_or_create_direct_chat(user_id, status.user_id)
+            status_label = status.caption.strip() if status.caption else status.media_type
+            message_content = f"Reacted to status: {active_reaction}"
+            new_msg = Message(
+                chat_id=chat.id,
+                sender_id=user_id,
+                content=message_content,
+                type='text',
+                reply_content=status.media_url,
+                reply_sender_name='Status'
+            )
+            db.session.add(new_msg)
+            db.session.commit()
+
+            payload = {
+                "id": new_msg.id,
+                "senderId": new_msg.sender_id,
+                "content": new_msg.content,
+                "type": new_msg.type,
+                "timestamp": iso_utc(new_msg.timestamp),
+                "chatId": chat.id,
+                "replyToId": new_msg.reply_to_id,
+                "replyContent": new_msg.reply_content,
+                "replySenderName": new_msg.reply_sender_name,
+                "deliveredAt": None,
+                "readAt": None,
+                "reactions": {},
+                "isPinned": False
+            }
+
+            participants = ChatParticipant.query.filter_by(chat_id=chat.id).all()
+            any_recipient_online = False
+            for participant in participants:
+                if participant.user_id != user_id and is_user_online(participant.user_id):
+                    any_recipient_online = True
+                    break
+
+            if any_recipient_online:
+                new_msg.status = 'delivered'
+                new_msg.delivered_at = utc_now()
+                db.session.commit()
+                payload["status"] = 'delivered'
+                payload["deliveredAt"] = iso_utc(new_msg.delivered_at)
+
+            for participant in participants:
+                socketio.emit('receive_message', payload, room=f"user_{participant.user_id}")
+        except Exception as e:
+            print(f"Error sending reaction message to chat: {e}")
+
     return jsonify({"ok": True, "reactions": counts, "myReaction": active_reaction})
 
 @status_bp.route('/api/status/<int:status_id>/reply', methods=['POST'])
@@ -208,10 +260,28 @@ def reply_to_status(status_id):
         "chatId": chat.id,
         "replyToId": new_msg.reply_to_id,
         "replyContent": new_msg.reply_content,
-        "replySenderName": new_msg.reply_sender_name
+        "replySenderName": new_msg.reply_sender_name,
+        "deliveredAt": None,
+        "readAt": None,
+        "reactions": {},
+        "isPinned": False
     }
 
-    for participant in ChatParticipant.query.filter_by(chat_id=chat.id).all():
+    participants = ChatParticipant.query.filter_by(chat_id=chat.id).all()
+    any_recipient_online = False
+    for participant in participants:
+        if participant.user_id != user_id and is_user_online(participant.user_id):
+            any_recipient_online = True
+            break
+
+    if any_recipient_online:
+        new_msg.status = 'delivered'
+        new_msg.delivered_at = utc_now()
+        db.session.commit()
+        payload["status"] = 'delivered'
+        payload["deliveredAt"] = iso_utc(new_msg.delivered_at)
+
+    for participant in participants:
         socketio.emit('receive_message', payload, room=f"user_{participant.user_id}")
 
     return jsonify({"ok": True, "chatId": chat.id, "message": payload}), 201

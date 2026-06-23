@@ -1834,9 +1834,9 @@ const Home = () => {
                             const prevSenderId = prevMsg?.senderId;
                             const showAvatar = msg.senderId !== user.id && prevSenderId !== msg.senderId;
                             const sender = visibleActiveChat.participants.find(p => p.id === msg.senderId);
-                            const replyData = msg.replyToId ? {
+                            const replyData = (msg.replyToId || msg.replySenderName === 'Status') ? {
                                 content: msg.replyContent,
-                                type: msg.replyType,
+                                type: msg.replyType || (msg.replySenderName === 'Status' ? 'status' : 'text'),
                                 senderName: msg.replySenderName
                             } : null;
 

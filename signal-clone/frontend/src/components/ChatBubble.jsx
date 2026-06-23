@@ -432,16 +432,6 @@ const ChatBubble = ({
                         </button>
                     )}
 
-                    {!isDeleted && (
-                        <button
-                            onClick={() => setShowActions(v => !v)}
-                            className={`opacity-0 group-hover/bubble:opacity-100 transition-opacity p-1 text-gray-500 hover:text-gray-300 mb-1 flex-shrink-0 ${isOwn ? 'order-first' : 'order-last'}`}
-                            title="More"
-                        >
-                            <EllipsisVerticalIcon className="w-4 h-4" />
-                        </button>
-                    )}
-
                     {isOwn && showDelete && onDelete && !isDeleted && (
                         <button
                             onClick={() => onDelete(message.id)}
@@ -452,6 +442,8 @@ const ChatBubble = ({
                     )}
 
                     <div 
+                        onMouseEnter={() => setShowReactions(true)}
+                        onMouseLeave={() => setShowReactions(false)}
                         onClick={(e) => {
                             if (e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON' && !e.target.closest('button') && !e.target.closest('select') && !e.target.closest('a')) {
                                 setShowReactions(v => !v);
@@ -465,11 +457,22 @@ const ChatBubble = ({
                     >
                         {/* Reply preview */}
                         {replyTo && (
-                            <div className={`mb-1 px-2 py-1 rounded-lg border-l-4 ${isOwn ? 'border-green-300 bg-white/10' : 'border-blue-400 bg-white/5'} text-xs text-gray-300 max-w-[220px]`}>
-                                <p className="font-semibold text-blue-300 truncate">{replyTo.senderName || 'Message'}</p>
-                                <p className="truncate opacity-80">
-                                    {replyTo.type && replyTo.type !== 'text' ? `📎 ${replyTo.type}` : replyTo.content}
-                                </p>
+                            <div className={`mb-1 px-2 py-1 rounded-lg border-l-4 ${isOwn ? 'border-green-300 bg-white/10' : 'border-blue-400 bg-white/5'} text-xs text-gray-300 max-w-[240px] flex items-center justify-between gap-2 bg-black/20`}>
+                                <div className="min-w-0 flex-1">
+                                    <p className="font-semibold text-blue-300 truncate">{replyTo.senderName || 'Message'}</p>
+                                    <p className="truncate opacity-80">
+                                        {replyTo.senderName === 'Status' ? 'Status' : (replyTo.type && replyTo.type !== 'text' ? `📎 ${replyTo.type}` : replyTo.content)}
+                                    </p>
+                                </div>
+                                {replyTo.senderName === 'Status' && replyTo.content && (
+                                    <div className="w-10 h-10 rounded overflow-hidden flex-shrink-0 bg-black/40">
+                                        {replyTo.content.match(/\.(mp4|webm|ogg)$/i) ? (
+                                            <video src={replyTo.content} className="w-full h-full object-cover" muted />
+                                        ) : (
+                                            <img src={replyTo.content} alt="" className="w-full h-full object-cover" />
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
 

@@ -197,12 +197,18 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, toke
 
                 {/* Header */}
                 <div className="absolute top-4 left-0 right-0 z-30 flex items-center justify-between px-3 pt-4 pointer-events-auto">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-1">
                         <img src={currentGroup.user.avatar} alt="" className="w-9 h-9 rounded-full border-2 border-white object-cover" />
                         <div>
                             <p className="text-white text-sm font-semibold">{currentGroup.user.username}</p>
-                            <p className="text-white/60 text-xs">{timeAgo(currentStatus.createdAt)}</p>
+                            <p className="text-white/60 text-[10px]">{timeAgo(currentStatus.createdAt)}</p>
                         </div>
+                        {currentStatus.musicName && (
+                            <div className="ml-3 flex items-center gap-1 bg-black/40 px-2.5 py-0.5 rounded-full border border-white/10 max-w-[140px] md:max-w-[200px] overflow-hidden truncate">
+                                <MusicalNoteIcon className="w-3.5 h-3.5 text-green-400 flex-shrink-0 animate-bounce mt-0.5" />
+                                <span className="text-green-400 text-[10px] font-bold truncate">{currentStatus.musicName}</span>
+                            </div>
+                        )}
                     </div>
                     <div className="flex items-center gap-2 relative">
                         {isOwn && (

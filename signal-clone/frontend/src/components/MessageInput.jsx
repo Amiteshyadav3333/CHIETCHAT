@@ -34,6 +34,21 @@ const GlobeIcon = ({ className }) => (
     </svg>
 );
 
+const STICKERS = [
+    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker1',
+    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker2',
+    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker3',
+    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker4',
+    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker5',
+    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker6',
+    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker7',
+    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker8',
+    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker9',
+    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker10',
+    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker11',
+    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker12',
+];
+
 const MessageInput = ({ 
     onSend, onUpload, onStartLiveLocation, replyTo, onCancelReply, 
     onTranslate, chatId, chatTranslationLang, onChangeTranslationLang,
@@ -43,6 +58,10 @@ const MessageInput = ({
 }) => {
     const [text, setText] = useState('');
     const [showEmoji, setShowEmoji] = useState(false);
+    const [pickerTab, setPickerTab] = useState('emoji');
+    const [gifSearch, setGifSearch] = useState('');
+    const [gifs, setGifs] = useState([]);
+    const [loadingGifs, setLoadingGifs] = useState(false);
     const [showAttachMenu, setShowAttachMenu] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
     const [showPollCreator, setShowPollCreator] = useState(false);
@@ -82,6 +101,31 @@ const MessageInput = ({
     React.useEffect(() => {
         return () => clearTimeout(typingTimerRef.current);
     }, []);
+
+    React.useEffect(() => {
+        if (pickerTab === 'gif' && showEmoji) {
+            const delayDebounce = setTimeout(() => {
+                fetchGifs();
+            }, 300);
+            return () => clearTimeout(delayDebounce);
+        }
+    }, [pickerTab, gifSearch, showEmoji]);
+
+    const fetchGifs = async () => {
+        setLoadingGifs(true);
+        try {
+            const query = gifSearch.trim() || 'trending';
+            const res = await fetch(`https://api.giphy.com/v1/gifs/search?api_key=dc6zaTOxFJmzC&q=${encodeURIComponent(query)}&limit=15&rating=g`);
+            const data = await res.json();
+            if (data.data) {
+                setGifs(data.data.map(item => item.images.fixed_height_small.url));
+            }
+        } catch (err) {
+            console.error("Error fetching GIFs:", err);
+        } finally {
+            setLoadingGifs(false);
+        }
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -326,25 +370,96 @@ const MessageInput = ({
                 </div>
             )}
 
-            {/* Emoji Picker */}
+            {/* Emoji / GIF / Sticker Picker */}
             {showEmoji && (
-                <div className="absolute bottom-full left-0 z-50 flex gap-2 rounded-2xl bg-[#202c33] p-2 shadow-2xl">
-                    <EmojiPicker
-                        onEmojiClick={handleEmojiClick}
-                        theme="dark"
-                        height={380}
-                        width={320}
-                        searchDisabled={false}
-                        skinTonesDisabled
-                        previewConfig={{ showPreview: false }}
-                    />
-                    <div className="hidden w-24 flex-col gap-2 sm:flex">
-                        <p className="px-1 text-[11px] font-bold uppercase tracking-wider text-gray-400">Stickers</p>
-                        {['🔥', '🎉', '✅', '💎', '🚀'].map(item => (
-                            <button key={item} onClick={() => sendSticker(item)} className="rounded-xl bg-white/5 p-2 text-3xl hover:bg-white/10">
-                                {item}
+                <div className="absolute bottom-full left-0 z-50 flex flex-col gap-2 rounded-2xl bg-[#202c33] p-3 shadow-2xl w-[350px]">
+                    {/* Tab Header */}
+                    <div className="flex bg-black/20 rounded-lg p-0.5 text-xs text-gray-300">
+                        {['emoji', 'gif', 'sticker'].map(tab => (
+                            <button
+                                key={tab}
+                                type="button"
+                                onClick={() => setPickerTab(tab)}
+                                className={`flex-1 py-1.5 rounded-md font-bold uppercase tracking-wider transition-all ${
+                                    pickerTab === tab 
+                                        ? 'bg-[#00a884] text-white shadow' 
+                                        : 'hover:text-white'
+                                }`}
+                            >
+                                {tab}
                             </button>
                         ))}
+                    </div>
+
+                    {/* Tab Content */}
+                    <div className="h-[380px] overflow-hidden flex flex-col">
+                        {pickerTab === 'emoji' && (
+                            <EmojiPicker
+                                onEmojiClick={handleEmojiClick}
+                                theme="dark"
+                                height={380}
+                                width={326}
+                                searchDisabled={false}
+                                skinTonesDisabled
+                                previewConfig={{ showPreview: false }}
+                            />
+                        )}
+
+                        {pickerTab === 'gif' && (
+                            <div className="flex flex-col h-full gap-2 font-sans text-xs pt-1">
+                                <input
+                                    type="text"
+                                    placeholder="Search GIPHY..."
+                                    value={gifSearch}
+                                    onChange={(e) => setGifSearch(e.target.value)}
+                                    className="w-full bg-[#111b21] text-white px-3 py-2 rounded-lg border border-gray-700 outline-none focus:border-[#00a884]"
+                                />
+                                <div className="flex-1 overflow-y-auto grid grid-cols-3 gap-1.5 scrollbar-thin pt-1">
+                                    {loadingGifs ? (
+                                        <div className="col-span-3 flex items-center justify-center py-10 opacity-70">
+                                            <span className="animate-spin rounded-full h-5 w-5 border border-white/30 border-t-white mr-2" />
+                                            Loading GIFs...
+                                        </div>
+                                    ) : gifs.length > 0 ? (
+                                        gifs.map((url, i) => (
+                                            <img
+                                                key={i}
+                                                src={url}
+                                                alt="gif"
+                                                onClick={() => {
+                                                    onSend(url, 'image', disappearingTtl);
+                                                    setShowEmoji(false);
+                                                }}
+                                                className="w-full h-20 object-cover rounded-lg cursor-pointer hover:scale-105 transition-transform"
+                                            />
+                                        ))
+                                    ) : (
+                                        <div className="col-span-3 text-center py-10 text-gray-500">No GIFs found</div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {pickerTab === 'sticker' && (
+                            <div className="flex flex-col h-full gap-2 font-sans text-xs overflow-y-auto pt-1">
+                                <p className="px-1 text-[11px] font-bold uppercase tracking-wider text-gray-400">Dicebear Stickers</p>
+                                <div className="grid grid-cols-4 gap-2 scrollbar-thin">
+                                    {STICKERS.map((url, i) => (
+                                        <button
+                                            key={i}
+                                            type="button"
+                                            onClick={() => {
+                                                onSend(url, 'sticker', disappearingTtl);
+                                                setShowEmoji(false);
+                                            }}
+                                            className="rounded-xl bg-white/5 p-2 hover:bg-white/10 transition-colors flex items-center justify-center"
+                                        >
+                                            <img src={url} alt={`sticker-${i}`} className="w-12 h-12 object-contain" />
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

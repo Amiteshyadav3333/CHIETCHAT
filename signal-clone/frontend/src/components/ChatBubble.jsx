@@ -4,6 +4,18 @@ import { TrashIcon, DocumentIcon, ArrowUturnLeftIcon, ArrowDownTrayIcon, Clipboa
 import { CheckIcon } from '@heroicons/react/24/solid';
 import FullscreenMediaModal from './FullscreenMediaModal';
 
+const getPlatformLabel = (url) => {
+    const lowercase = url.toLowerCase();
+    if (lowercase.includes('youtube.com') || lowercase.includes('youtu.be')) return 'YouTube';
+    if (lowercase.includes('github.com')) return 'GitHub';
+    if (lowercase.includes('instagram.com')) return 'Instagram';
+    if (lowercase.includes('facebook.com')) return 'Facebook';
+    if (lowercase.includes('linkedin.com')) return 'LinkedIn';
+    if (lowercase.includes('twitter.com') || lowercase.includes('x.com')) return 'Twitter/X';
+    if (lowercase.includes('google.com')) return 'Google';
+    return '';
+};
+
 const renderClickableText = (text) => {
     if (!text) return '';
     const regex = /(https?:\/\/[^\s]+)|(www\.[a-zA-Z0-9-]+\.[^\s]+)|([a-zA-Z0-9-]+\.(?:com|net|org|in|co|io|xyz|info|us|app|dev|me|ai)\b[^\s]*)|(\+?\d{1,3}[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})|(\b\d{10}\b)/gi;
@@ -25,16 +37,18 @@ const renderClickableText = (text) => {
             if (!hrefVal.match(/^https?:\/\//i)) {
                 hrefVal = `https://${hrefVal}`;
             }
+            const platform = getPlatformLabel(hrefVal);
             elements.push(
                 <a 
                     key={`url-${matchIndex}`}
                     href={hrefVal}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[#53bdeb] hover:underline break-all inline font-semibold"
+                    className={`${platform ? 'text-[#25D366]' : 'text-[#53bdeb]'} hover:underline break-all inline font-semibold`}
                     onClick={(e) => e.stopPropagation()}
+                    title={platform ? `${platform} Link` : 'Link'}
                 >
-                    {matchText}
+                    {platform ? `🔗 [${platform}] ${matchText}` : matchText}
                 </a>
             );
         } else {
@@ -351,6 +365,9 @@ const ChatBubble = ({
             return <MiniGameCard game={cnt} isOwn={isOwn} />;
         }
         if (type === 'sticker') {
+            if (cnt.startsWith('http')) {
+                return <img src={cnt} alt="sticker" className="w-24 h-24 object-contain py-1" />;
+            }
             return <div className="text-5xl leading-none py-2">{cnt}</div>;
         }
         return <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap">{renderClickableText(cnt)}</p>;

@@ -177,6 +177,7 @@ def get_messages(chat_id):
         "editedAt": iso_utc(m.edited_at),
         "deletedAt": iso_utc(m.deleted_at),
         "readAt": iso_utc(m.read_at),
+        "deliveredAt": iso_utc(m.delivered_at),
         "reactions": m.reactions_dict(),
         "isPinned": bool(m.is_pinned)
     } for m in messages])

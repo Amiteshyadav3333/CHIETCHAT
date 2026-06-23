@@ -9,7 +9,8 @@ import IncomingCallModal from '../components/IncomingCallModal';
 import VideoCallModal from '../components/VideoCall';
 import AvatarZoom from '../components/AvatarZoom';
 import StatusSection from '../components/StatusSection';
-import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon, EllipsisVerticalIcon, XMarkIcon, TrashIcon, NoSymbolIcon, PlayIcon, Cog6ToothIcon, BellIcon, MapPinIcon, PhotoIcon, ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon, EllipsisVerticalIcon, XMarkIcon, TrashIcon, NoSymbolIcon, PlayIcon, Cog6ToothIcon, BellIcon, MapPinIcon, PhotoIcon, ChatBubbleLeftRightIcon, InformationCircleIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon } from '@heroicons/react/24/outline';
+import { format } from 'date-fns';
 import SettingsModal from '../components/SettingsModal';
 import NotificationPanel from '../components/NotificationPanel';
 import { useEncryption } from '../hooks/useEncryption';
@@ -58,6 +59,9 @@ const Home = () => {
     const [theme, setTheme] = useState(() => localStorage.getItem('chat_theme') || 'dark');
     const [wallpaper, setWallpaper] = useState(() => localStorage.getItem('chat_wallpaper') || 'white');
     const [disappearingTtl, setDisappearingTtl] = useState(0);
+    const [showTopDropdown, setShowTopDropdown] = useState(false);
+    const [showTopReactions, setShowTopReactions] = useState(false);
+    const [topInfoMessage, setTopInfoMessage] = useState(null);
 
     // Group states
     const [searchModalTab, setSearchModalTab] = useState('search_user'); // 'search_user' | 'create_group' | 'discover_groups'
@@ -469,9 +473,9 @@ const Home = () => {
             });
         });
 
-        socket.on('message_status_update', ({ messageId, chatId, status, readAt }) => {
+        socket.on('message_status_update', ({ messageId, chatId, status, readAt, deliveredAt }) => {
             if (activeChatRef.current && chatId === activeChatRef.current.id) {
-                setMessages(prev => prev.map(m => m.id === messageId ? { ...m, status, readAt: readAt || m.readAt } : m));
+                setMessages(prev => prev.map(m => m.id === messageId ? { ...m, status, readAt: readAt || m.readAt, deliveredAt: deliveredAt || m.deliveredAt } : m));
             }
         });
 
@@ -1533,12 +1537,102 @@ const Home = () => {
                                 </p>
                             </div>
                         </div>
-                        <div className="flex gap-3 text-signal-accent items-center">
+                        <div className="flex gap-3 text-signal-accent items-center relative">
                             <button onClick={() => startCall('voice')} title="Voice Call"><PhoneIcon className="w-6 h-6" /></button>
                             <button onClick={() => startCall('video')} title="Video Call"><VideoCameraIcon className="w-6 h-6" /></button>
-                            <button onClick={() => setShowInfoPanel(true)} className="text-gray-400 hover:text-white">
-                                <EllipsisVerticalIcon className="w-6 h-6" />
-                            </button>
+                            <div className="relative">
+                                <button onClick={() => { setShowTopDropdown(v => !v); setShowTopReactions(false); }} className="text-gray-400 hover:text-white">
+                                    <EllipsisVerticalIcon className="w-6 h-6" />
+                                </button>
+                                {showTopDropdown && (() => {
+                                    const lastMessage = messages[messages.length - 1];
+                                    return (
+                                        <div className="absolute right-0 top-8 z-50 w-52 overflow-hidden rounded-xl bg-[#111b21] shadow-2xl border border-white/10 text-white text-xs">
+                                            <button 
+                                                onClick={() => { setShowInfoPanel(true); setShowTopDropdown(false); }} 
+                                                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-gray-200 hover:bg-white/10"
+                                            >
+                                                <InformationCircleIcon className="w-4 h-4 text-[#53bdeb]" />
+                                                <span>{visibleActiveChat.isGroup ? 'Group Info' : 'Contact Info'}</span>
+                                            </button>
+                                            {lastMessage ? (
+                                                <>
+                                                    <div className="border-t border-white/5 my-1"></div>
+                                                    <div className="px-4 py-1.5 text-[10px] uppercase font-bold tracking-wider text-white/40">Last Message Actions</div>
+                                                    <button 
+                                                        onClick={() => { handleCopyMessage(lastMessage); setShowTopDropdown(false); }} 
+                                                        className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-gray-200 hover:bg-white/10"
+                                                    >
+                                                        <ClipboardDocumentIcon className="w-4 h-4" />
+                                                        <span>Copy Last Message</span>
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => { setForwardMessage(lastMessage); setShowTopDropdown(false); }} 
+                                                        className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-gray-200 hover:bg-white/10"
+                                                    >
+                                                        <ForwardIcon className="w-4 h-4" />
+                                                        <span>Forward Last Message</span>
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => { setShowTopReactions(v => !v); }} 
+                                                        className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-gray-200 hover:bg-white/10"
+                                                    >
+                                                        <span>😊</span>
+                                                        <span>React to Last Message</span>
+                                                    </button>
+                                                    
+                                                    {showTopReactions && (
+                                                        <div className="flex gap-1 bg-black/40 p-1.5 justify-around border-t border-b border-white/5">
+                                                            {['👍', '❤️', '😂', '😮', '😢', '🙏'].map(emoji => (
+                                                                <button
+                                                                    key={emoji}
+                                                                    onClick={() => {
+                                                                        handleReactMessage(lastMessage, emoji);
+                                                                        setShowTopReactions(false);
+                                                                        setShowTopDropdown(false);
+                                                                    }}
+                                                                    className="hover:scale-125 transition-transform text-sm"
+                                                                >
+                                                                    {emoji}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+
+                                                    <button 
+                                                        onClick={() => { handlePinMessage(lastMessage); setShowTopDropdown(false); }} 
+                                                        className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-gray-200 hover:bg-white/10"
+                                                    >
+                                                        <span>📌</span>
+                                                        <span>{lastMessage.isPinned ? 'Unpin Last Message' : 'Pin Last Message'}</span>
+                                                    </button>
+                                                    
+                                                    {lastMessage.senderId === user?.id && lastMessage.type === 'text' && (
+                                                        <button 
+                                                            onClick={() => { openEditMessage(lastMessage); setShowTopDropdown(false); }} 
+                                                            className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-gray-200 hover:bg-white/10"
+                                                        >
+                                                            <PencilSquareIcon className="w-4 h-4" />
+                                                            <span>Edit Last Message</span>
+                                                        </button>
+                                                    )}
+
+                                                    <button 
+                                                        onClick={() => { 
+                                                            setTopInfoMessage(lastMessage);
+                                                            setShowTopDropdown(false);
+                                                        }} 
+                                                        className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-gray-200 hover:bg-white/10"
+                                                    >
+                                                        <InformationCircleIcon className="w-4 h-4" />
+                                                        <span>Last Message Info</span>
+                                                    </button>
+                                                </>
+                                            ) : null}
+                                        </div>
+                                    );
+                                })()}
+                            </div>
                         </div>
                     </div>
 
@@ -1855,6 +1949,93 @@ const Home = () => {
                     callType={callType} 
                     initialRingStatus={callRingState[activeChat?.id] || 'calling'}
                 />
+            )}
+            
+            {topInfoMessage && (
+                <div 
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in"
+                    onClick={() => setTopInfoMessage(null)}
+                >
+                    <div 
+                        className="w-full max-w-md overflow-hidden rounded-2xl bg-[#111b21] border border-white/10 shadow-2xl p-6 relative animate-scale-up text-white"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-3">
+                            <h3 className="text-lg font-bold flex items-center gap-2">
+                                <InformationCircleIcon className="w-5 h-5 text-[#53bdeb]" />
+                                Message Info (Last Message)
+                            </h3>
+                            <button 
+                                onClick={() => setTopInfoMessage(null)}
+                                className="p-1 rounded-full hover:bg-white/10 transition-colors text-gray-400 hover:text-white"
+                            >
+                                <XMarkIcon className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            {/* Preview Message content */}
+                            <div className="bg-white/5 rounded-xl p-3 border border-white/5 max-h-32 overflow-y-auto">
+                                <p className="text-xs text-white/50 mb-1">Message Preview</p>
+                                <p className="text-sm whitespace-pre-wrap break-words">
+                                    {topInfoMessage.type === 'deleted' ? 'Deleted message' : topInfoMessage.content}
+                                </p>
+                            </div>
+
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center bg-white/5 p-2.5 rounded-lg">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-white/60">Sent</span>
+                                    </div>
+                                    <span className="text-xs font-medium text-white/90">
+                                        {topInfoMessage.timestamp ? format(new Date(topInfoMessage.timestamp), 'd MMM yyyy, HH:mm:ss') : 'N/A'}
+                                    </span>
+                                </div>
+
+                                <div className="flex justify-between items-center bg-white/5 p-2.5 rounded-lg">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-white/60">Delivered</span>
+                                    </div>
+                                    <span className="text-xs font-medium text-white/90">
+                                        {topInfoMessage.deliveredAt ? (
+                                            format(new Date(topInfoMessage.deliveredAt), 'd MMM yyyy, HH:mm:ss')
+                                        ) : (
+                                            topInfoMessage.status === 'sent' ? (
+                                                <span className="text-white/40">Pending</span>
+                                            ) : (
+                                                topInfoMessage.status === 'delivered' || topInfoMessage.status === 'read' ? 'Yes' : 'N/A'
+                                            )
+                                        )}
+                                    </span>
+                                </div>
+
+                                <div className="flex justify-between items-center bg-white/5 p-2.5 rounded-lg">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-white/60">Seen / Read</span>
+                                    </div>
+                                    <span className="text-xs font-medium text-white/90">
+                                        {topInfoMessage.readAt ? (
+                                            <span className="text-[#53bdeb] font-semibold flex items-center gap-1">
+                                                {format(new Date(topInfoMessage.readAt), 'd MMM yyyy, HH:mm:ss')}
+                                            </span>
+                                        ) : (
+                                            <span className="text-white/40">Unread</span>
+                                        )}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mt-6 flex justify-end">
+                            <button
+                                onClick={() => setTopInfoMessage(null)}
+                                className="px-4 py-2 bg-[#53bdeb] hover:bg-[#40a3ce] text-black font-semibold rounded-lg text-xs transition-colors"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
         </div>

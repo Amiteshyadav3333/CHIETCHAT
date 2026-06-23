@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { format, isToday, isYesterday } from 'date-fns';
-import { TrashIcon, DocumentIcon, ArrowUturnLeftIcon, ArrowDownTrayIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon, EllipsisVerticalIcon, MapPinIcon } from '@heroicons/react/24/outline';
+import { TrashIcon, DocumentIcon, ArrowUturnLeftIcon, ArrowDownTrayIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon, EllipsisVerticalIcon, MapPinIcon, InformationCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { CheckIcon } from '@heroicons/react/24/solid';
 import FullscreenMediaModal from './FullscreenMediaModal';
 
@@ -101,6 +101,7 @@ const ChatBubble = ({
     const [showDelete, setShowDelete] = useState(false);
     const [showActions, setShowActions] = useState(false);
     const [showReactions, setShowReactions] = useState(false);
+    const [showInfoModal, setShowInfoModal] = useState(false);
     const [swipeX, setSwipeX] = useState(0);
     const [swiping, setSwiping] = useState(false);
     const [zoomedMedia, setZoomedMedia] = useState(null);
@@ -450,11 +451,17 @@ const ChatBubble = ({
                         </button>
                     )}
 
-                    <div className={`relative ${isMedia ? 'p-1' : 'px-3 py-2'} rounded-2xl shadow-sm
-                        ${isOwn
-                            ? 'bg-[#005c4b] text-white rounded-tr-sm'
-                            : 'bg-[#202c33] text-gray-100 rounded-tl-sm'
-                        }`}
+                    <div 
+                        onClick={(e) => {
+                            if (e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON' && !e.target.closest('button') && !e.target.closest('select') && !e.target.closest('a')) {
+                                setShowReactions(v => !v);
+                            }
+                        }}
+                        className={`relative ${isMedia ? 'p-1' : 'px-3 py-2'} rounded-2xl shadow-sm cursor-pointer select-none
+                            ${isOwn
+                                ? 'bg-[#005c4b] text-white rounded-tr-sm'
+                                : 'bg-[#202c33] text-gray-100 rounded-tl-sm'
+                            }`}
                     >
                         {/* Reply preview */}
                         {replyTo && (
@@ -568,6 +575,7 @@ const ChatBubble = ({
                                 <ActionRow icon={<span className="text-sm">😊</span>} label="React" onClick={() => { setShowReactions(true); setShowActions(false); }} />
                                 <ActionRow icon={<span className="text-sm">📌</span>} label={message.isPinned ? 'Unpin' : 'Pin'} onClick={() => { onPin?.(message); setShowActions(false); }} />
                                 {isOwn && isTextMessage && <ActionRow icon={<PencilSquareIcon className="w-4 h-4" />} label="Edit" onClick={() => { onEdit?.(message); setShowActions(false); }} />}
+                                <ActionRow icon={<InformationCircleIcon className="w-4 h-4" />} label="Info" onClick={() => { setShowInfoModal(true); setShowActions(false); }} />
                             </div>
                         )}
                     </div>
@@ -579,6 +587,90 @@ const ChatBubble = ({
                     type={zoomedMedia.type} 
                     onClose={() => setZoomedMedia(null)} 
                 />
+            )}
+            {showInfoModal && (
+                <div 
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in"
+                    onClick={() => setShowInfoModal(false)}
+                >
+                    <div 
+                        className="w-full max-w-md overflow-hidden rounded-2xl bg-[#111b21] border border-white/10 shadow-2xl p-6 relative animate-scale-up text-white"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-3">
+                            <h3 className="text-lg font-bold flex items-center gap-2">
+                                <InformationCircleIcon className="w-5 h-5 text-[#53bdeb]" />
+                                Message Info
+                            </h3>
+                            <button 
+                                onClick={() => setShowInfoModal(false)}
+                                className="p-1 rounded-full hover:bg-white/10 transition-colors text-gray-400 hover:text-white"
+                            >
+                                <XMarkIcon className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            {/* Preview Message content */}
+                            <div className="bg-white/5 rounded-xl p-3 border border-white/5 max-h-32 overflow-y-auto">
+                                <p className="text-xs text-white/50 mb-1">Message Preview</p>
+                                <p className="text-sm whitespace-pre-wrap break-words">{isDeleted ? 'Deleted message' : message.content}</p>
+                            </div>
+
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center bg-white/5 p-2.5 rounded-lg">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-white/60">Sent</span>
+                                    </div>
+                                    <span className="text-xs font-medium text-white/90">
+                                        {message.timestamp ? format(new Date(message.timestamp), 'd MMM yyyy, HH:mm:ss') : 'N/A'}
+                                    </span>
+                                </div>
+
+                                <div className="flex justify-between items-center bg-white/5 p-2.5 rounded-lg">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-white/60">Delivered</span>
+                                    </div>
+                                    <span className="text-xs font-medium text-white/90">
+                                        {message.deliveredAt ? (
+                                            format(new Date(message.deliveredAt), 'd MMM yyyy, HH:mm:ss')
+                                        ) : (
+                                            message.status === 'sent' ? (
+                                                <span className="text-white/40">Pending</span>
+                                            ) : (
+                                                message.status === 'delivered' || message.status === 'read' ? 'Yes' : 'N/A'
+                                            )
+                                        )}
+                                    </span>
+                                </div>
+
+                                <div className="flex justify-between items-center bg-white/5 p-2.5 rounded-lg">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-white/60">Seen / Read</span>
+                                    </div>
+                                    <span className="text-xs font-medium text-white/90">
+                                        {message.readAt ? (
+                                            <span className="text-[#53bdeb] font-semibold flex items-center gap-1">
+                                                {format(new Date(message.readAt), 'd MMM yyyy, HH:mm:ss')}
+                                            </span>
+                                        ) : (
+                                            <span className="text-white/40">Unread</span>
+                                        )}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mt-6 flex justify-end">
+                            <button
+                                onClick={() => setShowInfoModal(false)}
+                                className="px-4 py-2 bg-[#53bdeb] hover:bg-[#40a3ce] text-black font-semibold rounded-lg text-xs transition-colors"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

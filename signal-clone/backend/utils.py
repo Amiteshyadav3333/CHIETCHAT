@@ -148,6 +148,7 @@ def ensure_database_schema():
             'edited_at': db.DateTime(),
             'deleted_at': db.DateTime(),
             'read_at': db.DateTime(),
+            'delivered_at': db.DateTime(),
             'reactions': db.Text(),
             'is_pinned': db.Boolean(),
         })

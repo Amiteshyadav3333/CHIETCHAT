@@ -90,6 +90,7 @@ class Message(db.Model):
     edited_at = db.Column(db.DateTime, nullable=True)
     deleted_at = db.Column(db.DateTime, nullable=True)
     read_at = db.Column(db.DateTime, nullable=True)
+    delivered_at = db.Column(db.DateTime, nullable=True)
     reactions = db.Column(db.Text, default='{}')
     is_pinned = db.Column(db.Boolean, default=False)
 

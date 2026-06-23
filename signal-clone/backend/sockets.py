@@ -35,11 +35,13 @@ def register_socket_events(socketio):
                 ).all()
                 for m in undelivered:
                     m.status = 'delivered'
+                    m.delivered_at = utc_now()
                     has_updates = True
                     socketio.emit('message_status_update', {
                         "messageId": m.id,
                         "chatId": m.chat_id,
-                        "status": 'delivered'
+                        "status": 'delivered',
+                        "deliveredAt": iso_utc(m.delivered_at)
                     }, room=f"user_{m.sender_id}")
             if has_updates:
                 db.session.commit()
@@ -159,6 +161,7 @@ def register_socket_events(socketio):
             "editedAt": None,
             "deletedAt": None,
             "readAt": None,
+            "deliveredAt": None,
             "reactions": {},
             "isPinned": False
         }
@@ -172,8 +175,10 @@ def register_socket_events(socketio):
 
         if any_recipient_online:
             new_msg.status = 'delivered'
+            new_msg.delivered_at = utc_now()
             db.session.commit()
             payload["status"] = 'delivered'
+            payload["deliveredAt"] = iso_utc(new_msg.delivered_at)
 
         for participant in participants:
             socketio.emit('receive_message', payload, room=f"user_{participant.user_id}")
@@ -362,7 +367,8 @@ def register_socket_events(socketio):
             "status": 'sent',
             "type": 'text',
             "timestamp": iso_utc(new_msg.timestamp),
-            "chatId": chat_id
+            "chatId": chat_id,
+            "deliveredAt": None
         }
         any_recipient_online = False
         for uid in participant_ids:
@@ -372,8 +378,10 @@ def register_socket_events(socketio):
 
         if any_recipient_online:
             new_msg.status = 'delivered'
+            new_msg.delivered_at = utc_now()
             db.session.commit()
             msg_payload["status"] = 'delivered'
+            msg_payload["deliveredAt"] = iso_utc(new_msg.delivered_at)
 
         for uid in participant_ids:
             socketio.emit('receive_message', msg_payload, room=f"user_{uid}")

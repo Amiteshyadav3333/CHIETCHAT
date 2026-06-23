@@ -1,5 +1,5 @@
-import json
-from flask import Blueprint, jsonify
+import requests
+from flask import Blueprint, jsonify, request
 from models import db, Chat, ChatParticipant, Message, User
 from extensions import socketio
 from utils import (
@@ -528,3 +528,34 @@ def toggle_group_chat(chat_id):
     except Exception as e:
         print(f"Error toggling group chat: {e}")
         return jsonify({"error": str(e)}), 500
+
+FALLBACK_GIFS = [
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHB1bWppMTk5amswMTZlY2FhdzF3ejA2eGFoc3V0dmc0dWV2MzhqZSZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/3ntq5FxIfvLfO/giphy.gif",
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNmt0bXUxdnp4YWJpdjVpc3ZzMzU3ODl3ZXhhazRhY2dvd2t5YTZuNSZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/t3s3G2f2jO8EM/giphy.gif",
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdzB2MGFjNno4NXZrMDk0OHlzZnd6ZXhrbzI4Y2c1amtzdmh1aXQ1diZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/cuPm4p4pClZVC/giphy.gif",
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZnNpdGZ2M3l6NWlyOTM4ZGNnaGR2azFsc3NzNHo0ejNlZHkweGR5NyZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/kEKcOWl8RMLde/giphy.gif",
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMGxmeTNuaDljdXV6Nmx2bzRtNWZpd3Z0cnlzNzI2eGx6c2g2ODc4NCZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/BCkJ89PNKmOf1s51oR/giphy.gif",
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMWNnMXJndXo5bzJ4MXNwdzM2M2VyeWJwb2RucHBwYzRxbGthczY5OCZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/3o7TKoWXm3okO1kgdW/giphy.gif",
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYnQydXkweHhsMGZpdzJpczU5dTZyeHpycnhzdmhhMmxlazJ3azh4MyZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/c6SRlotmEgHVMTxazt/giphy.gif",
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2RxMzhvczY4MXB5cjJqMzdpa3RteDlsbzB2dDk1bWF6eWp5dG9yMW11bmFseWFvJmVwPXYxX2ludGVybmFsX2dpZl9ieV9naXBoeSZjdD1n/xT0xeJpD8e4DYnCHq8/giphy.gif",
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM2FwdGFnMXp1M2lyNG9nbTF2dmhyeHRkNzR0aHAydnVpMjI5Ymx1biZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/l3q2zVr6cu95nF6O4/giphy.gif",
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYTN4dnk5ODkxdDZ4YmY0bmcyNWl4bGF0YTZoM3pvMDQ5NmI4MHhqciZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/11sBLVxNs7v6WA/giphy.gif",
+]
+
+@chats_bp.route('/api/gifs', methods=['GET'])
+def get_gifs_proxy():
+    query = request.args.get('q', 'trending').strip()
+    if not query:
+        query = 'trending'
+    try:
+        res = requests.get(f"https://api.giphy.com/v1/gifs/search?api_key=dc6zaTOxFJmzC&q={query}&limit=18&rating=g", timeout=6)
+        if res.status_code == 200:
+            data = res.json()
+            urls = [item['images']['fixed_height_small']['url'] for item in data.get('data', [])]
+            if urls:
+                return jsonify({"gifs": urls})
+    except Exception as e:
+        print("Error fetching GIPHY proxy:", e)
+    
+    # Return subset of fallback gifs containing query match or just random selection if fails
+    return jsonify({"gifs": FALLBACK_GIFS})

@@ -115,10 +115,10 @@ const MessageInput = ({
         setLoadingGifs(true);
         try {
             const query = gifSearch.trim() || 'trending';
-            const res = await fetch(`https://api.giphy.com/v1/gifs/search?api_key=dc6zaTOxFJmzC&q=${encodeURIComponent(query)}&limit=15&rating=g`);
+            const res = await fetch(`/api/gifs?q=${encodeURIComponent(query)}`);
             const data = await res.json();
-            if (data.data) {
-                setGifs(data.data.map(item => item.images.fixed_height_small.url));
+            if (data.gifs) {
+                setGifs(data.gifs);
             }
         } catch (err) {
             console.error("Error fetching GIFs:", err);

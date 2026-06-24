@@ -1,438 +1,659 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { XMarkIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { formatDuration } from '../utils/mediaCompressor';
 
-/* ─── Premium Fullscreen Media Viewer ─── */
+/* ═══════════════════════════════════════════════════════════════
+   ROOT PORTAL — renders directly on <body> so fixed/z-index works
+   ═══════════════════════════════════════════════════════════════ */
+const Portal = ({ children }) => ReactDOM.createPortal(children, document.body);
+
+/* ═══════════════════════════════════════════════════════════════
+   MAIN EXPORT — dispatch to right viewer
+   ═══════════════════════════════════════════════════════════════ */
 const FullscreenMediaModal = ({ src, type, onClose }) => {
+    useEffect(() => {
+        if (!src) return;
+        // Prevent body scroll while open
+        document.body.style.overflow = 'hidden';
+        return () => { document.body.style.overflow = ''; };
+    }, [src]);
+
+    useEffect(() => {
+        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [onClose]);
+
     if (!src) return null;
 
-    const isVideo = type === 'video' || src.match(/\.(mp4|webm|ogg)$/i);
-    const isAudio = type === 'audio' || src.match(/\.(mp3|wav|m4a|aac|oga|webm)$/i);
+    const isVideo = type === 'video' || /\.(mp4|webm|ogg|mov)$/i.test(src);
+    const isAudio = type === 'audio' || /\.(mp3|wav|m4a|aac|oga)$/i.test(src) ||
+        (type === 'audio' && /\.webm$/i.test(src));
 
     const handleDownload = async (e) => {
-        e.stopPropagation();
+        e?.stopPropagation();
         try {
             const response = await fetch(src);
             const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
+            const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = src.split('/').pop() || 'media';
+            a.download = decodeURIComponent(src.split('/').pop()) || 'media';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
+            URL.revokeObjectURL(url);
         } catch {
             window.open(src, '_blank');
         }
     };
 
-    if (isVideo) return <VideoViewer src={src} onClose={onClose} onDownload={handleDownload} />;
-    if (isAudio) return <AudioViewer src={src} onClose={onClose} onDownload={handleDownload} />;
-    return <ImageViewer src={src} onClose={onClose} onDownload={handleDownload} />;
+    return (
+        <Portal>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 99999 }}>
+                {isVideo
+                    ? <VideoViewer src={src} onClose={onClose} onDownload={handleDownload} />
+                    : isAudio
+                        ? <AudioViewer src={src} onClose={onClose} onDownload={handleDownload} />
+                        : <ImageViewer src={src} onClose={onClose} onDownload={handleDownload} />
+                }
+            </div>
+        </Portal>
+    );
 };
 
-/* ─── Image Viewer with Pinch Zoom ─── */
+/* ═══════════════════════════════════════════════════════════════
+   IMAGE VIEWER — WhatsApp style with pinch/double-tap zoom
+   ═══════════════════════════════════════════════════════════════ */
 const ImageViewer = ({ src, onClose, onDownload }) => {
     const [scale, setScale] = useState(1);
-    const [position, setPosition] = useState({ x: 0, y: 0 });
+    const [pos, setPos] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
-    const lastPos = useRef({ x: 0, y: 0 });
-    const lastDistance = useRef(null);
-    const imgRef = useRef(null);
+    const [loaded, setLoaded] = useState(false);
+    const [entering, setEntering] = useState(true);
+    const dragStart = useRef(null);
+    const lastTap = useRef(0);
+    const lastPinchDist = useRef(null);
     const containerRef = useRef(null);
 
-    const resetZoom = () => { setScale(1); setPosition({ x: 0, y: 0 }); };
+    useEffect(() => {
+        const t = setTimeout(() => setEntering(false), 30);
+        return () => clearTimeout(t);
+    }, []);
 
-    const handleDoubleClick = (e) => {
-        e.stopPropagation();
-        if (scale > 1) { resetZoom(); }
-        else {
-            const rect = containerRef.current.getBoundingClientRect();
-            const cx = e.clientX - rect.left - rect.width / 2;
-            const cy = e.clientY - rect.top - rect.height / 2;
-            setScale(2.5);
-            setPosition({ x: -cx * 1.5, y: -cy * 1.5 });
-        }
-    };
+    const resetZoom = () => { setScale(1); setPos({ x: 0, y: 0 }); };
 
-    const handleWheel = (e) => {
-        e.preventDefault();
-        const delta = e.deltaY > 0 ? 0.85 : 1.18;
-        setScale(s => Math.min(Math.max(s * delta, 0.5), 5));
-    };
-
-    const handleMouseDown = (e) => {
+    /* Mouse drag */
+    const onMouseDown = (e) => {
         if (scale <= 1) return;
+        e.preventDefault();
         setIsDragging(true);
-        lastPos.current = { x: e.clientX - position.x, y: e.clientY - position.y };
+        dragStart.current = { mx: e.clientX - pos.x, my: e.clientY - pos.y };
     };
-    const handleMouseMove = (e) => {
-        if (!isDragging) return;
-        setPosition({ x: e.clientX - lastPos.current.x, y: e.clientY - lastPos.current.y });
+    const onMouseMove = (e) => {
+        if (!isDragging || !dragStart.current) return;
+        setPos({ x: e.clientX - dragStart.current.mx, y: e.clientY - dragStart.current.my });
     };
-    const handleMouseUp = () => setIsDragging(false);
+    const onMouseUp = () => { setIsDragging(false); dragStart.current = null; };
 
-    // Touch zoom
-    const handleTouchStart = (e) => {
+    /* Wheel zoom */
+    const onWheel = (e) => {
+        e.preventDefault();
+        setScale(s => Math.min(Math.max(s * (e.deltaY > 0 ? 0.88 : 1.14), 0.5), 6));
+    };
+
+    /* Double click zoom */
+    const onDoubleClick = (e) => {
+        e.stopPropagation();
+        if (scale > 1) { resetZoom(); return; }
+        const rect = containerRef.current.getBoundingClientRect();
+        const ox = e.clientX - rect.left - rect.width / 2;
+        const oy = e.clientY - rect.top - rect.height / 2;
+        setScale(2.8);
+        setPos({ x: -ox * 1.8, y: -oy * 1.8 });
+    };
+
+    /* Touch pinch */
+    const onTouchStart = (e) => {
         if (e.touches.length === 2) {
-            lastDistance.current = Math.hypot(
+            lastPinchDist.current = Math.hypot(
                 e.touches[0].clientX - e.touches[1].clientX,
                 e.touches[0].clientY - e.touches[1].clientY
             );
-        } else if (e.touches.length === 1 && scale > 1) {
-            lastPos.current = { x: e.touches[0].clientX - position.x, y: e.touches[0].clientY - position.y };
+        } else if (e.touches.length === 1) {
+            // Double-tap detection
+            const now = Date.now();
+            if (now - lastTap.current < 300) {
+                if (scale > 1) resetZoom();
+                else { setScale(2.5); }
+            }
+            lastTap.current = now;
+            if (scale > 1) {
+                dragStart.current = { mx: e.touches[0].clientX - pos.x, my: e.touches[0].clientY - pos.y };
+            }
         }
     };
-    const handleTouchMove = (e) => {
+    const onTouchMove = (e) => {
         e.preventDefault();
         if (e.touches.length === 2) {
-            const dist = Math.hypot(
-                e.touches[0].clientX - e.touches[1].clientX,
-                e.touches[0].clientY - e.touches[1].clientY
-            );
-            if (lastDistance.current) {
-                const ratio = dist / lastDistance.current;
-                setScale(s => Math.min(Math.max(s * ratio, 0.5), 5));
-            }
-            lastDistance.current = dist;
-        } else if (e.touches.length === 1 && scale > 1) {
-            setPosition({ x: e.touches[0].clientX - lastPos.current.x, y: e.touches[0].clientY - lastPos.current.y });
+            const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+            if (lastPinchDist.current) setScale(s => Math.min(Math.max(s * (d / lastPinchDist.current), 0.5), 6));
+            lastPinchDist.current = d;
+        } else if (e.touches.length === 1 && scale > 1 && dragStart.current) {
+            setPos({ x: e.touches[0].clientX - dragStart.current.mx, y: e.touches[0].clientY - dragStart.current.my });
         }
     };
-    const handleTouchEnd = () => { lastDistance.current = null; };
+    const onTouchEnd = () => { lastPinchDist.current = null; dragStart.current = null; };
 
     return (
         <div
-            className="fixed inset-0 z-[100] flex flex-col"
-            style={{ background: 'rgba(0,0,0,0.97)' }}
-            onClick={scale <= 1 ? onClose : undefined}
+            style={{
+                position: 'fixed', inset: 0, background: entering ? 'rgba(0,0,0,0)' : 'rgba(0,0,0,0.97)',
+                transition: 'background 0.2s ease',
+                display: 'flex', flexDirection: 'column',
+                userSelect: 'none',
+            }}
         >
             {/* Top bar */}
-            <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-4 pt-10 pb-4"
-                style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.7), transparent)' }}>
-                <button onClick={onClose} className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors">
-                    <XMarkIcon className="w-6 h-6" />
+            <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '48px 16px 16px',
+                background: 'linear-gradient(to bottom, rgba(0,0,0,0.75) 0%, transparent 100%)',
+            }}>
+                <button onClick={onClose} style={btnStyle}>
+                    <XMarkIcon style={{ width: 24, height: 24, color: 'white' }} />
                 </button>
-                <div className="flex gap-3">
+                <div style={{ display: 'flex', gap: 10 }}>
                     {scale > 1 && (
-                        <button onClick={(e) => { e.stopPropagation(); resetZoom(); }}
-                            className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-full text-white text-xs font-bold transition-colors">
-                            Reset Zoom
+                        <button onClick={(e) => { e.stopPropagation(); resetZoom(); }} style={{ ...btnStyle, padding: '6px 14px', fontSize: 12, fontWeight: 700, borderRadius: 20 }}>
+                            Reset
                         </button>
                     )}
-                    <button onClick={onDownload} className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors" title="Download">
-                        <ArrowDownTrayIcon className="w-6 h-6" />
+                    <button onClick={onDownload} style={btnStyle} title="Download">
+                        <ArrowDownTrayIcon style={{ width: 22, height: 22, color: 'white' }} />
                     </button>
                 </div>
             </div>
 
-            {/* Image container */}
+            {/* Image area */}
             <div
                 ref={containerRef}
-                className="flex-1 flex items-center justify-center overflow-hidden"
-                style={{ cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'zoom-in' }}
-                onWheel={handleWheel}
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
+                style={{
+                    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    overflow: 'hidden',
+                    cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'zoom-in',
+                }}
+                onMouseDown={onMouseDown}
+                onMouseMove={onMouseMove}
+                onMouseUp={onMouseUp}
+                onMouseLeave={onMouseUp}
+                onWheel={onWheel}
+                onTouchStart={onTouchStart}
+                onTouchMove={onTouchMove}
+                onTouchEnd={onTouchEnd}
+                onClick={() => scale <= 1 && onClose()}
             >
+                {!loaded && (
+                    <div style={{ position: 'absolute', color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Loading…</div>
+                )}
                 <img
-                    ref={imgRef}
                     src={src}
-                    alt="Full view"
+                    alt="media"
                     draggable={false}
-                    onDoubleClick={handleDoubleClick}
-                    className="select-none"
+                    onLoad={() => setLoaded(true)}
+                    onDoubleClick={onDoubleClick}
                     style={{
-                        maxWidth: '100vw',
-                        maxHeight: '90vh',
+                        maxWidth: '100vw', maxHeight: '90vh',
                         objectFit: 'contain',
-                        transform: `scale(${scale}) translate(${position.x / scale}px, ${position.y / scale}px)`,
-                        transition: isDragging ? 'none' : 'transform 0.15s ease',
-                        userSelect: 'none',
+                        opacity: loaded ? 1 : 0,
+                        transform: `scale(${scale}) translate(${pos.x / scale}px, ${pos.y / scale}px)`,
+                        transition: isDragging ? 'none' : 'transform 0.18s ease, opacity 0.3s ease',
+                        display: 'block',
+                        borderRadius: scale > 1 ? 0 : 8,
                     }}
+                    onClick={(e) => e.stopPropagation()}
                 />
             </div>
 
             {/* Hint */}
-            {scale <= 1 && (
-                <div className="absolute bottom-6 left-0 right-0 flex justify-center">
-                    <span className="text-white/30 text-xs">Double-tap to zoom • Pinch to zoom • Click outside to close</span>
+            {scale <= 1 && loaded && (
+                <div style={{ position: 'absolute', bottom: 20, left: 0, right: 0, textAlign: 'center', color: 'rgba(255,255,255,0.28)', fontSize: 11, pointerEvents: 'none' }}>
+                    Double-tap to zoom · Pinch to zoom · Tap outside to close
                 </div>
             )}
         </div>
     );
 };
 
-/* ─── Video Viewer with Full Controls ─── */
+/* ═══════════════════════════════════════════════════════════════
+   VIDEO VIEWER — WhatsApp / Instagram reels style player
+   ═══════════════════════════════════════════════════════════════ */
 const VideoViewer = ({ src, onClose, onDownload }) => {
     const videoRef = useRef(null);
-    const [isPlaying, setIsPlaying] = useState(false);
+    const progressRef = useRef(null);
+    const hideTimer = useRef(null);
+    const [playing, setPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const [volume, setVolume] = useState(1);
-    const [isMuted, setIsMuted] = useState(false);
-    const [showControls, setShowControls] = useState(true);
-    const controlsTimer = useRef(null);
-    const progressRef = useRef(null);
+    const [muted, setMuted] = useState(false);
+    const [showUI, setShowUI] = useState(true);
+    const [loaded, setLoaded] = useState(false);
+    const [buffered, setBuffered] = useState(0);
 
     useEffect(() => {
         const v = videoRef.current;
         if (!v) return;
-        const onMeta = () => setDuration(v.duration || 0);
-        const onTime = () => setCurrentTime(v.currentTime);
-        const onPlay = () => setIsPlaying(true);
-        const onPause = () => setIsPlaying(false);
-        v.addEventListener('loadedmetadata', onMeta);
-        v.addEventListener('timeupdate', onTime);
-        v.addEventListener('play', onPlay);
-        v.addEventListener('pause', onPause);
-        return () => {
-            v.removeEventListener('loadedmetadata', onMeta);
-            v.removeEventListener('timeupdate', onTime);
-            v.removeEventListener('play', onPlay);
-            v.removeEventListener('pause', onPause);
+        const handlers = {
+            loadedmetadata: () => setDuration(v.duration || 0),
+            timeupdate: () => {
+                setCurrentTime(v.currentTime);
+                if (v.buffered.length > 0) setBuffered(v.buffered.end(v.buffered.length - 1));
+            },
+            play: () => setPlaying(true),
+            pause: () => setPlaying(false),
+            canplay: () => setLoaded(true),
+            ended: () => { setPlaying(false); resetUI(); },
         };
+        Object.entries(handlers).forEach(([e, h]) => v.addEventListener(e, h));
+        return () => Object.entries(handlers).forEach(([e, h]) => v.removeEventListener(e, h));
     }, []);
 
-    const resetControlsTimer = () => {
-        setShowControls(true);
-        clearTimeout(controlsTimer.current);
-        controlsTimer.current = setTimeout(() => isPlaying && setShowControls(false), 3000);
+    const resetUI = () => {
+        setShowUI(true);
+        clearTimeout(hideTimer.current);
+        hideTimer.current = setTimeout(() => {
+            if (videoRef.current && !videoRef.current.paused) setShowUI(false);
+        }, 3500);
     };
 
     const togglePlay = (e) => {
-        e.stopPropagation();
-        resetControlsTimer();
+        e?.stopPropagation();
+        resetUI();
         videoRef.current?.paused ? videoRef.current.play() : videoRef.current.pause();
     };
 
-    const handleProgressClick = (e) => {
+    const seek = (e) => {
         e.stopPropagation();
         const rect = progressRef.current.getBoundingClientRect();
-        const ratio = (e.clientX - rect.left) / rect.width;
-        videoRef.current.currentTime = ratio * duration;
+        const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        if (videoRef.current) videoRef.current.currentTime = ratio * duration;
     };
 
     const toggleMute = (e) => {
         e.stopPropagation();
         const v = videoRef.current;
+        if (!v) return;
         v.muted = !v.muted;
-        setIsMuted(v.muted);
+        setMuted(v.muted);
+    };
+
+    const changeVolume = (e) => {
+        e.stopPropagation();
+        const val = parseFloat(e.target.value);
+        setVolume(val);
+        if (videoRef.current) videoRef.current.volume = val;
+        if (val > 0) setMuted(false);
     };
 
     const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+    const bufferedPct = duration > 0 ? (buffered / duration) * 100 : 0;
 
     return (
-        <div className="fixed inset-0 z-[100] bg-black flex flex-col" onMouseMove={resetControlsTimer} onClick={resetControlsTimer}>
-            {/* Top bar */}
-            <div className={`absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-4 pt-10 pb-4 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-                style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.7), transparent)' }}>
-                <button onClick={onClose} className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors">
-                    <XMarkIcon className="w-6 h-6" />
+        <div
+            style={{ position: 'fixed', inset: 0, background: '#000', display: 'flex', flexDirection: 'column' }}
+            onMouseMove={resetUI}
+            onClick={resetUI}
+        >
+            {/* TOP BAR */}
+            <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '48px 16px 24px',
+                background: 'linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, transparent 100%)',
+                opacity: showUI ? 1 : 0,
+                pointerEvents: showUI ? 'auto' : 'none',
+                transition: 'opacity 0.3s ease',
+            }}>
+                <button onClick={onClose} style={btnStyle}>
+                    <XMarkIcon style={{ width: 24, height: 24, color: 'white' }} />
                 </button>
-                <button onClick={onDownload} className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors">
-                    <ArrowDownTrayIcon className="w-6 h-6" />
+                <button onClick={onDownload} style={btnStyle}>
+                    <ArrowDownTrayIcon style={{ width: 22, height: 22, color: 'white' }} />
                 </button>
             </div>
 
-            {/* Video */}
-            <div className="flex-1 flex items-center justify-center" onClick={togglePlay}>
-                <video ref={videoRef} src={src} className="max-w-full max-h-full object-contain" playsInline />
+            {/* VIDEO */}
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}
+                onClick={togglePlay}>
+                <video
+                    ref={videoRef}
+                    src={src}
+                    playsInline
+                    style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }}
+                />
+                {/* Loading spinner */}
+                {!loaded && (
+                    <div style={{ position: 'absolute', color: 'rgba(255,255,255,0.5)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                        <div style={{ width: 44, height: 44, border: '3px solid rgba(255,255,255,0.2)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                        <span style={{ fontSize: 13 }}>Loading video…</span>
+                    </div>
+                )}
             </div>
 
-            {/* Center play/pause indicator */}
-            <div className={`absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-200 ${showControls ? 'opacity-100' : 'opacity-0'}`}>
-                <div className="w-16 h-16 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center border border-white/20">
-                    {isPlaying ? (
-                        <svg viewBox="0 0 24 24" fill="white" className="w-7 h-7">
-                            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-                        </svg>
-                    ) : (
-                        <svg viewBox="0 0 24 24" fill="white" className="w-7 h-7 ml-1">
-                            <path d="M8 5v14l11-7z" />
-                        </svg>
-                    )}
+            {/* CENTER PLAY/PAUSE RIPPLE */}
+            <div style={{
+                position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                pointerEvents: 'none',
+                opacity: showUI ? 1 : 0,
+                transition: 'opacity 0.3s ease',
+            }}>
+                <div style={{
+                    width: 72, height: 72, borderRadius: '50%',
+                    background: 'rgba(0,0,0,0.55)',
+                    backdropFilter: 'blur(12px)',
+                    border: '1.5px solid rgba(255,255,255,0.25)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                }}>
+                    {playing
+                        ? <svg viewBox="0 0 24 24" fill="white" style={{ width: 30, height: 30 }}><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
+                        : <svg viewBox="0 0 24 24" fill="white" style={{ width: 30, height: 30, marginLeft: 3 }}><path d="M8 5v14l11-7z" /></svg>
+                    }
                 </div>
             </div>
 
-            {/* Bottom controls */}
-            <div className={`absolute bottom-0 left-0 right-0 z-20 px-4 pb-8 pt-10 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-                style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.85), transparent)' }}>
-                {/* Progress bar */}
-                <div ref={progressRef} className="w-full h-1 bg-white/20 rounded-full cursor-pointer mb-3 relative group/progress"
-                    onClick={handleProgressClick}>
-                    <div className="h-full bg-white rounded-full transition-all relative" style={{ width: `${progress}%` }}>
-                        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-white rounded-full shadow-lg opacity-0 group-hover/progress:opacity-100 transition-opacity" />
+            {/* BOTTOM CONTROLS */}
+            <div style={{
+                position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 10,
+                padding: '32px 20px 36px',
+                background: 'linear-gradient(to top, rgba(0,0,0,0.88) 0%, transparent 100%)',
+                opacity: showUI ? 1 : 0,
+                pointerEvents: showUI ? 'auto' : 'none',
+                transition: 'opacity 0.3s ease',
+            }}>
+                {/* Progress bar with buffered */}
+                <div
+                    ref={progressRef}
+                    onClick={seek}
+                    style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.18)', borderRadius: 4, cursor: 'pointer', marginBottom: 14, position: 'relative' }}
+                >
+                    {/* Buffered */}
+                    <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${bufferedPct}%`, background: 'rgba(255,255,255,0.28)', borderRadius: 4 }} />
+                    {/* Played */}
+                    <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${progress}%`, background: '#25d366', borderRadius: 4, transition: 'width 0.1s linear' }}>
+                        <div style={{ position: 'absolute', right: -6, top: '50%', transform: 'translateY(-50%)', width: 13, height: 13, borderRadius: '50%', background: 'white', boxShadow: '0 2px 8px rgba(0,0,0,0.5)' }} />
                     </div>
                 </div>
 
-                <div className="flex items-center gap-4">
-                    {/* Play/Pause */}
-                    <button onClick={togglePlay} className="text-white hover:text-white/80 transition-colors">
-                        {isPlaying ? (
-                            <svg viewBox="0 0 24 24" fill="currentColor" className="w-7 h-7">
-                                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-                            </svg>
-                        ) : (
-                            <svg viewBox="0 0 24 24" fill="currentColor" className="w-7 h-7">
-                                <path d="M8 5v14l11-7z" />
-                            </svg>
-                        )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    {/* Play/pause */}
+                    <button onClick={togglePlay} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'white' }}>
+                        {playing
+                            ? <svg viewBox="0 0 24 24" fill="white" style={{ width: 28, height: 28 }}><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
+                            : <svg viewBox="0 0 24 24" fill="white" style={{ width: 28, height: 28 }}><path d="M8 5v14l11-7z" /></svg>
+                        }
                     </button>
 
                     {/* Time */}
-                    <span className="text-white/70 text-sm font-mono tabular-nums">
+                    <span style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
                         {formatDuration(currentTime)} / {formatDuration(duration)}
                     </span>
 
-                    <div className="flex-1" />
+                    <div style={{ flex: 1 }} />
 
-                    {/* Volume */}
-                    <button onClick={toggleMute} className="text-white/70 hover:text-white transition-colors">
-                        {isMuted ? (
-                            <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                                <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
-                            </svg>
-                        ) : (
-                            <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" />
-                            </svg>
-                        )}
+                    {/* Volume icon */}
+                    <button onClick={toggleMute} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'rgba(255,255,255,0.75)' }}>
+                        {muted
+                            ? <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 22, height: 22 }}><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" /></svg>
+                            : <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 22, height: 22 }}><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" /></svg>
+                        }
                     </button>
 
                     {/* Volume slider */}
-                    <input type="range" min="0" max="1" step="0.05" value={isMuted ? 0 : volume}
-                        onChange={(e) => {
-                            const v = parseFloat(e.target.value);
-                            setVolume(v);
-                            if (videoRef.current) videoRef.current.volume = v;
-                            if (v > 0) setIsMuted(false);
-                        }}
-                        className="w-20 accent-white cursor-pointer" />
+                    <input
+                        type="range" min="0" max="1" step="0.05"
+                        value={muted ? 0 : volume}
+                        onChange={changeVolume}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ width: 80, accentColor: '#25d366', cursor: 'pointer' }}
+                    />
                 </div>
             </div>
+
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
     );
 };
 
-/* ─── Audio Fullscreen Viewer ─── */
+/* ═══════════════════════════════════════════════════════════════
+   AUDIO VIEWER — Premium music player style
+   ═══════════════════════════════════════════════════════════════ */
 const AudioViewer = ({ src, onClose, onDownload }) => {
     const audioRef = useRef(null);
-    const [isPlaying, setIsPlaying] = useState(false);
+    const progressRef = useRef(null);
+    const animRef = useRef(null);
+    const [playing, setPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
-    const progressRef = useRef(null);
+    const [speed, setSpeed] = useState(1);
+    const [barHeights, setBarHeights] = useState(() => Array.from({ length: 50 }, (_, i) => Math.abs(Math.sin(i * 0.4)) * 0.75 + 0.15));
 
     useEffect(() => {
         const a = audioRef.current;
         if (!a) return;
-        const onMeta = () => setDuration(a.duration || 0);
-        const onTime = () => setCurrentTime(a.currentTime);
-        const onPlay = () => setIsPlaying(true);
-        const onPause = () => setIsPlaying(false);
-        a.addEventListener('loadedmetadata', onMeta);
-        a.addEventListener('timeupdate', onTime);
-        a.addEventListener('play', onPlay);
-        a.addEventListener('pause', onPause);
-        return () => {
-            a.removeEventListener('loadedmetadata', onMeta);
-            a.removeEventListener('timeupdate', onTime);
-            a.removeEventListener('play', onPlay);
-            a.removeEventListener('pause', onPause);
+        const hs = {
+            loadedmetadata: () => setDuration(a.duration || 0),
+            timeupdate: () => setCurrentTime(a.currentTime),
+            play: () => setPlaying(true),
+            pause: () => setPlaying(false),
+            ended: () => { setPlaying(false); setCurrentTime(0); },
         };
+        Object.entries(hs).forEach(([e, h]) => a.addEventListener(e, h));
+        return () => Object.entries(hs).forEach(([e, h]) => a.removeEventListener(e, h));
     }, []);
+
+    // Animate waveform bars when playing
+    useEffect(() => {
+        if (playing) {
+            const animate = () => {
+                setBarHeights(prev => prev.map((h, i) => {
+                    const base = Math.abs(Math.sin(i * 0.4)) * 0.75 + 0.15;
+                    return base * 0.4 + Math.random() * 0.6;
+                }));
+                animRef.current = requestAnimationFrame(animate);
+            };
+            animRef.current = requestAnimationFrame(animate);
+        } else {
+            cancelAnimationFrame(animRef.current);
+            setBarHeights(Array.from({ length: 50 }, (_, i) => Math.abs(Math.sin(i * 0.4)) * 0.75 + 0.15));
+        }
+        return () => cancelAnimationFrame(animRef.current);
+    }, [playing]);
 
     const togglePlay = () => audioRef.current?.paused ? audioRef.current.play() : audioRef.current.pause();
 
-    const handleProgressClick = (e) => {
+    const seek = (e) => {
         const rect = progressRef.current.getBoundingClientRect();
-        audioRef.current.currentTime = ((e.clientX - rect.left) / rect.width) * duration;
+        const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        if (audioRef.current) audioRef.current.currentTime = ratio * duration;
+    };
+
+    const cycleSpeed = () => {
+        const speeds = [1, 1.25, 1.5, 2];
+        const next = speeds[(speeds.indexOf(speed) + 1) % speeds.length];
+        setSpeed(next);
+        if (audioRef.current) audioRef.current.playbackRate = next;
+    };
+
+    const skipBy = (secs) => {
+        if (audioRef.current) audioRef.current.currentTime = Math.max(0, Math.min(duration, audioRef.current.currentTime + secs));
     };
 
     const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
-    const bars = Array.from({ length: 40 }, (_, i) => {
-        const base = Math.sin(i * 0.7) * 0.5 + 0.5;
-        const animated = isPlaying ? Math.random() * 0.6 + 0.2 : base * 0.4 + 0.1;
-        return { height: base * 0.6 + 0.1, animated };
-    });
+    const fileName = decodeURIComponent(src.split('/').pop() || 'Voice Message').replace(/\.[^.]+$/, '');
 
     return (
-        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center"
-            style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #0f1923 50%, #0d1117 100%)' }}>
-            <audio ref={audioRef} src={src} />
+        <div style={{
+            position: 'fixed', inset: 0,
+            background: 'linear-gradient(160deg, #0d1b2a 0%, #112233 40%, #0a1520 100%)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        }}>
+            <audio ref={audioRef} src={src} preload="metadata" />
 
-            {/* Top */}
-            <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 pt-10 pb-4">
-                <button onClick={onClose} className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white">
-                    <XMarkIcon className="w-6 h-6" />
+            {/* TOP BAR */}
+            <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '48px 16px 16px',
+            }}>
+                <button onClick={onClose} style={btnStyle}>
+                    <XMarkIcon style={{ width: 24, height: 24, color: 'white' }} />
                 </button>
-                <button onClick={onDownload} className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white">
-                    <ArrowDownTrayIcon className="w-6 h-6" />
+                <button onClick={onDownload} style={btnStyle}>
+                    <ArrowDownTrayIcon style={{ width: 22, height: 22, color: 'white' }} />
                 </button>
             </div>
 
-            {/* Waveform visualization */}
-            <div className="flex items-end gap-1 h-24 mb-8">
-                {bars.map((bar, i) => (
-                    <div key={i}
-                        className="rounded-full transition-all duration-100"
-                        style={{
-                            width: '4px',
-                            height: `${(isPlaying ? Math.random() * 60 + 20 : bar.height * 60 + 10)}px`,
-                            background: i / bars.length < progress / 100
-                                ? 'linear-gradient(to top, #25d366, #00c896)'
-                                : 'rgba(255,255,255,0.2)',
-                            animation: isPlaying ? `wave ${0.4 + (i % 5) * 0.1}s ease-in-out infinite alternate` : 'none'
-                        }}
-                    />
-                ))}
+            {/* ALBUM ART placeholder */}
+            <div style={{
+                width: 180, height: 180, borderRadius: 24,
+                background: 'linear-gradient(135deg, #1a3a2a 0%, #25d366 100%)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                marginBottom: 32,
+                boxShadow: playing
+                    ? '0 0 0 12px rgba(37,211,102,0.08), 0 0 0 24px rgba(37,211,102,0.04), 0 24px 60px rgba(0,0,0,0.6)'
+                    : '0 24px 60px rgba(0,0,0,0.5)',
+                transition: 'box-shadow 0.6s ease',
+                animation: playing ? 'pulse-ring 2s ease-in-out infinite' : 'none',
+            }}>
+                <svg viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)" style={{ width: 72, height: 72 }}>
+                    <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+                </svg>
             </div>
 
-            {/* Voice message label */}
-            <div className="text-white/50 text-sm mb-8">Voice Message</div>
+            {/* TITLE */}
+            <div style={{ textAlign: 'center', marginBottom: 40, padding: '0 32px' }}>
+                <div style={{ color: 'white', fontSize: 18, fontWeight: 700, marginBottom: 4, maxWidth: 280, wordBreak: 'break-word' }}>
+                    {fileName.startsWith('voice-') ? 'Voice Message' : fileName}
+                </div>
+                <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13 }}>Audio</div>
+            </div>
 
-            {/* Progress */}
-            <div className="w-72 mb-4">
-                <div ref={progressRef} className="w-full h-1.5 bg-white/15 rounded-full cursor-pointer"
-                    onClick={handleProgressClick}>
-                    <div className="h-full bg-[#25d366] rounded-full relative" style={{ width: `${progress}%` }}>
-                        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-white rounded-full shadow-lg" />
+            {/* WAVEFORM BARS */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2, height: 60, marginBottom: 32, padding: '0 24px' }}>
+                {barHeights.map((h, i) => {
+                    const isPlayed = (i / barHeights.length) * 100 < progress;
+                    return (
+                        <div
+                            key={i}
+                            style={{
+                                flex: 1,
+                                height: `${Math.max(h * 52, 4)}px`,
+                                borderRadius: 3,
+                                background: isPlayed
+                                    ? 'linear-gradient(to top, #25d366, #00e67a)'
+                                    : 'rgba(255,255,255,0.18)',
+                                transition: playing ? 'height 0.08s ease' : 'height 0.3s ease, background 0.2s',
+                                minWidth: 3,
+                            }}
+                        />
+                    );
+                })}
+            </div>
+
+            {/* PROGRESS BAR */}
+            <div style={{ width: '100%', maxWidth: 340, padding: '0 24px', marginBottom: 8 }}>
+                <div
+                    ref={progressRef}
+                    onClick={seek}
+                    style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 4, cursor: 'pointer', position: 'relative' }}
+                >
+                    <div style={{ height: '100%', width: `${progress}%`, background: '#25d366', borderRadius: 4, position: 'relative', transition: 'width 0.1s linear' }}>
+                        <div style={{ position: 'absolute', right: -6, top: '50%', transform: 'translateY(-50%)', width: 13, height: 13, borderRadius: '50%', background: 'white', boxShadow: '0 2px 8px rgba(0,0,0,0.5)' }} />
                     </div>
                 </div>
-                <div className="flex justify-between text-xs text-white/40 mt-1 font-mono tabular-nums">
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, color: 'rgba(255,255,255,0.4)', fontSize: 12, fontFamily: 'monospace' }}>
                     <span>{formatDuration(currentTime)}</span>
                     <span>{formatDuration(duration)}</span>
                 </div>
             </div>
 
-            {/* Play button */}
-            <button onClick={togglePlay}
-                className="w-16 h-16 rounded-full bg-[#25d366] hover:bg-[#20c05a] flex items-center justify-center shadow-xl shadow-green-500/30 transition-all active:scale-95">
-                {isPlaying ? (
-                    <svg viewBox="0 0 24 24" fill="white" className="w-7 h-7">
-                        <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+            {/* CONTROLS */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginTop: 16 }}>
+                {/* Skip -10 */}
+                <button onClick={() => skipBy(-10)} style={ghostBtn}>
+                    <svg viewBox="0 0 24 24" fill="white" style={{ width: 26, height: 26 }}>
+                        <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" />
                     </svg>
-                ) : (
-                    <svg viewBox="0 0 24 24" fill="white" className="w-7 h-7 ml-1">
-                        <path d="M8 5v14l11-7z" />
+                    <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.6)', position: 'absolute', bottom: 2 }}>10</span>
+                </button>
+
+                {/* Play/Pause */}
+                <button onClick={togglePlay} style={{
+                    width: 68, height: 68, borderRadius: '50%',
+                    background: '#25d366',
+                    border: 'none', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    boxShadow: '0 8px 32px rgba(37,211,102,0.4)',
+                    transition: 'transform 0.1s ease, box-shadow 0.2s ease',
+                }}>
+                    {playing
+                        ? <svg viewBox="0 0 24 24" fill="white" style={{ width: 28, height: 28 }}><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
+                        : <svg viewBox="0 0 24 24" fill="white" style={{ width: 28, height: 28, marginLeft: 3 }}><path d="M8 5v14l11-7z" /></svg>
+                    }
+                </button>
+
+                {/* Skip +10 */}
+                <button onClick={() => skipBy(10)} style={ghostBtn}>
+                    <svg viewBox="0 0 24 24" fill="white" style={{ width: 26, height: 26, transform: 'scaleX(-1)' }}>
+                        <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" />
                     </svg>
-                )}
+                    <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.6)', position: 'absolute', bottom: 2 }}>10</span>
+                </button>
+            </div>
+
+            {/* Speed button */}
+            <button onClick={cycleSpeed} style={{
+                marginTop: 28,
+                background: 'rgba(255,255,255,0.08)',
+                border: '1.5px solid rgba(255,255,255,0.15)',
+                borderRadius: 20, padding: '6px 18px',
+                color: '#25d366', fontSize: 13, fontWeight: 700,
+                cursor: 'pointer', letterSpacing: 0.5,
+            }}>
+                {speed}x Speed
             </button>
 
             <style>{`
-                @keyframes wave {
-                    from { transform: scaleY(0.6); }
-                    to { transform: scaleY(1); }
+                @keyframes pulse-ring {
+                    0%, 100% { box-shadow: 0 0 0 12px rgba(37,211,102,0.08), 0 0 0 24px rgba(37,211,102,0.04), 0 24px 60px rgba(0,0,0,0.6); }
+                    50% { box-shadow: 0 0 0 18px rgba(37,211,102,0.12), 0 0 0 36px rgba(37,211,102,0.06), 0 24px 60px rgba(0,0,0,0.6); }
                 }
             `}</style>
         </div>
     );
+};
+
+/* ─── Shared button style ─── */
+const btnStyle = {
+    background: 'rgba(255,255,255,0.12)',
+    backdropFilter: 'blur(12px)',
+    border: '1px solid rgba(255,255,255,0.15)',
+    borderRadius: '50%',
+    width: 42, height: 42,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    cursor: 'pointer',
+    transition: 'background 0.2s ease',
+};
+
+const ghostBtn = {
+    background: 'none', border: 'none', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    position: 'relative', padding: 8,
+    opacity: 0.75,
 };
 
 export default FullscreenMediaModal;

@@ -1,8 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { format, isToday, isYesterday } from 'date-fns';
-import { TrashIcon, DocumentIcon, ArrowUturnLeftIcon, ArrowDownTrayIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon, EllipsisVerticalIcon, MapPinIcon, InformationCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { TrashIcon, DocumentIcon, ArrowUturnLeftIcon, ArrowDownTrayIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon, MapPinIcon, InformationCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { CheckIcon } from '@heroicons/react/24/solid';
 import FullscreenMediaModal from './FullscreenMediaModal';
+import { formatDuration, formatFileSize } from '../utils/mediaCompressor';
 
 const getPlatformLabel = (url) => {
     const lowercase = url.toLowerCase();
@@ -18,7 +19,7 @@ const getPlatformLabel = (url) => {
 
 const renderClickableText = (text) => {
     if (!text) return '';
-    const regex = /(https?:\/\/[^\s]+)|(www\.[a-zA-Z0-9-]+\.[^\s]+)|([a-zA-Z0-9-]+\.(?:com|net|org|in|co|io|xyz|info|us|app|dev|me|ai)\b[^\s]*)|(\+?\d{1,3}[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})|(\b\d{10}\b)/gi;
+    const regex = /(https?:\/\/[^\s]+)|(www\.[a-zA-Z0-9-]+\.[^\s]+)|([a-zA-Z0-9-]+\.(?:com|net|org|in|co|io|xyz|info|us|app|dev|me|ai)\b[^\s]*)|(\+?\d{1,3}[-.\ s]?\(?\d{3}\)?[-.\ s]?\d{3}[-.\ s]?\d{4})|(\b\d{10}\b)/gi;
     const elements = [];
     let lastIndex = 0;
     let match;
@@ -29,8 +30,6 @@ const renderClickableText = (text) => {
         if (matchIndex > lastIndex) {
             elements.push(text.substring(lastIndex, matchIndex));
         }
-        
-        // Match group 1, 2, or 3 means it's a URL
         const isUrl = match[1] || match[2] || match[3];
         if (isUrl) {
             let hrefVal = matchText;
@@ -39,7 +38,7 @@ const renderClickableText = (text) => {
             }
             const platform = getPlatformLabel(hrefVal);
             elements.push(
-                <a 
+                <a
                     key={`url-${matchIndex}`}
                     href={hrefVal}
                     target="_blank"
@@ -53,9 +52,9 @@ const renderClickableText = (text) => {
             );
         } else {
             elements.push(
-                <a 
+                <a
                     key={`phone-${matchIndex}`}
-                    href={`tel:${matchText.replace(/[-.\s()]/g, '')}`}
+                    href={`tel:${matchText.replace(/[-.\ s()]/g, '')}`}
                     className="text-[#53bdeb] hover:underline break-all inline font-semibold"
                     onClick={(e) => e.stopPropagation()}
                 >
@@ -107,28 +106,270 @@ const ClockIcon = ({ className }) => (
 const SWIPE_THRESHOLD = 60;
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
-const ChatBubble = ({ 
-    message, isOwn, senderName, onDelete, senderAvatar, showAvatar, 
+/* ─── Inline Audio Player (WhatsApp style) ─── */
+const InlineAudioPlayer = ({ src, isOwn, onOpen }) => {
+    const audioRef = useRef(null);
+    const progressRef = useRef(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [currentTime, setCurrentTime] = useState(0);
+    const [duration, setDuration] = useState(0);
+    const [speed, setSpeed] = useState(1);
+    const bars = [0.3,0.6,0.9,0.7,0.4,0.8,0.5,0.95,0.6,0.3,0.7,0.8,0.4,0.6,0.9,0.5,0.7,0.4,0.8,0.6,0.3,0.9,0.7,0.5,0.6,0.4,0.8,0.7,0.3,0.6];
+
+    useEffect(() => {
+        const a = audioRef.current;
+        if (!a) return;
+        const onMeta = () => setDuration(a.duration || 0);
+        const onTime = () => setCurrentTime(a.currentTime);
+        const onPlay = () => setIsPlaying(true);
+        const onPause = () => setIsPlaying(false);
+        const onEnd = () => { setIsPlaying(false); setCurrentTime(0); };
+        a.addEventListener('loadedmetadata', onMeta);
+        a.addEventListener('timeupdate', onTime);
+        a.addEventListener('play', onPlay);
+        a.addEventListener('pause', onPause);
+        a.addEventListener('ended', onEnd);
+        return () => {
+            a.removeEventListener('loadedmetadata', onMeta);
+            a.removeEventListener('timeupdate', onTime);
+            a.removeEventListener('play', onPlay);
+            a.removeEventListener('pause', onPause);
+            a.removeEventListener('ended', onEnd);
+        };
+    }, []);
+
+    const togglePlay = (e) => {
+        e.stopPropagation();
+        if (audioRef.current?.paused) audioRef.current.play();
+        else audioRef.current?.pause();
+    };
+
+    const handleProgressClick = (e) => {
+        e.stopPropagation();
+        const rect = progressRef.current.getBoundingClientRect();
+        if (audioRef.current) audioRef.current.currentTime = ((e.clientX - rect.left) / rect.width) * duration;
+    };
+
+    const cycleSpeed = (e) => {
+        e.stopPropagation();
+        const speeds = [1, 1.5, 2];
+        const next = speeds[(speeds.indexOf(speed) + 1) % speeds.length];
+        setSpeed(next);
+        if (audioRef.current) audioRef.current.playbackRate = next;
+    };
+
+    const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+    const accentColor = isOwn ? '#a7f3d0' : '#25d366';
+
+    return (
+        <div className="flex items-center gap-2.5 min-w-[220px] max-w-[270px] py-0.5">
+            <audio ref={audioRef} src={src} preload="metadata" />
+
+            {/* Play/Pause button */}
+            <button
+                onClick={togglePlay}
+                className={`w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center shadow-md transition-all active:scale-95 ${isOwn ? 'bg-white/20 hover:bg-white/30' : 'bg-[#25d366]/20 hover:bg-[#25d366]/30'}`}
+            >
+                {isPlaying ? (
+                    <svg viewBox="0 0 24 24" fill={accentColor} className="w-5 h-5">
+                        <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                    </svg>
+                ) : (
+                    <svg viewBox="0 0 24 24" fill={accentColor} className="w-5 h-5 ml-0.5">
+                        <path d="M8 5v14l11-7z" />
+                    </svg>
+                )}
+            </button>
+
+            {/* Waveform + progress */}
+            <div className="flex-1 flex flex-col gap-1.5">
+                {/* Waveform bars */}
+                <div
+                    ref={progressRef}
+                    className="flex items-end gap-[2px] h-8 cursor-pointer"
+                    onClick={handleProgressClick}
+                >
+                    {bars.map((h, i) => {
+                        const filled = (i / bars.length) * 100 < progress;
+                        return (
+                            <div
+                                key={i}
+                                className="rounded-full transition-all duration-75 flex-1"
+                                style={{
+                                    height: `${Math.max((isPlaying && filled ? h * 0.7 + Math.random() * 0.3 : h) * 28, 4)}px`,
+                                    background: filled ? accentColor : (isOwn ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.2)'),
+                                    minWidth: '3px',
+                                }}
+                            />
+                        );
+                    })}
+                </div>
+
+                {/* Time + speed */}
+                <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono tabular-nums" style={{ color: isOwn ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.5)' }}>
+                        {formatDuration(isPlaying || currentTime > 0 ? currentTime : duration)}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                        <button
+                            onClick={cycleSpeed}
+                            className="text-[9px] font-bold px-1.5 py-0.5 rounded-full border transition-colors"
+                            style={{ color: accentColor, borderColor: `${accentColor}50`, background: `${accentColor}15` }}
+                        >
+                            {speed}x
+                        </button>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onOpen?.(); }}
+                            className="text-[9px] opacity-50 hover:opacity-100 transition-opacity"
+                            style={{ color: accentColor }}
+                            title="Open fullscreen player"
+                        >
+                            ⛶
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+/* ─── Document file type helper ─── */
+const getDocIcon = (filename) => {
+    const ext = (filename || '').split('.').pop().toLowerCase();
+    const map = {
+        pdf: { icon: 'PDF', bg: 'bg-red-500', text: 'text-white' },
+        doc: { icon: 'DOC', bg: 'bg-blue-600', text: 'text-white' },
+        docx: { icon: 'DOC', bg: 'bg-blue-600', text: 'text-white' },
+        xls: { icon: 'XLS', bg: 'bg-green-600', text: 'text-white' },
+        xlsx: { icon: 'XLS', bg: 'bg-green-600', text: 'text-white' },
+        ppt: { icon: 'PPT', bg: 'bg-orange-500', text: 'text-white' },
+        pptx: { icon: 'PPT', bg: 'bg-orange-500', text: 'text-white' },
+        zip: { icon: 'ZIP', bg: 'bg-yellow-600', text: 'text-white' },
+        rar: { icon: 'RAR', bg: 'bg-yellow-700', text: 'text-white' },
+        txt: { icon: 'TXT', bg: 'bg-gray-500', text: 'text-white' },
+        mp3: { icon: 'MP3', bg: 'bg-purple-500', text: 'text-white' },
+        mp4: { icon: 'MP4', bg: 'bg-pink-500', text: 'text-white' },
+        apk: { icon: 'APK', bg: 'bg-emerald-600', text: 'text-white' },
+    };
+    return map[ext] || { icon: ext.toUpperCase().slice(0, 3) || '📄', bg: 'bg-indigo-500', text: 'text-white' };
+};
+
+// WhatsApp-style action menu overlay
+const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, onReply, onEdit, onCopy, onForward, onReact, onPin, onDelete, onInfo, onTranslate }) => {
+    const menuRef = useRef(null);
+
+    useEffect(() => {
+        const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
+        document.addEventListener('keydown', handleKey);
+        return () => document.removeEventListener('keydown', handleKey);
+    }, [onClose]);
+
+    const actions = [
+        { icon: '↩️', label: 'Reply', onClick: () => { onReply?.(); onClose(); } },
+        ...(isOwn && isTextMessage && !isDeleted ? [{ icon: '✏️', label: 'Edit', onClick: () => { onEdit?.(); onClose(); } }] : []),
+        ...(!isDeleted ? [{ icon: '📌', label: message.isPinned ? 'Unpin' : 'Pin', onClick: () => { onPin?.(); onClose(); } }] : []),
+        ...(!isDeleted ? [{ icon: '📋', label: 'Copy', onClick: () => { onCopy?.(); onClose(); } }] : []),
+        ...(!isDeleted ? [{ icon: '➡️', label: 'Forward', onClick: () => { onForward?.(); onClose(); } }] : []),
+        ...(!isDeleted && isTextMessage ? [{ icon: '🌐', label: 'Translate', onClick: () => { onTranslate?.(); onClose(); } }] : []),
+        ...(!isDeleted ? [{ icon: '😊', label: 'React', onClick: () => { onReact?.(); onClose(); } }] : []),
+        { icon: 'ℹ️', label: 'Info', onClick: () => { onInfo?.(); onClose(); } },
+        ...(isOwn && !isDeleted ? [{ icon: '🗑️', label: 'Delete', danger: true, onClick: () => { onDelete?.(); onClose(); } }] : []),
+    ];
+
+    return (
+        <div
+            className="fixed inset-0 z-[80] flex items-center justify-center"
+            onClick={onClose}
+            style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(3px)' }}
+        >
+            <div
+                ref={menuRef}
+                className="w-full max-w-xs mx-4 rounded-2xl overflow-hidden shadow-2xl border border-white/10"
+                style={{
+                    background: 'linear-gradient(135deg, #1a2634 0%, #111b21 100%)',
+                    animation: 'scaleInMenu 0.18s cubic-bezier(0.34,1.56,0.64,1) both'
+                }}
+                onClick={e => e.stopPropagation()}
+            >
+                {/* Message preview */}
+                {!isDeleted && (
+                    <div className="px-4 py-3 border-b border-white/8 bg-white/5">
+                        <p className="text-xs text-white/40 mb-1 uppercase tracking-wider font-semibold">Message</p>
+                        <p className="text-sm text-white/80 line-clamp-2 break-words">
+                            {message.type && message.type !== 'text' ? `📎 ${message.type}` : (message.content || '...')}
+                        </p>
+                    </div>
+                )}
+
+                {/* Quick reactions row */}
+                {!isDeleted && (
+                    <div className="flex items-center justify-around px-3 py-3 border-b border-white/8 bg-white/3">
+                        {QUICK_REACTIONS.map(emoji => (
+                            <button
+                                key={emoji}
+                                type="button"
+                                onClick={() => { onReact?.(emoji); onClose(); }}
+                                className="text-2xl hover:scale-125 active:scale-110 transition-transform duration-150 leading-none p-1 rounded-full hover:bg-white/10"
+                                title={emoji}
+                            >
+                                {emoji}
+                            </button>
+                        ))}
+                    </div>
+                )}
+
+                {/* Action list */}
+                <div className="py-1">
+                    {actions.map((action, idx) => (
+                        <button
+                            key={idx}
+                            type="button"
+                            onClick={action.onClick}
+                            className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/8 active:bg-white/12 ${action.danger ? 'text-red-400 hover:text-red-300' : 'text-gray-100'}`}
+                        >
+                            <span className="text-lg leading-none w-6 text-center">{action.icon}</span>
+                            <span className="text-sm font-medium">{action.label}</span>
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <style>{`
+                @keyframes scaleInMenu {
+                    from { opacity: 0; transform: scale(0.85) translateY(10px); }
+                    to { opacity: 1; transform: scale(1) translateY(0); }
+                }
+            `}</style>
+        </div>
+    );
+};
+
+const ChatBubble = ({
+    message, isOwn, senderName, onDelete, senderAvatar, showAvatar,
     onReply, replyTo, onTranslate, chatId, chatTranslationLang,
     onEdit, onCopy, onForward, onReact, onPin
 }) => {
-    const [showDelete, setShowDelete] = useState(false);
-    const [showActions, setShowActions] = useState(false);
-    const [showReactions, setShowReactions] = useState(false);
+    const [showActionMenu, setShowActionMenu] = useState(false);
+    const [showReactionsInMenu, setShowReactionsInMenu] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
+    const [showTranslatorMenu, setShowTranslatorMenu] = useState(false);
     const [swipeX, setSwipeX] = useState(0);
     const [swiping, setSwiping] = useState(false);
     const [zoomedMedia, setZoomedMedia] = useState(null);
-    
+
     const [translatedText, setTranslatedText] = useState('');
-    const [showTranslatorMenu, setShowTranslatorMenu] = useState(false);
     const [isTranslating, setIsTranslating] = useState(false);
-    
+
     // localTargetLang acts as a manual override for this specific message bubble
     const [localTargetLang, setLocalTargetLang] = useState('');
     const targetLang = localTargetLang || chatTranslationLang || localStorage.getItem('preferred_translation_language') || 'en';
-    
+
+    // Long press for mobile
+    const longPressTimer = useRef(null);
     const touchStartX = useRef(null);
+    const touchStartY = useRef(null);
+    const isSwiping = useRef(false);
+
     const content = message.content || '';
     const isDeleted = message.type === 'deleted' || message.deletedAt;
 
@@ -137,15 +378,13 @@ const ChatBubble = ({
 
     const isTextMessage = (!message.type || message.type === 'text') && !isMedia;
 
-    React.useEffect(() => {
+    useEffect(() => {
         const autoTranslate = async () => {
             if (!isTextMessage || !content || !onTranslate || !chatId) {
                 setTranslatedText('');
                 return;
             }
-            // Auto translate if chatTranslationLang is active and message is incoming (!isOwn)
-            // Or if localTargetLang (manual bubble translation) is set
-            const activeLang = localTargetLang || ( (!isOwn) ? chatTranslationLang : '' );
+            const activeLang = localTargetLang || ((!isOwn) ? chatTranslationLang : '');
             if (activeLang) {
                 setIsTranslating(true);
                 try {
@@ -180,31 +419,61 @@ const ChatBubble = ({
             window.URL.revokeObjectURL(blobUrl);
         } catch (error) {
             console.error('Download failed:', error);
-            // Fallback: open in new tab
             window.open(url, '_blank');
         }
     };
 
+    // Touch handlers — swipe = reply, long press = action menu
     const handleTouchStart = (e) => {
         touchStartX.current = e.touches[0].clientX;
+        touchStartY.current = e.touches[0].clientY;
+        isSwiping.current = false;
         setSwiping(true);
+
+        longPressTimer.current = setTimeout(() => {
+            if (!isSwiping.current) {
+                setShowActionMenu(true);
+            }
+        }, 450);
     };
 
     const handleTouchMove = (e) => {
         if (touchStartX.current === null) return;
-        const diff = e.touches[0].clientX - touchStartX.current;
-        // own messages: swipe left (negative), others: swipe right (positive)
-        if (isOwn && diff < 0) setSwipeX(Math.max(diff, -SWIPE_THRESHOLD));
-        else if (!isOwn && diff > 0) setSwipeX(Math.min(diff, SWIPE_THRESHOLD));
+        const diffX = e.touches[0].clientX - touchStartX.current;
+        const diffY = e.touches[0].clientY - touchStartY.current;
+
+        if (Math.abs(diffY) > 10) {
+            clearTimeout(longPressTimer.current);
+            isSwiping.current = true;
+        }
+
+        if (Math.abs(diffX) > 8) {
+            clearTimeout(longPressTimer.current);
+            isSwiping.current = true;
+            if (isOwn && diffX < 0) setSwipeX(Math.max(diffX, -SWIPE_THRESHOLD));
+            else if (!isOwn && diffX > 0) setSwipeX(Math.min(diffX, SWIPE_THRESHOLD));
+        }
     };
 
     const handleTouchEnd = () => {
+        clearTimeout(longPressTimer.current);
         if (Math.abs(swipeX) >= SWIPE_THRESHOLD - 5) {
             onReply && onReply(message);
         }
         setSwipeX(0);
         setSwiping(false);
         touchStartX.current = null;
+        touchStartY.current = null;
+        isSwiping.current = false;
+    };
+
+    // Desktop click → show action menu
+    const handleBubbleClick = (e) => {
+        if (e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON' ||
+            e.target.closest('button') || e.target.closest('select') || e.target.closest('a')) {
+            return;
+        }
+        setShowActionMenu(true);
     };
 
     const handleTranslateMessage = async () => {
@@ -225,90 +494,138 @@ const ChatBubble = ({
         }
     };
 
-
     const renderContent = (cnt, type) => {
+        // ── IMAGE ──
         if (type === 'image' || cnt.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
             return (
-                <div className="relative group/media">
+                <div
+                    className="relative group/media cursor-pointer rounded-2xl overflow-hidden"
+                    style={{ maxWidth: 260 }}
+                    onClick={(e) => { e.stopPropagation(); setZoomedMedia({ src: cnt, type: 'image' }); }}
+                >
                     <img
                         src={cnt}
                         alt="sent"
-                        className="rounded-xl max-w-[260px] max-h-[300px] w-full object-cover cursor-pointer block"
-                        onClick={() => setZoomedMedia({ src: cnt, type: 'image' })}
+                        className="w-full object-cover block"
+                        style={{ maxHeight: 320, minHeight: 80, minWidth: 120 }}
+                        loading="lazy"
                     />
-                    <button
-                        onClick={(e) => { e.stopPropagation(); handleDownload(cnt); }}
-                        className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 rounded-full text-white opacity-0 group-hover/media:opacity-100 transition-opacity"
-                        title="Download Image"
-                    >
-                        <ArrowDownTrayIcon className="w-4 h-4" />
-                    </button>
-                </div>
-            );
-        }
-        if (type === 'audio' || cnt.match(/\.(mp3|wav|m4a|aac|oga|webm)$/i)) {
-            return (
-                <div className="flex min-w-[240px] flex-col gap-2">
-                    <audio controls src={cnt} className="w-full h-9 accent-blue-500" preload="metadata" />
-                    <div className="flex items-center justify-between text-[10px] text-white/55">
-                        <span>Voice message</span>
-                        <span>Drag the bar to seek</span>
-                    </div>
-                    <button
-                        onClick={() => handleDownload(cnt)}
-                        className="text-[10px] text-white/60 hover:text-white flex items-center gap-1 self-end px-1"
-                    >
-                        <ArrowDownTrayIcon className="w-3 h-3" /> Download
-                    </button>
-                </div>
-            );
-        }
-        if (type === 'video' || cnt.match(/\.(mp4|webm|ogg)$/i)) {
-            return (
-                <div 
-                    className="relative group/media cursor-pointer rounded-xl overflow-hidden"
-                    onClick={() => setZoomedMedia({ src: cnt, type: 'video' })}
-                >
-                    <video src={cnt} className="rounded-xl max-w-[260px] max-h-[300px] w-full object-cover block" preload="metadata" />
-                    
-                    {/* Play Icon Overlay */}
-                    <div className="absolute inset-0 bg-black/20 flex items-center justify-center group-hover/media:bg-black/35 transition-colors">
-                        <div className="p-3 bg-black/40 backdrop-blur-md rounded-full text-white group-hover/media:scale-110 transition-transform shadow-lg border border-white/10">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 fill-white">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+                    {/* Hover overlay */}
+                    <div className="absolute inset-0 bg-black/0 group-hover/media:bg-black/25 transition-colors flex items-center justify-center">
+                        <div className="opacity-0 group-hover/media:opacity-100 transition-opacity p-2.5 bg-black/50 backdrop-blur-md rounded-full border border-white/20">
+                            <svg viewBox="0 0 24 24" fill="white" className="w-5 h-5">
+                                <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
                             </svg>
                         </div>
                     </div>
-
+                    {/* Download button */}
                     <button
                         onClick={(e) => { e.stopPropagation(); handleDownload(cnt); }}
-                        className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 rounded-full text-white opacity-0 group-hover/media:opacity-100 transition-opacity"
-                        title="Download Video"
+                        className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/80 rounded-full text-white opacity-0 group-hover/media:opacity-100 transition-opacity shadow-lg"
+                        title="Download"
                     >
                         <ArrowDownTrayIcon className="w-4 h-4" />
                     </button>
                 </div>
             );
         }
-        if (type === 'file') {
-            const fileName = cnt.split('/').pop() || 'File';
+        // ── AUDIO ──
+        if (type === 'audio' || cnt.match(/\.(mp3|wav|m4a|aac|oga|webm)$/i)) {
             return (
-                <div className="flex flex-col gap-1">
-                    <a href={cnt} target="_blank" rel="noreferrer" className="flex items-center gap-3 min-w-[180px]">
-                        <div className={`p-2 rounded-lg ${isOwn ? 'bg-white/20' : 'bg-blue-500/20'}`}>
-                            <DocumentIcon className="w-6 h-6 text-white" />
+                <InlineAudioPlayer
+                    src={cnt}
+                    isOwn={isOwn}
+                    onOpen={() => setZoomedMedia({ src: cnt, type: 'audio' })}
+                />
+            );
+        }
+        // ── VIDEO ──
+        if (type === 'video' || cnt.match(/\.(mp4|webm|ogg)$/i)) {
+            return (
+                <div
+                    className="relative group/media cursor-pointer rounded-2xl overflow-hidden"
+                    style={{ maxWidth: 260 }}
+                    onClick={(e) => { e.stopPropagation(); setZoomedMedia({ src: cnt, type: 'video' }); }}
+                >
+                    <video
+                        src={cnt}
+                        className="w-full object-cover block"
+                        style={{ maxHeight: 320, minHeight: 100 }}
+                        preload="metadata"
+                        muted
+                    />
+                    {/* Play overlay */}
+                    <div className="absolute inset-0 bg-black/30 group-hover/media:bg-black/45 transition-colors flex items-center justify-center">
+                        <div className="p-3.5 bg-black/60 backdrop-blur-md rounded-full border border-white/20 group-hover/media:scale-110 transition-transform shadow-2xl">
+                            <svg viewBox="0 0 24 24" fill="white" className="w-8 h-8 ml-0.5">
+                                <path d="M8 5v14l11-7z" />
+                            </svg>
                         </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate text-white">{fileName}</p>
-                            <p className="text-xs opacity-60">Tap to open</p>
-                        </div>
-                    </a>
+                    </div>
+                    {/* Video badge */}
+                    <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/60 backdrop-blur-sm rounded-full px-2 py-0.5">
+                        <svg viewBox="0 0 24 24" fill="white" className="w-3 h-3">
+                            <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
+                        </svg>
+                        <span className="text-white text-[10px] font-semibold">Video</span>
+                    </div>
+                    {/* Download button */}
                     <button
-                        onClick={() => handleDownload(cnt)}
-                        className="text-[10px] text-white/60 hover:text-white flex items-center gap-1 self-end px-1"
+                        onClick={(e) => { e.stopPropagation(); handleDownload(cnt); }}
+                        className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/80 rounded-full text-white opacity-0 group-hover/media:opacity-100 transition-opacity shadow-lg"
+                        title="Download"
                     >
-                        <ArrowDownTrayIcon className="w-3 h-3" /> Download
+                        <ArrowDownTrayIcon className="w-4 h-4" />
                     </button>
+                </div>
+            );
+        }
+        // ── DOCUMENT / FILE ──
+        if (type === 'file') {
+            const fileName = decodeURIComponent(cnt.split('/').pop() || 'File');
+            const docInfo = getDocIcon(fileName);
+            return (
+                <div className="min-w-[220px] max-w-[260px]">
+                    {/* File card */}
+                    <div className={`flex items-center gap-3 p-3 rounded-xl mb-0 ${isOwn ? 'bg-white/10' : 'bg-white/6'} border border-white/8`}>
+                        {/* File type icon */}
+                        <div className={`w-11 h-11 rounded-xl ${docInfo.bg} flex items-center justify-center flex-shrink-0 shadow-lg`}>
+                            <span className={`text-[10px] font-black tracking-tight ${docInfo.text}`}>{docInfo.icon}</span>
+                        </div>
+                        {/* File info */}
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-white truncate leading-tight">{fileName}</p>
+                            <p className="text-[10px] text-white/45 mt-0.5 uppercase tracking-wider">
+                                {(fileName.split('.').pop() || 'file').toUpperCase()} · Document
+                            </p>
+                        </div>
+                    </div>
+                    {/* Action buttons */}
+                    <div className="flex gap-1.5 mt-2">
+                        <a
+                            href={cnt}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                                isOwn ? 'bg-white/15 hover:bg-white/25 text-white' : 'bg-white/10 hover:bg-white/20 text-white'
+                            }`}
+                        >
+                            <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
+                                <path d="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z" />
+                            </svg>
+                            Open
+                        </a>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); handleDownload(cnt); }}
+                            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                                isOwn ? 'bg-white/15 hover:bg-white/25 text-white' : 'bg-white/10 hover:bg-white/20 text-white'
+                            }`}
+                        >
+                            <ArrowDownTrayIcon className="w-3.5 h-3.5" />
+                            Download
+                        </button>
+                    </div>
                 </div>
             );
         }
@@ -361,9 +678,6 @@ const ChatBubble = ({
                 );
             } catch { return <p className="text-sm">{cnt}</p>; }
         }
-        if (type === 'game') {
-            return <MiniGameCard game={cnt} isOwn={isOwn} />;
-        }
         if (type === 'sticker') {
             if (cnt.startsWith('http')) {
                 return <img src={cnt} alt="sticker" className="w-24 h-24 object-contain py-1" />;
@@ -372,8 +686,6 @@ const ChatBubble = ({
         }
         return <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap">{renderClickableText(cnt)}</p>;
     };
-
-
 
     const timestamp = (
         <span className={`text-[11px] select-none whitespace-nowrap ${isOwn ? 'text-white/60' : 'text-gray-400'}`}>
@@ -395,225 +707,213 @@ const ChatBubble = ({
     );
 
     return (
-        <div
-            className={`flex items-end gap-2 w-full ${isOwn ? 'flex-row-reverse' : 'flex-row'} mb-1`}
-            onMouseEnter={() => setShowDelete(true)}
-            onMouseLeave={() => setShowDelete(false)}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-            style={{
-                transform: `translateX(${swipeX}px)`,
-                transition: swiping ? 'none' : 'transform 0.2s ease'
-            }}
-        >
-            {/* Swipe reply icon */}
-            {Math.abs(swipeX) > 20 && (
-                <div className={`absolute ${isOwn ? 'right-2' : 'left-2'} flex items-center justify-center opacity-${Math.min(Math.round(Math.abs(swipeX) / SWIPE_THRESHOLD * 10) * 10, 100)}`}>
-                    <ArrowUturnLeftIcon className="w-5 h-5 text-gray-400" />
-                </div>
-            )}
-
-            {/* Avatar for others in group */}
-            {!isOwn && (
-                <div className="w-7 h-7 flex-shrink-0 mb-1">
-                    {showAvatar && senderAvatar ? (
-                        <img src={senderAvatar} alt="" className="w-7 h-7 rounded-full object-cover" />
-                    ) : (
-                        <div className="w-7 h-7" />
-                    )}
-                </div>
-            )}
-
-            <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} max-w-[75%] md:max-w-[60%]`}>
-                {!isOwn && senderName && showAvatar && (
-                    <span className="text-xs font-semibold text-blue-400 ml-3 mb-0.5">{senderName}</span>
+        <>
+            <div
+                className={`flex items-end gap-2 w-full ${isOwn ? 'flex-row-reverse' : 'flex-row'} mb-1`}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                style={{
+                    transform: `translateX(${swipeX}px)`,
+                    transition: swiping ? 'none' : 'transform 0.2s ease'
+                }}
+            >
+                {/* Swipe reply icon */}
+                {Math.abs(swipeX) > 20 && (
+                    <div className={`absolute ${isOwn ? 'right-2' : 'left-2'} flex items-center justify-center opacity-${Math.min(Math.round(Math.abs(swipeX) / SWIPE_THRESHOLD * 10) * 10, 100)}`}>
+                        <ArrowUturnLeftIcon className="w-5 h-5 text-gray-400" />
+                    </div>
                 )}
 
-                <div className="relative group/bubble flex items-end gap-1">
-                    {/* Desktop reply button */}
-                    <button
-                        onClick={() => onReply && onReply(message)}
-                        className={`opacity-0 group-hover/bubble:opacity-100 transition-opacity p-1 text-gray-500 hover:text-gray-300 mb-1 flex-shrink-0 ${isOwn ? 'order-first' : 'order-last'}`}
-                    >
-                        <ArrowUturnLeftIcon className="w-4 h-4" />
-                    </button>
-
-                    {!isDeleted && isTextMessage && (
-                        <button
-                            onClick={() => setShowTranslatorMenu(v => !v)}
-                            className={`opacity-0 group-hover/bubble:opacity-100 transition-opacity p-1 text-gray-500 hover:text-blue-400 mb-1 flex-shrink-0 ${isOwn ? 'order-first' : 'order-last'}`}
-                            title="Translate"
-                        >
-                            <GlobeIcon className="w-4 h-4" />
-                        </button>
-                    )}
-
-                    {isOwn && showDelete && onDelete && !isDeleted && (
-                        <button
-                            onClick={() => onDelete(message.id)}
-                            className="opacity-0 group-hover/bubble:opacity-100 transition-opacity p-1 text-gray-500 hover:text-red-400 mb-1 flex-shrink-0"
-                        >
-                            <TrashIcon className="w-4 h-4" />
-                        </button>
-                    )}
-
-                    <div 
-                        onMouseEnter={() => setShowReactions(true)}
-                        onMouseLeave={() => setShowReactions(false)}
-                        onClick={(e) => {
-                            if (e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON' && !e.target.closest('button') && !e.target.closest('select') && !e.target.closest('a')) {
-                                setShowReactions(v => !v);
-                            }
-                        }}
-                        className={`relative ${isMedia ? 'p-1' : 'px-3 py-2'} rounded-2xl shadow-sm cursor-pointer select-none
-                            ${isOwn
-                                ? 'bg-[#005c4b] text-white rounded-tr-sm'
-                                : 'bg-[#202c33] text-gray-100 rounded-tl-sm'
-                            }`}
-                    >
-                        {/* Reply preview */}
-                        {replyTo && (
-                            <div className={`mb-1 px-2 py-1 rounded-lg border-l-4 ${isOwn ? 'border-green-300 bg-white/10' : 'border-blue-400 bg-white/5'} text-xs text-gray-300 max-w-[240px] flex items-center justify-between gap-2 bg-black/20`}>
-                                <div className="min-w-0 flex-1">
-                                    <p className="font-semibold text-blue-300 truncate">{replyTo.senderName || 'Message'}</p>
-                                    <p className="truncate opacity-80">
-                                        {replyTo.senderName === 'Status' ? 'Status' : (replyTo.type && replyTo.type !== 'text' ? `📎 ${replyTo.type}` : replyTo.content)}
-                                    </p>
-                                </div>
-                                {replyTo.senderName === 'Status' && replyTo.content && (
-                                    <div className="w-10 h-10 rounded overflow-hidden flex-shrink-0 bg-black/40">
-                                        {replyTo.content.match(/\.(mp4|webm|ogg)$/i) ? (
-                                            <video src={replyTo.content} className="w-full h-full object-cover" muted />
-                                        ) : (
-                                            <img src={replyTo.content} alt="" className="w-full h-full object-cover" />
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {message.isPinned && (
-                            <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-yellow-300">Pinned</div>
-                        )}
-
-                        {isDeleted ? (
-                            <p className="text-sm italic text-white/55">This message was deleted</p>
+                {/* Avatar for others in group */}
+                {!isOwn && (
+                    <div className="w-7 h-7 flex-shrink-0 mb-1">
+                        {showAvatar && senderAvatar ? (
+                            <img src={senderAvatar} alt="" className="w-7 h-7 rounded-full object-cover" />
                         ) : (
-                            renderContent(content, message.type)
-                        )}
-
-                        {/* Translation container */}
-                        {((showTranslatorMenu || translatedText || isTranslating) && isTextMessage) && (
-                            <div className="mt-2 pt-2 border-t border-white/10 text-xs text-gray-200 min-w-[140px] font-sans">
-                                {isTranslating ? (
-                                    <div className="flex items-center gap-1.5 py-1 opacity-70">
-                                        <span className="animate-spin rounded-full h-3 w-3 border border-white/30 border-t-white" />
-                                        <span>Translating...</span>
-                                    </div>
-                                ) : translatedText ? (
-                                    <div className="space-y-1">
-                                        <div className="flex items-center justify-between gap-2 opacity-60 text-[10px]">
-                                            <span>Translated ({LANGUAGES.find(l => l.code === targetLang)?.name || targetLang}):</span>
-                                            <button 
-                                                onClick={() => { setTranslatedText(''); setLocalTargetLang(''); setShowTranslatorMenu(false); }} 
-                                                className="hover:text-white"
-                                            >
-                                                Hide
-                                            </button>
-                                        </div>
-                                        <p className="text-[14px] leading-relaxed break-words whitespace-pre-wrap text-green-300 font-medium font-sans">
-                                            {translatedText}
-                                        </p>
-                                    </div>
-                                ) : (
-                                    <div className="flex items-center gap-1.5 py-1">
-                                        <select
-                                            value={targetLang}
-                                            onChange={(e) => {
-                                                setLocalTargetLang(e.target.value);
-                                                localStorage.setItem('preferred_translation_language', e.target.value);
-                                            }}
-                                            className="bg-[#111b21] text-[11px] text-white px-1.5 py-0.5 rounded border border-gray-600 outline-none cursor-pointer"
-                                        >
-                                            {LANGUAGES.map(lang => (
-                                                <option key={lang.code} value={lang.code}>{lang.name}</option>
-                                            ))}
-                                        </select>
-                                        <button
-                                            onClick={handleTranslateMessage}
-                                            className="bg-signal-accent hover:bg-signal-accentHover text-white px-2 py-0.5 rounded font-bold text-[10px] active:scale-95"
-                                        >
-                                            Translate
-                                        </button>
-                                        <button
-                                            onClick={() => setShowTranslatorMenu(false)}
-                                            className="text-gray-400 hover:text-white text-[10px] ml-auto"
-                                        >
-                                            Cancel
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        <div className={`flex items-center gap-1 justify-end mt-0.5 ${isMedia ? 'absolute bottom-2 right-2 bg-black/40 rounded-full px-1.5 py-0.5' : ''}`}>
-                            {timestamp}
-                            {message.editedAt && <span className={`text-[10px] ${isOwn ? 'text-white/50' : 'text-gray-500'}`}>edited</span>}
-                            {ticks}
-                        </div>
-                        {Object.keys(message.reactions || {}).length > 0 && (
-                            <div className={`absolute -bottom-5 ${isOwn ? 'left-2' : 'right-2'} rounded-full bg-[#111b21] px-2 py-0.5 text-xs shadow border border-white/10`}>
-                                {Object.values(message.reactions).join(' ')}
-                            </div>
-                        )}
-                        {isOwn && message.readAt && (
-                            <div className="mt-1 text-right text-[10px] text-[#53bdeb]">
-                                Seen {format(new Date(message.readAt), 'HH:mm')}
-                            </div>
-                        )}
-
-                        {showReactions && (
-                            <div className={`absolute z-30 -top-10 ${isOwn ? 'right-0' : 'left-0'} flex gap-1 rounded-full bg-[#111b21] p-1 shadow-xl border border-white/10`}>
-                                {QUICK_REACTIONS.map(emoji => (
-                                    <button
-                                        key={emoji}
-                                        type="button"
-                                        onClick={() => { onReact?.(message, emoji); setShowReactions(false); }}
-                                        className="h-8 w-8 rounded-full hover:bg-white/10 text-lg"
-                                    >
-                                        {emoji}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-
-                        {showActions && (
-                            <div className={`absolute z-40 top-8 ${isOwn ? 'right-0' : 'left-0'} w-44 overflow-hidden rounded-xl bg-[#111b21] shadow-2xl border border-white/10`}>
-                                <ActionRow icon={<ClipboardDocumentIcon className="w-4 h-4" />} label="Copy" onClick={() => { onCopy?.(message); setShowActions(false); }} />
-                                <ActionRow icon={<ForwardIcon className="w-4 h-4" />} label="Forward" onClick={() => { onForward?.(message); setShowActions(false); }} />
-                                <ActionRow icon={<span className="text-sm">😊</span>} label="React" onClick={() => { setShowReactions(true); setShowActions(false); }} />
-                                <ActionRow icon={<span className="text-sm">📌</span>} label={message.isPinned ? 'Unpin' : 'Pin'} onClick={() => { onPin?.(message); setShowActions(false); }} />
-                                {isOwn && isTextMessage && <ActionRow icon={<PencilSquareIcon className="w-4 h-4" />} label="Edit" onClick={() => { onEdit?.(message); setShowActions(false); }} />}
-                                <ActionRow icon={<InformationCircleIcon className="w-4 h-4" />} label="Info" onClick={() => { setShowInfoModal(true); setShowActions(false); }} />
-                            </div>
+                            <div className="w-7 h-7" />
                         )}
                     </div>
+                )}
+
+                <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} max-w-[75%] md:max-w-[60%]`}>
+                    {!isOwn && senderName && showAvatar && (
+                        <span className="text-xs font-semibold text-blue-400 ml-3 mb-0.5">{senderName}</span>
+                    )}
+
+                    <div className="relative group/bubble flex items-end gap-1">
+                        {/* Desktop reply button (hover) */}
+                        <button
+                            onClick={() => onReply && onReply(message)}
+                            className={`opacity-0 group-hover/bubble:opacity-100 transition-opacity p-1 text-gray-500 hover:text-gray-300 mb-1 flex-shrink-0 ${isOwn ? 'order-first' : 'order-last'}`}
+                        >
+                            <ArrowUturnLeftIcon className="w-4 h-4" />
+                        </button>
+
+                        {/* 3-dot button (desktop hover) */}
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setShowActionMenu(true); }}
+                            className={`opacity-0 group-hover/bubble:opacity-100 transition-opacity p-1 text-gray-500 hover:text-gray-200 mb-1 flex-shrink-0 ${isOwn ? 'order-first' : 'order-last'}`}
+                            title="More actions"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                                <path d="M10 3a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM10 8.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM11.5 15.5a1.5 1.5 0 1 0-3 0 1.5 1.5 0 0 0 3 0Z" />
+                            </svg>
+                        </button>
+
+                        {/* The bubble itself */}
+                        <div
+                            onClick={handleBubbleClick}
+                            className={`relative ${isMedia ? 'p-1' : 'px-3 py-2'} rounded-2xl shadow-sm cursor-pointer select-none
+                                ${isOwn
+                                    ? 'bg-[#005c4b] text-white rounded-tr-sm'
+                                    : 'bg-[#202c33] text-gray-100 rounded-tl-sm'
+                                }`}
+                        >
+                            {/* Reply preview */}
+                            {replyTo && (
+                                <div className={`mb-1 px-2 py-1 rounded-lg border-l-4 ${isOwn ? 'border-green-300 bg-white/10' : 'border-blue-400 bg-white/5'} text-xs text-gray-300 max-w-[240px] flex items-center justify-between gap-2 bg-black/20`}>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="font-semibold text-blue-300 truncate">{replyTo.senderName || 'Message'}</p>
+                                        <p className="truncate opacity-80">
+                                            {replyTo.senderName === 'Status' ? 'Status' : (replyTo.type && replyTo.type !== 'text' ? `📎 ${replyTo.type}` : replyTo.content)}
+                                        </p>
+                                    </div>
+                                    {replyTo.senderName === 'Status' && replyTo.content && (
+                                        <div className="w-10 h-10 rounded overflow-hidden flex-shrink-0 bg-black/40">
+                                            {replyTo.content.match(/\.(mp4|webm|ogg)$/i) ? (
+                                                <video src={replyTo.content} className="w-full h-full object-cover" muted />
+                                            ) : (
+                                                <img src={replyTo.content} alt="" className="w-full h-full object-cover" />
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {message.isPinned && (
+                                <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-yellow-300 flex items-center gap-1">
+                                    📌 Pinned
+                                </div>
+                            )}
+
+                            {isDeleted ? (
+                                <p className="text-sm italic text-white/55">This message was deleted</p>
+                            ) : (
+                                renderContent(content, message.type)
+                            )}
+
+                            {/* Translation container */}
+                            {((showTranslatorMenu || translatedText || isTranslating) && isTextMessage) && (
+                                <div className="mt-2 pt-2 border-t border-white/10 text-xs text-gray-200 min-w-[140px] font-sans">
+                                    {isTranslating ? (
+                                        <div className="flex items-center gap-1.5 py-1 opacity-70">
+                                            <span className="animate-spin rounded-full h-3 w-3 border border-white/30 border-t-white" />
+                                            <span>Translating...</span>
+                                        </div>
+                                    ) : translatedText ? (
+                                        <div className="space-y-1">
+                                            <div className="flex items-center justify-between gap-2 opacity-60 text-[10px]">
+                                                <span>Translated ({LANGUAGES.find(l => l.code === targetLang)?.name || targetLang}):</span>
+                                                <button
+                                                    onClick={() => { setTranslatedText(''); setLocalTargetLang(''); setShowTranslatorMenu(false); }}
+                                                    className="hover:text-white"
+                                                >
+                                                    Hide
+                                                </button>
+                                            </div>
+                                            <p className="text-[14px] leading-relaxed break-words whitespace-pre-wrap text-green-300 font-medium font-sans">
+                                                {translatedText}
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-1.5 py-1">
+                                            <select
+                                                value={targetLang}
+                                                onChange={(e) => {
+                                                    setLocalTargetLang(e.target.value);
+                                                    localStorage.setItem('preferred_translation_language', e.target.value);
+                                                }}
+                                                className="bg-[#111b21] text-[11px] text-white px-1.5 py-0.5 rounded border border-gray-600 outline-none cursor-pointer"
+                                            >
+                                                {LANGUAGES.map(lang => (
+                                                    <option key={lang.code} value={lang.code}>{lang.name}</option>
+                                                ))}
+                                            </select>
+                                            <button
+                                                onClick={handleTranslateMessage}
+                                                className="bg-signal-accent hover:bg-signal-accentHover text-white px-2 py-0.5 rounded font-bold text-[10px] active:scale-95"
+                                            >
+                                                Translate
+                                            </button>
+                                            <button
+                                                onClick={() => setShowTranslatorMenu(false)}
+                                                className="text-gray-400 hover:text-white text-[10px] ml-auto"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            <div className={`flex items-center gap-1 justify-end mt-0.5 ${isMedia ? 'absolute bottom-2 right-2 bg-black/40 rounded-full px-1.5 py-0.5' : ''}`}>
+                                {timestamp}
+                                {message.editedAt && <span className={`text-[10px] ${isOwn ? 'text-white/50' : 'text-gray-500'}`}>edited</span>}
+                                {ticks}
+                            </div>
+
+                            {Object.keys(message.reactions || {}).length > 0 && (
+                                <div className={`absolute -bottom-5 ${isOwn ? 'left-2' : 'right-2'} rounded-full bg-[#111b21] px-2 py-0.5 text-xs shadow border border-white/10`}>
+                                    {Object.values(message.reactions).join(' ')}
+                                </div>
+                            )}
+
+                            {isOwn && message.readAt && (
+                                <div className="mt-1 text-right text-[10px] text-[#53bdeb]">
+                                    Seen {format(new Date(message.readAt), 'HH:mm')}
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </div>
+
+                {zoomedMedia && (
+                    <FullscreenMediaModal
+                        src={zoomedMedia.src}
+                        type={zoomedMedia.type}
+                        onClose={() => setZoomedMedia(null)}
+                    />
+                )}
             </div>
-            {zoomedMedia && (
-                <FullscreenMediaModal 
-                    src={zoomedMedia.src} 
-                    type={zoomedMedia.type} 
-                    onClose={() => setZoomedMedia(null)} 
+
+            {/* WhatsApp-style action menu overlay */}
+            {showActionMenu && (
+                <MessageActionMenu
+                    message={message}
+                    isOwn={isOwn}
+                    isTextMessage={isTextMessage}
+                    isDeleted={isDeleted}
+                    onClose={() => setShowActionMenu(false)}
+                    onReply={() => onReply && onReply(message)}
+                    onEdit={() => onEdit && onEdit(message)}
+                    onCopy={() => onCopy && onCopy(message)}
+                    onForward={() => onForward && onForward(message)}
+                    onReact={(emoji) => onReact && onReact(message, emoji)}
+                    onPin={() => onPin && onPin(message)}
+                    onDelete={() => onDelete && onDelete(message.id)}
+                    onInfo={() => setShowInfoModal(true)}
+                    onTranslate={() => { setShowTranslatorMenu(true); }}
                 />
             )}
+
+            {/* Message Info Modal */}
             {showInfoModal && (
-                <div 
+                <div
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in"
                     onClick={() => setShowInfoModal(false)}
                 >
-                    <div 
+                    <div
                         className="w-full max-w-md overflow-hidden rounded-2xl bg-[#111b21] border border-white/10 shadow-2xl p-6 relative animate-scale-up text-white"
                         onClick={e => e.stopPropagation()}
                     >
@@ -622,7 +922,7 @@ const ChatBubble = ({
                                 <InformationCircleIcon className="w-5 h-5 text-[#53bdeb]" />
                                 Message Info
                             </h3>
-                            <button 
+                            <button
                                 onClick={() => setShowInfoModal(false)}
                                 className="p-1 rounded-full hover:bg-white/10 transition-colors text-gray-400 hover:text-white"
                             >
@@ -631,7 +931,6 @@ const ChatBubble = ({
                         </div>
 
                         <div className="space-y-4">
-                            {/* Preview Message content */}
                             <div className="bg-white/5 rounded-xl p-3 border border-white/5 max-h-32 overflow-y-auto">
                                 <p className="text-xs text-white/50 mb-1">Message Preview</p>
                                 <p className="text-sm whitespace-pre-wrap break-words">{isDeleted ? 'Deleted message' : message.content}</p>
@@ -639,18 +938,14 @@ const ChatBubble = ({
 
                             <div className="space-y-3">
                                 <div className="flex justify-between items-center bg-white/5 p-2.5 rounded-lg">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs text-white/60">Sent</span>
-                                    </div>
+                                    <span className="text-xs text-white/60">Sent</span>
                                     <span className="text-xs font-medium text-white/90">
                                         {message.timestamp ? format(new Date(message.timestamp), 'd MMM yyyy, HH:mm:ss') : 'N/A'}
                                     </span>
                                 </div>
 
                                 <div className="flex justify-between items-center bg-white/5 p-2.5 rounded-lg">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs text-white/60">Delivered</span>
-                                    </div>
+                                    <span className="text-xs text-white/60">Delivered</span>
                                     <span className="text-xs font-medium text-white/90">
                                         {message.deliveredAt ? (
                                             format(new Date(message.deliveredAt), 'd MMM yyyy, HH:mm:ss')
@@ -665,9 +960,7 @@ const ChatBubble = ({
                                 </div>
 
                                 <div className="flex justify-between items-center bg-white/5 p-2.5 rounded-lg">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs text-white/60">Seen / Read</span>
-                                    </div>
+                                    <span className="text-xs text-white/60">Seen / Read</span>
                                     <span className="text-xs font-medium text-white/90">
                                         {message.readAt ? (
                                             <span className="text-[#53bdeb] font-semibold flex items-center gap-1">
@@ -692,16 +985,9 @@ const ChatBubble = ({
                     </div>
                 </div>
             )}
-        </div>
+        </>
     );
 };
-
-const ActionRow = ({ icon, label, onClick }) => (
-    <button type="button" onClick={onClick} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-gray-200 hover:bg-white/10">
-        {icon}
-        <span>{label}</span>
-    </button>
-);
 
 const MiniGameCard = ({ game, isOwn }) => {
     const [score, setScore] = useState(0);

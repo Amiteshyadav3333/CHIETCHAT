@@ -97,10 +97,18 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video', initialRingSt
     useEffect(() => {
         const initCall = async () => {
             try {
-                // Media optimization: use moderate resolution (480p ideal, 720p max) to save bandwidth on slow internet
+                // HD Media: 1080p ideal, 720p fallback, 30fps for HD video call worldwide
                 const constraints = callType === 'voice'
-                    ? { audio: true, video: false }
-                    : { audio: true, video: { width: { ideal: 640, max: 1280 }, height: { ideal: 480, max: 720 }, facingMode: facingModeRef.current } };
+                    ? { audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 }, video: false }
+                    : {
+                        audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 },
+                        video: {
+                            width: { ideal: 1920, max: 1920 },
+                            height: { ideal: 1080, max: 1080 },
+                            frameRate: { ideal: 30, max: 30 },
+                            facingMode: facingModeRef.current
+                        }
+                    };
 
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 streamRef.current = stream;
@@ -198,13 +206,14 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video', initialRingSt
                     parameters.encodings = [{}];
                 }
                 if (sender.track.kind === 'video') {
-                    // Limit video bandwidth to 300 kbps for smooth calling on slow internet
-                    parameters.encodings[0].maxBitrate = 300000;
-                    parameters.encodings[0].maxFramerate = 15;
-                    parameters.degradationPreference = 'maintain-framerate';
+                    // HD video: 2.5 Mbps for crisp 1080p quality worldwide
+                    parameters.encodings[0].maxBitrate = 2500000;
+                    parameters.encodings[0].maxFramerate = 30;
+                    parameters.encodings[0].scaleResolutionDownBy = 1.0; // No downscaling for HD
+                    parameters.degradationPreference = 'maintain-resolution'; // Keep HD resolution
                 } else if (sender.track.kind === 'audio') {
-                    // Limit audio to 40 kbps to save bandwidth
-                    parameters.encodings[0].maxBitrate = 40000;
+                    // High-quality audio: 128 kbps for clear voice
+                    parameters.encodings[0].maxBitrate = 128000;
                 }
                 await sender.setParameters(parameters);
             }
@@ -218,14 +227,55 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video', initialRingSt
 
         const pc = new RTCPeerConnection({
             encodedInsertableStreams: true, // Enables WebRTC Encoded Transform (E2EE)
+            iceTransportPolicy: 'all', // Try all ICE candidates for max global reach
+            bundlePolicy: 'max-bundle',
+            rtcpMuxPolicy: 'require',
             iceServers: [
+                // Google STUN — global, reliable
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
                 { urls: 'stun:stun2.l.google.com:19302' },
                 { urls: 'stun:stun3.l.google.com:19302' },
                 { urls: 'stun:stun4.l.google.com:19302' },
+                // Mozilla STUN — EU region
                 { urls: 'stun:stun.services.mozilla.com' },
-                { urls: 'stun:stun.ekiga.net' }
+                // Open STUN servers — additional worldwide fallback
+                { urls: 'stun:stun.ekiga.net' },
+                { urls: 'stun:stun.ideasip.com' },
+                { urls: 'stun:stun.schlund.de' },
+                { urls: 'stun:stun.voiparound.com' },
+                { urls: 'stun:stun.voipbuster.com' },
+                { urls: 'stun:stun.voxgratia.org' },
+                { urls: 'stun:stun.xten.com' },
+                // Cloudflare STUN — Asia/global CDN
+                { urls: 'stun:stun.cloudflare.com:3478' },
+                // Open Relay TURN — worldwide TURN server for restrictive NATs & firewalls
+                {
+                    urls: [
+                        'turn:openrelay.metered.ca:80',
+                        'turn:openrelay.metered.ca:443',
+                        'turn:openrelay.metered.ca:443?transport=tcp',
+                        'turns:openrelay.metered.ca:443'
+                    ],
+                    username: 'openrelayproject',
+                    credential: 'openrelayproject'
+                },
+                // Additional free TURN for extra coverage
+                {
+                    urls: 'turn:relay.metered.ca:80',
+                    username: 'e8dd65f422b554671be72eba',
+                    credential: 'gWJTELNy7sMIgIOf'
+                },
+                {
+                    urls: 'turn:relay.metered.ca:443',
+                    username: 'e8dd65f422b554671be72eba',
+                    credential: 'gWJTELNy7sMIgIOf'
+                },
+                {
+                    urls: 'turns:relay.metered.ca:443',
+                    username: 'e8dd65f422b554671be72eba',
+                    credential: 'gWJTELNy7sMIgIOf'
+                }
             ]
         });
 
@@ -317,7 +367,7 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video', initialRingSt
     const actuallySwitchToVideo = async () => {
         try {
             const videoStream = await navigator.mediaDevices.getUserMedia({
-                video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: facingModeRef.current },
+                video: { width: { ideal: 1920, max: 1920 }, height: { ideal: 1080, max: 1080 }, frameRate: { ideal: 30, max: 30 }, facingMode: facingModeRef.current },
                 audio: false
             });
             const videoTrack = videoStream.getVideoTracks()[0];
@@ -358,8 +408,9 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video', initialRingSt
         try {
             const nextStream = await navigator.mediaDevices.getUserMedia({
                 video: {
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 },
+                    width: { ideal: 1920, max: 1920 },
+                    height: { ideal: 1080, max: 1080 },
+                    frameRate: { ideal: 30, max: 30 },
                     facingMode: { ideal: nextFacingMode }
                 },
                 audio: false
@@ -669,10 +720,17 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video', initialRingSt
             >
                 <div className="flex items-center gap-4">
                     <div>
-                        <h2 className="text-white font-bold text-lg">{activeChat.name}</h2>
+                        <div className="flex items-center gap-2">
+                            <h2 className="text-white font-bold text-lg">{activeChat.name}</h2>
+                            {/* HD Badge */}
+                            <span className="flex items-center gap-1 bg-gradient-to-r from-blue-600 to-cyan-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-lg shadow-blue-500/30 tracking-widest uppercase">
+                                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                                HD
+                            </span>
+                        </div>
                         <div className="flex items-center gap-2 mt-0.5">
                             <span className="text-green-400 text-xs font-semibold">
-                                {firstPeer?.[1]?.stream ? 'Connected' : ringStatus === 'ringing' ? 'Ringing...' : 'Calling...'}
+                                {firstPeer?.[1]?.stream ? 'Connected · 1080p' : ringStatus === 'ringing' ? 'Ringing...' : 'Calling...'}
                             </span>
                             <span className="text-white/40 text-xs">•</span>
                             <button 

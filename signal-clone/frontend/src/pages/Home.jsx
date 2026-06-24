@@ -17,6 +17,7 @@ import { useEncryption } from '../hooks/useEncryption';
 import Reels from './Reels';
 import Social from './Social';
 import { decryptEnvelope, encryptForRecipients, isEncryptedPayload } from '../utils/encryption';
+import { compressImage, compressVideo, getFileCategory, formatFileSize } from '../utils/mediaCompressor';
 
 const Home = () => {
     const { user, token, logout, updateUser } = useContext(AuthContext);
@@ -62,6 +63,8 @@ const Home = () => {
     const [showTopDropdown, setShowTopDropdown] = useState(false);
     const [showTopReactions, setShowTopReactions] = useState(false);
     const [topInfoMessage, setTopInfoMessage] = useState(null);
+    // Upload progress state
+    const [uploadProgress, setUploadProgress] = useState(null); // null | { fileName, stage, percent, originalSize, compressedSize }
 
     // Group states
     const [searchModalTab, setSearchModalTab] = useState('search_user'); // 'search_user' | 'create_group' | 'discover_groups'
@@ -86,6 +89,7 @@ const Home = () => {
     const activeChatRef = useRef(activeChat);
     const chatsRef = useRef(chats);
     const showCallModalRef = useRef(showCallModal);
+    const messageRefsMap = useRef({});
 
     useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
     useEffect(() => { chatsRef.current = chats; }, [chats]);
@@ -722,12 +726,52 @@ const Home = () => {
 
         const maxSize = 100 * 1024 * 1024;
         if (file.size > maxSize) {
-            alert("File is too large (Max 100MB)");
+            alert('File is too large (Max 100MB)');
             return;
         }
 
+        const category = getFileCategory(file);
+        const originalSize = file.size;
+        let fileToUpload = file;
+
+        // ── COMPRESSION STEP ──
+        try {
+            if (category === 'image') {
+                setUploadProgress({ fileName: file.name, stage: 'Compressing image...', percent: 10, originalSize, compressedSize: null });
+                fileToUpload = await compressImage(file);
+                setUploadProgress(prev => ({
+                    ...prev,
+                    stage: 'Image compressed! Uploading...',
+                    percent: 30,
+                    compressedSize: fileToUpload.size
+                }));
+            } else if (category === 'video') {
+                setUploadProgress({ fileName: file.name, stage: 'Compressing video...', percent: 5, originalSize, compressedSize: null });
+                fileToUpload = await compressVideo(file, {
+                    onProgress: (p) => setUploadProgress(prev => ({
+                        ...prev,
+                        stage: `Compressing video... ${Math.round(p)}%`,
+                        percent: Math.round(p * 0.5) // compression = 0-50% of progress bar
+                    }))
+                });
+                setUploadProgress(prev => ({
+                    ...prev,
+                    stage: 'Video compressed! Uploading...',
+                    percent: 55,
+                    compressedSize: fileToUpload.size
+                }));
+            } else {
+                // Audio/document — upload directly with progress
+                setUploadProgress({ fileName: file.name, stage: 'Preparing upload...', percent: 5, originalSize, compressedSize: null });
+            }
+        } catch (compressErr) {
+            console.warn('Compression failed, using original:', compressErr);
+            fileToUpload = file;
+        }
+
+        // ── UPLOAD STEP ──
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('file', fileToUpload);
         try {
             const res = await axios.post('/api/upload', formData, {
                 headers: {
@@ -735,6 +779,19 @@ const Home = () => {
                     Authorization: `Bearer ${token}`
                 },
                 timeout: 3600000,
+                onUploadProgress: (progressEvent) => {
+                    const pct = progressEvent.total
+                        ? Math.round((progressEvent.loaded / progressEvent.total) * 100)
+                        : 50;
+                    const uploadStart = category === 'image' ? 30 : category === 'video' ? 55 : 5;
+                    const mapped = uploadStart + Math.round(pct * (95 - uploadStart) / 100);
+                    setUploadProgress(prev => ({
+                        ...prev,
+                        stage: `Uploading... ${pct}%`,
+                        percent: mapped,
+                        compressedSize: prev?.compressedSize ?? fileToUpload.size
+                    }));
+                }
             });
 
             const url = res.data.url;
@@ -743,11 +800,13 @@ const Home = () => {
             else if (file.type.startsWith('audio/') || url.match(/\.(mp3|wav|m4a|aac|oga)$/i)) type = 'audio';
             else if (file.type.startsWith('video/') || url.match(/\.(mp4|webm|ogg)$/i)) type = 'video';
 
+            setUploadProgress(null);
             handleSendMessage(url, type, null, disappearingTtl);
         } catch (err) {
+            setUploadProgress(null);
             console.error(err);
             const msg = err.response?.data?.error || err.response?.statusText || err.message;
-            alert("Upload failed: " + msg);
+            alert('Upload failed: ' + msg);
         }
     };
 
@@ -1519,6 +1578,37 @@ const Home = () => {
                         </div>
                     )}
 
+                    {/* Pinned Message Banner — WhatsApp style */}
+                    {(() => {
+                        const pinnedMsg = messages.find(m => m.isPinned);
+                        if (!pinnedMsg) return null;
+                        const scrollToPinned = () => {
+                            const el = messageRefsMap.current[pinnedMsg.id];
+                            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        };
+                        return (
+                            <div
+                                onClick={scrollToPinned}
+                                className="flex items-center gap-3 px-4 py-2 cursor-pointer border-b border-yellow-500/20 hover:bg-yellow-500/5 transition-colors group"
+                                style={{ background: 'linear-gradient(90deg, rgba(234,179,8,0.08) 0%, rgba(0,0,0,0) 100%)' }}
+                                title="Click to go to pinned message"
+                            >
+                                <div className="flex-shrink-0 w-0.5 h-8 bg-gradient-to-b from-yellow-400 to-yellow-600 rounded-full" />
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-[10px] font-bold text-yellow-400 uppercase tracking-widest mb-0.5 flex items-center gap-1">
+                                        📌 Pinned Message
+                                    </p>
+                                    <p className="text-xs text-gray-300 truncate">
+                                        {pinnedMsg.type && pinnedMsg.type !== 'text' ? `📎 ${pinnedMsg.type}` : (pinnedMsg.content || '...')}
+                                    </p>
+                                </div>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-yellow-400/50 group-hover:text-yellow-400 transition-colors flex-shrink-0">
+                                    <path fillRule="evenodd" d="M5.22 14.78a.75.75 0 0 0 1.06 0l7.22-7.22v5.69a.75.75 0 0 0 1.5 0v-7.5a.75.75 0 0 0-.75-.75h-7.5a.75.75 0 0 0 0 1.5h5.69l-7.22 7.22a.75.75 0 0 0 0 1.06Z" clipRule="evenodd" />
+                                </svg>
+                            </div>
+                        );
+                    })()}
+
                     {/* Chat Header */}
                     <div className="h-16 bg-signal-bg border-b border-gray-800 flex items-center justify-between px-4">
                         <div className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer" onClick={() => setShowInfoPanel(true)}>
@@ -1843,24 +1933,26 @@ const Home = () => {
                             return (
                                 <React.Fragment key={msg.id || idx}>
                                     {showDate && <DateSeparator date={msg.timestamp} />}
-                                    <ChatBubble
-                                        message={{ ...msg, senderName: sender?.username }}
-                                        isOwn={msg.senderId === user.id}
-                                        senderName={visibleActiveChat.isGroup ? sender?.username : null}
-                                        senderAvatar={sender?.avatar}
-                                        showAvatar={showAvatar || prevSenderId !== msg.senderId}
-                                        onDelete={handleDeleteMessage}
-                                        onReply={(m) => setReplyTo({ ...m, senderName: sender?.username || 'You' })}
-                                        onEdit={openEditMessage}
-                                        onCopy={handleCopyMessage}
-                                        onForward={setForwardMessage}
-                                        onReact={handleReactMessage}
-                                        onPin={handlePinMessage}
-                                        replyTo={replyData}
-                                        onTranslate={handleTranslate}
-                                        chatId={visibleActiveChat.id}
-                                        chatTranslationLang={chatTranslationLang}
-                                    />
+                                    <div ref={el => { if (msg.id) messageRefsMap.current[msg.id] = el; }}>
+                                        <ChatBubble
+                                            message={{ ...msg, senderName: sender?.username }}
+                                            isOwn={msg.senderId === user.id}
+                                            senderName={visibleActiveChat.isGroup ? sender?.username : null}
+                                            senderAvatar={sender?.avatar}
+                                            showAvatar={showAvatar || prevSenderId !== msg.senderId}
+                                            onDelete={handleDeleteMessage}
+                                            onReply={(m) => setReplyTo({ ...m, senderName: sender?.username || 'You' })}
+                                            onEdit={openEditMessage}
+                                            onCopy={handleCopyMessage}
+                                            onForward={setForwardMessage}
+                                            onReact={handleReactMessage}
+                                            onPin={handlePinMessage}
+                                            replyTo={replyData}
+                                            onTranslate={handleTranslate}
+                                            chatId={visibleActiveChat.id}
+                                            chatTranslationLang={chatTranslationLang}
+                                        />
+                                    </div>
                                 </React.Fragment>
                             );
                         })}
@@ -1940,6 +2032,49 @@ const Home = () => {
                     onAccept={acceptCall}
                     onReject={rejectCall}
                 />
+            )}
+
+            {/* ── Upload Progress Modal (WhatsApp-style compression indicator) ── */}
+            {uploadProgress && (
+                <div className="fixed inset-0 z-[200] flex items-end justify-center pb-8 px-4 pointer-events-none">
+                    <div className="w-full max-w-sm bg-[#1f2c34] border border-white/10 rounded-2xl p-4 shadow-2xl pointer-events-auto animate-slide-up">
+                        {/* Header */}
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="w-9 h-9 rounded-full bg-[#25d366]/20 flex items-center justify-center flex-shrink-0">
+                                {uploadProgress.percent < 55 ? (
+                                    <svg viewBox="0 0 24 24" fill="#25d366" className="w-4 h-4 animate-spin">
+                                        <path d="M12 2a10 10 0 1 0 10 10A10.016 10.016 0 0 0 12 2zm1 14.93V15a1 1 0 0 0-2 0v1.93A8.008 8.008 0 0 1 4.07 11H6a1 1 0 0 0 0-2H4.07A8.008 8.008 0 0 1 11 4.07V6a1 1 0 0 0 2 0V4.07A8.008 8.008 0 0 1 19.93 11H18a1 1 0 0 0 0 2h1.93A8.008 8.008 0 0 1 13 16.93z" />
+                                    </svg>
+                                ) : (
+                                    <svg viewBox="0 0 24 24" fill="#25d366" className="w-4 h-4">
+                                        <path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" />
+                                    </svg>
+                                )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-white text-xs font-semibold truncate">{uploadProgress.fileName}</p>
+                                <p className="text-white/50 text-[10px] mt-0.5">{uploadProgress.stage}</p>
+                            </div>
+                        </div>
+                        {/* Progress bar */}
+                        <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden mb-2">
+                            <div
+                                className="h-full bg-gradient-to-r from-[#25d366] to-[#00c896] rounded-full transition-all duration-500"
+                                style={{ width: `${uploadProgress.percent}%` }}
+                            />
+                        </div>
+                        {/* Size info */}
+                        <div className="flex items-center justify-between text-[10px]">
+                            <span className="text-white/40">Original: <span className="text-white/60">{formatFileSize(uploadProgress.originalSize)}</span></span>
+                            {uploadProgress.compressedSize != null && uploadProgress.compressedSize !== uploadProgress.originalSize && (
+                                <span className="text-green-400 font-semibold">
+                                    ↓ Compressed: {formatFileSize(uploadProgress.compressedSize)} ({Math.round((1 - uploadProgress.compressedSize / uploadProgress.originalSize) * 100)}% saved)
+                                </span>
+                            )}
+                            <span className="text-white/40">{uploadProgress.percent}%</span>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {showCallModal && (

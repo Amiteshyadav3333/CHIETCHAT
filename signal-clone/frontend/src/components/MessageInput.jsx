@@ -209,7 +209,7 @@ const MessageInput = ({
     };
 
     const sendMiniGame = () => {
-        onSend('Tap Race', 'game', 0);
+        onSend('Indiasearch Games', 'game', 0);
         setShowAttachMenu(false);
     };
 

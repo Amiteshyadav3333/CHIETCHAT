@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { format, isToday, isYesterday } from 'date-fns';
-import { TrashIcon, DocumentIcon, ArrowUturnLeftIcon, ArrowDownTrayIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon, MapPinIcon, InformationCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { TrashIcon, DocumentIcon, ArrowUturnLeftIcon, ArrowDownTrayIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon, MapPinIcon, InformationCircleIcon, XMarkIcon, ArrowLeftIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
 import { CheckIcon } from '@heroicons/react/24/solid';
 import FullscreenMediaModal from './FullscreenMediaModal';
 import { formatDuration, formatFileSize } from '../utils/mediaCompressor';
@@ -678,6 +679,9 @@ const ChatBubble = ({
                 );
             } catch { return <p className="text-sm">{cnt}</p>; }
         }
+        if (type === 'game') {
+            return <MiniGameCard game={cnt} isOwn={isOwn} />;
+        }
         if (type === 'sticker') {
             if (cnt.startsWith('http')) {
                 return <img src={cnt} alt="sticker" className="w-24 h-24 object-contain py-1" />;
@@ -990,16 +994,112 @@ const ChatBubble = ({
 };
 
 const MiniGameCard = ({ game, isOwn }) => {
-    const [score, setScore] = useState(0);
+    const [showModal, setShowModal] = useState(false);
+    const iframeUrl = 'https://game.indiasearch.site';
+
+    // Prevent background scrolling when game modal is open
+    useEffect(() => {
+        if (showModal) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = '';
+        }
+        return () => {
+            document.body.style.overflow = '';
+        };
+    }, [showModal]);
+
     return (
-        <div className="min-w-[210px] space-y-2">
-            <p className="text-xs uppercase tracking-wider text-white/50">Mini game</p>
-            <div className={`rounded-xl p-3 ${isOwn ? 'bg-white/10' : 'bg-blue-500/10'}`}>
-                <p className="text-sm font-bold">{game || 'Tap Race'}</p>
-                <button onClick={() => setScore(s => s + 1)} className="mt-2 w-full rounded-lg bg-white/15 px-3 py-2 text-sm font-bold hover:bg-white/25">
-                    Tap score: {score}
-                </button>
+        <div className="min-w-[220px] max-w-[280px] space-y-2">
+            <p className="text-xs uppercase tracking-wider text-white/50 flex items-center gap-1.5">
+                🎮 Mini Game
+            </p>
+            <div className={`rounded-2xl p-4 border border-white/8 relative overflow-hidden bg-gradient-to-br ${isOwn ? 'from-purple-600/30 to-indigo-600/20' : 'from-blue-600/30 to-teal-600/20'}`}>
+                {/* Decorative retro grid design background */}
+                <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px]" />
+                
+                <div className="relative z-10 space-y-3">
+                    <div>
+                        <h4 className="text-sm font-bold text-white tracking-wide">{game || 'Indiasearch Games'}</h4>
+                        <p className="text-[10px] text-white/60 mt-0.5">Ready to play in Chat</p>
+                    </div>
+                    
+                    <button 
+                        onClick={() => setShowModal(true)} 
+                        className="w-full rounded-xl bg-white/15 px-3 py-2.5 text-xs font-bold hover:bg-white/25 active:scale-[0.98] transition-all text-white flex items-center justify-center gap-1.5 shadow-lg border border-white/10"
+                    >
+                        🎮 Play Now
+                    </button>
+                </div>
             </div>
+
+            {/* Fullscreen Game Modal using ReactDOM Portal */}
+            {showModal && createPortal(
+                <div className="fixed inset-0 z-[100] flex flex-col bg-[#080b11]/95 backdrop-blur-md font-sans">
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 bg-[#0d121c]">
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => setShowModal(false)}
+                                className="p-2 rounded-xl bg-gray-800/70 hover:bg-gray-700 text-gray-300 transition-colors"
+                            >
+                                <ArrowLeftIcon className="w-5 h-5" />
+                            </button>
+                            <div>
+                                <h3 className="text-md font-bold text-white flex items-center gap-2">
+                                    🎮 {game || 'Indiasearch Games'}
+                                </h3>
+                                <p className="text-[10px] text-gray-400">Mini Game Panel</p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => {
+                                    const iframe = document.getElementById('game-iframe');
+                                    if (iframe) iframe.src = iframe.src;
+                                }}
+                                className="p-2 rounded-xl bg-gray-800/50 hover:bg-gray-800 text-gray-300 transition-colors"
+                                title="Restart Game"
+                            >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-4 h-4" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                                </svg>
+                            </button>
+                            <a
+                                href={iframeUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="p-2 rounded-xl bg-gray-850 hover:bg-gray-800 text-gray-300 transition-colors flex items-center justify-center"
+                                title="Open in New Tab"
+                            >
+                                <ArrowTopRightOnSquareIcon className="w-4 h-4" />
+                            </a>
+                            <button
+                                onClick={() => setShowModal(false)}
+                                className="p-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/35 text-rose-400 transition-colors"
+                                title="Close"
+                            >
+                                <XMarkIcon className="w-5 h-5" />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* IFrame Container */}
+                    <div className="flex-1 p-6 flex justify-center items-center">
+                        <div className="w-full h-full max-w-4xl max-h-[85vh] rounded-3xl overflow-hidden border border-gray-800 shadow-2xl bg-black relative">
+                            <iframe
+                                id="game-iframe"
+                                src={iframeUrl}
+                                className="w-full h-full border-none"
+                                title="Mini Game"
+                                allow="autoplay; fullscreen; keyboard"
+                            />
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 };

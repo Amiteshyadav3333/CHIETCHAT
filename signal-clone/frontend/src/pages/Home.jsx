@@ -9,13 +9,14 @@ import IncomingCallModal from '../components/IncomingCallModal';
 import VideoCallModal from '../components/VideoCall';
 import AvatarZoom from '../components/AvatarZoom';
 import StatusSection from '../components/StatusSection';
-import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon, EllipsisVerticalIcon, XMarkIcon, TrashIcon, NoSymbolIcon, PlayIcon, Cog6ToothIcon, BellIcon, MapPinIcon, PhotoIcon, ChatBubbleLeftRightIcon, InformationCircleIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon, EllipsisVerticalIcon, XMarkIcon, TrashIcon, NoSymbolIcon, PlayIcon, Cog6ToothIcon, BellIcon, MapPinIcon, PhotoIcon, ChatBubbleLeftRightIcon, InformationCircleIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon, MicrophoneIcon } from '@heroicons/react/24/outline';
 import { format } from 'date-fns';
 import SettingsModal from '../components/SettingsModal';
 import NotificationPanel from '../components/NotificationPanel';
 import { useEncryption } from '../hooks/useEncryption';
 import Reels from './Reels';
 import Social from './Social';
+import PodLiveView from './PodLiveView';
 import { decryptEnvelope, encryptForRecipients, isEncryptedPayload } from '../utils/encryption';
 import { compressImage, compressVideo, getFileCategory, formatFileSize } from '../utils/mediaCompressor';
 
@@ -37,6 +38,7 @@ const Home = () => {
     const [blockedUsers, setBlockedUsers] = useState([]);
     const [showReels, setShowReels] = useState(() => localStorage.getItem('activeView') === 'reels');
     const [showSocial, setShowSocial] = useState(() => localStorage.getItem('activeView') === 'social');
+    const [showPodlive, setShowPodlive] = useState(() => localStorage.getItem('activeView') === 'podlive');
     const [socialDeepLink, setSocialDeepLink] = useState(null); // { type: 'post'|'profile', id }
     const [showSettings, setShowSettings] = useState(() => localStorage.getItem('activeView') === 'settings');
     const [navPeekOpen, setNavPeekOpen] = useState(false);
@@ -99,9 +101,9 @@ const Home = () => {
 
     // Persist active view for refresh survival
     useEffect(() => {
-        const view = showReels ? 'reels' : showSocial ? 'social' : showSettings ? 'settings' : 'chats';
+        const view = showReels ? 'reels' : showSocial ? 'social' : showPodlive ? 'podlive' : showSettings ? 'settings' : 'chats';
         localStorage.setItem('activeView', view);
-    }, [showReels, showSocial, showSettings]);
+    }, [showReels, showSocial, showPodlive, showSettings]);
 
     const fetchChats = useCallback(async ({ restoreActive = false } = {}) => {
         if (!token) return [];
@@ -346,6 +348,8 @@ const Home = () => {
     // Navigate to the activity from a notification click
     const handleNotificationNavigate = (notification) => {
         setShowNotifications(false);
+        setShowReels(false);
+        setShowPodlive(false);
         const { type, targetId } = notification;
 
         // Social-related activities → open Social page with deep link
@@ -1171,17 +1175,19 @@ const Home = () => {
         {
             label: 'Chats',
             icon: ChatBubbleLeftRightIcon,
-            active: !showSocial && !showReels,
+            active: !showSocial && !showReels && !showPodlive,
             action: () => {
                 hideAppNavForFeature();
                 setShowReels(false);
                 setShowSocial(false);
+                setShowPodlive(false);
                 setActiveChat(null);
                 localStorage.removeItem('activeChatId');
             }
         },
-        { label: 'Reels', icon: PlayIcon, active: false, action: () => { hideAppNavForFeature(); setShowSocial(false); setShowReels(true); } },
-        { label: 'Social', icon: PhotoIcon, active: false, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(true); } },
+        { label: 'Reels', icon: PlayIcon, active: showReels, action: () => { hideAppNavForFeature(); setShowSocial(false); setShowPodlive(false); setShowReels(true); } },
+        { label: 'Social', icon: PhotoIcon, active: showSocial, action: () => { hideAppNavForFeature(); setShowReels(false); setShowPodlive(false); setShowSocial(true); } },
+        { label: 'PodLive', icon: MicrophoneIcon, active: showPodlive, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(true); } },
         { label: 'Notify', icon: BellIcon, active: showNotifications, action: openNotifications, badge: unreadCount },
         { label: 'New', icon: PlusIcon, active: showSearchModal, action: () => { setShowNotifications(false); setShowSettings(false); setShowSearchModal(true); } },
         { label: 'Settings', icon: Cog6ToothIcon, active: showSettings, action: () => { setShowNotifications(false); setShowSearchModal(false); setShowSettings(true); } }
@@ -2012,6 +2018,14 @@ const Home = () => {
                     onBack={() => { setShowSocial(false); setSocialDeepLink(null); }}
                     deepLink={socialDeepLink}
                     onDeepLinkConsumed={() => setSocialDeepLink(null)}
+                />
+            </div>
+
+            {/* PodLive Overlay */}
+            <div className={`fixed inset-0 z-50 bg-[#0b0f19] transition-opacity duration-200 ${showPodlive ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+                <PodLiveView
+                    active={showPodlive && !incomingCall && !showCallModal}
+                    onBack={() => setShowPodlive(false)}
                 />
             </div>
 

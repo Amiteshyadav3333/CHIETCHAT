@@ -1,0 +1,56 @@
+# System files
+.DS_Store
+
+# Node modules
+node_modules/
+
+# Environment Variables
+.env
+.env.local
+.env.*
+!.env.example
+
+# LiveKit local config (contains dev keys)
+livekit.yaml
+infra/livekit/livekit.yaml
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Next.js build output
+.next/
+out/
+build/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+# Uploads and temporary media
+uploads/
+/podlive-backend/uploads/
+*.vtt
+*.mp4
+*.ts
+*.m3u8
+
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Test and Debug files
+test-*.js
+test_*.js
+*.log
+backend.log
+frontend.log
+build.log
+infra/

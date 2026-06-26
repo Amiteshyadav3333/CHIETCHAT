@@ -45,6 +45,13 @@ const Home = () => {
     const [showSettings, setShowSettings] = useState(() => localStorage.getItem('activeView') === 'settings');
     const [navPeekOpen, setNavPeekOpen] = useState(false);
     const [sidebarSearchQuery, setSidebarSearchQuery] = useState('');
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 768);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     // Search Modal States
     const [showSearchModal, setShowSearchModal] = useState(false);
@@ -1503,7 +1510,7 @@ const Home = () => {
                 </div>
             )}
 
-            {appNavHidden && !navPeekOpen && (
+            {(appNavHidden || isMobile) && !navPeekOpen && (
                 <button
                     onClick={() => setNavPeekOpen(true)}
                     className="fixed left-0 top-1/2 z-[70] -translate-y-1/2 rounded-r-2xl border border-l-0 border-gray-700 bg-[#111b21]/95 px-1.5 py-6 text-gray-300 shadow-2xl hover:text-white active:scale-95"
@@ -1522,7 +1529,10 @@ const Home = () => {
             )}
 
             {/* WhatsApp-style side navigation */}
-            <aside className={`${appNavVisible ? 'flex' : 'hidden'} ${navPeekOpen ? 'fixed inset-y-0 left-0 z-[80] shadow-2xl' : 'relative'} w-[68px] md:w-[78px] xl:w-[236px] flex-col border-r border-gray-800 bg-[#080808] px-2 md:px-3 py-4 md:py-5 shrink-0`}>
+            <aside className={navPeekOpen
+                ? "fixed inset-y-0 left-0 z-[80] shadow-2xl flex w-[68px] md:w-[78px] xl:w-[236px] flex-col border-r border-gray-800 bg-[#080808] px-2 md:px-3 py-4 md:py-5 shrink-0"
+                : `hidden md:${!appNavHidden ? 'flex' : 'hidden'} md:relative w-[68px] md:w-[78px] xl:w-[236px] flex-col border-r border-gray-800 bg-[#080808] px-2 md:px-3 py-4 md:py-5 shrink-0`
+            }>
                 <div className="h-12 px-2 flex items-center">
                     <span className="hidden xl:block text-xl font-black tracking-tight">CHEETCHAT</span>
                     <span className="xl:hidden w-9 h-9 rounded-xl bg-signal-accent flex items-center justify-center font-black">C</span>

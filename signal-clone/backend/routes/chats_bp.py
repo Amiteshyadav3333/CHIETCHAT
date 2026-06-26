@@ -35,6 +35,7 @@ def get_chats():
     try:
         participations = ChatParticipant.query.filter_by(user_id=user_id).all()
         chat_ids = [p.chat_id for p in participations]
+        archive_map = {p.chat_id: bool(p.is_archived) for p in participations}
         chats = Chat.query.filter(Chat.id.in_(chat_ids)).all()
 
         result = []
@@ -44,7 +45,7 @@ def get_chats():
             participants = ChatParticipant.query.filter_by(chat_id=chat.id).all()
             part_data = []
             for p in participants:
-                s_user = serialize_user(p.user)
+                s_user = serialize_user(p.user, viewer_id=user_id)
                 if chat.is_group and p.user_id != user_id:
                     s_user['phone'] = 'Hidden'
                     s_user['bio'] = ''
@@ -64,6 +65,7 @@ def get_chats():
             result.append({
                 "id": chat.id,
                 "isGroup": chat.is_group,
+                "isArchived": archive_map.get(chat.id, False),
                 "name": chat_name,
                 "avatar": chat_avatar,
                 "participants": part_data,
@@ -163,6 +165,18 @@ def get_messages(chat_id):
         db.session.commit()
 
     messages = Message.query.filter_by(chat_id=chat_id).order_by(Message.timestamp.asc()).all()
+    
+    from models import StarredMessage, PollVote
+    starred_ids = {s.message_id for s in StarredMessage.query.filter_by(user_id=user_id).all()}
+    
+    msg_ids = [m.id for m in messages]
+    all_votes = PollVote.query.filter(PollVote.message_id.in_(msg_ids)).all() if msg_ids else []
+    votes_by_message = {}
+    for v in all_votes:
+        if v.message_id not in votes_by_message:
+            votes_by_message[v.message_id] = []
+        votes_by_message[v.message_id].append({"userId": v.user_id, "optionIdx": v.option_idx})
+
     return jsonify([{
         "id": m.id,
         "senderId": m.sender_id,
@@ -179,7 +193,9 @@ def get_messages(chat_id):
         "readAt": iso_utc(m.read_at),
         "deliveredAt": iso_utc(m.delivered_at),
         "reactions": m.reactions_dict(),
-        "isPinned": bool(m.is_pinned)
+        "isPinned": bool(m.is_pinned),
+        "isStarred": m.id in starred_ids,
+        "votes": votes_by_message.get(m.id, [])
     } for m in messages])
 
 @chats_bp.route('/api/messages/<int:message_id>', methods=['DELETE'])
@@ -314,6 +330,60 @@ def create_group():
     except Exception as e:
         print(f"Error creating group: {e}")
         return jsonify({"error": "Failed to create group"}), 500
+
+# Add Participant to Group
+@chats_bp.route('/api/chats/<int:chat_id>/participants', methods=['POST'])
+def add_group_participant(chat_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    chat = Chat.query.get(chat_id)
+    if not chat or not chat.is_group:
+        return jsonify({"error": "Group not found"}), 404
+
+    if not user_can_access_chat(user_id, chat_id):
+        return jsonify({"error": "Forbidden"}), 403
+
+    data = get_json_data()
+    target_uid = data.get('userId')
+    if not target_uid:
+        return jsonify({"error": "User ID is required"}), 400
+
+    target_user = User.query.get(target_uid)
+    if not target_user:
+        return jsonify({"error": "User not found"}), 404
+
+    existing = ChatParticipant.query.filter_by(chat_id=chat_id, user_id=target_uid).first()
+    if not existing:
+        participant = ChatParticipant(chat_id=chat_id, user_id=target_uid)
+        db.session.add(participant)
+        db.session.commit()
+
+        # Send a system message to the chat
+        system_msg = Message(
+            chat_id=chat_id,
+            sender_id=user_id,
+            content=f"Added {target_user.username} to the group",
+            type='text',
+            status='sent'
+        )
+        db.session.add(system_msg)
+        db.session.commit()
+
+        msg_payload = {
+            "id": system_msg.id,
+            "senderId": user_id,
+            "content": system_msg.content,
+            "status": 'sent',
+            "type": 'text',
+            "timestamp": iso_utc(system_msg.timestamp),
+            "chatId": chat_id,
+            "deliveredAt": None
+        }
+        emit_message_update(chat_id, 'receive_message', msg_payload)
+
+    return jsonify({"ok": True})
 
 # Discover Public Groups
 @chats_bp.route('/api/groups/public', methods=['GET'])
@@ -559,3 +629,145 @@ def get_gifs_proxy():
     
     # Return subset of fallback gifs containing query match or just random selection if fails
     return jsonify({"gifs": FALLBACK_GIFS})
+
+# Star/Unstar Messages
+@chats_bp.route('/api/messages/<int:message_id>/star', methods=['POST'])
+def star_message(message_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    msg = Message.query.get(message_id)
+    if not msg:
+        return jsonify({"error": "Message not found"}), 404
+        
+    if not user_can_access_chat(user_id, msg.chat_id):
+        return jsonify({"error": "Forbidden"}), 403
+        
+    from models import StarredMessage
+    existing = StarredMessage.query.filter_by(user_id=user_id, message_id=message_id).first()
+    if not existing:
+        starred = StarredMessage(user_id=user_id, message_id=message_id)
+        db.session.add(starred)
+        db.session.commit()
+        
+    return jsonify({"ok": True, "starred": True})
+
+@chats_bp.route('/api/messages/<int:message_id>/unstar', methods=['POST'])
+def unstar_message(message_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+        
+    from models import StarredMessage
+    existing = StarredMessage.query.filter_by(user_id=user_id, message_id=message_id).first()
+    if existing:
+        db.session.delete(existing)
+        db.session.commit()
+        
+    return jsonify({"ok": True, "starred": False})
+
+@chats_bp.route('/api/messages/starred', methods=['GET'])
+def get_starred_messages():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+        
+    from models import StarredMessage
+    starred = StarredMessage.query.filter_by(user_id=user_id).all()
+    msg_ids = [s.message_id for s in starred]
+    if not msg_ids:
+        return jsonify([])
+        
+    messages = Message.query.filter(Message.id.in_(msg_ids)).order_by(Message.timestamp.desc()).all()
+    res = []
+    for m in messages:
+        res.append({
+            "id": m.id,
+            "chatId": m.chat_id,
+            "senderId": m.sender_id,
+            "senderName": m.sender.username if m.sender else "Unknown",
+            "content": m.content,
+            "type": m.type,
+            "timestamp": iso_utc(m.timestamp),
+            "status": m.status,
+            "replyToId": m.reply_to_id,
+            "replyContent": m.reply_content,
+            "replySenderName": m.reply_sender_name,
+            "editedAt": iso_utc(m.edited_at) if m.edited_at else None,
+            "deletedAt": iso_utc(m.deleted_at) if m.deleted_at else None,
+            "reactions": m.reactions_dict(),
+            "isPinned": bool(m.is_pinned),
+            "isStarred": True
+        })
+    return jsonify(res)
+
+# Archive/Unarchive Chats
+@chats_bp.route('/api/chats/<int:chat_id>/archive', methods=['POST'])
+def archive_chat(chat_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+        
+    participant = ChatParticipant.query.filter_by(chat_id=chat_id, user_id=user_id).first()
+    if not participant:
+        return jsonify({"error": "Chat participant not found"}), 404
+        
+    participant.is_archived = True
+    db.session.commit()
+    return jsonify({"ok": True, "isArchived": True})
+
+@chats_bp.route('/api/chats/<int:chat_id>/unarchive', methods=['POST'])
+def unarchive_chat(chat_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+        
+    participant = ChatParticipant.query.filter_by(chat_id=chat_id, user_id=user_id).first()
+    if not participant:
+        return jsonify({"error": "Chat participant not found"}), 404
+        
+    participant.is_archived = False
+    db.session.commit()
+    return jsonify({"ok": True, "isArchived": False})
+
+# Poll Voting
+@chats_bp.route('/api/messages/<int:message_id>/poll-vote', methods=['POST'])
+def vote_poll(message_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+        
+    msg = Message.query.get(message_id)
+    if not msg or msg.type != 'poll':
+        return jsonify({"error": "Poll message not found"}), 404
+        
+    if not user_can_access_chat(user_id, msg.chat_id):
+        return jsonify({"error": "Forbidden"}), 403
+        
+    data = get_json_data()
+    option_idx = data.get('optionIdx')
+    if option_idx is None:
+        return jsonify({"error": "Option index is required"}), 400
+        
+    from models import PollVote
+    existing = PollVote.query.filter_by(message_id=message_id, user_id=user_id).first()
+    if existing:
+        if existing.option_idx == option_idx:
+            db.session.delete(existing)
+        else:
+            existing.option_idx = option_idx
+    else:
+        vote = PollVote(message_id=message_id, user_id=user_id, option_idx=option_idx)
+        db.session.add(vote)
+        
+    db.session.commit()
+    
+    votes = PollVote.query.filter_by(message_id=message_id).all()
+    vote_data = [{"userId": v.user_id, "optionIdx": v.option_idx} for v in votes]
+    
+    payload = {"messageId": message_id, "chatId": msg.chat_id, "votes": vote_data}
+    from sockets import emit_message_update
+    emit_message_update(msg.chat_id, 'poll_vote_update', payload)
+    
+    return jsonify({"ok": True, "votes": vote_data})

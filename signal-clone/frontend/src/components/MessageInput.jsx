@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { 
     PaperAirplaneIcon, FaceSmileIcon, PaperClipIcon, MicrophoneIcon, 
     StopIcon, XMarkIcon, ChartBarIcon, MapPinIcon, DocumentIcon,
-    MusicalNoteIcon, PhotoIcon, CameraIcon, UserCircleIcon
+    MusicalNoteIcon, PhotoIcon, CameraIcon, UserCircleIcon, PlayIcon
 } from '@heroicons/react/24/solid';
 import { ArrowUturnLeftIcon } from '@heroicons/react/24/outline';
 import EmojiPicker from 'emoji-picker-react';
@@ -54,7 +54,8 @@ const MessageInput = ({
     onTranslate, chatId, chatTranslationLang, onChangeTranslationLang,
     onTyping,
     disappearingTtl = 0,
-    disabled = false, placeholderOverride = ""
+    disabled = false, placeholderOverride = "",
+    lastMessageText = ""
 }) => {
     const [text, setText] = useState('');
     const [showEmoji, setShowEmoji] = useState(false);
@@ -66,6 +67,62 @@ const MessageInput = ({
     const [isRecording, setIsRecording] = useState(false);
     const [showPollCreator, setShowPollCreator] = useState(false);
     const [pollData, setPollData] = useState({ question: '', options: ['', ''] });
+    const [smartReplies, setSmartReplies] = useState([]);
+
+    React.useEffect(() => {
+        if (!lastMessageText) {
+            setSmartReplies([]);
+            return;
+        }
+        const textLower = lastMessageText.toLowerCase();
+        let replies = [];
+        if (textLower.includes('hello') || textLower.includes('hi') || textLower.includes('hey') || textLower.includes('kasa kai') || textLower.includes('namaste')) {
+            replies = ["Hello! 👋", "Hi, how are you?", "Hey there! 😊"];
+        } else if (textLower.includes('how are you') || textLower.includes('how r u') || textLower.includes('kya hal') || textLower.includes('kaisa hai')) {
+            replies = ["I'm doing great, thanks!", "All good here! 👍", "Doing well, what about you?"];
+        } else if (textLower.includes('where') || textLower.includes('location') || textLower.includes('kahan')) {
+            replies = ["I'm at home.", "On my way! 🚗", "Let me share my location..."];
+        } else if (textLower.includes('game') || textLower.includes('play') || textLower.includes('khelein')) {
+            replies = ["Let's play Tic-Tac-Toe! 🎮", "Sure, start the game!", "Maybe later."];
+        } else if (textLower.includes('upi') || textLower.includes('pay') || textLower.includes('money') || textLower.includes('payment')) {
+            replies = ["Sending UPI payment now...", "How much do you need?", "Let me check my balance."];
+        } else {
+            replies = ["Awesome! 👍", "Okay, got it.", "Sounds good!"];
+        }
+        setSmartReplies(replies);
+    }, [lastMessageText]);
+
+    const handleGrammarFix = () => {
+        if (!text.trim()) return;
+        let t = text.trim();
+        t = t.charAt(0).toUpperCase() + t.slice(1);
+        const rules = [
+            { regex: /\bi\b/g, replacement: 'I' },
+            { regex: /\bdont\b/gi, replacement: "don't" },
+            { regex: /\bcant\b/gi, replacement: "can't" },
+            { regex: /\bwont\b/gi, replacement: "won't" },
+            { regex: /\bpls\b/gi, replacement: "please" },
+            { regex: /\bplz\b/gi, replacement: "please" },
+            { regex: /\bu\b/gi, replacement: "you" },
+            { regex: /\br\b/gi, replacement: "are" },
+            { regex: /\by\b/gi, replacement: "why" },
+            { regex: /\bomg\b/gi, replacement: "Oh my God" },
+            { regex: /\bthx\b/gi, replacement: "thanks" },
+            { regex: /\btanks\b/gi, replacement: "thanks" },
+            { regex: /\bsry\b/gi, replacement: "sorry" },
+            { regex: /\btomorrow\b/gi, replacement: "tomorrow" },
+            { regex: /\bhow r u\b/gi, replacement: "how are you" },
+            { regex: /\bhow are u\b/gi, replacement: "how are you" },
+        ];
+        rules.forEach(rule => {
+            t = t.replace(rule.regex, rule.replacement);
+        });
+        if (!/[.!?]$/.test(t)) {
+            t += '.';
+        }
+        setText(t);
+        inputRef.current?.focus();
+    };
     
     const showTranslator = chatTranslationLang !== '';
     const targetLang = chatTranslationLang || 'hi';
@@ -213,6 +270,28 @@ const MessageInput = ({
         setShowAttachMenu(false);
     };
 
+    const sendTicTacToe = () => {
+        onSend('Tic-Tac-Toe', 'game', 0);
+        setShowAttachMenu(false);
+    };
+
+    const sendUPIPayment = () => {
+        const amount = prompt("Enter amount to transfer (₹):");
+        if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
+            if (amount) alert("Please enter a valid transfer amount.");
+            return;
+        }
+        const remarks = prompt("Enter remarks (optional):") || "";
+        const payload = {
+            amount: parseFloat(amount),
+            remarks,
+            status: 'Completed',
+            transactionId: 'TXN' + Math.floor(Math.random() * 100000000000)
+        };
+        onSend(JSON.stringify(payload), 'payment', disappearingTtl);
+        setShowAttachMenu(false);
+    };
+
     const sendSticker = (sticker) => {
         onSend(sticker, 'sticker', disappearingTtl);
         setShowEmoji(false);
@@ -266,7 +345,27 @@ const MessageInput = ({
     };
 
     return (
-        <div className="relative bg-[#202c33] border-t border-gray-800">
+        <div className="relative bg-[#202c33] border-t border-gray-800 font-sans">
+            {/* AI Smart Replies */}
+            {smartReplies.length > 0 && (
+                <div className="flex gap-2 px-4 py-2 bg-[#1f2c34] overflow-x-auto scrollbar-none border-b border-gray-800 flex-wrap items-center animate-slide-up">
+                    <span className="text-[10px] bg-[#00a884]/20 text-[#00a884] px-2 py-0.5 rounded-full font-bold uppercase shrink-0">Smart Replies</span>
+                    {smartReplies.map((reply, i) => (
+                        <button
+                            key={i}
+                            type="button"
+                            onClick={() => {
+                                onSend(reply, 'text', disappearingTtl);
+                                setSmartReplies([]);
+                            }}
+                            className="bg-[#2a3942] hover:bg-[#374248] text-xs text-white px-3 py-1 rounded-full border border-gray-700 transition active:scale-95 whitespace-nowrap"
+                        >
+                            {reply}
+                        </button>
+                    ))}
+                </div>
+            )}
+
             {/* Poll Creator Modal */}
             {showPollCreator && (
                 <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
@@ -528,6 +627,18 @@ const MessageInput = ({
                             icon={<ChartBarIcon className="w-6 h-6 text-white" />}
                             onClick={sendMiniGame}
                         />
+                        <AttachOption
+                            label="Tic-Tac-Toe"
+                            color="bg-orange-500"
+                            icon={<PlayIcon className="w-6 h-6 text-white" />}
+                            onClick={sendTicTacToe}
+                        />
+                        <AttachOption
+                            label="UPI Pay"
+                            color="bg-emerald-600"
+                            icon={<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-white"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5h16.5m-18 0A1.5 1.5 0 0 1 3.5 3h17a1.5 1.5 0 0 1 1.5 1.5m-18.5 0v11.25A2.25 2.25 0 0 0 3.75 18h15A2.25 2.25 0 0 0 21 15.75V4.5m-18.5 0v11.25" /></svg>}
+                            onClick={sendUPIPayment}
+                        />
                     </div>
                     <input ref={galleryInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="image/*,video/*" />
                     <input ref={cameraInputRef} type="file" className="hidden" onChange={handleFileChange} accept="image/*,video/*" capture="environment" />
@@ -568,6 +679,17 @@ const MessageInput = ({
                             title="Translate"
                         >
                             <GlobeIcon className="w-6 h-6" />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleGrammarFix}
+                            disabled={!text.trim()}
+                            className={`p-2 rounded-full transition-all ${text.trim() ? 'text-violet-400 hover:text-violet-300 hover:scale-105 active:scale-95' : 'text-gray-600 cursor-not-allowed'}`}
+                            title="AI Grammar Fix"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 21l-.813-5.096L3.091 15.091l5.096-.813L9 9.187l.813 5.091 5.096.813-5.096.813zM19.071 4.929l-.312 1.948-1.948.312 1.948.312.312 1.948.312-1.948 1.948-.312-1.948-.312-.312-1.948zM19.071 19.071l-.312 1.948-1.948.312 1.948.312.312 1.948.312-1.948 1.948-.312-1.948-.312-.312-1.948z" />
+                            </svg>
                         </button>
                     </div>
                 )}

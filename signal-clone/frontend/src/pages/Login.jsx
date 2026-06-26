@@ -14,6 +14,12 @@ const Login = () => {
     const [phone, setPhone] = useState('');
     const [otp, setOtp] = useState('');
     const [message, setMessage] = useState('');
+    
+    // 2FA login states
+    const [is2FaStep, setIs2FaStep] = useState(false);
+    const [twoFactorCode, setTwoFactorCode] = useState('');
+    const [twoFactorUserId, setTwoFactorUserId] = useState(null);
+
     const [attemptsRemaining, setAttemptsRemaining] = useState(null);
     const [passwordLocked, setPasswordLocked] = useState(false);
     const [pendingKeys, setPendingKeys] = useState(null);
@@ -23,7 +29,6 @@ const Login = () => {
 
     React.useEffect(() => {
         if (token) {
-            // Don't redirect if we're about to navigate somewhere specific (like /setup-profile)
             const pendingNav = sessionStorage.getItem('pending_nav');
             if (pendingNav) {
                 sessionStorage.removeItem('pending_nav');
@@ -50,6 +55,9 @@ const Login = () => {
         setAttemptsRemaining(null);
         setPasswordLocked(false);
         setPendingKeys(null);
+        setIs2FaStep(false);
+        setTwoFactorCode('');
+        setTwoFactorUserId(null);
     };
 
     const finishLogin = (userData, authToken, keysToStore = null, needsProfileSetup = false) => {
@@ -98,6 +106,15 @@ const Login = () => {
         }
 
         try {
+            if (is2FaStep) {
+                const res = await axios.post('/api/auth/2fa/login-verify', {
+                    userId: twoFactorUserId,
+                    token: twoFactorCode
+                });
+                finishLogin(res.data.user, res.data.token);
+                return;
+            }
+
             if (isLogin && isOtpStep) {
                 const res = await axios.post('/api/login/verify-otp', { email: cleanEmail, otp });
                 finishLogin(res.data.user, res.data.token);
@@ -106,6 +123,14 @@ const Login = () => {
 
             if (isLogin) {
                 const res = await axios.post('/api/login', { email: cleanEmail, password });
+                if (res.data.twoFactorRequired) {
+                    setTwoFactorUserId(res.data.userId);
+                    setIs2FaStep(true);
+                    setAuthStep('2fa');
+                    setMessage('Please enter your 2-Factor Authentication Code');
+                    setSubmitting(false);
+                    return;
+                }
                 finishLogin(res.data.user, res.data.token);
                 return;
             }

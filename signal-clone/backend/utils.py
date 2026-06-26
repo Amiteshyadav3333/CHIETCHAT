@@ -119,6 +119,15 @@ def ensure_database_schema():
             'password_login_locked': db.Boolean(),
             'platform_id': db.String(30),
             'profile_setup_done': db.Boolean(),
+            'hide_last_seen': db.Boolean(),
+            'hide_online_status': db.Boolean(),
+            'read_receipts': db.Boolean(),
+            'profile_photo_privacy': db.String(20),
+            'two_factor_enabled': db.Boolean(),
+            'two_factor_secret': db.String(100),
+        })
+        add_missing_columns(inspector, 'chat_participant', {
+            'is_archived': db.Boolean(),
         })
         if 'user' in inspector.get_table_names():
             user_columns = {column['name'] for column in inspector.get_columns('user')}
@@ -129,8 +138,22 @@ def ensure_database_schema():
                 updates.append('failed_login_attempts = COALESCE(failed_login_attempts, 0)')
             if 'password_login_locked' in user_columns:
                 updates.append('password_login_locked = COALESCE(password_login_locked, FALSE)')
+            if 'hide_last_seen' in user_columns:
+                updates.append('hide_last_seen = COALESCE(hide_last_seen, FALSE)')
+            if 'hide_online_status' in user_columns:
+                updates.append('hide_online_status = COALESCE(hide_online_status, FALSE)')
+            if 'read_receipts' in user_columns:
+                updates.append('read_receipts = COALESCE(read_receipts, TRUE)')
+            if 'profile_photo_privacy' in user_columns:
+                updates.append("profile_photo_privacy = COALESCE(profile_photo_privacy, 'everyone')")
+            if 'two_factor_enabled' in user_columns:
+                updates.append('two_factor_enabled = COALESCE(two_factor_enabled, FALSE)')
             if updates:
                 db.session.execute(text(f'UPDATE "user" SET {", ".join(updates)}'))
+        if 'chat_participant' in inspector.get_table_names():
+            cp_columns = {column['name'] for column in inspector.get_columns('chat_participant')}
+            if 'is_archived' in cp_columns:
+                db.session.execute(text('UPDATE "chat_participant" SET is_archived = COALESCE(is_archived, FALSE)'))
         add_missing_columns(inspector, 'chat', {
             'is_group': db.Boolean(),
             'name': db.String(100),
@@ -194,7 +217,14 @@ def get_current_user_id():
     try:
         token = auth_header.split(' ', 1)[1]
         payload = jwt.decode(token, current_app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
-        return payload.get('user_id')
+        user_id = payload.get('user_id')
+        session_id = payload.get('session_id')
+        if session_id:
+            from models import ActiveSession
+            session = ActiveSession.query.get(session_id)
+            if not session:
+                return None  # Session revoked
+        return user_id
     except Exception:
         return None
 
@@ -293,19 +323,46 @@ def iso_utc(dt):
 def is_user_online(user_id):
     return user_connection_counts.get(user_id, 0) > 0
 
-def serialize_user(user):
+def serialize_user(user, viewer_id=None):
+    avatar = user.avatar
+    # Apply profile photo privacy rules
+    if user.profile_photo_privacy == 'nobody':
+        avatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=hidden"
+    elif user.profile_photo_privacy == 'contacts' and viewer_id and viewer_id != user.id:
+        if not has_contact(user.id, viewer_id):
+            avatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=hidden"
+
+    # Last seen privacy rules
+    show_last_seen = True
+    if user.hide_last_seen:
+        show_last_seen = False
+        if viewer_id == user.id:
+            show_last_seen = True
+
+    # Online status privacy rules
+    show_online_status = True
+    if user.hide_online_status:
+        show_online_status = False
+        if viewer_id == user.id:
+            show_online_status = True
+
     return {
         "id": user.id,
         "username": user.username,
         "phone": user.phone,
-        "avatar": user.avatar,
+        "avatar": avatar,
         "publicKey": user.public_key,
         "bio": user.bio or "",
         "websiteUrl": user.website_url or "",
         "platformId": user.platform_id or "",
         "profileSetupDone": bool(user.profile_setup_done),
-        "lastSeen": iso_utc(user.last_seen),
-        "isOnline": is_user_online(user.id)
+        "lastSeen": iso_utc(user.last_seen) if show_last_seen else None,
+        "isOnline": is_user_online(user.id) if show_online_status else False,
+        "hideLastSeen": bool(user.hide_last_seen),
+        "hideOnlineStatus": bool(user.hide_online_status),
+        "readReceipts": bool(user.read_receipts),
+        "profilePhotoPrivacy": user.profile_photo_privacy,
+        "twoFactorEnabled": bool(user.two_factor_enabled)
     }
 
 def emit_to_user_chat_contacts(user_id, event, payload):
@@ -408,3 +465,42 @@ def search_itunes_tracks(query, limit=12):
             "durationMs": item.get("trackTimeMillis"),
         })
     return tracks
+
+def get_totp_token(secret, intervals_no):
+    import hmac
+    import hashlib
+    import struct
+    import base64
+    try:
+        key = base64.b32decode(secret, True)
+        msg = struct.pack(">Q", intervals_no)
+        h = hmac.new(key, msg, hashlib.sha1).digest()
+        o = h[19] & 15
+        h = (struct.unpack(">I", h[o:o+4])[0] & 0x7fffffff) % 1000000
+        return f"{h:06d}"
+    except Exception:
+        return ""
+
+def verify_totp(secret, token, window=1):
+    import time
+    try:
+        token = str(token).strip()
+        if len(token) != 6 or not token.isdigit():
+            return False
+        base32_secret = secret.upper()
+        missing_padding = len(base32_secret) % 8
+        if missing_padding:
+            base32_secret += '=' * (8 - missing_padding)
+        
+        now = int(time.time()) // 30
+        for i in range(-window, window + 1):
+            if get_totp_token(base32_secret, now + i) == token:
+                return True
+    except Exception as e:
+        print(f"TOTP verification error: {e}")
+    return False
+
+def generate_totp_secret():
+    import secrets
+    chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+    return "".join(secrets.choice(chars) for _ in range(16))

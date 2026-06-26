@@ -3,8 +3,10 @@ import { SocketContext } from '../context/SocketContext';
 import { AuthContext } from '../context/AuthContext';
 import {
     VideoCameraIcon, VideoCameraSlashIcon, XMarkIcon,
-    MicrophoneIcon, SpeakerXMarkIcon, ArrowsPointingOutIcon, ArrowPathIcon, ComputerDesktopIcon
+    MicrophoneIcon, SpeakerXMarkIcon, ArrowsPointingOutIcon, ArrowPathIcon, ComputerDesktopIcon,
+    UserPlusIcon
 } from '@heroicons/react/24/solid';
+import axios from 'axios';
 
 const MAX_PARTICIPANTS = 10;
 
@@ -53,7 +55,10 @@ const generateSafetyNumber = (userA, userB) => {
     return `${absHash.slice(0, 5)} ${absHash.slice(5, 10)} ${absHash.slice(2, 7)} ${absHash.slice(4, 9)} 10839 94827`;
 };
 
-const VideoCallModal = ({ activeChat, onClose, callType = 'video', initialRingStatus = 'calling' }) => {
+const VideoCallModal = ({ 
+    activeChat, onClose, callType = 'video', initialRingStatus = 'calling',
+    token, onTransitionCall 
+}) => {
     const { socket } = useContext(SocketContext);
     const { user } = useContext(AuthContext);
 
@@ -72,7 +77,16 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video', initialRingSt
     const [isScreenSharing, setIsScreenSharing] = useState(false);
     const [ringStatus, setRingStatus] = useState(initialRingStatus);
     const [showSafetyModal, setShowSafetyModal] = useState(false);
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [contacts, setContacts] = useState([]);
+    const [loadingContacts, setLoadingContacts] = useState(false);
+    const [addingStates, setAddingStates] = useState({}); // userId -> 'adding' | 'added' | null
     const cameraTrackRef = useRef(null);
+    const [isRecording, setIsRecording] = useState(false);
+    const mediaRecorderRef = useRef(null);
+    const recordedChunksRef = useRef([]);
+    const audioCtxRef = useRef(null);
+    const audioDestRef = useRef(null);
     const controlsTimerRef = useRef(null);
     const facingModeRef = useRef('user');
 
@@ -93,6 +107,72 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video', initialRingSt
         }
         return () => clearTimeout(controlsTimerRef.current);
     }, [showControls]);
+
+    useEffect(() => {
+        if (showAddModal && contacts.length === 0) {
+            const fetchContactsList = async () => {
+                setLoadingContacts(true);
+                try {
+                    const res = await axios.get('/api/users', {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    setContacts(res.data);
+                } catch (e) {
+                    console.error("Error fetching contacts", e);
+                } finally {
+                    setLoadingContacts(false);
+                }
+            };
+            fetchContactsList();
+        }
+    }, [showAddModal, contacts.length, token]);
+
+    const handleAddParticipant = async (contact) => {
+        setAddingStates(prev => ({ ...prev, [contact.id]: 'adding' }));
+        try {
+            if (activeChat.isGroup) {
+                await axios.post(`/api/chats/${activeChat.id}/participants`, { userId: contact.id }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                socket.emit('invite_to_call', {
+                    chatId: activeChat.id,
+                    userId: contact.id,
+                    callType: currentCallType
+                });
+                setAddingStates(prev => ({ ...prev, [contact.id]: 'added' }));
+            } else {
+                const otherParticipant = activeChat.participants.find(p => p.id !== user.id);
+                if (!otherParticipant) return;
+                const groupName = `Group Call - ${user.username}, ${otherParticipant.username}, ${contact.username}`;
+                const res = await axios.post('/api/chats/create', {
+                    participants: [user.id, otherParticipant.id, contact.id],
+                    isGroup: true,
+                    name: groupName
+                }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                const newChatId = res.data.id;
+                socket.emit('transition_call', {
+                    chatId: activeChat.id,
+                    newChatId: newChatId
+                });
+                socket.emit('invite_to_call', {
+                    chatId: newChatId,
+                    userId: contact.id,
+                    callType: currentCallType
+                });
+                setAddingStates(prev => ({ ...prev, [contact.id]: 'added' }));
+                if (onTransitionCall) {
+                    await onTransitionCall(newChatId);
+                }
+                setShowAddModal(false);
+            }
+        } catch (err) {
+            console.error("Error adding participant", err);
+            alert("Failed to add participant to call");
+            setAddingStates(prev => ({ ...prev, [contact.id]: null }));
+        }
+    };
 
     useEffect(() => {
         const initCall = async () => {
@@ -168,6 +248,12 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video', initialRingSt
                     }
                 });
 
+                socket.on('call_transitioned', async (data) => {
+                    if (onTransitionCall) {
+                        await onTransitionCall(data.newChatId);
+                    }
+                });
+
             } catch (err) {
                 console.error(err);
                 alert('Could not access microphone/camera. Please allow permissions.');
@@ -192,6 +278,7 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video', initialRingSt
             socket.off('call_ended');
             socket.off('request_video_upgrade');
             socket.off('video_upgrade_accepted');
+            socket.off('call_transitioned');
         };
     }, [activeChat?.id]);
 
@@ -331,7 +418,7 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video', initialRingSt
             [remoteSocketId]: {
                 pc,
                 stream: null,
-                user: { username: remoteParticipant?.username || `User ${remoteUserId}`, avatar: remoteParticipant?.avatar }
+                user: { id: remoteUserId, username: remoteParticipant?.username || `User ${remoteUserId}`, avatar: remoteParticipant?.avatar }
             }
         }));
 
@@ -509,6 +596,89 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video', initialRingSt
         }
     };
 
+    const toggleRecording = () => {
+        if (isRecording) {
+            stopRecording();
+        } else {
+            startRecording();
+        }
+    };
+
+    const startRecording = () => {
+        if (!window.confirm("Start call recording? Make sure you have consent from all participants.")) {
+            return;
+        }
+
+        try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            const audioCtx = new AudioContext();
+            audioCtxRef.current = audioCtx;
+            const dest = audioCtx.createMediaStreamDestination();
+            audioDestRef.current = dest;
+
+            if (localStream && localStream.getAudioTracks().length > 0) {
+                const localSource = audioCtx.createMediaStreamSource(new MediaStream([localStream.getAudioTracks()[0]]));
+                localSource.connect(dest);
+            }
+
+            Object.values(peersRef.current || {}).forEach(peer => {
+                if (peer.stream && peer.stream.getAudioTracks().length > 0) {
+                    try {
+                        const remoteSource = audioCtx.createMediaStreamSource(new MediaStream([peer.stream.getAudioTracks()[0]]));
+                        remoteSource.connect(dest);
+                    } catch (e) {
+                        console.error("Error adding peer audio to recording:", e);
+                    }
+                }
+            });
+
+            const tracks = [];
+            if (localStream && localStream.getVideoTracks().length > 0) {
+                tracks.push(localStream.getVideoTracks()[0]);
+            }
+            if (dest.stream.getAudioTracks().length > 0) {
+                tracks.push(dest.stream.getAudioTracks()[0]);
+            }
+
+            const recordStream = new MediaStream(tracks);
+            const mediaRecorder = new MediaRecorder(recordStream, { mimeType: 'video/webm' });
+            mediaRecorderRef.current = mediaRecorder;
+            recordedChunksRef.current = [];
+
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) {
+                    recordedChunksRef.current.push(e.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `call-recording-${Date.now()}.webm`;
+                a.click();
+                if (audioCtxRef.current) {
+                    audioCtxRef.current.close();
+                    audioCtxRef.current = null;
+                }
+            };
+
+            mediaRecorder.start();
+            setIsRecording(true);
+        } catch (err) {
+            console.error("Failed to start recording:", err);
+            alert("Failed to start recording: " + err.message);
+        }
+    };
+
+    const stopRecording = () => {
+        if (mediaRecorderRef.current && isRecording) {
+            mediaRecorderRef.current.stop();
+            setIsRecording(false);
+        }
+    };
+
     const isVoiceOnly = currentCallType === 'voice';
     const peerList = Object.entries(peers);
 
@@ -599,6 +769,16 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video', initialRingSt
                     </ControlBtn>
                     <ControlBtn onClick={flipCamera} activeColor="bg-gray-700" label="Switch Camera">
                         <ArrowPathIcon className="w-6 h-6" />
+                    </ControlBtn>
+                    <ControlBtn onClick={toggleRecording} active={isRecording} activeColor="bg-red-600" label={isRecording ? 'Stop Recording' : 'Record'}>
+                        {isRecording ? (
+                            <span className="w-5 h-5 rounded bg-white" />
+                        ) : (
+                            <span className="w-5 h-5 rounded-full bg-red-500 animate-pulse" />
+                        )}
+                    </ControlBtn>
+                    <ControlBtn onClick={() => setShowAddModal(true)} activeColor="bg-blue-600" label="Add Participant">
+                        <UserPlusIcon className="w-6 h-6" />
                     </ControlBtn>
                     <button onClick={onClose} className="w-16 h-16 rounded-full bg-red-600 hover:bg-red-700 flex items-center justify-center shadow-lg">
                         <XMarkIcon className="w-7 h-7 text-white" />
@@ -766,6 +946,18 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video', initialRingSt
                     <ComputerDesktopIcon className="w-6 h-6" />
                 </ControlBtn>
 
+                <ControlBtn onClick={toggleRecording} active={isRecording} activeColor="bg-red-600" label={isRecording ? 'Stop Recording' : 'Record'}>
+                    {isRecording ? (
+                        <span className="w-5 h-5 rounded bg-white" />
+                    ) : (
+                        <span className="w-5 h-5 rounded-full bg-red-500 animate-pulse" />
+                    )}
+                </ControlBtn>
+
+                <ControlBtn onClick={() => setShowAddModal(true)} activeColor="bg-blue-600" label="Add Participant">
+                    <UserPlusIcon className="w-6 h-6" />
+                </ControlBtn>
+
                 <button
                     onClick={onClose}
                     className="w-16 h-16 rounded-full bg-red-600 hover:bg-red-700 flex items-center justify-center shadow-xl transition-transform active:scale-95"
@@ -797,6 +989,71 @@ const VideoCallModal = ({ activeChat, onClose, callType = 'video', initialRingSt
                         >
                             Close & Verify
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Add Participant Modal */}
+            {showAddModal && (
+                <div 
+                    className="fixed inset-0 z-[120] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm animate-fade-in"
+                    onClick={() => setShowAddModal(false)}
+                >
+                    <div 
+                        className="bg-[#1c2431] border border-white/10 p-6 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col max-h-[80vh]"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between mb-4 pb-2 border-b border-white/10">
+                            <h3 className="text-white text-lg font-bold">Add Participant</h3>
+                            <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-white p-1">
+                                <XMarkIcon className="w-5 h-5" />
+                            </button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+                            {loadingContacts ? (
+                                <p className="text-center text-gray-400 text-sm py-4">Loading contacts...</p>
+                            ) : contacts.length === 0 ? (
+                                <p className="text-center text-gray-400 text-sm py-4">No contacts found.</p>
+                            ) : (
+                                contacts.map(contact => {
+                                    if (contact.id === user.id) return null;
+                                    
+                                    const isInCall = Object.values(peers).some(p => p.user?.id === contact.id) || 
+                                                     (activeChat.participants && activeChat.participants.some(p => p.id === contact.id && p.id !== user.id && Object.values(peers).some(peer => peer.user?.id === p.id)));
+                                    
+                                    const addingState = addingStates[contact.id];
+                                    
+                                    return (
+                                        <div key={contact.id} className="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 transition">
+                                            <div className="flex items-center gap-3">
+                                                <img src={contact.avatar || "https://avatar.iran.liara.run/public"} className="w-10 h-10 rounded-full object-cover border border-white/10" alt="" />
+                                                <div className="text-left">
+                                                    <p className="text-white text-sm font-semibold">{contact.username}</p>
+                                                    <p className="text-gray-400 text-[10px]">{contact.phone}</p>
+                                                </div>
+                                            </div>
+                                            
+                                            <button
+                                                disabled={isInCall || addingState === 'adding' || addingState === 'added'}
+                                                onClick={() => handleAddParticipant(contact)}
+                                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition active:scale-95 ${
+                                                    isInCall 
+                                                        ? 'bg-gray-700/50 text-gray-400 cursor-not-allowed'
+                                                        : addingState === 'adding'
+                                                        ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                                                        : addingState === 'added'
+                                                        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                                                        : 'bg-signal-accent hover:bg-signal-accentHover text-white'
+                                                }`}
+                                            >
+                                                {isInCall ? 'In Call' : addingState === 'adding' ? 'Calling...' : addingState === 'added' ? 'Added' : 'Add'}
+                                            </button>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

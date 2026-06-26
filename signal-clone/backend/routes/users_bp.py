@@ -383,3 +383,55 @@ def toggle_follow(followed_id):
     )
     
     return jsonify({"isFollowing": True})
+
+@users_bp.route('/api/user/privacy', methods=['PUT'])
+def update_privacy_settings():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+        
+    data = request.get_json(silent=True) or {}
+    
+    if 'hideLastSeen' in data:
+        user.hide_last_seen = bool(data.get('hideLastSeen'))
+    if 'hideOnlineStatus' in data:
+        user.hide_online_status = bool(data.get('hideOnlineStatus'))
+    if 'readReceipts' in data:
+        user.read_receipts = bool(data.get('readReceipts'))
+    if 'profilePhotoPrivacy' in data:
+        val = data.get('profilePhotoPrivacy')
+        if val in ['everyone', 'contacts', 'nobody']:
+            user.profile_photo_privacy = val
+
+    db.session.commit()
+    
+    payload = serialize_user(user, viewer_id=user.id)
+    emit_to_user_chat_contacts(user_id, 'user_profile_updated', {"user": payload})
+    return jsonify(payload)
+
+@users_bp.route('/api/user/report', methods=['POST'])
+def report_user():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+        
+    data = request.get_json(silent=True) or {}
+    reported_id = data.get('userId')
+    reason = (data.get('reason') or '').strip()
+    
+    if not reported_id or not reason:
+        return jsonify({"error": "User ID and reason are required"}), 400
+        
+    reported_user = User.query.get(reported_id)
+    if not reported_user:
+        return jsonify({"error": "User not found"}), 404
+        
+    from models import UserReport
+    report = UserReport(reporter_id=user_id, reported_id=reported_id, reason=reason[:250])
+    db.session.add(report)
+    db.session.commit()
+    
+    return jsonify({"ok": True, "message": "User reported successfully"})

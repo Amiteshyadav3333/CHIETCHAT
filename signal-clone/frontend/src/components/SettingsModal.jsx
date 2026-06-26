@@ -14,7 +14,8 @@ const TITLES = {
     settings: 'Settings', profile: 'Profile', account: 'Account', privacy: 'Privacy',
     chats: 'Chats', notifications: 'Notifications', storage: 'Storage and data',
     business: 'Business tools', help: 'Help center', password: 'Change password',
-    delete: 'Delete account', activity: 'Your Activity',
+    delete: 'Delete account', activity: 'Your Activity', sessions: 'Active Sessions',
+    twofactor_setup: 'Enable 2FA', twofactor_disable: 'Disable 2FA'
 };
 
 const timeAgo = (dateStr) => {
@@ -41,6 +42,13 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     const [businessTitle, setBusinessTitle] = useState('Business tools');
     const [profile, setProfile] = useState({ username: user?.username || '', bio: user?.bio || '', websiteUrl: user?.websiteUrl || '', platformId: user?.platformId || '' });
     const [passwords, setPasswords] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    
+    // Sessions and 2FA states
+    const [sessionsList, setSessionsList] = useState([]);
+    const [twoFactorSetupData, setTwoFactorSetupData] = useState(null);
+    const [twoFactorCode, setTwoFactorCode] = useState('');
+    const [twoFactorDisablePassword, setTwoFactorDisablePassword] = useState('');
+
     // Activity state
     const [activityTab, setActivityTab] = useState('blocked');
     const [activityLoading, setActivityLoading] = useState(false);
@@ -48,9 +56,10 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     const [activityData, setActivityData] = useState({ likedReels: [], likedPosts: [], reelComments: [], postComments: [] });
     const [deletion, setDeletion] = useState({ password: '', confirmation: '' });
     const [prefs, setPrefs] = useState(() => ({
-        hideLastSeen: localStorage.getItem('hide_last_seen') === '1',
+        hideLastSeen: user?.hideLastSeen || false,
+        hideOnlineStatus: user?.hideOnlineStatus || false,
+        readReceipts: user?.readReceipts !== false,
         incognitoKeyboard: localStorage.getItem('incognito_keyboard') === '1',
-        twoStep: localStorage.getItem('two_step_verification') === '1',
         messageSounds: localStorage.getItem('message_sounds') !== '0',
         desktopAlerts: localStorage.getItem('desktop_alerts') !== '0',
         callSounds: localStorage.getItem('call_sounds') !== '0',
@@ -71,6 +80,99 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
             localStorage.setItem(storageKey, next ? '1' : '0');
             return { ...current, [name]: next };
         });
+    };
+
+    const handleTogglePrivacy = async (field, value) => {
+        setPrefs(prev => ({ ...prev, [field]: value }));
+        localStorage.setItem(
+            field === 'hideLastSeen' ? 'hide_last_seen' 
+            : field === 'hideOnlineStatus' ? 'hide_online_status' 
+            : 'read_receipts', 
+            value ? '1' : '0'
+        );
+        try {
+            const payload = {};
+            if (field === 'hideLastSeen') payload.hideLastSeen = value;
+            if (field === 'hideOnlineStatus') payload.hideOnlineStatus = value;
+            if (field === 'readReceipts') payload.readReceipts = value;
+            
+            const res = await axios.put('/api/user/privacy', payload, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            onUserUpdate?.(res.data);
+        } catch (err) {
+            console.error("Failed to update privacy on server:", err);
+        }
+    };
+
+    const fetchSessions = async () => {
+        try {
+            const res = await axios.get('/api/auth/sessions', { headers: { Authorization: `Bearer ${token}` } });
+            setSessionsList(res.data);
+        } catch (err) { console.error("Error fetching sessions:", err); }
+    };
+
+    const handleRevokeSession = async (sessionId) => {
+        try {
+            await axios.delete(`/api/auth/sessions/${sessionId}`, { headers: { Authorization: `Bearer ${token}` } });
+            setSessionsList(prev => prev.filter(s => s.id !== sessionId));
+        } catch (err) {
+            alert(err.response?.data?.error || 'Unable to revoke session');
+        }
+    };
+
+    const handleSetup2FA = async () => {
+        setBusy(true);
+        setMessage(null);
+        try {
+            const res = await axios.post('/api/auth/2fa/setup', {}, { headers: { Authorization: `Bearer ${token}` } });
+            setTwoFactorSetupData(res.data);
+            setTwoFactorCode('');
+            go('twofactor_setup');
+        } catch (err) {
+            setMessage({ type: 'error', text: err.response?.data?.error || 'Failed to start 2FA setup' });
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const handleEnable2FA = async (e) => {
+        e.preventDefault();
+        if (!twoFactorSetupData || !twoFactorCode) return;
+        setBusy(true);
+        setMessage(null);
+        try {
+            const res = await axios.post('/api/auth/2fa/enable', {
+                secret: twoFactorSetupData.secret,
+                token: twoFactorCode
+            }, { headers: { Authorization: `Bearer ${token}` } });
+            onUserUpdate?.(res.data.user);
+            setMessage({ type: 'success', text: res.data.message });
+            go('account');
+        } catch (err) {
+            setMessage({ type: 'error', text: err.response?.data?.error || 'Verification failed' });
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const handleDisable2FA = async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        setMessage(null);
+        try {
+            const res = await axios.post('/api/auth/2fa/disable', {
+                password: twoFactorDisablePassword
+            }, { headers: { Authorization: `Bearer ${token}` } });
+            onUserUpdate?.(res.data.user);
+            setTwoFactorDisablePassword('');
+            setMessage({ type: 'success', text: res.data.message });
+            go('account');
+        } catch (err) {
+            setMessage({ type: 'error', text: err.response?.data?.error || 'Failed to disable 2FA' });
+        } finally {
+            setBusy(false);
+        }
     };
 
     const openBusiness = (title) => {
@@ -159,7 +261,19 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
             <div className="flex h-[100dvh] w-full max-w-3xl flex-col overflow-hidden bg-[#111b21] shadow-2xl sm:h-[88vh] sm:rounded-xl sm:border sm:border-gray-800">
                 <header className="flex h-16 shrink-0 items-center gap-3 border-b border-white/5 bg-[#202c33] px-4">
                     {screen !== 'settings' && (
-                        <button onClick={() => go(screen === 'password' || screen === 'delete' ? 'help' : screen === 'activity' ? 'settings' : 'settings')} title="Back" className="rounded-full p-2 text-gray-300 hover:bg-white/10">
+                        <button 
+                            onClick={() => {
+                                if (['password', 'delete', 'sessions', 'twofactor_setup', 'twofactor_disable'].includes(screen)) {
+                                    go('account');
+                                } else if (screen === 'activity') {
+                                    go('settings');
+                                } else {
+                                    go('settings');
+                                }
+                            }} 
+                            title="Back" 
+                            className="rounded-full p-2 text-gray-300 hover:bg-white/10"
+                        >
                             <ArrowLeftIcon className="h-5 w-5" />
                         </button>
                     )}
@@ -246,14 +360,25 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
 
                     {screen === 'account' && (
                         <>
-                            <Hero icon={<ShieldCheckIcon />} title="Account security" text="Manage your sign-in password and permanent account controls." />
+                            <Hero icon={<ShieldCheckIcon />} title="Account security" text="Manage your sign-in password, sessions, and two-factor authentication." />
                             <SettingsGroup>
                                 <SettingsRow icon={<KeyIcon />} title="Change password" subtitle="Verify your current password first" onClick={() => go('password')} />
                                 <SettingsRow icon={<TrashIcon />} title="Delete account" subtitle="Permanently remove your account and data" onClick={() => go('delete')} danger />
                             </SettingsGroup>
-                            <SectionLabel>Security status</SectionLabel>
+                            <SectionLabel>Advanced security</SectionLabel>
                             <SettingsGroup>
-                                <SettingsToggle icon={<KeyIcon />} title="Two-step verification" subtitle="Require additional verification on sign-in" value={prefs.twoStep} onClick={() => togglePref('twoStep', 'two_step_verification')} />
+                                <SettingsRow 
+                                    icon={<KeyIcon />} 
+                                    title="Two-factor authentication (2FA)" 
+                                    subtitle={user?.twoFactorEnabled ? "Enabled (Secure)" : "Disabled (Set up now)"} 
+                                    onClick={user?.twoFactorEnabled ? () => go('twofactor_disable') : handleSetup2FA} 
+                                />
+                                <SettingsRow 
+                                    icon={<ComputerDesktopIcon />} 
+                                    title="Active device sessions" 
+                                    subtitle="View and manage other logged-in devices" 
+                                    onClick={() => { fetchSessions(); go('sessions'); }} 
+                                />
                                 <InfoRow title="Email verified" text="Your registered email is verified and can be used for account recovery." />
                             </SettingsGroup>
                         </>
@@ -263,13 +388,134 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                         <>
                             <SectionLabel>Who can see my personal info</SectionLabel>
                             <SettingsGroup>
-                                <SettingsToggle icon={<EyeSlashIcon />} title="Hide last seen" subtitle="Your last seen will not be shown" value={prefs.hideLastSeen} onClick={() => togglePref('hideLastSeen', 'hide_last_seen')} />
-                                <SettingsToggle icon={<ShieldCheckIcon />} title="Incognito keyboard" subtitle="Prevent personalized keyboard learning" value={prefs.incognitoKeyboard} onClick={() => togglePref('incognitoKeyboard', 'incognito_keyboard')} />
-                                <SettingsToggle icon={<KeyIcon />} title="Two-step verification" subtitle="Add an extra layer of account security" value={prefs.twoStep} onClick={() => togglePref('twoStep', 'two_step_verification')} />
+                                <SettingsToggle 
+                                    icon={<EyeSlashIcon />} 
+                                    title="Hide last seen" 
+                                    subtitle="Your last seen time will not be shared" 
+                                    value={user?.hideLastSeen || false} 
+                                    onClick={() => handleTogglePrivacy('hideLastSeen', !(user?.hideLastSeen))} 
+                                />
+                                <SettingsToggle 
+                                    icon={<EyeSlashIcon />} 
+                                    title="Hide online status" 
+                                    subtitle="Your online badge will not be shown to others" 
+                                    value={user?.hideOnlineStatus || false} 
+                                    onClick={() => handleTogglePrivacy('hideOnlineStatus', !(user?.hideOnlineStatus))} 
+                                />
+                                <SettingsToggle 
+                                    icon={<ShieldCheckIcon />} 
+                                    title="Read receipts (Blue tick)" 
+                                    subtitle="Send and receive read confirmation checkmarks" 
+                                    value={user?.readReceipts !== false} 
+                                    onClick={() => handleTogglePrivacy('readReceipts', !(user?.readReceipts))} 
+                                />
                             </SettingsGroup>
+                            
+                            <SectionLabel>Profile photo visibility</SectionLabel>
+                            <SettingsGroup>
+                                <ChoiceRow 
+                                    title="Who can see my profile photo" 
+                                    value={user?.profilePhotoPrivacy || 'everyone'} 
+                                    onChange={async (val) => {
+                                        try {
+                                            const res = await axios.put('/api/user/privacy', { profilePhotoPrivacy: val }, {
+                                                headers: { Authorization: `Bearer ${token}` }
+                                            });
+                                            onUserUpdate?.(res.data);
+                                        } catch (err) { console.error(err); }
+                                    }}
+                                    options={[['everyone', 'Everyone'], ['contacts', 'My Contacts'], ['nobody', 'Nobody']]} 
+                                />
+                            </SettingsGroup>
+                            
                             <SectionLabel>Security</SectionLabel>
-                            <SettingsGroup><InfoRow title="End-to-end encryption" text="Messages and calls are secured between participants." /><InfoRow title="Blocked contacts" text="Block or unblock a user from that contact's chat info." /></SettingsGroup>
+                            <SettingsGroup>
+                                <InfoRow title="End-to-end encryption" text="Messages and calls are secured between participants using RSA-256 and AES-GCM envelopes." />
+                                <InfoRow title="Blocked contacts" text="Block or unblock a user from that contact's chat info." />
+                            </SettingsGroup>
                         </>
+                    )}
+
+                    {screen === 'sessions' && (
+                        <div className="p-5 space-y-4">
+                            <Hero icon={<ComputerDesktopIcon />} title="Active Sessions" text="These devices are currently logged in to your account. You can log out of any session to revoke its access." />
+                            <div className="space-y-3">
+                                {sessionsList.map(s => (
+                                    <div key={s.id} className="flex items-center justify-between rounded-xl border border-gray-800 bg-[#111b21] p-4">
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-sm font-semibold text-white truncate">{s.userAgent || 'Unknown Device'}</p>
+                                            <p className="mt-1 text-xs text-gray-500">IP: {s.ipAddress || 'Unknown'} • Logged in: {timeAgo(s.createdAt)}</p>
+                                            {s.isCurrent && (
+                                                <span className="mt-2 inline-block rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 border border-emerald-500/20">
+                                                    Current Device
+                                                </span>
+                                            )}
+                                        </div>
+                                        {!s.isCurrent && (
+                                            <button 
+                                                onClick={() => handleRevokeSession(s.id)}
+                                                className="ml-4 rounded-lg bg-red-500/10 hover:bg-red-500/20 p-2 text-red-400 border border-red-500/20 active:scale-[0.98] transition-all"
+                                                title="Revoke access"
+                                            >
+                                                <TrashIcon className="h-5 w-5" />
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
+                                {sessionsList.length === 0 && (
+                                    <p className="text-center text-sm text-gray-500 py-10">No active sessions found.</p>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {screen === 'twofactor_setup' && (
+                        <SettingsForm onSubmit={handleEnable2FA}>
+                            <Hero icon={<ShieldCheckIcon />} title="Scan QR Code" text="Use your Google Authenticator or any TOTP application to scan the QR code below, or manually type the secret key." />
+                            {twoFactorSetupData && (
+                                <div className="flex flex-col items-center gap-4 bg-[#202c33] rounded-xl p-5 border border-gray-800">
+                                    <img src={twoFactorSetupData.qrCodeUrl} alt="2FA QR Code" className="w-44 h-44 rounded-lg bg-white p-2 border border-gray-700" />
+                                    <div className="text-center">
+                                        <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Secret Key</p>
+                                        <p className="text-sm font-mono text-violet-400 mt-1 select-all">{twoFactorSetupData.secret}</p>
+                                    </div>
+                                </div>
+                            )}
+                            <Field 
+                                label="6-Digit Verification Code" 
+                                placeholder="000000" 
+                                maxLength={6} 
+                                value={twoFactorCode} 
+                                onChange={setTwoFactorCode} 
+                                required 
+                            />
+                            <PrimaryButton busy={busy}>Verify and Enable 2FA</PrimaryButton>
+                        </SettingsForm>
+                    )}
+
+                    {screen === 'twofactor_disable' && (
+                        <SettingsForm onSubmit={handleDisable2FA}>
+                            <div className="rounded-xl border border-red-500/25 bg-red-500/10 p-5">
+                                <ExclamationTriangleIcon className="mb-3 h-8 w-8 text-red-400" />
+                                <h3 className="font-semibold text-white">Disable Two-factor Authentication</h3>
+                                <p className="mt-2 text-sm leading-6 text-gray-300">This will lower your account security. You will no longer be asked for a verification code when signing in on new devices.</p>
+                            </div>
+                            <Field 
+                                label="Confirm Password" 
+                                type="password" 
+                                placeholder="Enter password to confirm" 
+                                value={twoFactorDisablePassword} 
+                                onChange={setTwoFactorDisablePassword} 
+                                required 
+                            />
+                            <button 
+                                type="submit" 
+                                disabled={busy || !twoFactorDisablePassword} 
+                                className="w-full rounded-lg bg-red-500 px-4 py-3 text-sm font-semibold text-white hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                            >
+                                {busy ? 'Disabling 2FA...' : 'Disable 2FA'}
+                            </button>
+                        </SettingsForm>
                     )}
 
                     {screen === 'chats' && (

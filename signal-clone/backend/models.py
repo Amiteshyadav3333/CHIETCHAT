@@ -23,6 +23,12 @@ class User(db.Model):
     website_url = db.Column(db.String(200), nullable=True)
     platform_id = db.Column(db.String(30), unique=True, nullable=True)  # unique @handle, e.g. 'amitesh_123'
     profile_setup_done = db.Column(db.Boolean, default=False)  # True once user completes profile setup
+    hide_last_seen = db.Column(db.Boolean, default=False)
+    hide_online_status = db.Column(db.Boolean, default=False)
+    read_receipts = db.Column(db.Boolean, default=True)
+    profile_photo_privacy = db.Column(db.String(20), default='everyone')  # everyone | contacts | nobody
+    two_factor_enabled = db.Column(db.Boolean, default=False)
+    two_factor_secret = db.Column(db.String(100), nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now)
 
 class PendingRegistration(db.Model):
@@ -50,6 +56,7 @@ class ChatParticipant(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     chat_id = db.Column(db.Integer, db.ForeignKey('chat.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    is_archived = db.Column(db.Boolean, default=False)
     user = db.relationship('User')
 
 class GroupJoinRequest(db.Model):
@@ -259,3 +266,37 @@ class ChannelMembership(db.Model):
 
     user = db.relationship('User')
     __table_args__ = (db.UniqueConstraint('channel_id', 'user_id', name='uq_channel_user_membership'),)
+
+class ActiveSession(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    token_hash = db.Column(db.String(255), unique=True, nullable=False)
+    device_fingerprint = db.Column(db.String(255), nullable=True)
+    ip_address = db.Column(db.String(80), nullable=True)
+    user_agent = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=utc_now)
+    user = db.relationship('User', backref=db.backref('sessions', lazy=True, cascade='all, delete-orphan'))
+
+class UserReport(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    reporter_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    reported_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    reason = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now)
+    reporter = db.relationship('User', foreign_keys=[reporter_id])
+    reported = db.relationship('User', foreign_keys=[reported_id])
+
+class StarredMessage(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    message_id = db.Column(db.Integer, db.ForeignKey('message.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now)
+    __table_args__ = (db.UniqueConstraint('user_id', 'message_id', name='uq_user_starred_message'),)
+
+class PollVote(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    message_id = db.Column(db.Integer, db.ForeignKey('message.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    option_idx = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now)
+    __table_args__ = (db.UniqueConstraint('message_id', 'user_id', name='uq_poll_user_vote'),)

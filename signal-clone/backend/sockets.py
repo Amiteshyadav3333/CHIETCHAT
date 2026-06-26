@@ -255,6 +255,35 @@ def register_socket_events(socketio):
         socketio.emit('user_left_call', {"userId": user_id, "socketId": request.sid}, room=room, include_self=False)
         socketio.emit('call_ended', {"userId": user_id}, room=room, include_self=False)
 
+    @socketio.on('transition_call')
+    def on_transition_call(data):
+        user_id = get_socket_user_id()
+        if not user_id:
+            return
+        chat_id = data.get('chatId')
+        new_chat_id = data.get('newChatId')
+        if chat_id and new_chat_id:
+            room = f"call_{chat_id}"
+            socketio.emit('call_transitioned', {"newChatId": new_chat_id}, room=room, include_self=False)
+
+    @socketio.on('invite_to_call')
+    def on_invite_to_call(data):
+        user_id = get_socket_user_id()
+        if not user_id:
+            return
+        chat_id = data.get('chatId')
+        target_uid = data.get('userId')
+        call_type = data.get('callType', 'video')
+        if chat_id and target_uid:
+            caller = User.query.get(user_id)
+            socketio.emit('incoming_call', {
+                "chatId": chat_id,
+                "callerName": caller.username if caller else 'Unknown',
+                "callerId": user_id,
+                "callType": call_type,
+                "isGroupCall": True
+            }, room=f"user_{target_uid}")
+
     @socketio.on('offer')
     def on_offer(data):
         if not get_socket_user_id():

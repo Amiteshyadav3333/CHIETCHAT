@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import axios from 'axios';
 import { createPortal } from 'react-dom';
 import { format, isToday, isYesterday } from 'date-fns';
 import { TrashIcon, DocumentIcon, ArrowUturnLeftIcon, ArrowDownTrayIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon, MapPinIcon, InformationCircleIcon, XMarkIcon, ArrowLeftIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
@@ -256,7 +257,7 @@ const getDocIcon = (filename) => {
 };
 
 // WhatsApp-style action menu overlay
-const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, onReply, onEdit, onCopy, onForward, onReact, onPin, onDelete, onInfo, onTranslate }) => {
+const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, onReply, onEdit, onCopy, onForward, onReact, onPin, onDelete, onInfo, onTranslate, isLastMessage }) => {
     const menuRef = useRef(null);
 
     useEffect(() => {
@@ -267,12 +268,11 @@ const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, 
 
     const actions = [
         { icon: '↩️', label: 'Reply', onClick: () => { onReply?.(); onClose(); } },
-        ...(isOwn && isTextMessage && !isDeleted ? [{ icon: '✏️', label: 'Edit', onClick: () => { onEdit?.(); onClose(); } }] : []),
+        ...(isOwn && isTextMessage && !isDeleted && isLastMessage ? [{ icon: '✏️', label: 'Edit', onClick: () => { onEdit?.(); onClose(); } }] : []),
         ...(!isDeleted ? [{ icon: '📌', label: message.isPinned ? 'Unpin' : 'Pin', onClick: () => { onPin?.(); onClose(); } }] : []),
         ...(!isDeleted ? [{ icon: '📋', label: 'Copy', onClick: () => { onCopy?.(); onClose(); } }] : []),
         ...(!isDeleted ? [{ icon: '➡️', label: 'Forward', onClick: () => { onForward?.(); onClose(); } }] : []),
         ...(!isDeleted && isTextMessage ? [{ icon: '🌐', label: 'Translate', onClick: () => { onTranslate?.(); onClose(); } }] : []),
-        ...(!isDeleted ? [{ icon: '😊', label: 'React', onClick: () => { onReact?.(); onClose(); } }] : []),
         { icon: 'ℹ️', label: 'Info', onClick: () => { onInfo?.(); onClose(); } },
         ...(isOwn && !isDeleted ? [{ icon: '🗑️', label: 'Delete', danger: true, onClick: () => { onDelete?.(); onClose(); } }] : []),
     ];
@@ -348,17 +348,46 @@ const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, 
 const ChatBubble = ({
     message, isOwn, senderName, onDelete, senderAvatar, showAvatar,
     onReply, replyTo, onTranslate, chatId, chatTranslationLang,
-    onEdit, onCopy, onForward, onReact, onPin
+    onEdit, onCopy, onForward, onReact, onPin, isLastMessage
 }) => {
     const [showActionMenu, setShowActionMenu] = useState(false);
-    const [showReactionsInMenu, setShowReactionsInMenu] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
     const [showTranslatorMenu, setShowTranslatorMenu] = useState(false);
+
+    const getReactions = () => {
+        let reactions = message.reactions;
+        if (!reactions) return {};
+        if (typeof reactions === 'string') {
+            try {
+                return JSON.parse(reactions);
+            } catch (e) {
+                return {};
+            }
+        }
+        return reactions;
+    };
+    const reactionsObj = getReactions();
+    const hasReactions = Object.keys(reactionsObj).length > 0;
     const [swipeX, setSwipeX] = useState(0);
     const [swiping, setSwiping] = useState(false);
     const [zoomedMedia, setZoomedMedia] = useState(null);
 
     const [translatedText, setTranslatedText] = useState('');
+
+    const currentUserStr = localStorage.getItem('user');
+    const currentUser = currentUserStr ? JSON.parse(currentUserStr) : null;
+    const currentUserId = currentUser ? currentUser.id : null;
+
+    const handleVote = async (optionIdx) => {
+        try {
+            const token = localStorage.getItem('token');
+            await axios.post(`/api/messages/${message.id}/poll-vote`, { option_idx: optionIdx }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+        } catch (err) {
+            console.error("Error casting poll vote", err);
+        }
+    };
     const [isTranslating, setIsTranslating] = useState(false);
 
     // localTargetLang acts as a manual override for this specific message bubble
@@ -633,17 +662,49 @@ const ChatBubble = ({
         if (type === 'poll') {
             try {
                 const poll = JSON.parse(cnt);
+                const votes = message.votes || [];
+                const totalVotes = votes.length;
                 return (
-                    <div className="flex flex-col gap-3 min-w-[220px] p-1">
-                        <h4 className="font-bold text-sm text-white border-b border-white/10 pb-2">{poll.question}</h4>
+                    <div className="flex flex-col gap-3 min-w-[230px] p-2 bg-black/25 rounded-2xl border border-white/5 font-sans">
+                        <h4 className="font-bold text-sm text-white border-b border-white/10 pb-2 flex items-center gap-1.5">
+                            📊 {poll.question}
+                        </h4>
                         <div className="space-y-2">
-                            {poll.options.map((opt, i) => (
-                                <button key={i} className="w-full bg-white/10 hover:bg-white/20 text-left px-3 py-2 rounded-lg text-xs transition-colors border border-white/5">
-                                    {opt}
-                                </button>
-                            ))}
+                            {poll.options.map((opt, i) => {
+                                const optionVotes = votes.filter(v => v.optionIdx === i);
+                                const percentage = totalVotes > 0 ? Math.round((optionVotes.length / totalVotes) * 100) : 0;
+                                const hasVoted = votes.some(v => v.userId === currentUserId && v.optionIdx === i);
+                                
+                                return (
+                                    <button 
+                                        key={i} 
+                                        onClick={() => handleVote(i)}
+                                        className={`w-full relative overflow-hidden text-left px-3 py-2.5 rounded-xl text-xs transition-all border flex items-center justify-between gap-2 font-medium ${
+                                            hasVoted 
+                                                ? 'bg-[#00a884]/15 border-[#00a884] text-white shadow-md shadow-[#00a884]/10' 
+                                                : 'bg-white/5 hover:bg-white/10 border-white/5 text-gray-200'
+                                        }`}
+                                    >
+                                        <div 
+                                            className={`absolute left-0 top-0 bottom-0 transition-all duration-500 z-0 ${
+                                                hasVoted ? 'bg-[#00a884]/25' : 'bg-white/10'
+                                            }`}
+                                            style={{ width: `${percentage}%` }}
+                                        />
+                                        <span className="relative z-10 flex items-center gap-2 truncate">
+                                            {hasVoted && <span className="text-[#00a884] text-sm">✓</span>}
+                                            {opt}
+                                        </span>
+                                        <span className="relative z-10 text-[10px] text-white/55 font-semibold shrink-0">
+                                            {percentage}% ({optionVotes.length})
+                                        </span>
+                                    </button>
+                                );
+                            })}
                         </div>
-                        <p className="text-[10px] text-white/40 italic">Tap an option to vote</p>
+                        <p className="text-[10px] text-white/40 italic text-center">
+                            {totalVotes} {totalVotes === 1 ? 'vote' : 'votes'} • Tap an option to vote
+                        </p>
                     </div>
                 );
             } catch { return <p className="italic text-xs opacity-60 text-red-400">Invalid poll data</p>; }
@@ -671,10 +732,65 @@ const ChatBubble = ({
             try {
                 const contact = JSON.parse(cnt);
                 return (
-                    <div className="min-w-[210px]">
-                        <p className="text-xs uppercase tracking-wider text-white/50">Contact</p>
-                        <p className="text-sm font-bold">{contact.name}</p>
-                        <p className="text-xs text-white/70">{contact.phone}</p>
+                    <div className="min-w-[215px] p-2 bg-white/5 rounded-xl border border-white/8 space-y-3 font-sans">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-[#00a884]/20 flex items-center justify-center text-[#00a884] text-lg font-bold">
+                                {contact.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <p className="text-xs uppercase tracking-wider text-white/40 font-bold">Contact Card</p>
+                                <p className="text-sm font-bold text-white truncate">{contact.name}</p>
+                                <p className="text-xs text-white/70 truncate">{contact.phone}</p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => {
+                                navigator.clipboard.writeText(contact.phone);
+                                alert(`Copied contact phone number: ${contact.phone}`);
+                            }}
+                            className="w-full bg-white/10 hover:bg-white/25 text-white font-bold py-1.5 rounded-lg text-xs transition"
+                        >
+                            📞 Call / Message (Copy Number)
+                        </button>
+                    </div>
+                );
+            } catch { return <p className="text-sm">{cnt}</p>; }
+        }
+        if (type === 'payment') {
+            try {
+                const pay = JSON.parse(cnt);
+                return (
+                    <div className="min-w-[220px] p-3 rounded-2xl border bg-[#11221a] border-emerald-500/30 text-white space-y-3 shadow-lg font-sans">
+                        <div className="flex items-center justify-between border-b border-emerald-500/10 pb-2">
+                            <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">UPI Transfer</span>
+                            <span className="text-[10px] text-white/50">{pay.transactionId ? pay.transactionId.substring(0, 12) : ''}</span>
+                        </div>
+                        <div className="text-center py-2">
+                            <p className="text-3xl font-black text-emerald-400">₹{parseFloat(pay.amount).toFixed(2)}</p>
+                            <p className="text-[10px] text-emerald-500 font-bold flex items-center justify-center gap-1 mt-1">
+                                <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping" />
+                                Completed Successfully
+                            </p>
+                        </div>
+                        {pay.remarks && (
+                            <div className="bg-white/5 p-2 rounded-lg text-[11px] text-white/80 italic border border-white/5">
+                                Remarks: {pay.remarks}
+                            </div>
+                        )}
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => alert("Simulated UPI transaction details loaded securely.")}
+                                className="flex-1 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold transition"
+                            >
+                                Receipt
+                            </button>
+                            <button
+                                onClick={() => alert("Re-initiating simulated UPI payment transfer.")}
+                                className="flex-1 py-1 bg-white/10 hover:bg-white/25 text-white rounded-lg text-[10px] font-bold transition"
+                            >
+                                Pay Again
+                            </button>
+                        </div>
                     </div>
                 );
             } catch { return <p className="text-sm">{cnt}</p>; }
@@ -713,7 +829,7 @@ const ChatBubble = ({
     return (
         <>
             <div
-                className={`flex items-end gap-2 w-full ${isOwn ? 'flex-row-reverse' : 'flex-row'} mb-1`}
+                className={`flex items-end gap-2 w-full ${isOwn ? 'flex-row-reverse' : 'flex-row'} ${hasReactions ? 'mb-5' : 'mb-1'}`}
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
@@ -764,6 +880,18 @@ const ChatBubble = ({
                                 <path d="M10 3a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM10 8.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM11.5 15.5a1.5 1.5 0 1 0-3 0 1.5 1.5 0 0 0 3 0Z" />
                             </svg>
                         </button>
+
+                        {isTextMessage && (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); setShowTranslatorMenu(true); }}
+                                className={`opacity-0 group-hover/bubble:opacity-100 transition-opacity p-1 text-gray-500 hover:text-gray-200 mb-1 flex-shrink-0 ${isOwn ? 'order-first' : 'order-last'}`}
+                                title="Translate message"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-.778.099-1.533.284-2.253" />
+                                </svg>
+                            </button>
+                        )}
 
                         {/* The bubble itself */}
                         <div
@@ -867,9 +995,9 @@ const ChatBubble = ({
                                 {ticks}
                             </div>
 
-                            {Object.keys(message.reactions || {}).length > 0 && (
+                            {hasReactions && (
                                 <div className={`absolute -bottom-5 ${isOwn ? 'left-2' : 'right-2'} rounded-full bg-[#111b21] px-2 py-0.5 text-xs shadow border border-white/10`}>
-                                    {Object.values(message.reactions).join(' ')}
+                                    {Object.values(reactionsObj).join(' ')}
                                 </div>
                             )}
 
@@ -892,12 +1020,13 @@ const ChatBubble = ({
             </div>
 
             {/* WhatsApp-style action menu overlay */}
-            {showActionMenu && (
+            {showActionMenu && createPortal(
                 <MessageActionMenu
                     message={message}
                     isOwn={isOwn}
                     isTextMessage={isTextMessage}
                     isDeleted={isDeleted}
+                    isLastMessage={isLastMessage}
                     onClose={() => setShowActionMenu(false)}
                     onReply={() => onReply && onReply(message)}
                     onEdit={() => onEdit && onEdit(message)}
@@ -908,11 +1037,12 @@ const ChatBubble = ({
                     onDelete={() => onDelete && onDelete(message.id)}
                     onInfo={() => setShowInfoModal(true)}
                     onTranslate={() => { setShowTranslatorMenu(true); }}
-                />
+                />,
+                document.body
             )}
 
             {/* Message Info Modal */}
-            {showInfoModal && (
+            {showInfoModal && createPortal(
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in"
                     onClick={() => setShowInfoModal(false)}
@@ -987,9 +1117,313 @@ const ChatBubble = ({
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </>
+    );
+};
+
+const TicTacToeGame = () => {
+    const [board, setBoard] = useState(Array(9).fill(null));
+    const [isXNext, setIsXNext] = useState(true);
+    const [gameMode, setGameMode] = useState('vs-computer'); // 'vs-computer' or 'pass-play'
+    const [difficulty, setDifficulty] = useState('smart'); // 'easy' or 'smart'
+    const [scores, setScores] = useState({ x: 0, o: 0, draws: 0 });
+    const [winnerInfo, setWinnerInfo] = useState(null); // { winner: 'X'|'O'|'Draw', line: [...] }
+    const [isThinking, setIsThinking] = useState(false);
+
+    const winPatterns = [
+        [0, 1, 2], [3, 4, 5], [6, 7, 8],
+        [0, 3, 6], [1, 4, 7], [2, 5, 8],
+        [0, 4, 8], [2, 4, 6]
+    ];
+
+    const checkWinner = (currentBoard) => {
+        for (let pattern of winPatterns) {
+            const [a, b, c] = pattern;
+            if (currentBoard[a] && currentBoard[a] === currentBoard[b] && currentBoard[a] === currentBoard[c]) {
+                return { winner: currentBoard[a], line: pattern };
+            }
+        }
+        if (currentBoard.every(cell => cell !== null)) {
+            return { winner: 'Draw', line: null };
+        }
+        return null;
+    };
+
+    const makeMove = (index) => {
+        if (board[index] || winnerInfo || isThinking) return;
+
+        const newBoard = [...board];
+        const currentPlayer = isXNext ? 'X' : 'O';
+        newBoard[index] = currentPlayer;
+        setBoard(newBoard);
+
+        const result = checkWinner(newBoard);
+        if (result) {
+            setWinnerInfo(result);
+            updateScores(result.winner);
+            return;
+        }
+
+        const nextPlayerIsX = !isXNext;
+        setIsXNext(nextPlayerIsX);
+
+        if (gameMode === 'vs-computer' && nextPlayerIsX === false) {
+            setIsThinking(true);
+            setTimeout(() => {
+                triggerBotMove(newBoard);
+            }, 600);
+        }
+    };
+
+    const triggerBotMove = (currentBoard) => {
+        const botPlayer = 'O';
+        const humanPlayer = 'X';
+        const getAvailableMoves = (b) => b.map((val, idx) => val === null ? idx : null).filter(val => val !== null);
+        const availableMoves = getAvailableMoves(currentBoard);
+
+        if (availableMoves.length === 0) return;
+
+        let selectedMove = null;
+
+        if (difficulty === 'easy') {
+            selectedMove = availableMoves[Math.floor(Math.random() * availableMoves.length)];
+        } else {
+            // 1. Can AI win on next move?
+            for (let move of availableMoves) {
+                const tempBoard = [...currentBoard];
+                tempBoard[move] = botPlayer;
+                const res = checkWinner(tempBoard);
+                if (res && res.winner === botPlayer) {
+                    selectedMove = move;
+                    break;
+                }
+            }
+
+            // 2. Can human win on next move? Block them!
+            if (selectedMove === null) {
+                for (let move of availableMoves) {
+                    const tempBoard = [...currentBoard];
+                    tempBoard[move] = humanPlayer;
+                    const res = checkWinner(tempBoard);
+                    if (res && res.winner === humanPlayer) {
+                        selectedMove = move;
+                        break;
+                    }
+                }
+            }
+
+            // 3. Take center if available
+            if (selectedMove === null && currentBoard[4] === null) {
+                selectedMove = 4;
+            }
+
+            // 4. Take opposite corner if human in corner
+            if (selectedMove === null) {
+                const corners = [0, 2, 6, 8];
+                const opposites = { 0: 8, 2: 6, 6: 2, 8: 0 };
+                for (let c of corners) {
+                    if (currentBoard[c] === humanPlayer && currentBoard[opposites[c]] === null) {
+                        selectedMove = opposites[c];
+                        break;
+                    }
+                }
+            }
+
+            // 5. Take any corner
+            if (selectedMove === null) {
+                const corners = [0, 2, 6, 8];
+                const availableCorners = corners.filter(c => currentBoard[c] === null);
+                if (availableCorners.length > 0) {
+                    selectedMove = availableCorners[Math.floor(Math.random() * availableCorners.length)];
+                }
+            }
+
+            // 6. Take any side
+            if (selectedMove === null) {
+                const sides = [1, 3, 5, 7];
+                const availableSides = sides.filter(s => currentBoard[s] === null);
+                if (availableSides.length > 0) {
+                    selectedMove = availableSides[Math.floor(Math.random() * availableSides.length)];
+                }
+            }
+        }
+
+        const newBoard = [...currentBoard];
+        newBoard[selectedMove] = botPlayer;
+        setBoard(newBoard);
+        setIsThinking(false);
+
+        const result = checkWinner(newBoard);
+        if (result) {
+            setWinnerInfo(result);
+            updateScores(result.winner);
+            return;
+        }
+
+        setIsXNext(true);
+    };
+
+    const updateScores = (winner) => {
+        setScores(prev => {
+            if (winner === 'X') return { ...prev, x: prev.x + 1 };
+            if (winner === 'O') return { ...prev, o: prev.o + 1 };
+            if (winner === 'Draw') return { ...prev, draws: prev.draws + 1 };
+            return prev;
+        });
+    };
+
+    const resetRound = () => {
+        setBoard(Array(9).fill(null));
+        setIsXNext(true);
+        setWinnerInfo(null);
+        setIsThinking(false);
+    };
+
+    const resetAll = () => {
+        resetRound();
+        setScores({ x: 0, o: 0, draws: 0 });
+    };
+
+    const changeMode = (mode) => {
+        setGameMode(mode);
+        setBoard(Array(9).fill(null));
+        setIsXNext(true);
+        setWinnerInfo(null);
+        setIsThinking(false);
+    };
+
+    return (
+        <div className="flex flex-col items-center gap-4 w-full text-white">
+            {/* Game Mode Selector */}
+            <div className="flex gap-2 w-full p-1 bg-white/5 rounded-xl border border-white/5">
+                <button
+                    onClick={() => changeMode('vs-computer')}
+                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                        gameMode === 'vs-computer'
+                            ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
+                            : 'text-white/60 hover:text-white hover:bg-white/5'
+                    }`}
+                >
+                    🤖 VS Computer
+                </button>
+                <button
+                    onClick={() => changeMode('pass-play')}
+                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                        gameMode === 'pass-play'
+                            ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
+                            : 'text-white/60 hover:text-white hover:bg-white/5'
+                    }`}
+                >
+                    👥 Pass & Play
+                </button>
+            </div>
+
+            {/* Difficulty selector for VS Computer */}
+            {gameMode === 'vs-computer' && (
+                <div className="flex gap-2 w-full justify-between items-center text-xs px-1">
+                    <span className="text-white/50">Difficulty:</span>
+                    <div className="flex bg-white/5 rounded-lg p-0.5 border border-white/5">
+                        <button
+                            onClick={() => setDifficulty('easy')}
+                            className={`px-2.5 py-0.5 font-medium rounded-md transition-all ${
+                                difficulty === 'easy' ? 'bg-purple-600/30 text-purple-300' : 'text-white/40 hover:text-white/70'
+                            }`}
+                        >
+                            Easy
+                        </button>
+                        <button
+                            onClick={() => setDifficulty('smart')}
+                            className={`px-2.5 py-0.5 font-medium rounded-md transition-all ${
+                                difficulty === 'smart' ? 'bg-indigo-600/30 text-indigo-300' : 'text-white/40 hover:text-white/70'
+                            }`}
+                        >
+                            Smart
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Scoreboard */}
+            <div className="grid grid-cols-3 gap-2 w-full bg-white/5 rounded-2xl border border-white/10 p-3 text-center">
+                <div>
+                    <p className="text-[10px] uppercase tracking-wider text-rose-400 font-semibold">Player X</p>
+                    <p className="text-lg font-extrabold text-white mt-0.5">{scores.x}</p>
+                </div>
+                <div className="border-x border-white/10">
+                    <p className="text-[10px] uppercase tracking-wider text-white/40">Ties</p>
+                    <p className="text-lg font-extrabold text-white mt-0.5">{scores.draws}</p>
+                </div>
+                <div>
+                    <p className="text-[10px] uppercase tracking-wider text-cyan-400 font-semibold">
+                        {gameMode === 'vs-computer' ? 'Computer (O)' : 'Player O'}
+                    </p>
+                    <p className="text-lg font-extrabold text-white mt-0.5">{scores.o}</p>
+                </div>
+            </div>
+
+            {/* Turn/Winner Status */}
+            <div className="h-6 flex items-center justify-center text-sm font-semibold">
+                {winnerInfo ? (
+                    winnerInfo.winner === 'Draw' ? (
+                        <span className="text-amber-400 animate-pulse">🤝 It's a Tie!</span>
+                    ) : (
+                        <span className={`${winnerInfo.winner === 'X' ? 'text-rose-400' : 'text-cyan-400'} animate-bounce`}>
+                            🎉 Player {winnerInfo.winner} Wins!
+                        </span>
+                    )
+                ) : isThinking ? (
+                    <span className="text-cyan-400/80 animate-pulse flex items-center gap-1.5">
+                        <span className="inline-block w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+                        Computer is thinking...
+                    </span>
+                ) : (
+                    <span className="text-white/80">
+                        Turn: <span className={isXNext ? 'text-rose-400' : 'text-cyan-400'}>{isXNext ? 'X' : 'O'}</span>
+                    </span>
+                )}
+            </div>
+
+            {/* 3x3 Grid Board */}
+            <div className="grid grid-cols-3 gap-2 w-fit aspect-square mx-auto">
+                {board.map((cell, idx) => {
+                    const isWinningCell = winnerInfo?.line?.includes(idx);
+                    return (
+                        <button
+                            key={idx}
+                            onClick={() => makeMove(idx)}
+                            disabled={cell !== null || winnerInfo !== null || isThinking}
+                            className={`w-16 h-16 sm:w-20 sm:h-20 rounded-xl flex items-center justify-center transition-all duration-200 select-none border text-3xl sm:text-4xl font-black ${
+                                isWinningCell
+                                    ? 'bg-emerald-500/20 border-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.4)] animate-pulse'
+                                    : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20 active:scale-95'
+                            }`}
+                        >
+                            {cell === 'X' && <span className="text-rose-500 drop-shadow-[0_0_6px_rgba(244,63,94,0.6)]">X</span>}
+                            {cell === 'O' && <span className="text-cyan-400 drop-shadow-[0_0_6px_rgba(34,211,238,0.6)]">O</span>}
+                        </button>
+                    );
+                })}
+            </div>
+
+            {/* Reset Actions */}
+            <div className="flex gap-2 w-full mt-1">
+                <button
+                    onClick={resetRound}
+                    className="flex-1 py-2 text-xs font-bold rounded-xl border border-white/10 hover:bg-white/5 active:scale-95 transition-all text-white/80 flex items-center justify-center gap-1"
+                >
+                    🔄 Play Again
+                </button>
+                <button
+                    onClick={resetAll}
+                    className="py-2 px-3 text-xs font-bold rounded-xl bg-rose-500/10 hover:bg-rose-500/20 active:scale-95 transition-all text-rose-400 border border-rose-500/20"
+                >
+                    Reset
+                </button>
+            </div>
+        </div>
     );
 };
 
@@ -1037,7 +1471,7 @@ const MiniGameCard = ({ game, isOwn }) => {
             {showModal && createPortal(
                 <div className="fixed inset-0 z-[100] flex flex-col bg-[#080b11]/95 backdrop-blur-md font-sans">
                     {/* Header */}
-                    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 bg-[#0d121c]">
+                    <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-800 bg-[#0d121c]">
                         <div className="flex items-center gap-3">
                             <button
                                 onClick={() => setShowModal(false)}
@@ -1054,27 +1488,31 @@ const MiniGameCard = ({ game, isOwn }) => {
                         </div>
 
                         <div className="flex items-center gap-3">
-                            <button
-                                onClick={() => {
-                                    const iframe = document.getElementById('game-iframe');
-                                    if (iframe) iframe.src = iframe.src;
-                                }}
-                                className="p-2 rounded-xl bg-gray-800/50 hover:bg-gray-800 text-gray-300 transition-colors"
-                                title="Restart Game"
-                            >
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-4 h-4" strokeWidth="2">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-                                </svg>
-                            </button>
-                            <a
-                                href={iframeUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="p-2 rounded-xl bg-gray-850 hover:bg-gray-800 text-gray-300 transition-colors flex items-center justify-center"
-                                title="Open in New Tab"
-                            >
-                                <ArrowTopRightOnSquareIcon className="w-4 h-4" />
-                            </a>
+                            {game !== 'Tic-Tac-Toe' && (
+                                <>
+                                    <button
+                                        onClick={() => {
+                                            const iframe = document.getElementById('game-iframe');
+                                            if (iframe) iframe.src = iframe.src;
+                                        }}
+                                        className="p-2 rounded-xl bg-gray-800/50 hover:bg-gray-800 text-gray-300 transition-colors"
+                                        title="Restart Game"
+                                    >
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-4 h-4" strokeWidth="2">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                                        </svg>
+                                    </button>
+                                    <a
+                                        href={iframeUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="p-2 rounded-xl bg-gray-850 hover:bg-gray-800 text-gray-300 transition-colors flex items-center justify-center"
+                                        title="Open in New Tab"
+                                    >
+                                        <ArrowTopRightOnSquareIcon className="w-4 h-4" />
+                                    </a>
+                                </>
+                            )}
                             <button
                                 onClick={() => setShowModal(false)}
                                 className="p-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/35 text-rose-400 transition-colors"
@@ -1085,17 +1523,23 @@ const MiniGameCard = ({ game, isOwn }) => {
                         </div>
                     </div>
 
-                    {/* IFrame Container */}
-                    <div className="flex-1 p-6 flex justify-center items-center">
-                        <div className="w-full h-full max-w-4xl max-h-[85vh] rounded-3xl overflow-hidden border border-gray-800 shadow-2xl bg-black relative">
-                            <iframe
-                                id="game-iframe"
-                                src={iframeUrl}
-                                className="w-full h-full border-none"
-                                title="Mini Game"
-                                allow="autoplay; fullscreen; keyboard"
-                            />
-                        </div>
+                    {/* Game Content Container */}
+                    <div className="flex-1 p-2 sm:p-6 flex justify-center items-center overflow-y-auto">
+                        {game === 'Tic-Tac-Toe' ? (
+                            <div className="w-full max-w-sm rounded-2xl border border-white/10 shadow-2xl bg-[#0b0f19] p-4 sm:p-6 relative">
+                                <TicTacToeGame />
+                            </div>
+                        ) : (
+                            <div className="w-full h-full max-w-4xl max-h-[80vh] sm:max-h-[85vh] rounded-2xl sm:rounded-3xl overflow-hidden border border-gray-800 shadow-2xl bg-black relative">
+                                <iframe
+                                    id="game-iframe"
+                                    src={iframeUrl}
+                                    className="w-full h-full border-none"
+                                    title="Mini Game"
+                                    allow="autoplay; fullscreen; keyboard"
+                                />
+                            </div>
+                        )}
                     </div>
                 </div>,
                 document.body

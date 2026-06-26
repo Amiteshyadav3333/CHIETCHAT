@@ -10,18 +10,22 @@ from models import (
     db, User, PendingRegistration, Chat, ChatParticipant, GroupJoinRequest,
     Contact, Message, Status, StatusView, StatusReaction, Block, Reel,
     ReelLike, ReelComment, Follow, Notification, SocialPost, SocialPostLike,
-    SocialPostComment, CommentReply, Channel, ChannelMembership
+    SocialPostComment, CommentReply, Channel, ChannelMembership, ActiveSession,
+    UserReport, StarredMessage, PollVote
 )
 from utils import get_json_data, get_current_user_id, normalize_phone, is_valid_phone, utc_now, serialize_user
 
 auth_bp = Blueprint('auth_bp', __name__)
 MAX_PASSWORD_ATTEMPTS = 3
 
-def create_token(user):
-    return jwt.encode({
+def create_token(user, session_id=None):
+    payload = {
         'user_id': user.id,
         'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)
-    }, current_app.config['JWT_SECRET_KEY'], algorithm='HS256')
+    }
+    if session_id:
+        payload['session_id'] = session_id
+    return jwt.encode(payload, current_app.config['JWT_SECRET_KEY'], algorithm='HS256')
 
 def supabase_auth_request(path, payload, method='POST', bearer_token=None):
     supabase_url = current_app.config.get('SUPABASE_URL')
@@ -74,11 +78,43 @@ def get_supabase_user(access_token):
     return supabase_auth_request('user', None, method='GET', bearer_token=access_token)
 
 def complete_login(user):
+    if user.two_factor_enabled:
+        return jsonify({
+            "twoFactorRequired": True,
+            "userId": user.id,
+            "message": "Two-factor authentication code required"
+        }), 200
+    return finalize_login(user)
+
+def finalize_login(user):
     user.last_seen = utc_now()
     user.failed_login_attempts = 0
     user.password_login_locked = False
+    
+    from flask import request
+    import secrets
+
+    device_fingerprint = None
+    try:
+        data = request.get_json(silent=True) or {}
+        device_fingerprint = data.get('deviceFingerprint')
+    except Exception:
+        pass
+
+    session = ActiveSession(
+        user_id=user.id,
+        token_hash=secrets.token_hex(32),
+        device_fingerprint=device_fingerprint,
+        ip_address=request.remote_addr,
+        user_agent=request.headers.get('User-Agent')
+    )
+    db.session.add(session)
     db.session.commit()
-    return jsonify({"token": create_token(user), "user": serialize_user(user)}), 200
+
+    return jsonify({
+        "token": create_token(user, session_id=session.id),
+        "user": serialize_user(user, viewer_id=user.id)
+    }), 200
 
 @auth_bp.route('/api/register', methods=['POST'])
 def register():
@@ -408,6 +444,12 @@ def delete_user_account_data(user):
         (Notification.recipient_id == user_id) | (Notification.sender_id == user_id)
     ).delete(synchronize_session=False)
 
+    # Clean up session, reports, and starred messages
+    ActiveSession.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+    UserReport.query.filter((UserReport.reporter_id == user_id) | (UserReport.reported_id == user_id)).delete(synchronize_session=False)
+    StarredMessage.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+    PollVote.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+
     db.session.delete(user)
 
 @auth_bp.route('/api/account', methods=['DELETE'])
@@ -438,3 +480,146 @@ def delete_account():
         print(f"Delete Account Error: {e}")
         db.session.rollback()
         return jsonify({"error": "Unable to delete account right now"}), 500
+
+@auth_bp.route('/api/auth/2fa/setup', methods=['POST'])
+def setup_2fa():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+        
+    from utils import generate_totp_secret
+    secret = generate_totp_secret()
+    
+    qr_data = f"otpauth://totp/Cheetchat:{user.email}?secret={secret}&issuer=Cheetchat"
+    qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={urllib.parse.quote(qr_data)}"
+    
+    return jsonify({
+        "secret": secret,
+        "qrCodeUrl": qr_url
+    }), 200
+
+@auth_bp.route('/api/auth/2fa/enable', methods=['POST'])
+def enable_2fa():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+        
+    data = get_json_data()
+    secret = data.get('secret')
+    token = data.get('token')
+    
+    if not secret or not token:
+        return jsonify({"error": "Secret and verification code are required"}), 400
+        
+    from utils import verify_totp
+    if verify_totp(secret, token):
+        user.two_factor_secret = secret
+        user.two_factor_enabled = True
+        db.session.commit()
+        return jsonify({"message": "Two-factor authentication enabled successfully", "user": serialize_user(user, viewer_id=user.id)}), 200
+    else:
+        return jsonify({"error": "Invalid verification code. Please try again."}), 400
+
+@auth_bp.route('/api/auth/2fa/disable', methods=['POST'])
+def disable_2fa():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+        
+    data = get_json_data()
+    password = data.get('password')
+    
+    if not password:
+        return jsonify({"error": "Password is required to disable two-factor authentication"}), 400
+        
+    if not check_password_hash(user.password_hash, password):
+        return jsonify({"error": "Password is incorrect"}), 403
+        
+    user.two_factor_enabled = False
+    user.two_factor_secret = None
+    db.session.commit()
+    return jsonify({"message": "Two-factor authentication disabled successfully", "user": serialize_user(user, viewer_id=user.id)}), 200
+
+@auth_bp.route('/api/auth/2fa/login-verify', methods=['POST'])
+def login_verify_2fa():
+    try:
+        data = get_json_data()
+        user_id = data.get('userId')
+        token = data.get('token')
+        
+        if not user_id or not token:
+            return jsonify({"error": "User ID and code are required"}), 400
+            
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+            
+        if not user.two_factor_enabled or not user.two_factor_secret:
+            return jsonify({"error": "Two-factor authentication is not enabled"}), 400
+            
+        from utils import verify_totp
+        if verify_totp(user.two_factor_secret, token):
+            return finalize_login(user)
+        else:
+            return jsonify({"error": "Invalid verification code"}), 400
+    except Exception as e:
+        print(f"2FA login verification error: {e}")
+        return jsonify({"error": "Verification failed"}), 500
+
+@auth_bp.route('/api/auth/sessions', methods=['GET'])
+def get_active_sessions():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    from models import ActiveSession
+    from flask import request
+    
+    sessions = ActiveSession.query.filter_by(user_id=user_id).order_by(ActiveSession.created_at.desc()).all()
+    
+    auth_header = request.headers.get('Authorization', '')
+    current_session_id = None
+    if auth_header.startswith('Bearer '):
+        try:
+            token = auth_header.split(' ', 1)[1]
+            payload = jwt.decode(token, current_app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+            current_session_id = payload.get('session_id')
+        except Exception:
+            pass
+
+    from utils import iso_utc
+    return jsonify([
+        {
+            "id": s.id,
+            "ipAddress": s.ip_address,
+            "userAgent": s.user_agent,
+            "deviceFingerprint": s.device_fingerprint,
+            "createdAt": iso_utc(s.created_at),
+            "isCurrent": s.id == current_session_id
+        }
+        for s in sessions
+    ]), 200
+
+@auth_bp.route('/api/auth/sessions/<int:session_id>', methods=['DELETE'])
+def revoke_session(session_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+        
+    from models import ActiveSession
+    session = ActiveSession.query.filter_by(id=session_id, user_id=user_id).first()
+    if not session:
+        return jsonify({"error": "Session not found"}), 404
+        
+    db.session.delete(session)
+    db.session.commit()
+    return jsonify({"message": "Session revoked successfully"}), 200

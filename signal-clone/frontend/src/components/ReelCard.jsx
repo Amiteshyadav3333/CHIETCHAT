@@ -303,18 +303,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
                     <span className="text-white text-xs font-bold">{reel.commentsCount}</span>
                 </div>
 
-                <div className="flex flex-col items-center relative">
-                    <button onClick={() => setShowReactions(!showReactions)} className="p-2">
-                        <FaceSmileIcon className="w-8 h-8 text-white" />
-                    </button>
-                    {showReactions && (
-                        <div className="absolute right-12 bottom-0 flex gap-2 bg-black/60 backdrop-blur-md p-2 rounded-full animate-slide-left">
-                            {reactions.map(r => (
-                                <button key={r} onClick={() => { addFloatingEmoji(r); setShowReactions(false); }} className="text-2xl hover:scale-125 transition-transform">{r}</button>
-                            ))}
-                        </div>
-                    )}
-                </div>
+
 
                 <div className="flex flex-col items-center">
                     <button onClick={() => onReact(reel)} className="p-2 bg-blue-500/20 rounded-full animate-pulse">

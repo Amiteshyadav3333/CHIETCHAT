@@ -19,11 +19,13 @@ import Social from './Social';
 import PodLiveView from './PodLiveView';
 import { decryptEnvelope, encryptForRecipients, isEncryptedPayload } from '../utils/encryption';
 import { compressImage, compressVideo, getFileCategory, formatFileSize } from '../utils/mediaCompressor';
+import { getOfflineQueue, enqueueOfflineMessage, dequeueOfflineMessage, processOfflineQueue } from '../utils/offlineQueue';
 
 const Home = () => {
     const { user, token, logout, updateUser } = useContext(AuthContext);
     const { socket } = useContext(SocketContext);
     const { privateKey, publicKey } = useEncryption(user, token);
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
 
     const [chats, setChats] = useState([]);
     const [activeChat, setActiveChat] = useState(null);
@@ -98,6 +100,52 @@ const Home = () => {
     useEffect(() => { showCallModalRef.current = showCallModal; }, [showCallModal]);
     useEffect(() => { localStorage.setItem('chat_theme', theme); }, [theme]);
     useEffect(() => { localStorage.setItem('chat_wallpaper', wallpaper); }, [wallpaper]);
+
+    const processQueue = useCallback(async () => {
+        if (!navigator.onLine || !socket || !socket.connected || !publicKey) return;
+        await processOfflineQueue(async (msg) => {
+            const chat = chatsRef.current.find(c => c.id === msg.chatId);
+            if (!chat) return;
+
+            const recipientPublicKeys = {};
+            for (const participant of chat.participants) {
+                const participantPublicKey = participant.id === user.id
+                    ? publicKey
+                    : participant.publicKey;
+                if (!participantPublicKey) continue;
+                recipientPublicKeys[participant.id] = participantPublicKey;
+            }
+
+            const encryptedContent = await encryptForRecipients(recipientPublicKeys, msg.content);
+
+            socket.emit('send_message', {
+                chatId: msg.chatId,
+                senderId: user.id,
+                content: encryptedContent,
+                type: msg.type,
+                ttl: msg.disappearingTtl,
+                replyToId: msg.replyTo?.id || null,
+                replyContent: msg.replyTo ? (msg.replyTo.type !== 'text' ? msg.replyTo.type : msg.replyTo.content) : null,
+                replySenderName: msg.replyTo?.senderName || null
+            });
+        });
+    }, [socket, publicKey, user]);
+
+    useEffect(() => {
+        const handleOnline = () => {
+            setIsOnline(true);
+            processQueue();
+        };
+        const handleOffline = () => {
+            setIsOnline(false);
+        };
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, [processQueue]);
 
     // Persist active view for refresh survival
     useEffect(() => {
@@ -414,6 +462,14 @@ const Home = () => {
             socket.emit('join_room', { room: 'global', userId: user.id });
         }
 
+        if (socket.connected) {
+            processQueue();
+        }
+
+        socket.on('connect', () => {
+            processQueue();
+        });
+
         socket.on('incoming_call', (data) => {
             if (!showCallModalRef.current) {
                 setIncomingCall(data);
@@ -514,6 +570,10 @@ const Home = () => {
             }
         });
 
+        socket.on('poll_vote_update', ({ id, votes }) => {
+            setMessages(prev => prev.map(m => m.id === id ? { ...m, votes } : m));
+        });
+
         socket.on('typing_update', ({ chatId, userId, username, isTyping }) => {
             setTypingUsers(prev => {
                 const chatTyping = { ...(prev[chatId] || {}) };
@@ -602,6 +662,8 @@ const Home = () => {
         });
 
         return () => {
+            socket.off('connect');
+            socket.off('poll_vote_update');
             socket.off('receive_message');
             socket.off('incoming_call');
             socket.off('ring_status');
@@ -615,7 +677,7 @@ const Home = () => {
             socket.off('message_pin_update');
             socket.off('typing_update');
         };
-    }, [socket, user, fetchChats, decryptMessageForCurrentUser]);
+    }, [socket, user, fetchChats, decryptMessageForCurrentUser, processQueue]);
 
     useEffect(() => {
         const fetchMessages = async () => {
@@ -652,12 +714,7 @@ const Home = () => {
     }, [messages]);
 
     const handleSendMessage = async (text, type = 'text', replyMsg = null, ttl = 0) => {
-        if (!activeChat || !socket) return;
-
-        if (!privateKey || !publicKey) {
-            alert("Encryption keys are still loading. Please try again in a moment.");
-            return;
-        }
+        if (!activeChat) return;
 
         // Optimistic UI: show message instantly before encryption/server round trip
         const tempId = `temp_${Date.now()}_${Math.random()}`;
@@ -673,7 +730,7 @@ const Home = () => {
             replyToId: replyMsg?.id || null,
             replyContent: replyMsg ? (replyMsg.type !== 'text' ? replyMsg.type : replyMsg.content) : null,
             replySenderName: replyMsg?.senderName || null,
-            reactions: '{}',
+            reactions: {},
             isPinned: false,
             _isOptimistic: true
         };
@@ -694,6 +751,17 @@ const Home = () => {
             };
             return [targetChat, ...updatedChats];
         });
+
+        // Offline check
+        if (!navigator.onLine || !socket || !socket.connected) {
+            enqueueOfflineMessage(activeChat.id, text, type, replyMsg, ttl);
+            return;
+        }
+
+        if (!privateKey || !publicKey) {
+            alert("Encryption keys are still loading. Please try again in a moment.");
+            return;
+        }
 
         // Encrypt and send in background
         try {
@@ -989,13 +1057,19 @@ const Home = () => {
         socket.emit('typing', { chatId: visibleActiveChat.id, isTyping });
     };
 
-    const acceptCall = () => {
+    const acceptCall = async () => {
         if (incomingCall) {
-            const chat = chats.find(c => c.id === incomingCall.chatId);
+            let chat = chats.find(c => c.id === incomingCall.chatId);
+            if (!chat) {
+                const updatedChats = await fetchChats();
+                chat = updatedChats.find(c => c.id === incomingCall.chatId);
+            }
             if (chat) {
                 setActiveChat(chat);
                 setCallType(incomingCall.callType || 'video');
                 setShowCallModal(true);
+            } else {
+                alert("Could not load chat information for this call.");
             }
             setIncomingCall(null);
         }
@@ -1210,6 +1284,12 @@ const Home = () => {
 
     return (
         <div className="flex h-[100dvh] bg-signal-bg overflow-hidden text-gray-100 font-sans relative">
+            {!isOnline && (
+                <div className="absolute top-0 left-0 right-0 z-[100] bg-amber-600/90 text-white text-xs text-center py-1.5 px-4 font-bold flex items-center justify-center gap-2 animate-fade-in shadow-md">
+                    <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" />
+                    Offline mode. Messages will be queued and sent automatically when connection is restored.
+                </div>
+            )}
             {editingMessage && (
                 <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4">
                     <form onSubmit={submitEditMessage} className="w-full max-w-sm rounded-2xl border border-gray-700 bg-[#111b21] p-4 shadow-2xl">
@@ -1957,6 +2037,7 @@ const Home = () => {
                                             onTranslate={handleTranslate}
                                             chatId={visibleActiveChat.id}
                                             chatTranslationLang={chatTranslationLang}
+                                            isLastMessage={idx === messages.length - 1}
                                         />
                                     </div>
                                 </React.Fragment>
@@ -1990,6 +2071,7 @@ const Home = () => {
                         disappearingTtl={disappearingTtl}
                         disabled={visibleActiveChat.isChatDisabled && visibleActiveChat.groupAdminId !== user?.id}
                         placeholderOverride={visibleActiveChat.isChatDisabled && visibleActiveChat.groupAdminId !== user?.id ? "Only admins can send messages in this group" : ""}
+                        lastMessageText={messages.length > 0 && messages[messages.length - 1].senderId !== user?.id && (!messages[messages.length - 1].type || messages[messages.length - 1].type === 'text') ? messages[messages.length - 1].content : ''}
                     />
                 </div>
             ) : (
@@ -2097,6 +2179,14 @@ const Home = () => {
                     onClose={() => setShowCallModal(false)} 
                     callType={callType} 
                     initialRingStatus={callRingState[activeChat?.id] || 'calling'}
+                    token={token}
+                    onTransitionCall={async (newChatId) => {
+                        const updatedChats = await fetchChats();
+                        const newChatObj = updatedChats.find(c => c.id === newChatId);
+                        if (newChatObj) {
+                            setActiveChat(newChatObj);
+                        }
+                    }}
                 />
             )}
             

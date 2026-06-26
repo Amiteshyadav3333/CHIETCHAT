@@ -196,6 +196,20 @@ def ensure_database_schema():
             user_columns = {column['name'] for column in inspector.get_columns('user')}
             if {'last_seen', 'created_at'}.issubset(user_columns):
                 db.session.execute(text('UPDATE "user" SET last_seen = created_at WHERE last_seen IS NULL'))
+        
+        # Clean up broken seeded reels from the database dynamically
+        if 'reel' in inspector.get_table_names():
+            try:
+                from models import Reel
+                broken_patterns = ['ryq5tpznexkohkhwfzrn', 'iq2oc0u5t9z2g2lh0yam']
+                for pattern in broken_patterns:
+                    broken_reels = Reel.query.filter(Reel.video_url.like(f'%{pattern}%')).all()
+                    for r in broken_reels:
+                        db.session.delete(r)
+                print("Cleaned up broken reels from db")
+            except Exception as re_err:
+                print(f"Error checking broken reels: {re_err}")
+
         db.session.commit()
     except Exception as e:
         print(f"Database schema check timed out or failed: {e}")

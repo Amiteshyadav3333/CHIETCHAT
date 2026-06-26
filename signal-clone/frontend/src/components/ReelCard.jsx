@@ -21,6 +21,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
     const [newComment, setNewComment] = useState('');
     const [showReactions, setShowReactions] = useState(false);
     const [floatingEmojis, setFloatingEmojis] = useState([]);
+    const [videoError, setVideoError] = useState(false);
     const videoRef = useRef(null);
     const audioRef = useRef(null);
     const viewedRef = useRef(false);
@@ -227,25 +228,34 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
 
     return (
         <div className="relative h-full w-full bg-black snap-start flex items-center justify-center overflow-hidden">
-            <video
-                ref={videoRef}
-                src={reel.videoUrl}
-                className="h-full w-full object-contain cursor-pointer"
-                loop
-                playsInline
-                preload="auto"
-                muted={!!reel.musicUrl}
-                style={{ filter: filters[reel.filterName] || '' }}
-                onClick={() => {
-                    if (videoRef.current.paused) {
-                        videoRef.current.play();
-                        audioRef.current?.play();
-                    } else {
-                        videoRef.current.pause();
-                        audioRef.current?.pause();
-                    }
-                }}
-            />
+            {videoError ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-950 text-gray-400 gap-2 p-4 text-center select-none">
+                    <span className="text-5xl">⚠️</span>
+                    <p className="text-sm font-bold">Video not available</p>
+                    <p className="text-xs text-gray-500 max-w-[200px] leading-relaxed">The video link is broken or has been removed from the server.</p>
+                </div>
+            ) : (
+                <video
+                    ref={videoRef}
+                    src={reel.videoUrl}
+                    className="h-full w-full object-contain cursor-pointer"
+                    loop
+                    playsInline
+                    preload="auto"
+                    muted={!!reel.musicUrl}
+                    style={{ filter: filters[reel.filterName] || '' }}
+                    onError={() => setVideoError(true)}
+                    onClick={() => {
+                        if (videoRef.current.paused) {
+                            videoRef.current.play();
+                            audioRef.current?.play();
+                        } else {
+                            videoRef.current.pause();
+                            audioRef.current?.pause();
+                        }
+                    }}
+                />
+            )}
 
             {reel.musicUrl && (
                 <audio ref={audioRef} src={reel.musicUrl} loop />

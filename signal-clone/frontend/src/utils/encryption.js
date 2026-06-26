@@ -180,7 +180,7 @@ export const decryptEnvelope = async (privateKey, userId, encryptedPayload) => {
 
         return new TextDecoder().decode(decrypted);
     } catch (e) {
-        console.warn("Envelope decryption failed", e);
+        // Silently fallback — expected when keys rotate (logout/login cycles)
         return "🔒 Message";
     }
 };

@@ -4,7 +4,7 @@ import { AuthContext } from '../context/AuthContext';
 import {
     VideoCameraIcon, VideoCameraSlashIcon, XMarkIcon,
     MicrophoneIcon, SpeakerXMarkIcon, ArrowsPointingOutIcon, ArrowPathIcon, ComputerDesktopIcon,
-    UserPlusIcon
+    UserPlusIcon, EllipsisVerticalIcon
 } from '@heroicons/react/24/solid';
 import axios from 'axios';
 
@@ -23,15 +23,29 @@ const setupE2EE = (senderOrReceiver, keyString, mode) => {
         
         // Deterministic XOR key from secret
         const cryptoKey = Array.from(keyString).reduce((acc, char) => acc + char.charCodeAt(0), 0) % 256 || 0xA5;
+        const isVideo = senderOrReceiver.track?.kind === 'video';
 
         const transformStream = new TransformStream({
             transform(chunk, controller) {
                 const data = chunk.data;
                 const view = new Uint8Array(data);
                 const encrypted = new Uint8Array(data.byteLength);
-                for (let i = 0; i < data.byteLength; i++) {
-                    encrypted[i] = view[i] ^ cryptoKey; // XOR crypto frame-by-frame
+                
+                let headerSize = 0;
+                if (isVideo) {
+                    headerSize = chunk.type === 'key' ? 10 : 3;
                 }
+
+                // Copy unencrypted header bytes directly (decoders need these for frame tracking)
+                for (let i = 0; i < Math.min(headerSize, data.byteLength); i++) {
+                    encrypted[i] = view[i];
+                }
+
+                // XOR encrypt payload bytes only
+                for (let i = headerSize; i < data.byteLength; i++) {
+                    encrypted[i] = view[i] ^ cryptoKey;
+                }
+
                 chunk.data = encrypted.buffer;
                 controller.enqueue(chunk);
             }
@@ -89,6 +103,7 @@ const VideoCallModal = ({
     const audioDestRef = useRef(null);
     const controlsTimerRef = useRef(null);
     const facingModeRef = useRef('user');
+    const [showMoreMenu, setShowMoreMenu] = useState(false);
 
     useEffect(() => { peersRef.current = peers; }, [peers]);
     useEffect(() => { facingModeRef.current = facingMode; }, [facingMode]);
@@ -103,7 +118,12 @@ const VideoCallModal = ({
     useEffect(() => {
         if (showControls) {
             clearTimeout(controlsTimerRef.current);
-            controlsTimerRef.current = setTimeout(() => setShowControls(false), 4000);
+            controlsTimerRef.current = setTimeout(() => {
+                setShowControls(false);
+                setShowMoreMenu(false);
+            }, 4000);
+        } else {
+            setShowMoreMenu(false);
         }
         return () => clearTimeout(controlsTimerRef.current);
     }, [showControls]);
@@ -371,7 +391,17 @@ const VideoCallModal = ({
         };
 
         pc.ontrack = (e) => {
-            setPeers(prev => ({ ...prev, [remoteSocketId]: { ...prev[remoteSocketId], stream: e.streams[0] } }));
+            const remoteStream = e.streams[0] || new MediaStream();
+            if (!e.streams[0]) {
+                remoteStream.addTrack(e.track);
+            }
+            setPeers(prev => ({
+                ...prev,
+                [remoteSocketId]: {
+                    ...prev[remoteSocketId],
+                    stream: new MediaStream(remoteStream.getTracks())
+                }
+            }));
             // Set up E2EE decryption for receiving
             const sharedKey = `chietchat_call_secret_${activeChat.id}`;
             setupE2EE(e.receiver, sharedKey, 'receiver');
@@ -460,7 +490,11 @@ const VideoCallModal = ({
             const videoTrack = videoStream.getVideoTracks()[0];
             streamRef.current.addTrack(videoTrack);
             setLocalStream(new MediaStream(streamRef.current.getTracks()));
-            Object.values(peersRef.current).forEach(({ pc }) => pc.addTrack(videoTrack, streamRef.current));
+            Object.values(peersRef.current).forEach(({ pc }) => {
+                const sender = pc.addTrack(videoTrack, streamRef.current);
+                const sharedKey = `chietchat_call_secret_${activeChat.id}`;
+                setupE2EE(sender, sharedKey, 'sender');
+            });
             setCurrentCallType('video');
             setIsVideoOff(false);
         } catch { alert('Could not access camera.'); }
@@ -711,7 +745,7 @@ const VideoCallModal = ({
             <div
                 className="fixed inset-0 z-[100] flex flex-col"
                 style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)' }}
-                onClick={() => setShowControls(true)}
+                onClick={() => { setShowControls(true); setShowMoreMenu(false); }}
             >
                 {/* Top info */}
                 <div className="flex flex-col items-center pt-16 flex-1 justify-center gap-6">
@@ -757,29 +791,65 @@ const VideoCallModal = ({
                 </div>
 
                 {/* Controls */}
-                <div className="flex justify-center gap-6 pb-12">
+                <div className="flex justify-center gap-6 pb-12" onClick={e => { e.stopPropagation(); setShowMoreMenu(false); }}>
                     <ControlBtn onClick={toggleAudio} active={isMuted} activeColor="bg-red-600" label={isMuted ? 'Unmute' : 'Mute'}>
                         {isMuted ? <SpeakerXMarkIcon className="w-6 h-6" /> : <MicrophoneIcon className="w-6 h-6" />}
                     </ControlBtn>
                     <ControlBtn onClick={switchToVideo} activeColor="bg-blue-600" label="Video">
                         <VideoCameraIcon className="w-6 h-6" />
                     </ControlBtn>
-                    <ControlBtn onClick={toggleScreenShare} active={isScreenSharing} activeColor="bg-blue-600" label="Screen Share">
-                        <ComputerDesktopIcon className="w-6 h-6" />
-                    </ControlBtn>
                     <ControlBtn onClick={flipCamera} activeColor="bg-gray-700" label="Switch Camera">
                         <ArrowPathIcon className="w-6 h-6" />
                     </ControlBtn>
-                    <ControlBtn onClick={toggleRecording} active={isRecording} activeColor="bg-red-600" label={isRecording ? 'Stop Recording' : 'Record'}>
-                        {isRecording ? (
-                            <span className="w-5 h-5 rounded bg-white" />
-                        ) : (
-                            <span className="w-5 h-5 rounded-full bg-red-500 animate-pulse" />
+                    
+                    {/* 3-dot dropdown menu */}
+                    <div className="relative">
+                        <ControlBtn 
+                            onClick={(e) => { e.stopPropagation(); setShowMoreMenu(prev => !prev); }} 
+                            active={showMoreMenu} 
+                            activeColor="bg-gray-600" 
+                            label="More Options"
+                        >
+                            <EllipsisVerticalIcon className="w-6 h-6" />
+                        </ControlBtn>
+                        {showMoreMenu && (
+                            <div 
+                                className="absolute bottom-full right-0 mb-3 w-56 bg-[#1f2c34] border border-white/10 rounded-2xl p-2 shadow-2xl z-50 flex flex-col gap-1 text-left animate-fade-in"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <button
+                                    onClick={() => { setShowAddModal(true); setShowMoreMenu(false); }}
+                                    className="flex items-center gap-3 px-4 py-3 text-white hover:bg-white/10 rounded-xl transition text-sm text-left font-medium w-full"
+                                >
+                                    <UserPlusIcon className="w-5 h-5 text-gray-300" />
+                                    <span>Add Participant</span>
+                                </button>
+                                <button
+                                    onClick={() => { toggleScreenShare(); setShowMoreMenu(false); }}
+                                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition text-sm text-left font-medium w-full ${isScreenSharing ? 'text-blue-400 bg-blue-500/10 hover:bg-blue-500/20' : 'text-white hover:bg-white/10'}`}
+                                >
+                                    <ComputerDesktopIcon className="w-5 h-5" />
+                                    <span>{isScreenSharing ? 'Stop Screen Share' : 'Screen Share'}</span>
+                                </button>
+                                <button
+                                    onClick={() => { toggleRecording(); setShowMoreMenu(false); }}
+                                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition text-sm text-left font-medium w-full ${isRecording ? 'text-red-400 bg-red-500/10 hover:bg-red-500/20' : 'text-white hover:bg-white/10'}`}
+                                >
+                                    {isRecording ? (
+                                        <span className="w-5 h-5 flex items-center justify-center">
+                                            <span className="w-3.5 h-3.5 rounded bg-red-500" />
+                                        </span>
+                                    ) : (
+                                        <span className="w-5 h-5 flex items-center justify-center">
+                                            <span className="w-3.5 h-3.5 rounded-full bg-red-500 animate-pulse" />
+                                        </span>
+                                    )}
+                                    <span>{isRecording ? 'Stop Recording' : 'Record Call'}</span>
+                                </button>
+                            </div>
                         )}
-                    </ControlBtn>
-                    <ControlBtn onClick={() => setShowAddModal(true)} activeColor="bg-blue-600" label="Add Participant">
-                        <UserPlusIcon className="w-6 h-6" />
-                    </ControlBtn>
+                    </div>
+
                     <button onClick={onClose} className="w-16 h-16 rounded-full bg-red-600 hover:bg-red-700 flex items-center justify-center shadow-lg">
                         <XMarkIcon className="w-7 h-7 text-white" />
                     </button>
@@ -817,7 +887,7 @@ const VideoCallModal = ({
     return (
         <div
             className="fixed inset-0 z-[100] bg-black flex flex-col select-none"
-            onClick={() => setShowControls(v => !v)}
+            onClick={() => { setShowControls(v => !v); setShowMoreMenu(false); }}
         >
             {/* ── MAIN VIDEO (full screen) ── */}
             <div className="absolute inset-0">
@@ -928,7 +998,7 @@ const VideoCallModal = ({
             <div
                 className={`absolute bottom-0 left-0 right-0 z-10 flex justify-center gap-5 pb-10 pt-6 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
                 style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)' }}
-                onClick={e => e.stopPropagation()}
+                onClick={e => { e.stopPropagation(); setShowMoreMenu(false); }}
             >
                 <ControlBtn onClick={toggleAudio} active={isMuted} activeColor="bg-red-600" label={isMuted ? 'Unmute' : 'Mute'}>
                     {isMuted ? <SpeakerXMarkIcon className="w-6 h-6" /> : <MicrophoneIcon className="w-6 h-6" />}
@@ -942,21 +1012,53 @@ const VideoCallModal = ({
                     <ArrowPathIcon className="w-6 h-6" />
                 </ControlBtn>
 
-                <ControlBtn onClick={toggleScreenShare} active={isScreenSharing} activeColor="bg-blue-600" label="Screen Share">
-                    <ComputerDesktopIcon className="w-6 h-6" />
-                </ControlBtn>
-
-                <ControlBtn onClick={toggleRecording} active={isRecording} activeColor="bg-red-600" label={isRecording ? 'Stop Recording' : 'Record'}>
-                    {isRecording ? (
-                        <span className="w-5 h-5 rounded bg-white" />
-                    ) : (
-                        <span className="w-5 h-5 rounded-full bg-red-500 animate-pulse" />
+                {/* 3-dot dropdown menu */}
+                <div className="relative">
+                    <ControlBtn 
+                        onClick={(e) => { e.stopPropagation(); setShowMoreMenu(prev => !prev); }} 
+                        active={showMoreMenu} 
+                        activeColor="bg-gray-600" 
+                        label="More Options"
+                    >
+                        <EllipsisVerticalIcon className="w-6 h-6" />
+                    </ControlBtn>
+                    {showMoreMenu && (
+                        <div 
+                            className="absolute bottom-full right-0 mb-3 w-56 bg-[#1f2c34] border border-white/10 rounded-2xl p-2 shadow-2xl z-50 flex flex-col gap-1 text-left animate-fade-in"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <button
+                                onClick={() => { setShowAddModal(true); setShowMoreMenu(false); }}
+                                className="flex items-center gap-3 px-4 py-3 text-white hover:bg-white/10 rounded-xl transition text-sm text-left font-medium w-full"
+                            >
+                                <UserPlusIcon className="w-5 h-5 text-gray-300" />
+                                <span>Add Participant</span>
+                            </button>
+                            <button
+                                onClick={() => { toggleScreenShare(); setShowMoreMenu(false); }}
+                                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition text-sm text-left font-medium w-full ${isScreenSharing ? 'text-blue-400 bg-blue-500/10 hover:bg-blue-500/20' : 'text-white hover:bg-white/10'}`}
+                            >
+                                <ComputerDesktopIcon className="w-5 h-5" />
+                                <span>{isScreenSharing ? 'Stop Screen Share' : 'Screen Share'}</span>
+                            </button>
+                            <button
+                                onClick={() => { toggleRecording(); setShowMoreMenu(false); }}
+                                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition text-sm text-left font-medium w-full ${isRecording ? 'text-red-400 bg-red-500/10 hover:bg-red-500/20' : 'text-white hover:bg-white/10'}`}
+                            >
+                                {isRecording ? (
+                                    <span className="w-5 h-5 flex items-center justify-center">
+                                        <span className="w-3.5 h-3.5 rounded bg-red-500" />
+                                    </span>
+                                ) : (
+                                    <span className="w-5 h-5 flex items-center justify-center">
+                                        <span className="w-3.5 h-3.5 rounded-full bg-red-500 animate-pulse" />
+                                    </span>
+                                )}
+                                <span>{isRecording ? 'Stop Recording' : 'Record Call'}</span>
+                            </button>
+                        </div>
                     )}
-                </ControlBtn>
-
-                <ControlBtn onClick={() => setShowAddModal(true)} activeColor="bg-blue-600" label="Add Participant">
-                    <UserPlusIcon className="w-6 h-6" />
-                </ControlBtn>
+                </div>
 
                 <button
                     onClick={onClose}

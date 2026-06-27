@@ -201,6 +201,16 @@ const MessageInput = ({
     }, []);
 
     React.useEffect(() => {
+        if (pickerTab === 'gif' && gifs.length === 0) {
+            setLoadingGifs(true);
+            fetch(`/api/gifs?q=trending`)
+                .then(res => res.json())
+                .then(data => { setGifs(data.gifs || []); setLoadingGifs(false); })
+                .catch(() => { setGifs([]); setLoadingGifs(false); });
+        }
+    }, [pickerTab, gifs.length]);
+
+    React.useEffect(() => {
         const handleClickOutside = (e) => {
             if (showAttachMenu && attachMenuRef.current && !attachMenuRef.current.contains(e.target)) {
                 const attachBtn = document.getElementById('attach-btn');
@@ -362,7 +372,13 @@ const MessageInput = ({
 
     const handleSendGame = (type, mode, targetWins) => {
         if (type === 'Indiasearch Games') {
-            onSend('Indiasearch Games', 'game', 0);
+            const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+            const payload = {
+                game: 'Indiasearch Games',
+                mode: 'vs-friend',
+                gameCode: code
+            };
+            onSend(JSON.stringify(payload), 'game', 0);
         } else {
             if (mode === 'vs-computer') {
                 onSend('Tic-Tac-Toe', 'game', 0);
@@ -581,7 +597,7 @@ const MessageInput = ({
                 <div ref={emojiPickerRef} className="absolute bottom-full left-0 z-50 flex flex-col gap-2 rounded-2xl bg-[#202c33] p-3 shadow-2xl w-[350px]">
                     {/* Tab Header */}
                     <div className="flex bg-black/20 rounded-lg p-0.5 text-xs text-gray-300">
-                        {['emoji', 'sticker'].map(tab => (
+                        {['emoji', 'gif', 'sticker'].map(tab => (
                             <button
                                 key={tab}
                                 type="button"
@@ -609,6 +625,60 @@ const MessageInput = ({
                                 skinTonesDisabled
                                 previewConfig={{ showPreview: false }}
                             />
+                        )}
+
+                        {pickerTab === 'gif' && (
+                            <div className="flex flex-col h-full gap-2 font-sans text-xs overflow-hidden pt-1">
+                                <div className="flex px-1 gap-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Search GIFs..."
+                                        value={gifSearch}
+                                        onChange={(e) => setGifSearch(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                setLoadingGifs(true);
+                                                fetch(`/api/gifs?q=${encodeURIComponent(gifSearch)}`)
+                                                    .then(res => res.json())
+                                                    .then(data => { setGifs(data.gifs || []); setLoadingGifs(false); })
+                                                    .catch(() => { setGifs([]); setLoadingGifs(false); });
+                                            }
+                                        }}
+                                        className="w-full bg-[#111b21] border border-white/10 rounded-md px-2 py-1 text-white outline-none focus:border-[#00a884]"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setLoadingGifs(true);
+                                            fetch(`/api/gifs?q=${encodeURIComponent(gifSearch || 'trending')}`)
+                                                .then(res => res.json())
+                                                .then(data => { setGifs(data.gifs || []); setLoadingGifs(false); })
+                                                .catch(() => { setGifs([]); setLoadingGifs(false); });
+                                        }}
+                                        className="bg-[#00a884] text-white px-3 py-1 rounded-md font-bold hover:bg-[#008f72]"
+                                    >
+                                        Search
+                                    </button>
+                                </div>
+                                <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-1 scrollbar-thin px-1 pb-1">
+                                    {loadingGifs ? (
+                                        <div className="col-span-2 text-center py-4 text-gray-400">Loading GIFs...</div>
+                                    ) : gifs.map((url, i) => (
+                                        <button
+                                            key={i}
+                                            type="button"
+                                            onClick={() => {
+                                                onSend(url, 'gif', disappearingTtl);
+                                                setShowEmoji(false);
+                                            }}
+                                            className="rounded-xl overflow-hidden hover:opacity-80 transition-opacity bg-black/20 h-24"
+                                        >
+                                            <img src={url} alt={`gif-${i}`} className="w-full h-full object-cover" loading="lazy" />
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                         )}
 
                         {pickerTab === 'sticker' && (

@@ -134,7 +134,21 @@ const InlineAudioPlayer = ({ src, isOwn, onOpen }) => {
             }
         };
 
-        const onMeta = () => updateDur();
+        const onMeta = () => {
+            if (a.duration === Infinity) {
+                // Workaround for Chrome webm duration bug
+                a.currentTime = 1e101;
+                a.addEventListener('timeupdate', function getDuration() {
+                    a.removeEventListener('timeupdate', getDuration);
+                    if (a.duration !== Infinity && !isNaN(a.duration)) {
+                        setDuration(a.duration);
+                    }
+                    a.currentTime = 0;
+                });
+            } else {
+                updateDur();
+            }
+        };
         const onTime = () => {
             setCurrentTime(a.currentTime);
             updateDur();
@@ -1562,7 +1576,7 @@ const TicTacToeGame = ({ gameCode, gameMode: initialGameMode, targetWins, creato
 
 const MiniGameCard = ({ game, isOwn, socket, chatId, currentUserId }) => {
     const [showModal, setShowModal] = useState(false);
-    const iframeUrl = 'https://game.indiasearch.site';
+    let iframeUrl = 'https://game.indiasearch.site';
 
     let gameName = game;
     let gameMode = 'vs-computer';
@@ -1577,6 +1591,9 @@ const MiniGameCard = ({ game, isOwn, socket, chatId, currentUserId }) => {
             gameMode = data.mode || 'vs-computer';
             targetWins = data.target || 3;
             gameCode = data.gameCode || '';
+            if (gameName === 'Indiasearch Games' && gameCode) {
+                iframeUrl = `https://game.indiasearch.site?room=${gameCode}`;
+            }
             creatorId = data.creatorId || '';
         }
     } catch (e) {

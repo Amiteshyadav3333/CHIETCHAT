@@ -68,7 +68,10 @@ const Home = () => {
     const [editingMessage, setEditingMessage] = useState(null);
     const [editText, setEditText] = useState('');
     const [forwardMessage, setForwardMessage] = useState(null);
-    const [aiEnabled, setAiEnabled] = useState(() => localStorage.getItem('ai_grammar_fix_enabled') === 'true');
+    const [showTopDropdown, setShowTopDropdown] = useState(false);
+    const [aiEnabled, setAiEnabled] = useState(localStorage.getItem('ai_grammar_fix_enabled') !== 'false');
+    const [smartRepliesEnabled, setSmartRepliesEnabled] = useState(localStorage.getItem('smart_replies_enabled') === 'true');
+    const [showInfoPanel, setShowInfoPanel] = useState(false);
     const [msgToDelete, setMsgToDelete] = useState(null);
     const [chatToDelete, setChatToDelete] = useState(null);
     const [showBioBanner, setShowBioBanner] = useState(true);
@@ -1783,12 +1786,22 @@ const Home = () => {
                                                     const newVal = !aiEnabled;
                                                     setAiEnabled(newVal);
                                                     localStorage.setItem('ai_grammar_fix_enabled', String(newVal));
-                                                    setShowTopDropdown(false);
                                                 }} 
                                                 className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-gray-200 hover:bg-white/10"
                                             >
                                                 <span className="text-[#a78bfa]">✨</span>
                                                 <span>{aiEnabled ? 'Disable AI Grammar' : 'Enable AI Grammar'}</span>
+                                            </button>
+                                            <button 
+                                                onClick={() => {
+                                                    const newVal = !smartRepliesEnabled;
+                                                    setSmartRepliesEnabled(newVal);
+                                                    localStorage.setItem('smart_replies_enabled', String(newVal));
+                                                }} 
+                                                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-gray-200 hover:bg-white/10"
+                                            >
+                                                <span className="text-[#00a884]">💡</span>
+                                                <span>{smartRepliesEnabled ? 'Disable Smart Replies' : 'Enable Smart Replies'}</span>
                                             </button>
                                             <button 
                                                 onClick={() => { setShowInfoPanel(true); setShowTopDropdown(false); }} 
@@ -2165,6 +2178,7 @@ const Home = () => {
                         placeholderOverride={visibleActiveChat.isChatDisabled && visibleActiveChat.groupAdminId !== user?.id ? "Only admins can send messages in this group" : ""}
                         lastMessageText={messages.length > 0 && messages[messages.length - 1].senderId !== user?.id && (!messages[messages.length - 1].type || messages[messages.length - 1].type === 'text') ? messages[messages.length - 1].content : ''}
                         showAiFeature={aiEnabled}
+                        showSmartReplies={smartRepliesEnabled}
                         currentUserId={user?.id}
                     />
                 </div>

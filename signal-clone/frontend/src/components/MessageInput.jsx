@@ -86,6 +86,7 @@ const MessageInput = ({
     disabled = false, placeholderOverride = "",
     lastMessageText = "",
     showAiFeature = false,
+    showSmartReplies = false,
     currentUserId
 }) => {
     const [text, setText] = useState('');
@@ -107,7 +108,7 @@ const MessageInput = ({
     const [gameTargetWins, setGameTargetWins] = useState(3);
 
     React.useEffect(() => {
-        if (!lastMessageText) {
+        if (!showSmartReplies || !lastMessageText) {
             setSmartReplies([]);
             return;
         }
@@ -127,7 +128,7 @@ const MessageInput = ({
             replies = ["Awesome! 👍", "Okay, got it.", "Sounds good!"];
         }
         setSmartReplies(replies);
-    }, [lastMessageText]);
+    }, [lastMessageText, showSmartReplies]);
 
     const handleGrammarFix = () => {
         if (!text.trim()) return;

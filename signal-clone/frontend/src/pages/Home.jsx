@@ -68,10 +68,8 @@ const Home = () => {
     const [editingMessage, setEditingMessage] = useState(null);
     const [editText, setEditText] = useState('');
     const [forwardMessage, setForwardMessage] = useState(null);
-    const [showTopDropdown, setShowTopDropdown] = useState(false);
     const [aiEnabled, setAiEnabled] = useState(localStorage.getItem('ai_grammar_fix_enabled') !== 'false');
     const [smartRepliesEnabled, setSmartRepliesEnabled] = useState(localStorage.getItem('smart_replies_enabled') === 'true');
-    const [showInfoPanel, setShowInfoPanel] = useState(false);
     const [msgToDelete, setMsgToDelete] = useState(null);
     const [chatToDelete, setChatToDelete] = useState(null);
     const [showBioBanner, setShowBioBanner] = useState(true);

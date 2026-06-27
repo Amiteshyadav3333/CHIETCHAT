@@ -1,6 +1,6 @@
 import requests
 from flask import Blueprint, jsonify, request
-from models import db, Chat, ChatParticipant, Message, User
+from models import db, Chat, ChatParticipant, Message, User, MessageDeletion
 from extensions import socketio
 from utils import (
     get_current_user_id, user_can_access_chat, serialize_user, 
@@ -20,11 +20,46 @@ def delete_chat(chat_id):
         return jsonify({"error": "Unauthorized"}), 401
     if not user_can_access_chat(user_id, chat_id):
         return jsonify({"error": "Forbidden"}), 403
-    Message.query.filter_by(chat_id=chat_id).delete()
-    ChatParticipant.query.filter_by(chat_id=chat_id).delete()
-    Chat.query.filter_by(id=chat_id).delete()
-    db.session.commit()
-    return jsonify({"ok": True})
+
+    option = request.args.get('option', 'me')
+
+    if option == 'everyone':
+        chat = Chat.query.get(chat_id)
+        if chat.is_group and chat.group_admin_id != user_id:
+            return jsonify({"error": "Only group admin can delete chat for everyone"}), 403
+
+        # Delete messages, participants, and chat
+        Message.query.filter_by(chat_id=chat_id).delete()
+        ChatParticipant.query.filter_by(chat_id=chat_id).delete()
+        Chat.query.filter_by(id=chat_id).delete()
+        db.session.commit()
+
+        # Emit socket update to notify other participants
+        emit_message_update(chat_id, 'chat_deleted', {"chatId": chat_id})
+        return jsonify({"ok": True})
+
+    else: # option == 'me'
+        participant = ChatParticipant.query.filter_by(chat_id=chat_id, user_id=user_id).first()
+        if participant:
+            participant.deleted_at = utc_now()
+
+            # Add all existing messages to MessageDeletion for this user
+            messages = Message.query.filter_by(chat_id=chat_id).all()
+            for msg in messages:
+                existing = MessageDeletion.query.filter_by(message_id=msg.id, user_id=user_id).first()
+                if not existing:
+                    db.session.add(MessageDeletion(message_id=msg.id, user_id=user_id))
+
+            # If all participants have deleted the chat for themselves, delete it from DB fully
+            total_participants = ChatParticipant.query.filter_by(chat_id=chat_id).all()
+            all_deleted = all(p.deleted_at is not None for p in total_participants)
+            if all_deleted:
+                Message.query.filter_by(chat_id=chat_id).delete()
+                ChatParticipant.query.filter_by(chat_id=chat_id).delete()
+                Chat.query.filter_by(id=chat_id).delete()
+
+            db.session.commit()
+        return jsonify({"ok": True})
 
 @chats_bp.route('/api/chats', methods=['GET'])
 def get_chats():
@@ -52,7 +87,21 @@ def get_chats():
                     s_user['websiteUrl'] = ''
                 part_data.append(s_user)
 
-            last_msg = Message.query.filter_by(chat_id=chat.id).order_by(Message.timestamp.desc()).first()
+            deleted_msg_ids = {d.message_id for d in MessageDeletion.query.filter_by(user_id=user_id).all()}
+            my_participant = next((p for p in participants if p.user_id == user_id), None)
+            p_deleted_at = my_participant.deleted_at if my_participant else None
+
+            query = Message.query.filter(Message.chat_id == chat.id)
+            if deleted_msg_ids:
+                query = query.filter(~Message.id.in_(list(deleted_msg_ids)))
+            if p_deleted_at:
+                query = query.filter(Message.timestamp > p_deleted_at)
+
+            last_msg = query.order_by(Message.timestamp.desc()).first()
+
+            # Hide chat if deleted for me and there are no messages after deletion
+            if p_deleted_at and not last_msg:
+                continue
 
             chat_name = chat.name
             chat_avatar = None
@@ -164,7 +213,15 @@ def get_messages(chat_id):
     if expired:
         db.session.commit()
 
-    messages = Message.query.filter_by(chat_id=chat_id).order_by(Message.timestamp.asc()).all()
+    participant = ChatParticipant.query.filter_by(chat_id=chat_id, user_id=user_id).first()
+    p_deleted_at = participant.deleted_at if participant else None
+
+    deleted_msg_ids_subquery = db.session.query(MessageDeletion.message_id).filter(MessageDeletion.user_id == user_id).subquery()
+    query = Message.query.filter(Message.chat_id == chat_id, ~Message.id.in_(deleted_msg_ids_subquery))
+    if p_deleted_at:
+        query = query.filter(Message.timestamp > p_deleted_at)
+
+    messages = query.order_by(Message.timestamp.asc()).all()
     
     from models import StarredMessage, PollVote
     starred_ids = {s.message_id for s in StarredMessage.query.filter_by(user_id=user_id).all()}
@@ -208,21 +265,41 @@ def delete_message(message_id):
     if not message:
         return jsonify({"error": "Message not found"}), 404
 
-    if message.sender_id != user_id:
-        return jsonify({"error": "Forbidden"}), 403
+    option = request.args.get('option', 'me')
 
-    message.content = ''
-    message.type = 'deleted'
-    message.deleted_at = utc_now()
-    db.session.commit()
-    payload = {
-        "message": "Deleted",
-        "id": message.id,
-        "chatId": message.chat_id,
-        "deletedAt": iso_utc(message.deleted_at)
-    }
-    emit_message_update(message.chat_id, 'message_deleted', payload)
-    return jsonify(payload), 200
+    if option == 'everyone':
+        if message.sender_id != user_id:
+            return jsonify({"error": "Forbidden"}), 403
+
+        message.content = ''
+        message.type = 'deleted'
+        message.deleted_at = utc_now()
+        db.session.commit()
+        payload = {
+            "message": "Deleted",
+            "id": message.id,
+            "chatId": message.chat_id,
+            "deletedAt": iso_utc(message.deleted_at)
+        }
+        emit_message_update(message.chat_id, 'message_deleted', payload)
+        return jsonify(payload), 200
+
+    else: # option == 'me'
+        if not user_can_access_chat(user_id, message.chat_id):
+            return jsonify({"error": "Forbidden"}), 403
+
+        existing = MessageDeletion.query.filter_by(message_id=message_id, user_id=user_id).first()
+        if not existing:
+            db.session.add(MessageDeletion(message_id=message_id, user_id=user_id))
+            db.session.commit()
+
+        payload = {
+            "message": "Deleted for me",
+            "id": message_id,
+            "chatId": message.chat_id,
+            "option": "me"
+        }
+        return jsonify(payload), 200
 
 @chats_bp.route('/api/messages/<int:message_id>', methods=['PUT'])
 def edit_message(message_id):

@@ -125,9 +125,11 @@ def ensure_database_schema():
             'profile_photo_privacy': db.String(20),
             'two_factor_enabled': db.Boolean(),
             'two_factor_secret': db.String(100),
+            'bio_expires_at': db.DateTime(),
         })
         add_missing_columns(inspector, 'chat_participant', {
             'is_archived': db.Boolean(),
+            'deleted_at': db.DateTime(),
         })
         if 'user' in inspector.get_table_names():
             user_columns = {column['name'] for column in inspector.get_columns('user')}
@@ -360,13 +362,17 @@ def serialize_user(user, viewer_id=None):
         if viewer_id == user.id:
             show_online_status = True
 
+    user_bio = user.bio
+    if user.bio_expires_at and utc_now() > user.bio_expires_at:
+        user_bio = ""
+
     return {
         "id": user.id,
         "username": user.username,
         "phone": user.phone,
         "avatar": avatar,
         "publicKey": user.public_key,
-        "bio": user.bio or "",
+        "bio": user_bio or "",
         "websiteUrl": user.website_url or "",
         "platformId": user.platform_id or "",
         "profileSetupDone": bool(user.profile_setup_done),

@@ -68,6 +68,14 @@ const Home = () => {
     const [editingMessage, setEditingMessage] = useState(null);
     const [editText, setEditText] = useState('');
     const [forwardMessage, setForwardMessage] = useState(null);
+    const [aiEnabled, setAiEnabled] = useState(() => localStorage.getItem('ai_grammar_fix_enabled') === 'true');
+    const [msgToDelete, setMsgToDelete] = useState(null);
+    const [chatToDelete, setChatToDelete] = useState(null);
+    const [showBioBanner, setShowBioBanner] = useState(true);
+
+    useEffect(() => {
+        setShowBioBanner(true);
+    }, [activeChat]);
     const [theme, setTheme] = useState(() => localStorage.getItem('chat_theme') || 'dark');
     const [wallpaper, setWallpaper] = useState(() => localStorage.getItem('chat_wallpaper') || 'white');
     const [disappearingTtl, setDisappearingTtl] = useState(0);
@@ -565,6 +573,14 @@ const Home = () => {
             }
         });
 
+        socket.on('chat_deleted', ({ chatId }) => {
+            setChats(prev => prev.filter(c => c.id !== chatId));
+            if (activeChatRef.current?.id === chatId) {
+                setActiveChat(null);
+                localStorage.removeItem('activeChatId');
+            }
+        });
+
         socket.on('message_reaction_update', ({ id, chatId, reactions }) => {
             if (activeChatRef.current?.id === chatId) {
                 setMessages(prev => prev.map(m => m.id === id ? { ...m, reactions } : m));
@@ -680,6 +696,7 @@ const Home = () => {
             socket.off('message_status_update');
             socket.off('message_edited');
             socket.off('message_deleted');
+            socket.off('chat_deleted');
             socket.off('message_reaction_update');
             socket.off('message_pin_update');
             socket.off('typing_update');
@@ -938,14 +955,46 @@ const Home = () => {
         setShowCallModal(true);
     };
 
-    const handleDeleteChat = async (chatId) => {
-        if (!window.confirm('Delete this chat for everyone?')) return;
+    const handleDeleteChat = (chatId) => {
+        setChatToDelete(chatId);
+    };
+
+    const handleDeleteChatConfirm = async (chatId, option) => {
         try {
-            await axios.delete(`/api/chats/${chatId}`, { headers: { Authorization: `Bearer ${token}` } });
+            await axios.delete(`/api/chats/${chatId}?option=${option}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
             setChats(prev => prev.filter(c => c.id !== chatId));
-            setActiveChat(null);
-            localStorage.removeItem('activeChatId');
-        } catch (err) { console.error(err); }
+            if (activeChat?.id === chatId) {
+                setActiveChat(null);
+                localStorage.removeItem('activeChatId');
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setChatToDelete(null);
+        }
+    };
+
+    const handleDeleteMessage = (message) => {
+        setMsgToDelete(message);
+    };
+
+    const handleDeleteMessageConfirm = async (messageId, option) => {
+        try {
+            const res = await axios.delete(`/api/messages/${messageId}?option=${option}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (option === 'everyone') {
+                setMessages(prev => prev.map(m => m.id === messageId ? { ...m, content: '', type: 'deleted', deletedAt: res.data.deletedAt } : m));
+            } else {
+                setMessages(prev => prev.filter(m => m.id !== messageId));
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setMsgToDelete(null);
+        }
     };
 
     const handleBlockUser = async (targetUserId) => {
@@ -970,16 +1019,7 @@ const Home = () => {
         } catch (err) { console.error(err); }
     };
 
-    const handleDeleteMessage = async (messageId) => {
-        try {
-            const res = await axios.delete(`/api/messages/${messageId}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setMessages(prev => prev.map(m => m.id === messageId ? { ...m, content: '', type: 'deleted', deletedAt: res.data.deletedAt } : m));
-        } catch (err) {
-            console.error(err);
-        }
-    };
+
 
     const handleCopyMessage = async (message) => {
         try {
@@ -1735,8 +1775,20 @@ const Home = () => {
                                     return (
                                         <div className="absolute right-0 top-8 z-50 w-52 overflow-hidden rounded-xl bg-[#111b21] shadow-2xl border border-white/10 text-white text-xs">
                                             <button 
-                                                onClick={() => { setShowInfoPanel(true); setShowTopDropdown(false); }} 
+                                                onClick={() => {
+                                                    const newVal = !aiEnabled;
+                                                    setAiEnabled(newVal);
+                                                    localStorage.setItem('ai_grammar_fix_enabled', String(newVal));
+                                                    setShowTopDropdown(false);
+                                                }} 
                                                 className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-gray-200 hover:bg-white/10"
+                                            >
+                                                <span className="text-[#a78bfa]">✨</span>
+                                                <span>{aiEnabled ? 'Disable AI Grammar' : 'Enable AI Grammar'}</span>
+                                            </button>
+                                            <button 
+                                                onClick={() => { setShowInfoPanel(true); setShowTopDropdown(false); }} 
+                                                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-gray-200 hover:bg-white/10 border-t border-white/5"
                                             >
                                                 <InformationCircleIcon className="w-4 h-4 text-[#53bdeb]" />
                                                 <span>{visibleActiveChat.isGroup ? 'Group Info' : 'Contact Info'}</span>
@@ -2012,6 +2064,30 @@ const Home = () => {
                         className="flex-1 overflow-y-auto px-4 py-3 space-y-0.5"
                         style={{ background: chatBackground, backgroundSize: wallpaper === 'dots' ? '18px 18px' : undefined }}
                     >
+                        {(() => {
+                            const other = getOtherParticipant(visibleActiveChat);
+                            const otherBio = other?.bio;
+                            return otherBio && showBioBanner && (
+                                <div className="sticky top-0 z-30 mb-2 flex items-center justify-between gap-3 rounded-xl border border-violet-500/20 bg-gradient-to-r from-violet-950/70 to-indigo-950/70 px-4 py-3 text-xs text-white shadow-lg backdrop-blur-md animate-slide-up">
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-500/20 text-violet-300">
+                                            ✨
+                                        </div>
+                                        <div className="min-w-0">
+                                            <div className="text-[10px] uppercase tracking-wider text-violet-400 font-bold mb-0.5">Note (24h Bio)</div>
+                                            <p className="truncate text-white/95 font-medium italic">"{otherBio}"</p>
+                                        </div>
+                                    </div>
+                                    <button 
+                                        onClick={() => setShowBioBanner(false)}
+                                        className="shrink-0 p-1 text-white/40 hover:text-white/80 rounded-lg hover:bg-white/5 transition"
+                                        title="Close"
+                                    >
+                                        <XMarkIcon className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            );
+                        })()}
                         {messages.map((msg, idx) => {
                             const prevMsg = messages[idx - 1];
                             const currDate = new Date(msg.timestamp).toDateString();
@@ -2082,6 +2158,7 @@ const Home = () => {
                         disabled={visibleActiveChat.isChatDisabled && visibleActiveChat.groupAdminId !== user?.id}
                         placeholderOverride={visibleActiveChat.isChatDisabled && visibleActiveChat.groupAdminId !== user?.id ? "Only admins can send messages in this group" : ""}
                         lastMessageText={messages.length > 0 && messages[messages.length - 1].senderId !== user?.id && (!messages[messages.length - 1].type || messages[messages.length - 1].type === 'text') ? messages[messages.length - 1].content : ''}
+                        showAiFeature={aiEnabled}
                     />
                 </div>
             ) : (
@@ -2286,6 +2363,74 @@ const Home = () => {
                     </div>
                 </div>
             )}
+
+            {/* Deletion confirmation modals */}
+            {msgToDelete && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setMsgToDelete(null)}>
+                    <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#1f2c34] p-6 text-white shadow-2xl animate-scale-up" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-lg font-bold mb-2">Delete message?</h3>
+                        <p className="text-sm text-gray-400 mb-6">This action cannot be undone.</p>
+                        <div className="flex flex-col gap-2">
+                            {msgToDelete.senderId === user.id && (
+                                <button 
+                                    onClick={() => handleDeleteMessageConfirm(msgToDelete.id, 'everyone')}
+                                    className="w-full rounded-xl bg-red-600 hover:bg-red-500 py-3 text-sm font-semibold transition"
+                                >
+                                    Delete for everyone
+                                </button>
+                            )}
+                            <button 
+                                onClick={() => handleDeleteMessageConfirm(msgToDelete.id, 'me')}
+                                className="w-full rounded-xl bg-white/10 hover:bg-white/15 py-3 text-sm font-semibold transition"
+                            >
+                                Delete for me
+                            </button>
+                            <button 
+                                onClick={() => setMsgToDelete(null)}
+                                className="w-full rounded-xl py-3 text-sm font-semibold text-gray-400 hover:text-white transition"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {chatToDelete && (() => {
+                const chat = chats.find(c => c.id === chatToDelete);
+                const isAdmin = chat?.isGroup && chat?.groupAdminId === user.id;
+                const canDeleteForEveryone = !chat?.isGroup || isAdmin;
+                return (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setChatToDelete(null)}>
+                        <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#1f2c34] p-6 text-white shadow-2xl animate-scale-up" onClick={e => e.stopPropagation()}>
+                            <h3 className="text-lg font-bold mb-2">Delete chat?</h3>
+                            <p className="text-sm text-gray-400 mb-6">Are you sure you want to delete this chat conversation?</p>
+                            <div className="flex flex-col gap-2">
+                                {canDeleteForEveryone && (
+                                    <button 
+                                        onClick={() => handleDeleteChatConfirm(chatToDelete, 'everyone')}
+                                        className="w-full rounded-xl bg-red-600 hover:bg-red-500 py-3 text-sm font-semibold transition"
+                                    >
+                                        Delete for everyone
+                                    </button>
+                                )}
+                                <button 
+                                    onClick={() => handleDeleteChatConfirm(chatToDelete, 'me')}
+                                    className="w-full rounded-xl bg-white/10 hover:bg-white/15 py-3 text-sm font-semibold transition"
+                                >
+                                    Delete for me
+                                </button>
+                                <button 
+                                    onClick={() => setChatToDelete(null)}
+                                    className="w-full rounded-xl py-3 text-sm font-semibold text-gray-400 hover:text-white transition"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
 
         </div>
     );

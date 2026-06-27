@@ -274,7 +274,7 @@ const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, 
         ...(!isDeleted ? [{ icon: '➡️', label: 'Forward', onClick: () => { onForward?.(); onClose(); } }] : []),
         ...(!isDeleted && isTextMessage ? [{ icon: '🌐', label: 'Translate', onClick: () => { onTranslate?.(); onClose(); } }] : []),
         { icon: 'ℹ️', label: 'Info', onClick: () => { onInfo?.(); onClose(); } },
-        ...(isOwn && !isDeleted ? [{ icon: '🗑️', label: 'Delete', danger: true, onClick: () => { onDelete?.(); onClose(); } }] : []),
+        ...(!isDeleted ? [{ icon: '🗑️', label: 'Delete', danger: true, onClick: () => { onDelete?.(); onClose(); } }] : []),
     ];
 
     return (
@@ -1034,7 +1034,7 @@ const ChatBubble = ({
                     onForward={() => onForward && onForward(message)}
                     onReact={(emoji) => onReact && onReact(message, emoji)}
                     onPin={() => onPin && onPin(message)}
-                    onDelete={() => onDelete && onDelete(message.id)}
+                    onDelete={() => onDelete && onDelete(message)}
                     onInfo={() => setShowInfoModal(true)}
                     onTranslate={() => { setShowTranslatorMenu(true); }}
                 />,

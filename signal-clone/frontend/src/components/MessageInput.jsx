@@ -55,7 +55,8 @@ const MessageInput = ({
     onTyping,
     disappearingTtl = 0,
     disabled = false, placeholderOverride = "",
-    lastMessageText = ""
+    lastMessageText = "",
+    showAiFeature = false
 }) => {
     const [text, setText] = useState('');
     const [showEmoji, setShowEmoji] = useState(false);
@@ -680,17 +681,19 @@ const MessageInput = ({
                         >
                             <GlobeIcon className="w-6 h-6" />
                         </button>
-                        <button
-                            type="button"
-                            onClick={handleGrammarFix}
-                            disabled={!text.trim()}
-                            className={`p-2 rounded-full transition-all ${text.trim() ? 'text-violet-400 hover:text-violet-300 hover:scale-105 active:scale-95' : 'text-gray-600 cursor-not-allowed'}`}
-                            title="AI Grammar Fix"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 21l-.813-5.096L3.091 15.091l5.096-.813L9 9.187l.813 5.091 5.096.813-5.096.813zM19.071 4.929l-.312 1.948-1.948.312 1.948.312.312 1.948.312-1.948 1.948-.312-1.948-.312-.312-1.948zM19.071 19.071l-.312 1.948-1.948.312 1.948.312.312 1.948.312-1.948 1.948-.312-1.948-.312-.312-1.948z" />
-                            </svg>
-                        </button>
+                        {showAiFeature && (
+                            <button
+                                type="button"
+                                onClick={handleGrammarFix}
+                                disabled={!text.trim()}
+                                className={`p-2 rounded-full transition-all ${text.trim() ? 'text-violet-400 hover:text-violet-300 hover:scale-105 active:scale-95' : 'text-gray-600 cursor-not-allowed'}`}
+                                title="AI Grammar Fix"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 21l-.813-5.096L3.091 15.091l5.096-.813L9 9.187l.813 5.091 5.096.813-5.096.813zM19.071 4.929l-.312 1.948-1.948.312 1.948.312.312 1.948.312-1.948 1.948-.312-1.948-.312-.312-1.948zM19.071 19.071l-.312 1.948-1.948.312 1.948.312.312 1.948.312-1.948 1.948-.312-1.948-.312-.312-1.948z" />
+                                </svg>
+                            </button>
+                        )}
                     </div>
                 )}
 

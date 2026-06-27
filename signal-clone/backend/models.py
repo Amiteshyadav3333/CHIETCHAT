@@ -29,6 +29,7 @@ class User(db.Model):
     profile_photo_privacy = db.Column(db.String(20), default='everyone')  # everyone | contacts | nobody
     two_factor_enabled = db.Column(db.Boolean, default=False)
     two_factor_secret = db.Column(db.String(100), nullable=True)
+    bio_expires_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now)
 
 class PendingRegistration(db.Model):
@@ -57,6 +58,7 @@ class ChatParticipant(db.Model):
     chat_id = db.Column(db.Integer, db.ForeignKey('chat.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     is_archived = db.Column(db.Boolean, default=False)
+    deleted_at = db.Column(db.DateTime, nullable=True)
     user = db.relationship('User')
 
 class GroupJoinRequest(db.Model):
@@ -300,3 +302,10 @@ class PollVote(db.Model):
     option_idx = db.Column(db.Integer, nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now)
     __table_args__ = (db.UniqueConstraint('message_id', 'user_id', name='uq_poll_user_vote'),)
+
+class MessageDeletion(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    message_id = db.Column(db.Integer, db.ForeignKey('message.id', ondelete='CASCADE'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False)
+    deleted_at = db.Column(db.DateTime, default=utc_now)
+    __table_args__ = (db.UniqueConstraint('message_id', 'user_id', name='uq_message_user_deletion'),)

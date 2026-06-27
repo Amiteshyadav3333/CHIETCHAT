@@ -4,7 +4,7 @@ from models import db, User, Block, Follow
 from utils import (
     get_current_user_id, get_contact_user_ids, serialize_user, get_json_data,
     normalize_phone, is_valid_phone, add_contact, upload_to_cloudinary,
-    emit_to_user_chat_contacts, has_contact, create_notification, iso_utc
+    emit_to_user_chat_contacts, has_contact, create_notification, iso_utc, utc_now
 )
 
 users_bp = Blueprint('users_bp', __name__)
@@ -109,7 +109,13 @@ def setup_profile():
 
     if display_name:
         user.username = display_name
-    user.bio = bio or user.bio
+    if 'bio' in request.form:
+        user.bio = bio
+        if bio:
+            from datetime import timedelta
+            user.bio_expires_at = utc_now() + timedelta(hours=24)
+        else:
+            user.bio_expires_at = None
     user.website_url = website_url or user.website_url
     user.profile_setup_done = True
     db.session.commit()
@@ -336,7 +342,14 @@ def update_profile():
     user = User.query.get(user_id)
     if data.get('username'):
         user.username = data['username'].strip()
-    user.bio = data.get('bio', user.bio)
+    if 'bio' in data:
+        bio_val = data['bio'].strip() if data['bio'] else ""
+        user.bio = bio_val
+        if bio_val:
+            from datetime import timedelta
+            user.bio_expires_at = utc_now() + timedelta(hours=24)
+        else:
+            user.bio_expires_at = None
     user.website_url = data.get('websiteUrl', user.website_url)
     # Update platform handle if provided
     new_platform_id = (data.get('platformId') or '').strip().lstrip('@').lower()

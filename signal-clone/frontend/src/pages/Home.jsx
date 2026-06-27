@@ -892,9 +892,13 @@ const Home = () => {
 
             const url = res.data.url;
             let type = 'file';
-            if (file.type.startsWith('image/') || url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) type = 'image';
-            else if (file.type.startsWith('audio/') || url.match(/\.(mp3|wav|m4a|aac|oga)$/i)) type = 'audio';
-            else if (file.type.startsWith('video/') || url.match(/\.(mp4|webm|ogg)$/i)) type = 'video';
+            const isImage = file.type.startsWith('image/') || url.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+            const isAudio = file.type.startsWith('audio/') || file.name.startsWith('voice-') || url.match(/\.(mp3|wav|m4a|aac|oga)$/i);
+            const isVideo = !isAudio && (file.type.startsWith('video/') || url.match(/\.(mp4|webm|ogg|mov)$/i));
+
+            if (isImage) type = 'image';
+            else if (isAudio) type = 'audio';
+            else if (isVideo) type = 'video';
 
             setUploadProgress(null);
             handleSendMessage(url, type, null, disappearingTtl);
@@ -2124,6 +2128,8 @@ const Home = () => {
                                             chatId={visibleActiveChat.id}
                                             chatTranslationLang={chatTranslationLang}
                                             isLastMessage={idx === messages.length - 1}
+                                            socket={socket}
+                                            currentUserId={user.id}
                                         />
                                     </div>
                                 </React.Fragment>
@@ -2159,6 +2165,7 @@ const Home = () => {
                         placeholderOverride={visibleActiveChat.isChatDisabled && visibleActiveChat.groupAdminId !== user?.id ? "Only admins can send messages in this group" : ""}
                         lastMessageText={messages.length > 0 && messages[messages.length - 1].senderId !== user?.id && (!messages[messages.length - 1].type || messages[messages.length - 1].type === 'text') ? messages[messages.length - 1].content : ''}
                         showAiFeature={aiEnabled}
+                        currentUserId={user?.id}
                     />
                 </div>
             ) : (

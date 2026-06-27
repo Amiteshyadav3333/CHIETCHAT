@@ -440,3 +440,16 @@ def register_socket_events(socketio):
             "lat": data.get('lat'),
             "lng": data.get('lng')
         }, room=str(chat_id))
+
+    @socketio.on('game_move')
+    def on_game_move(data):
+        user_id = get_socket_user_id()
+        chat_id = data.get('chatId')
+        if not user_id or not chat_id or not user_can_access_chat(user_id, chat_id):
+            return
+        
+        # Broadcast the move to all participants in this chat
+        from models import ChatParticipant
+        participants = ChatParticipant.query.filter_by(chat_id=chat_id).all()
+        for participant in participants:
+            socketio.emit('game_move_received', data, room=f"user_{participant.user_id}")

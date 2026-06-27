@@ -10,14 +10,6 @@ import EmojiPicker from 'emoji-picker-react';
 const LANGUAGES = [
     { code: 'hi', name: 'Hindi (हिंदी)' },
     { code: 'en', name: 'English' },
-    { code: 'es', name: 'Spanish (Español)' },
-    { code: 'fr', name: 'French (Français)' },
-    { code: 'de', name: 'German (Deutsch)' },
-    { code: 'ar', name: 'Arabic (العربية)' },
-    { code: 'zh-CN', name: 'Chinese (中文)' },
-    { code: 'ja', name: 'Japanese (日本語)' },
-    { code: 'ru', name: 'Russian (Русский)' },
-    { code: 'pt', name: 'Portuguese (Português)' },
     { code: 'bn', name: 'Bengali (বাংলা)' },
     { code: 'pa', name: 'Punjabi (ਪੰਜਾਬੀ)' },
     { code: 'mr', name: 'Marathi (मराठी)' },
@@ -25,7 +17,28 @@ const LANGUAGES = [
     { code: 'ta', name: 'Tamil (தமிழ்)' },
     { code: 'te', name: 'Telugu (తెలుగు)' },
     { code: 'kn', name: 'Kannada (ಕನ್ನಡ)' },
-    { code: 'ml', name: 'Malayalam (മലയാളം)' }
+    { code: 'ml', name: 'Malayalam (മലയാളം)' },
+    { code: 'ur', name: 'Urdu (اردو)' },
+    { code: 'or', name: 'Odia (ଓଡ଼ିଆ)' },
+    { code: 'as', name: 'Assamese (অসমীয়া)' },
+    { code: 'sa', name: 'Sanskrit (संस्कृतम्)' },
+    { code: 'ne', name: 'Nepali (नेपाली)' },
+    { code: 'mai', name: 'Maithili (मैथिली)' },
+    { code: 'sd', name: 'Sindhi (سنڌي)' },
+    { code: 'kok', name: 'Konkani (कोंकणी)' },
+    { code: 'ks', name: 'Kashmiri (کأشُر)' },
+    { code: 'mni', name: 'Manipuri (মণিপুরী)' },
+    { code: 'doi', name: 'Dogri (डोगरी)' },
+    { code: 'brx', name: 'Bodo (बड़ो)' },
+    { code: 'sat', name: 'Santali (সাঁওতালী)' },
+    { code: 'es', name: 'Spanish (Español)' },
+    { code: 'fr', name: 'French (Français)' },
+    { code: 'de', name: 'German (Deutsch)' },
+    { code: 'ar', name: 'Arabic (العربية)' },
+    { code: 'zh-CN', name: 'Chinese (中文)' },
+    { code: 'ja', name: 'Japanese (日本語)' },
+    { code: 'ru', name: 'Russian (Русский)' },
+    { code: 'pt', name: 'Portuguese (Português)' }
 ];
 
 const GlobeIcon = ({ className }) => (
@@ -35,18 +48,34 @@ const GlobeIcon = ({ className }) => (
 );
 
 const STICKERS = [
-    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker1',
-    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker2',
-    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker3',
-    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker4',
-    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker5',
-    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker6',
-    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker7',
-    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker8',
-    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker9',
-    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker10',
-    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker11',
-    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker12',
+    'https://api.dicebear.com/7.x/fun-emoji/svg?seed=sticker1',
+    'https://api.dicebear.com/7.x/fun-emoji/svg?seed=sticker2',
+    'https://api.dicebear.com/7.x/fun-emoji/svg?seed=sticker3',
+    'https://api.dicebear.com/7.x/fun-emoji/svg?seed=sticker4',
+    'https://api.dicebear.com/7.x/fun-emoji/svg?seed=sticker5',
+    'https://api.dicebear.com/7.x/fun-emoji/svg?seed=sticker6',
+    'https://api.dicebear.com/7.x/fun-emoji/svg?seed=sticker7',
+    'https://api.dicebear.com/7.x/fun-emoji/svg?seed=sticker8',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=sticker9',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=sticker10',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=sticker11',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=sticker12',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=sticker13',
+    'https://api.dicebear.com/7.x/adventurer/svg?seed=sticker14',
+    'https://api.dicebear.com/7.x/lorelei/svg?seed=sticker15',
+    'https://api.dicebear.com/7.x/lorelei/svg?seed=sticker16',
+    'https://api.dicebear.com/7.x/lorelei/svg?seed=sticker17',
+    'https://api.dicebear.com/7.x/lorelei/svg?seed=sticker18',
+    'https://api.dicebear.com/7.x/lorelei/svg?seed=sticker19',
+    'https://api.dicebear.com/7.x/lorelei/svg?seed=sticker20',
+    'https://api.dicebear.com/7.x/pixel-art/svg?seed=sticker21',
+    'https://api.dicebear.com/7.x/pixel-art/svg?seed=sticker22',
+    'https://api.dicebear.com/7.x/pixel-art/svg?seed=sticker23',
+    'https://api.dicebear.com/7.x/pixel-art/svg?seed=sticker24',
+    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker25',
+    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker26',
+    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker27',
+    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker28'
 ];
 
 const MessageInput = ({ 
@@ -56,7 +85,8 @@ const MessageInput = ({
     disappearingTtl = 0,
     disabled = false, placeholderOverride = "",
     lastMessageText = "",
-    showAiFeature = false
+    showAiFeature = false,
+    currentUserId
 }) => {
     const [text, setText] = useState('');
     const [showEmoji, setShowEmoji] = useState(false);
@@ -69,6 +99,12 @@ const MessageInput = ({
     const [showPollCreator, setShowPollCreator] = useState(false);
     const [pollData, setPollData] = useState({ question: '', options: ['', ''] });
     const [smartReplies, setSmartReplies] = useState([]);
+
+    const [showCameraModal, setShowCameraModal] = useState(false);
+    const [showGameCreator, setShowGameCreator] = useState(false);
+    const [gameType, setGameType] = useState('Tic-Tac-Toe');
+    const [gameMode, setGameMode] = useState('vs-friend');
+    const [gameTargetWins, setGameTargetWins] = useState(3);
 
     React.useEffect(() => {
         if (!lastMessageText) {
@@ -156,33 +192,70 @@ const MessageInput = ({
     const gifInputRef = useRef(null);
     const typingTimerRef = useRef(null);
 
+    const attachMenuRef = useRef(null);
+    const emojiPickerRef = useRef(null);
+    const videoRef = useRef(null);
+
     React.useEffect(() => {
         return () => clearTimeout(typingTimerRef.current);
     }, []);
 
     React.useEffect(() => {
-        if (pickerTab === 'gif' && showEmoji) {
-            const delayDebounce = setTimeout(() => {
-                fetchGifs();
-            }, 300);
-            return () => clearTimeout(delayDebounce);
-        }
-    }, [pickerTab, gifSearch, showEmoji]);
-
-    const fetchGifs = async () => {
-        setLoadingGifs(true);
-        try {
-            const query = gifSearch.trim() || 'trending';
-            const res = await fetch(`/api/gifs?q=${encodeURIComponent(query)}`);
-            const data = await res.json();
-            if (data.gifs) {
-                setGifs(data.gifs);
+        const handleClickOutside = (e) => {
+            if (showAttachMenu && attachMenuRef.current && !attachMenuRef.current.contains(e.target)) {
+                const attachBtn = document.getElementById('attach-btn');
+                if (!attachBtn || !attachBtn.contains(e.target)) {
+                    setShowAttachMenu(false);
+                }
             }
-        } catch (err) {
-            console.error("Error fetching GIFs:", err);
-        } finally {
-            setLoadingGifs(false);
+            if (showEmoji && emojiPickerRef.current && !emojiPickerRef.current.contains(e.target)) {
+                const emojiBtn = document.getElementById('emoji-btn');
+                if (!emojiBtn || !emojiBtn.contains(e.target)) {
+                    setShowEmoji(false);
+                }
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showAttachMenu, showEmoji]);
+
+    React.useEffect(() => {
+        let stream = null;
+        if (showCameraModal) {
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
+                .then(s => {
+                    stream = s;
+                    if (videoRef.current) videoRef.current.srcObject = s;
+                })
+                .catch(err => {
+                    console.error("Camera access error:", err);
+                    alert("Could not access camera. Please check permissions.");
+                    setShowCameraModal(false);
+                });
         }
+        return () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        };
+    }, [showCameraModal]);
+
+    const capturePhoto = () => {
+        const video = videoRef.current;
+        if (!video) return;
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        canvas.toBlob((blob) => {
+            if (blob) {
+                const file = new File([blob], `camera-${Date.now()}.png`, { type: 'image/png' });
+                onUpload(file);
+                setShowCameraModal(false);
+            }
+        }, 'image/png');
     };
 
     const handleSubmit = async (e) => {
@@ -258,21 +331,54 @@ const MessageInput = ({
         setShowAttachMenu(false);
     };
 
-    const sendContactCard = () => {
-        const name = prompt('Contact name');
+    const sendContactCard = async () => {
+        if (navigator.contacts && navigator.contacts.select) {
+            try {
+                const props = ['name', 'tel'];
+                const contacts = await navigator.contacts.select(props, { multiple: false });
+                if (contacts && contacts.length > 0) {
+                    const contact = contacts[0];
+                    const name = contact.name && contact.name[0] ? contact.name[0] : 'Unknown';
+                    const phone = contact.tel && contact.tel[0] ? contact.tel[0] : '';
+                    onSend(JSON.stringify({ name, phone }), 'contact', disappearingTtl);
+                    setShowAttachMenu(false);
+                }
+            } catch (err) {
+                console.error("Native contact picker error, falling back:", err);
+                fallbackContactPrompt();
+            }
+        } else {
+            fallbackContactPrompt();
+        }
+    };
+
+    const fallbackContactPrompt = () => {
+        const name = prompt('Contact name:');
         if (!name) return;
-        const phone = prompt('Phone number') || '';
+        const phone = prompt('Phone number:') || '';
         onSend(JSON.stringify({ name, phone }), 'contact', disappearingTtl);
         setShowAttachMenu(false);
     };
 
-    const sendMiniGame = () => {
-        onSend('Indiasearch Games', 'game', 0);
-        setShowAttachMenu(false);
-    };
-
-    const sendTicTacToe = () => {
-        onSend('Tic-Tac-Toe', 'game', 0);
+    const handleSendGame = (type, mode, targetWins) => {
+        if (type === 'Indiasearch Games') {
+            onSend('Indiasearch Games', 'game', 0);
+        } else {
+            if (mode === 'vs-computer') {
+                onSend('Tic-Tac-Toe', 'game', 0);
+            } else {
+                const code = `TTT-${Math.floor(100000 + Math.random() * 900000)}`;
+                const payload = {
+                    game: 'Tic-Tac-Toe',
+                    mode: 'vs-friend',
+                    target: parseInt(targetWins) || 3,
+                    gameCode: code,
+                    creatorId: currentUserId
+                };
+                onSend(JSON.stringify(payload), 'game', 0);
+            }
+        }
+        setShowGameCreator(false);
         setShowAttachMenu(false);
     };
 
@@ -472,10 +578,10 @@ const MessageInput = ({
 
             {/* Emoji / GIF / Sticker Picker */}
             {showEmoji && (
-                <div className="absolute bottom-full left-0 z-50 flex flex-col gap-2 rounded-2xl bg-[#202c33] p-3 shadow-2xl w-[350px]">
+                <div ref={emojiPickerRef} className="absolute bottom-full left-0 z-50 flex flex-col gap-2 rounded-2xl bg-[#202c33] p-3 shadow-2xl w-[350px]">
                     {/* Tab Header */}
                     <div className="flex bg-black/20 rounded-lg p-0.5 text-xs text-gray-300">
-                        {['emoji', 'gif', 'sticker'].map(tab => (
+                        {['emoji', 'sticker'].map(tab => (
                             <button
                                 key={tab}
                                 type="button"
@@ -505,41 +611,6 @@ const MessageInput = ({
                             />
                         )}
 
-                        {pickerTab === 'gif' && (
-                            <div className="flex flex-col h-full gap-2 font-sans text-xs pt-1">
-                                <input
-                                    type="text"
-                                    placeholder="Search GIPHY..."
-                                    value={gifSearch}
-                                    onChange={(e) => setGifSearch(e.target.value)}
-                                    className="w-full bg-[#111b21] text-white px-3 py-2 rounded-lg border border-gray-700 outline-none focus:border-[#00a884]"
-                                />
-                                <div className="flex-1 overflow-y-auto grid grid-cols-3 gap-1.5 scrollbar-thin pt-1">
-                                    {loadingGifs ? (
-                                        <div className="col-span-3 flex items-center justify-center py-10 opacity-70">
-                                            <span className="animate-spin rounded-full h-5 w-5 border border-white/30 border-t-white mr-2" />
-                                            Loading GIFs...
-                                        </div>
-                                    ) : gifs.length > 0 ? (
-                                        gifs.map((url, i) => (
-                                            <img
-                                                key={i}
-                                                src={url}
-                                                alt="gif"
-                                                onClick={() => {
-                                                    onSend(url, 'image', disappearingTtl);
-                                                    setShowEmoji(false);
-                                                }}
-                                                className="w-full h-20 object-cover rounded-lg cursor-pointer hover:scale-105 transition-transform"
-                                            />
-                                        ))
-                                    ) : (
-                                        <div className="col-span-3 text-center py-10 text-gray-500">No GIFs found</div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-
                         {pickerTab === 'sticker' && (
                             <div className="flex flex-col h-full gap-2 font-sans text-xs overflow-y-auto pt-1">
                                 <p className="px-1 text-[11px] font-bold uppercase tracking-wider text-gray-400">Dicebear Stickers</p>
@@ -566,7 +637,7 @@ const MessageInput = ({
 
             {/* Attachment Menu */}
             {showAttachMenu && (
-                <div className="absolute bottom-full left-2 sm:left-10 mb-3 z-50 w-[calc(100vw-1rem)] max-w-sm rounded-3xl bg-[#233138] p-3 shadow-2xl border border-white/10 animate-slide-up">
+                <div ref={attachMenuRef} className="absolute bottom-full left-2 sm:left-10 mb-3 z-50 w-[calc(100vw-1rem)] max-w-sm rounded-3xl bg-[#233138] p-3 shadow-2xl border border-white/10 animate-slide-up">
                     <div className="grid grid-cols-4 gap-2">
                         <AttachOption
                             label="Gallery"
@@ -578,7 +649,7 @@ const MessageInput = ({
                             label="Camera"
                             color="bg-rose-500"
                             icon={<CameraIcon className="w-6 h-6 text-white" />}
-                            onClick={() => cameraInputRef.current?.click()}
+                            onClick={() => setShowCameraModal(true)}
                         />
                         <AttachOption
                             label="Document"
@@ -591,12 +662,6 @@ const MessageInput = ({
                             color="bg-orange-500"
                             icon={<MusicalNoteIcon className="w-6 h-6 text-white" />}
                             onClick={() => audioInputRef.current?.click()}
-                        />
-                        <AttachOption
-                            label="Location"
-                            color="bg-emerald-500"
-                            icon={<MapPinIcon className="w-6 h-6 text-white" />}
-                            onClick={handleShareLocation}
                         />
                         <AttachOption
                             label="Live"
@@ -617,22 +682,10 @@ const MessageInput = ({
                             onClick={sendContactCard}
                         />
                         <AttachOption
-                            label="GIF"
-                            color="bg-pink-500"
-                            icon={<FaceSmileIcon className="w-6 h-6 text-white" />}
-                            onClick={() => gifInputRef.current?.click()}
-                        />
-                        <AttachOption
-                            label="Game"
+                            label="Game 🎮"
                             color="bg-violet-500"
                             icon={<ChartBarIcon className="w-6 h-6 text-white" />}
-                            onClick={sendMiniGame}
-                        />
-                        <AttachOption
-                            label="Tic-Tac-Toe"
-                            color="bg-orange-500"
-                            icon={<PlayIcon className="w-6 h-6 text-white" />}
-                            onClick={sendTicTacToe}
+                            onClick={() => setShowGameCreator(true)}
                         />
                         <AttachOption
                             label="UPI Pay"
@@ -645,7 +698,109 @@ const MessageInput = ({
                     <input ref={cameraInputRef} type="file" className="hidden" onChange={handleFileChange} accept="image/*,video/*" capture="environment" />
                     <input ref={documentInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="*/*" />
                     <input ref={audioInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="audio/*" />
-                    <input ref={gifInputRef} type="file" className="hidden" onChange={handleFileChange} accept="image/gif" />
+                </div>
+            )}
+
+            {showCameraModal && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 p-4 animate-fade-in">
+                    <div className="w-full max-w-md rounded-3xl bg-[#202c33] p-4 border border-white/10 shadow-2xl space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-md font-bold text-white">📸 Take a Photo</h3>
+                            <button 
+                                onClick={() => setShowCameraModal(false)}
+                                className="p-1 rounded-full bg-white/5 hover:bg-white/10 text-gray-300"
+                            >
+                                <XMarkIcon className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="relative rounded-2xl overflow-hidden bg-black aspect-video flex items-center justify-center">
+                            <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => {
+                                    cameraInputRef.current?.click();
+                                    setShowCameraModal(false);
+                                }}
+                                className="flex-1 py-2.5 rounded-xl border border-white/10 text-white/80 hover:bg-white/5 font-bold text-xs"
+                            >
+                                Upload File
+                            </button>
+                            <button
+                                onClick={capturePhoto}
+                                className="flex-1 py-2.5 rounded-xl bg-[#00a884] text-white hover:bg-[#008f72] font-bold text-xs shadow-md"
+                            >
+                                📸 Capture & Send
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showGameCreator && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 p-4 animate-fade-in">
+                    <div className="w-full max-w-sm rounded-3xl bg-[#202c33] p-5 border border-white/10 shadow-2xl space-y-4 text-white">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-md font-bold flex items-center gap-1.5 font-sans">🎮 Create Game</h3>
+                            <button 
+                                onClick={() => setShowGameCreator(false)}
+                                className="p-1 rounded-full bg-white/5 hover:bg-white/10 text-gray-300"
+                            >
+                                <XMarkIcon className="w-5 h-5" />
+                            </button>
+                        </div>
+                        
+                        <div className="space-y-3 font-sans">
+                            <div className="space-y-1">
+                                <label className="text-[10px] uppercase font-bold text-gray-400">Select Game</label>
+                                <select 
+                                    value={gameType} 
+                                    onChange={(e) => setGameType(e.target.value)}
+                                    className="w-full bg-[#111b21] border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-[#00a884]"
+                                >
+                                    <option value="Tic-Tac-Toe">Tic-Tac-Toe</option>
+                                    <option value="Indiasearch Games">Indiasearch Games</option>
+                                </select>
+                            </div>
+
+                            {gameType === 'Tic-Tac-Toe' && (
+                                <>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] uppercase font-bold text-gray-400">Game Mode</label>
+                                        <select 
+                                            value={gameMode} 
+                                            onChange={(e) => setGameMode(e.target.value)}
+                                            className="w-full bg-[#111b21] border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-[#00a884]"
+                                        >
+                                            <option value="vs-friend">👥 vs Friend (Real-Time Multiplayer)</option>
+                                            <option value="vs-computer">🤖 vs Computer</option>
+                                        </select>
+                                    </div>
+
+                                    {gameMode === 'vs-friend' && (
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] uppercase font-bold text-gray-400 font-sans">Target Wins (Rounds)</label>
+                                            <input 
+                                                type="number" 
+                                                min="1" 
+                                                max="10" 
+                                                value={gameTargetWins} 
+                                                onChange={(e) => setGameTargetWins(Math.max(1, parseInt(e.target.value) || 1))}
+                                                className="w-full bg-[#111b21] border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-[#00a884]"
+                                            />
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+
+                        <button
+                            onClick={() => handleSendGame(gameType, gameMode, gameTargetWins)}
+                            className="w-full py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs shadow-md transition-colors"
+                        >
+                            🚀 Send Game Invitation
+                        </button>
+                    </div>
                 </div>
             )}
 
@@ -654,6 +809,7 @@ const MessageInput = ({
                 {!isRecording && !disabled && (
                     <div className="flex items-center gap-1 flex-shrink-0 pb-1">
                         <button
+                            id="emoji-btn"
                             type="button"
                             onClick={() => { setShowEmoji(v => !v); setShowAttachMenu(false); }}
                             className={`p-2 rounded-full transition-colors ${showEmoji ? 'text-blue-400' : 'text-gray-400 hover:text-gray-200'}`}
@@ -662,6 +818,7 @@ const MessageInput = ({
                             <FaceSmileIcon className="w-6 h-6" />
                         </button>
                         <button 
+                            id="attach-btn"
                             type="button"
                             onClick={() => { setShowAttachMenu(v => !v); setShowEmoji(false); }}
                             className={`p-2 rounded-full transition-colors ${showAttachMenu ? 'text-blue-400 rotate-45' : 'text-gray-400 hover:text-gray-200'}`}

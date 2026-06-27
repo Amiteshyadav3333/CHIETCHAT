@@ -108,7 +108,6 @@ const ClockIcon = ({ className }) => (
 const SWIPE_THRESHOLD = 60;
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
-/* ─── Inline Audio Player (WhatsApp style) ─── */
 const InlineAudioPlayer = ({ src, isOwn, onOpen }) => {
     const audioRef = useRef(null);
     const progressRef = useRef(null);
@@ -118,19 +117,42 @@ const InlineAudioPlayer = ({ src, isOwn, onOpen }) => {
     const [speed, setSpeed] = useState(1);
     const bars = [0.3,0.6,0.9,0.7,0.4,0.8,0.5,0.95,0.6,0.3,0.7,0.8,0.4,0.6,0.9,0.5,0.7,0.4,0.8,0.6,0.3,0.9,0.7,0.5,0.6,0.4,0.8,0.7,0.3,0.6];
 
+    const displayTime = (sec) => {
+        if (!sec || sec === Infinity || isNaN(sec)) return "0:00";
+        const m = Math.floor(sec / 60);
+        const s = Math.floor(sec % 60);
+        return `${m}:${s < 10 ? '0' : ''}${s}`;
+    };
+
     useEffect(() => {
         const a = audioRef.current;
         if (!a) return;
-        const onMeta = () => setDuration(a.duration || 0);
-        const onTime = () => setCurrentTime(a.currentTime);
+        
+        const updateDur = () => {
+            if (a.duration && a.duration !== Infinity && !isNaN(a.duration)) {
+                setDuration(a.duration);
+            }
+        };
+
+        const onMeta = () => updateDur();
+        const onTime = () => {
+            setCurrentTime(a.currentTime);
+            updateDur();
+        };
         const onPlay = () => setIsPlaying(true);
         const onPause = () => setIsPlaying(false);
         const onEnd = () => { setIsPlaying(false); setCurrentTime(0); };
+
         a.addEventListener('loadedmetadata', onMeta);
         a.addEventListener('timeupdate', onTime);
         a.addEventListener('play', onPlay);
         a.addEventListener('pause', onPause);
         a.addEventListener('ended', onEnd);
+
+        if (a.readyState >= 1) {
+            updateDur();
+        }
+
         return () => {
             a.removeEventListener('loadedmetadata', onMeta);
             a.removeEventListener('timeupdate', onTime);
@@ -149,7 +171,9 @@ const InlineAudioPlayer = ({ src, isOwn, onOpen }) => {
     const handleProgressClick = (e) => {
         e.stopPropagation();
         const rect = progressRef.current.getBoundingClientRect();
-        if (audioRef.current) audioRef.current.currentTime = ((e.clientX - rect.left) / rect.width) * duration;
+        if (audioRef.current && duration > 0) {
+            audioRef.current.currentTime = ((e.clientX - rect.left) / rect.width) * duration;
+        }
     };
 
     const cycleSpeed = (e) => {
@@ -164,7 +188,7 @@ const InlineAudioPlayer = ({ src, isOwn, onOpen }) => {
     const accentColor = isOwn ? '#a7f3d0' : '#25d366';
 
     return (
-        <div className="flex items-center gap-2.5 min-w-[220px] max-w-[270px] py-0.5">
+        <div className="flex items-center gap-2.5 min-w-[220px] max-w-[270px] py-0.5 font-sans">
             <audio ref={audioRef} src={src} preload="metadata" />
 
             {/* Play/Pause button */}
@@ -209,8 +233,8 @@ const InlineAudioPlayer = ({ src, isOwn, onOpen }) => {
 
                 {/* Time + speed */}
                 <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-mono tabular-nums" style={{ color: isOwn ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.5)' }}>
-                        {formatDuration(isPlaying || currentTime > 0 ? currentTime : duration)}
+                    <span className="text-[10px] font-mono tabular-nums text-white/60">
+                        {displayTime(isPlaying || currentTime > 0 ? currentTime : duration)}
                     </span>
                     <div className="flex items-center gap-1.5">
                         <button
@@ -348,11 +372,13 @@ const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, 
 const ChatBubble = ({
     message, isOwn, senderName, onDelete, senderAvatar, showAvatar,
     onReply, replyTo, onTranslate, chatId, chatTranslationLang,
-    onEdit, onCopy, onForward, onReact, onPin, isLastMessage
+    onEdit, onCopy, onForward, onReact, onPin, isLastMessage,
+    socket
 }) => {
     const [showActionMenu, setShowActionMenu] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
     const [showTranslatorMenu, setShowTranslatorMenu] = useState(false);
+    const [showPdfModal, setShowPdfModal] = useState(false);
 
     const getReactions = () => {
         let reactions = message.reactions;
@@ -632,20 +658,34 @@ const ChatBubble = ({
                     </div>
                     {/* Action buttons */}
                     <div className="flex gap-1.5 mt-2">
-                        <a
-                            href={cnt}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                                isOwn ? 'bg-white/15 hover:bg-white/25 text-white' : 'bg-white/10 hover:bg-white/20 text-white'
-                            }`}
-                        >
-                            <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
-                                <path d="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z" />
-                            </svg>
-                            Open
-                        </a>
+                        {fileName.toLowerCase().endsWith('.pdf') ? (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); setShowPdfModal(true); }}
+                                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                                    isOwn ? 'bg-white/15 hover:bg-white/25 text-white' : 'bg-white/10 hover:bg-white/20 text-white'
+                                }`}
+                            >
+                                <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
+                                    <path d="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z" />
+                                </svg>
+                                Preview
+                            </button>
+                        ) : (
+                            <a
+                                href={cnt}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                                    isOwn ? 'bg-white/15 hover:bg-white/25 text-white' : 'bg-white/10 hover:bg-white/20 text-white'
+                                }`}
+                            >
+                                <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
+                                    <path d="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z" />
+                                </svg>
+                                Open
+                            </a>
+                        )}
                         <button
                             onClick={(e) => { e.stopPropagation(); handleDownload(cnt); }}
                             className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
@@ -656,6 +696,33 @@ const ChatBubble = ({
                             Download
                         </button>
                     </div>
+
+                    {/* PDF Preview Modal Portal */}
+                    {showPdfModal && createPortal(
+                        <div className="fixed inset-0 z-[120] flex flex-col bg-black/90 p-4 font-sans" onClick={() => setShowPdfModal(false)}>
+                            <div className="flex justify-between items-center text-white mb-3" onClick={e => e.stopPropagation()}>
+                                <h3 className="font-bold text-sm truncate flex-1 pr-4">{fileName}</h3>
+                                <div className="flex gap-2">
+                                    <button 
+                                        onClick={() => handleDownload(cnt)} 
+                                        className="bg-[#00a884] hover:bg-[#008f72] px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 text-white shadow-md"
+                                    >
+                                        <ArrowDownTrayIcon className="w-3.5 h-3.5" /> Download
+                                    </button>
+                                    <button 
+                                        onClick={() => setShowPdfModal(false)} 
+                                        className="bg-white/10 hover:bg-white/20 p-1.5 rounded-full text-white"
+                                    >
+                                        <XMarkIcon className="w-5 h-5" />
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="flex-1 w-full rounded-xl overflow-hidden bg-white" onClick={e => e.stopPropagation()}>
+                                <iframe src={`${cnt}#toolbar=0`} className="w-full h-full border-none" title="PDF Preview" />
+                            </div>
+                        </div>,
+                        document.body
+                    )}
                 </div>
             );
         }
@@ -796,7 +863,15 @@ const ChatBubble = ({
             } catch { return <p className="text-sm">{cnt}</p>; }
         }
         if (type === 'game') {
-            return <MiniGameCard game={cnt} isOwn={isOwn} />;
+            return (
+                <MiniGameCard 
+                    game={cnt} 
+                    isOwn={isOwn} 
+                    socket={socket} 
+                    chatId={chatId} 
+                    currentUserId={currentUserId} 
+                />
+            );
         }
         if (type === 'sticker') {
             if (cnt.startsWith('http')) {
@@ -1124,10 +1199,10 @@ const ChatBubble = ({
     );
 };
 
-const TicTacToeGame = () => {
+const TicTacToeGame = ({ gameCode, gameMode: initialGameMode, targetWins, creatorId, currentUserId, socket, chatId }) => {
     const [board, setBoard] = useState(Array(9).fill(null));
     const [isXNext, setIsXNext] = useState(true);
-    const [gameMode, setGameMode] = useState('vs-computer'); // 'vs-computer' or 'pass-play'
+    const [gameMode, setGameMode] = useState(initialGameMode || 'vs-computer'); // 'vs-computer', 'pass-play', or 'vs-friend'
     const [difficulty, setDifficulty] = useState('smart'); // 'easy' or 'smart'
     const [scores, setScores] = useState({ x: 0, o: 0, draws: 0 });
     const [winnerInfo, setWinnerInfo] = useState(null); // { winner: 'X'|'O'|'Draw', line: [...] }
@@ -1138,6 +1213,10 @@ const TicTacToeGame = () => {
         [0, 3, 6], [1, 4, 7], [2, 5, 8],
         [0, 4, 8], [2, 4, 6]
     ];
+
+    const mySymbol = gameMode === 'vs-friend' ? (creatorId === currentUserId ? 'X' : 'O') : null;
+    const isMyTurn = gameMode !== 'vs-friend' || (isXNext && mySymbol === 'X') || (!isXNext && mySymbol === 'O');
+    const matchWinner = gameMode === 'vs-friend' && targetWins && (scores.x >= targetWins ? 'X' : scores.o >= targetWins ? 'O' : null);
 
     const checkWinner = (currentBoard) => {
         for (let pattern of winPatterns) {
@@ -1152,8 +1231,40 @@ const TicTacToeGame = () => {
         return null;
     };
 
+    const updateScores = (winner) => {
+        setScores(prev => {
+            if (winner === 'X') return { ...prev, x: prev.x + 1 };
+            if (winner === 'O') return { ...prev, o: prev.o + 1 };
+            if (winner === 'Draw') return { ...prev, draws: prev.draws + 1 };
+            return prev;
+        });
+    };
+
+    useEffect(() => {
+        if (gameMode === 'vs-friend' && socket) {
+            const handleMoveRecv = (data) => {
+                if (data.gameCode === gameCode) {
+                    setBoard(data.board);
+                    setIsXNext(data.isXNext);
+                    const result = checkWinner(data.board);
+                    if (result) {
+                        setWinnerInfo(result);
+                        updateScores(result.winner);
+                    } else {
+                        setWinnerInfo(null);
+                    }
+                }
+            };
+            socket.on('game_move_received', handleMoveRecv);
+            return () => {
+                socket.off('game_move_received', handleMoveRecv);
+            };
+        }
+    }, [gameMode, socket, gameCode]);
+
     const makeMove = (index) => {
-        if (board[index] || winnerInfo || isThinking) return;
+        if (board[index] || winnerInfo || isThinking || matchWinner) return;
+        if (!isMyTurn) return;
 
         const newBoard = [...board];
         const currentPlayer = isXNext ? 'X' : 'O';
@@ -1164,13 +1275,21 @@ const TicTacToeGame = () => {
         if (result) {
             setWinnerInfo(result);
             updateScores(result.winner);
-            return;
         }
 
         const nextPlayerIsX = !isXNext;
         setIsXNext(nextPlayerIsX);
 
-        if (gameMode === 'vs-computer' && nextPlayerIsX === false) {
+        if (gameMode === 'vs-friend' && socket) {
+            socket.emit('game_move', {
+                chatId,
+                gameCode,
+                board: newBoard,
+                isXNext: nextPlayerIsX
+            });
+        }
+
+        if (gameMode === 'vs-computer' && nextPlayerIsX === false && !result) {
             setIsThinking(true);
             setTimeout(() => {
                 triggerBotMove(newBoard);
@@ -1191,7 +1310,6 @@ const TicTacToeGame = () => {
         if (difficulty === 'easy') {
             selectedMove = availableMoves[Math.floor(Math.random() * availableMoves.length)];
         } else {
-            // 1. Can AI win on next move?
             for (let move of availableMoves) {
                 const tempBoard = [...currentBoard];
                 tempBoard[move] = botPlayer;
@@ -1202,7 +1320,6 @@ const TicTacToeGame = () => {
                 }
             }
 
-            // 2. Can human win on next move? Block them!
             if (selectedMove === null) {
                 for (let move of availableMoves) {
                     const tempBoard = [...currentBoard];
@@ -1215,12 +1332,10 @@ const TicTacToeGame = () => {
                 }
             }
 
-            // 3. Take center if available
             if (selectedMove === null && currentBoard[4] === null) {
                 selectedMove = 4;
             }
 
-            // 4. Take opposite corner if human in corner
             if (selectedMove === null) {
                 const corners = [0, 2, 6, 8];
                 const opposites = { 0: 8, 2: 6, 6: 2, 8: 0 };
@@ -1232,7 +1347,6 @@ const TicTacToeGame = () => {
                 }
             }
 
-            // 5. Take any corner
             if (selectedMove === null) {
                 const corners = [0, 2, 6, 8];
                 const availableCorners = corners.filter(c => currentBoard[c] === null);
@@ -1241,7 +1355,6 @@ const TicTacToeGame = () => {
                 }
             }
 
-            // 6. Take any side
             if (selectedMove === null) {
                 const sides = [1, 3, 5, 7];
                 const availableSides = sides.filter(s => currentBoard[s] === null);
@@ -1266,20 +1379,20 @@ const TicTacToeGame = () => {
         setIsXNext(true);
     };
 
-    const updateScores = (winner) => {
-        setScores(prev => {
-            if (winner === 'X') return { ...prev, x: prev.x + 1 };
-            if (winner === 'O') return { ...prev, o: prev.o + 1 };
-            if (winner === 'Draw') return { ...prev, draws: prev.draws + 1 };
-            return prev;
-        });
-    };
-
     const resetRound = () => {
-        setBoard(Array(9).fill(null));
+        const emptyBoard = Array(9).fill(null);
+        setBoard(emptyBoard);
         setIsXNext(true);
         setWinnerInfo(null);
         setIsThinking(false);
+        if (gameMode === 'vs-friend' && socket) {
+            socket.emit('game_move', {
+                chatId,
+                gameCode,
+                board: emptyBoard,
+                isXNext: true
+            });
+        }
     };
 
     const resetAll = () => {
@@ -1296,30 +1409,37 @@ const TicTacToeGame = () => {
     };
 
     return (
-        <div className="flex flex-col items-center gap-4 w-full text-white">
+        <div className="flex flex-col items-center gap-4 w-full text-white font-sans">
             {/* Game Mode Selector */}
-            <div className="flex gap-2 w-full p-1 bg-white/5 rounded-xl border border-white/5">
-                <button
-                    onClick={() => changeMode('vs-computer')}
-                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                        gameMode === 'vs-computer'
-                            ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
-                            : 'text-white/60 hover:text-white hover:bg-white/5'
-                    }`}
-                >
-                    🤖 VS Computer
-                </button>
-                <button
-                    onClick={() => changeMode('pass-play')}
-                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                        gameMode === 'pass-play'
-                            ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
-                            : 'text-white/60 hover:text-white hover:bg-white/5'
-                    }`}
-                >
-                    👥 Pass & Play
-                </button>
-            </div>
+            {gameMode === 'vs-friend' ? (
+                <div className="w-full text-center py-2 px-3 bg-violet-650/20 border border-violet-500/30 rounded-xl text-xs font-bold text-violet-300">
+                    👥 Multiplayer Game (Code: {gameCode}) <br />
+                    <span className="text-[10px] opacity-75 font-medium">You play as: {mySymbol} · First to {targetWins} wins</span>
+                </div>
+            ) : (
+                <div className="flex gap-2 w-full p-1 bg-white/5 rounded-xl border border-white/5">
+                    <button
+                        onClick={() => changeMode('vs-computer')}
+                        className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                            gameMode === 'vs-computer'
+                                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
+                                : 'text-white/60 hover:text-white hover:bg-white/5'
+                        }`}
+                    >
+                        🤖 VS Computer
+                    </button>
+                    <button
+                        onClick={() => changeMode('pass-play')}
+                        className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                            gameMode === 'pass-play'
+                                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
+                                : 'text-white/60 hover:text-white hover:bg-white/5'
+                        }`}
+                    >
+                        👥 Pass & Play
+                    </button>
+                </div>
+            )}
 
             {/* Difficulty selector for VS Computer */}
             {gameMode === 'vs-computer' && (
@@ -1358,7 +1478,7 @@ const TicTacToeGame = () => {
                 </div>
                 <div>
                     <p className="text-[10px] uppercase tracking-wider text-cyan-400 font-semibold">
-                        {gameMode === 'vs-computer' ? 'Computer (O)' : 'Player O'}
+                        {gameMode === 'vs-computer' ? 'Computer (O)' : gameMode === 'vs-friend' ? 'Friend (O)' : 'Player O'}
                     </p>
                     <p className="text-lg font-extrabold text-white mt-0.5">{scores.o}</p>
                 </div>
@@ -1366,7 +1486,11 @@ const TicTacToeGame = () => {
 
             {/* Turn/Winner Status */}
             <div className="h-6 flex items-center justify-center text-sm font-semibold">
-                {winnerInfo ? (
+                {matchWinner ? (
+                    <span className="text-yellow-400 font-extrabold animate-bounce flex items-center gap-1.5">
+                        🏆 Match Winner: Player {matchWinner}!
+                    </span>
+                ) : winnerInfo ? (
                     winnerInfo.winner === 'Draw' ? (
                         <span className="text-amber-400 animate-pulse">🤝 It's a Tie!</span>
                     ) : (
@@ -1381,7 +1505,15 @@ const TicTacToeGame = () => {
                     </span>
                 ) : (
                     <span className="text-white/80">
-                        Turn: <span className={isXNext ? 'text-rose-400' : 'text-cyan-400'}>{isXNext ? 'X' : 'O'}</span>
+                        {gameMode === 'vs-friend' ? (
+                            isMyTurn ? (
+                                <span className="text-green-400 animate-pulse">👉 Your Turn ({mySymbol})</span>
+                            ) : (
+                                <span className="text-white/40">Waiting for opponent... ({isXNext ? 'X' : 'O'})</span>
+                            )
+                        ) : (
+                            <span>Turn: <span className={isXNext ? 'text-rose-400' : 'text-cyan-400'}>{isXNext ? 'X' : 'O'}</span></span>
+                        )}
                     </span>
                 )}
             </div>
@@ -1394,7 +1526,7 @@ const TicTacToeGame = () => {
                         <button
                             key={idx}
                             onClick={() => makeMove(idx)}
-                            disabled={cell !== null || winnerInfo !== null || isThinking}
+                            disabled={cell !== null || winnerInfo !== null || isThinking || matchWinner || !isMyTurn}
                             className={`w-16 h-16 sm:w-20 sm:h-20 rounded-xl flex items-center justify-center transition-all duration-200 select-none border text-3xl sm:text-4xl font-black ${
                                 isWinningCell
                                     ? 'bg-emerald-500/20 border-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.4)] animate-pulse'
@@ -1412,7 +1544,8 @@ const TicTacToeGame = () => {
             <div className="flex gap-2 w-full mt-1">
                 <button
                     onClick={resetRound}
-                    className="flex-1 py-2 text-xs font-bold rounded-xl border border-white/10 hover:bg-white/5 active:scale-95 transition-all text-white/80 flex items-center justify-center gap-1"
+                    disabled={!!matchWinner}
+                    className={`flex-1 py-2 text-xs font-bold rounded-xl border border-white/10 hover:bg-white/5 active:scale-95 transition-all text-white/80 flex items-center justify-center gap-1 ${matchWinner ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                     🔄 Play Again
                 </button>
@@ -1420,16 +1553,35 @@ const TicTacToeGame = () => {
                     onClick={resetAll}
                     className="py-2 px-3 text-xs font-bold rounded-xl bg-rose-500/10 hover:bg-rose-500/20 active:scale-95 transition-all text-rose-400 border border-rose-500/20"
                 >
-                    Reset
+                    Reset Match
                 </button>
             </div>
         </div>
     );
 };
 
-const MiniGameCard = ({ game, isOwn }) => {
+const MiniGameCard = ({ game, isOwn, socket, chatId, currentUserId }) => {
     const [showModal, setShowModal] = useState(false);
     const iframeUrl = 'https://game.indiasearch.site';
+
+    let gameName = game;
+    let gameMode = 'vs-computer';
+    let targetWins = 3;
+    let gameCode = '';
+    let creatorId = '';
+
+    try {
+        if (game.startsWith('{')) {
+            const data = JSON.parse(game);
+            gameName = data.game || 'Tic-Tac-Toe';
+            gameMode = data.mode || 'vs-computer';
+            targetWins = data.target || 3;
+            gameCode = data.gameCode || '';
+            creatorId = data.creatorId || '';
+        }
+    } catch (e) {
+        // Fallback for raw text
+    }
 
     // Prevent background scrolling when game modal is open
     useEffect(() => {
@@ -1445,18 +1597,41 @@ const MiniGameCard = ({ game, isOwn }) => {
 
     return (
         <div className="min-w-[220px] max-w-[280px] space-y-2">
-            <p className="text-xs uppercase tracking-wider text-white/50 flex items-center gap-1.5">
-                🎮 Mini Game
+            <p className="text-xs uppercase tracking-wider text-white/50 flex items-center gap-1.5 font-sans font-bold">
+                🎮 {gameMode === 'vs-friend' ? 'Multiplayer Game' : 'Mini Game'}
             </p>
             <div className={`rounded-2xl p-4 border border-white/8 relative overflow-hidden bg-gradient-to-br ${isOwn ? 'from-purple-600/30 to-indigo-600/20' : 'from-blue-600/30 to-teal-600/20'}`}>
                 {/* Decorative retro grid design background */}
                 <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px]" />
                 
-                <div className="relative z-10 space-y-3">
+                <div className="relative z-10 space-y-3 font-sans">
                     <div>
-                        <h4 className="text-sm font-bold text-white tracking-wide">{game || 'Indiasearch Games'}</h4>
-                        <p className="text-[10px] text-white/60 mt-0.5">Ready to play in Chat</p>
+                        <h4 className="text-sm font-bold text-white tracking-wide">{gameName}</h4>
+                        {gameMode === 'vs-friend' ? (
+                            <p className="text-[10px] text-violet-300 font-semibold mt-0.5">
+                                Mode: vs Friend (Target: {targetWins} wins)
+                            </p>
+                        ) : (
+                            <p className="text-[10px] text-white/60 mt-0.5">Ready to play in Chat</p>
+                        )}
                     </div>
+
+                    {gameMode === 'vs-friend' && gameCode && (
+                        <div className="flex items-center justify-between gap-2 mt-2 bg-black/40 rounded-xl px-3 py-1.5 border border-white/5">
+                            <span className="text-[10px] font-mono font-bold text-white/70 select-all">{gameCode}</span>
+                            <button 
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigator.clipboard.writeText(gameCode);
+                                    alert("Game Code copied to clipboard!");
+                                }}
+                                className="p-1 rounded bg-white/5 hover:bg-white/10 text-white/70 transition-colors"
+                                title="Copy game code"
+                            >
+                                <ClipboardDocumentIcon className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+                    )}
                     
                     <button 
                         onClick={() => setShowModal(true)} 
@@ -1475,20 +1650,22 @@ const MiniGameCard = ({ game, isOwn }) => {
                         <div className="flex items-center gap-3">
                             <button
                                 onClick={() => setShowModal(false)}
-                                className="p-2 rounded-xl bg-gray-800/70 hover:bg-gray-700 text-gray-300 transition-colors"
+                                className="p-2 rounded-xl bg-gray-850 hover:bg-gray-800 text-gray-300 transition-colors"
                             >
                                 <ArrowLeftIcon className="w-5 h-5" />
                             </button>
                             <div>
                                 <h3 className="text-md font-bold text-white flex items-center gap-2">
-                                    🎮 {game || 'Indiasearch Games'}
+                                    🎮 {gameName}
                                 </h3>
-                                <p className="text-[10px] text-gray-400">Mini Game Panel</p>
+                                <p className="text-[10px] text-gray-400">
+                                    {gameMode === 'vs-friend' ? 'Real-Time Multiplayer Room' : 'Mini Game Panel'}
+                                </p>
                             </div>
                         </div>
 
                         <div className="flex items-center gap-3">
-                            {game !== 'Tic-Tac-Toe' && (
+                            {gameName !== 'Tic-Tac-Toe' && (
                                 <>
                                     <button
                                         onClick={() => {
@@ -1506,7 +1683,7 @@ const MiniGameCard = ({ game, isOwn }) => {
                                         href={iframeUrl}
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="p-2 rounded-xl bg-gray-850 hover:bg-gray-800 text-gray-300 transition-colors flex items-center justify-center"
+                                        className="p-2 rounded-xl bg-gray-850 hover:bg-gray-850 text-gray-300 transition-colors flex items-center justify-center"
                                         title="Open in New Tab"
                                     >
                                         <ArrowTopRightOnSquareIcon className="w-4 h-4" />
@@ -1525,9 +1702,17 @@ const MiniGameCard = ({ game, isOwn }) => {
 
                     {/* Game Content Container */}
                     <div className="flex-1 p-2 sm:p-6 flex justify-center items-center overflow-y-auto">
-                        {game === 'Tic-Tac-Toe' ? (
+                        {gameName === 'Tic-Tac-Toe' ? (
                             <div className="w-full max-w-sm rounded-2xl border border-white/10 shadow-2xl bg-[#0b0f19] p-4 sm:p-6 relative">
-                                <TicTacToeGame />
+                                <TicTacToeGame 
+                                    gameCode={gameCode} 
+                                    gameMode={gameMode} 
+                                    targetWins={targetWins} 
+                                    creatorId={creatorId} 
+                                    currentUserId={currentUserId}
+                                    socket={socket}
+                                    chatId={chatId}
+                                />
                             </div>
                         ) : (
                             <div className="w-full h-full max-w-4xl max-h-[80vh] sm:max-h-[85vh] rounded-2xl sm:rounded-3xl overflow-hidden border border-gray-800 shadow-2xl bg-black relative">

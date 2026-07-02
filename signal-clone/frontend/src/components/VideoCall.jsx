@@ -105,6 +105,35 @@ const VideoCallModal = ({
     const facingModeRef = useRef('user');
     const [showMoreMenu, setShowMoreMenu] = useState(false);
 
+    const [isMinimized, setIsMinimized] = useState(false);
+
+    // PIP Drag State
+    const [pipPos, setPipPos] = useState({ x: window.innerWidth - 140, y: 16 });
+    const isDraggingPipRef = useRef(false);
+    const pipOffsetRef = useRef({ x: 0, y: 0 });
+
+    const handlePipPointerDown = (e) => {
+        isDraggingPipRef.current = true;
+        pipOffsetRef.current = {
+            x: e.clientX - pipPos.x,
+            y: e.clientY - pipPos.y
+        };
+        e.currentTarget.setPointerCapture(e.pointerId);
+    };
+
+    const handlePipPointerMove = (e) => {
+        if (!isDraggingPipRef.current) return;
+        setPipPos({
+            x: e.clientX - pipOffsetRef.current.x,
+            y: e.clientY - pipOffsetRef.current.y
+        });
+    };
+
+    const handlePipPointerUp = (e) => {
+        isDraggingPipRef.current = false;
+        e.currentTarget.releasePointerCapture(e.pointerId);
+    };
+
     useEffect(() => { peersRef.current = peers; }, [peers]);
     useEffect(() => { facingModeRef.current = facingMode; }, [facingMode]);
 
@@ -886,8 +915,16 @@ const VideoCallModal = ({
     // Video call UI — WhatsApp style
     return (
         <div
-            className="fixed inset-0 z-[100] bg-black flex flex-col select-none"
-            onClick={() => { setShowControls(v => !v); setShowMoreMenu(false); }}
+            className={isMinimized 
+                ? "fixed z-[100] bg-black flex flex-col select-none overflow-hidden rounded-2xl shadow-2xl border border-white/20 cursor-move touch-none" 
+                : "fixed inset-0 z-[100] bg-black flex flex-col select-none"
+            }
+            style={isMinimized ? { left: pipPos.x, top: pipPos.y, width: '280px', height: '400px' } : {}}
+            onPointerDown={isMinimized ? handlePipPointerDown : undefined}
+            onPointerMove={isMinimized ? handlePipPointerMove : undefined}
+            onPointerUp={isMinimized ? handlePipPointerUp : undefined}
+            onPointerCancel={isMinimized ? handlePipPointerUp : undefined}
+            onClick={!isMinimized ? () => { setShowControls(v => !v); setShowMoreMenu(false); } : undefined}
         >
             {/* ── MAIN VIDEO (full screen) ── */}
             <div className="absolute inset-0">
@@ -927,8 +964,15 @@ const VideoCallModal = ({
                 )}
             </div>
 
-            {/* ── PIP thumbnails ── */}
-            <div className="absolute top-4 right-4 z-20 flex flex-col gap-2">
+            {/* ── PIP thumbnails (Draggable) ── */}
+            <div 
+                className="absolute z-20 flex flex-col gap-2 cursor-move touch-none"
+                style={{ left: pipPos.x, top: pipPos.y }}
+                onPointerDown={handlePipPointerDown}
+                onPointerMove={handlePipPointerMove}
+                onPointerUp={handlePipPointerUp}
+                onPointerCancel={handlePipPointerUp}
+            >
                 {thumbnails.length > 0 ? thumbnails.map(item => (
                     <button
                         key={item.id}
@@ -965,7 +1009,7 @@ const VideoCallModal = ({
             </div>
 
             {/* ── TOP BAR (name + end call) ── */}
-            <div className={`absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-4 pt-10 pb-4 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            <div className={`absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-4 pt-${isMinimized ? '4' : '10'} pb-4 transition-opacity duration-300 ${showControls || isMinimized ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
                 style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.6), transparent)' }}
             >
                 <div className="flex items-center gap-4">
@@ -992,21 +1036,45 @@ const VideoCallModal = ({
                         </div>
                     </div>
                 </div>
+                
+                {/* Minimize / Expand Button */}
+                <div className="flex items-center">
+                    {isMinimized ? (
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); setIsMinimized(false); }}
+                            className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md pointer-events-auto"
+                            title="Expand Call"
+                        >
+                            <ArrowsPointingOutIcon className="w-5 h-5" />
+                        </button>
+                    ) : (
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); setIsMinimized(true); }}
+                            className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md pointer-events-auto"
+                            title="Minimize to Chat"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 12h-15" />
+                            </svg>
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* ── BOTTOM CONTROLS ── */}
-            <div
-                className={`absolute bottom-0 left-0 right-0 z-10 flex justify-center gap-5 pb-10 pt-6 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-                style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)' }}
-                onClick={e => { e.stopPropagation(); setShowMoreMenu(false); }}
-            >
-                <ControlBtn onClick={toggleAudio} active={isMuted} activeColor="bg-red-600" label={isMuted ? 'Unmute' : 'Mute'}>
-                    {isMuted ? <SpeakerXMarkIcon className="w-6 h-6" /> : <MicrophoneIcon className="w-6 h-6" />}
-                </ControlBtn>
+            {!isMinimized && (
+                <div
+                    className={`absolute bottom-0 left-0 right-0 z-10 flex justify-center gap-5 pb-10 pt-6 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                    style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)' }}
+                    onClick={e => { e.stopPropagation(); setShowMoreMenu(false); }}
+                >
+                    <ControlBtn onClick={toggleAudio} active={isMuted} activeColor="bg-red-600" label={isMuted ? 'Unmute' : 'Mute'}>
+                        {isMuted ? <SpeakerXMarkIcon className="w-6 h-6" /> : <MicrophoneIcon className="w-6 h-6" />}
+                    </ControlBtn>
 
-                <ControlBtn onClick={toggleVideo} active={isVideoOff} activeColor="bg-red-600" label={isVideoOff ? 'Start Video' : 'Stop Video'}>
-                    {isVideoOff ? <VideoCameraSlashIcon className="w-6 h-6" /> : <VideoCameraIcon className="w-6 h-6" />}
-                </ControlBtn>
+                    <ControlBtn onClick={toggleVideo} active={isVideoOff} activeColor="bg-red-600" label={isVideoOff ? 'Start Video' : 'Stop Video'}>
+                        {isVideoOff ? <VideoCameraSlashIcon className="w-6 h-6" /> : <VideoCameraIcon className="w-6 h-6" />}
+                    </ControlBtn>
 
                 <ControlBtn onClick={flipCamera} activeColor="bg-gray-700" label="Switch Camera">
                     <ArrowPathIcon className="w-6 h-6" />
@@ -1067,6 +1135,7 @@ const VideoCallModal = ({
                     <XMarkIcon className="w-7 h-7 text-white" />
                 </button>
             </div>
+            )}
 
             {/* Audio players for all peers */}
             {peerList.map(([id, p]) => p.stream && <AudioPlayer key={id} stream={p.stream} />)}

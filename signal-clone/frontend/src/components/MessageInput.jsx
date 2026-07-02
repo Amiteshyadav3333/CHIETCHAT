@@ -4,8 +4,11 @@ import {
     StopIcon, XMarkIcon, ChartBarIcon, MapPinIcon, DocumentIcon,
     MusicalNoteIcon, PhotoIcon, CameraIcon, UserCircleIcon, PlayIcon
 } from '@heroicons/react/24/solid';
-import { ArrowUturnLeftIcon } from '@heroicons/react/24/outline';
+import { ArrowUturnLeftIcon, GiftIcon, ShoppingBagIcon } from '@heroicons/react/24/outline';
 import EmojiPicker from 'emoji-picker-react';
+import RideModal from './RideModal';
+import GiftModal from './GiftModal';
+import BirthdayModal from './BirthdayModal';
 
 const LANGUAGES = [
     { code: 'hi', name: 'Hindi (हिंदी)' },
@@ -106,6 +109,10 @@ const MessageInput = ({
     const [gameType, setGameType] = useState('Tic-Tac-Toe');
     const [gameMode, setGameMode] = useState('vs-friend');
     const [gameTargetWins, setGameTargetWins] = useState(3);
+
+    const [showRideModal, setShowRideModal] = useState(false);
+    const [showGiftModal, setShowGiftModal] = useState(false);
+    const [showBirthdayModal, setShowBirthdayModal] = useState(false);
 
     React.useEffect(() => {
         if (!showSmartReplies || !lastMessageText) {
@@ -766,6 +773,24 @@ const MessageInput = ({
                             icon={<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-white"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5h16.5m-18 0A1.5 1.5 0 0 1 3.5 3h17a1.5 1.5 0 0 1 1.5 1.5m-18.5 0v11.25A2.25 2.25 0 0 0 3.75 18h15A2.25 2.25 0 0 0 21 15.75V4.5m-18.5 0v11.25" /></svg>}
                             onClick={sendUPIPayment}
                         />
+                        <AttachOption
+                            label="Ride 🚕"
+                            color="bg-slate-700"
+                            icon={<MapPinIcon className="w-6 h-6 text-white" />}
+                            onClick={() => { setShowRideModal(true); setShowAttachMenu(false); }}
+                        />
+                        <AttachOption
+                            label="Gift 🛍️"
+                            color="bg-pink-500"
+                            icon={<ShoppingBagIcon className="w-6 h-6 text-white" />}
+                            onClick={() => { setShowGiftModal(true); setShowAttachMenu(false); }}
+                        />
+                        <AttachOption
+                            label="Birthday 🎂"
+                            color="bg-gradient-to-br from-fuchsia-500 to-pink-500"
+                            icon={<GiftIcon className="w-6 h-6 text-white" />}
+                            onClick={() => { setShowBirthdayModal(true); setShowAttachMenu(false); }}
+                        />
                     </div>
                 </div>
             )}
@@ -990,6 +1015,29 @@ const MessageInput = ({
                     )}
                 </form>
             </div>
+
+            {/* Modals for new premium features */}
+            {showRideModal && (
+                <RideModal 
+                    onClose={() => setShowRideModal(false)}
+                    onSend={(payload) => onUpload(JSON.stringify(payload), false, 'ride')}
+                />
+            )}
+
+            {showGiftModal && (
+                <GiftModal 
+                    onClose={() => setShowGiftModal(false)}
+                    onSend={(payload) => onUpload(JSON.stringify(payload), false, 'gift')}
+                />
+            )}
+
+            {showBirthdayModal && (
+                <BirthdayModal 
+                    onClose={() => setShowBirthdayModal(false)}
+                    onSend={(payload) => onUpload(JSON.stringify(payload), false, 'birthday')}
+                />
+            )}
+
         </div>
     );
 };

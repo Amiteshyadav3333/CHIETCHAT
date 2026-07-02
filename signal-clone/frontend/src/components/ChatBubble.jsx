@@ -888,6 +888,93 @@ const ChatBubble = ({
                 />
             );
         }
+        if (type === 'ride') {
+            let data = {};
+            try { data = JSON.parse(cnt); } catch(e){}
+            return (
+                <div className="flex flex-col gap-2 min-w-[240px]">
+                    <div className="relative h-24 bg-gray-800 rounded-lg overflow-hidden shrink-0">
+                        <img src="https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=800&auto=format&fit=crop" alt="Map" className="w-full h-full object-cover opacity-60" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end p-2">
+                            <span className="text-white font-bold text-sm drop-shadow-md">{data?.car?.name || 'Ride'} Booked</span>
+                        </div>
+                    </div>
+                    <div className="flex flex-col gap-1.5 px-1 pb-1">
+                        <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-blue-500" />
+                            <span className="text-xs text-gray-300 truncate">{data.pickup}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <MapPinIcon className="w-3 h-3 text-red-500 -ml-0.5" />
+                            <span className="text-xs text-gray-300 truncate">{data.destination}</span>
+                        </div>
+                        <div className="mt-2 flex items-center justify-between p-2 bg-black/20 rounded-lg">
+                            <div className="flex items-center gap-2">
+                                <span className="text-2xl drop-shadow-md">{data?.car?.icon || '🚗'}</span>
+                                <div className="flex flex-col">
+                                    <span className="text-white text-xs font-bold">{data?.driver?.vehicle || 'MH02 XX 1234'}</span>
+                                    <span className="text-gray-400 text-[10px]">{data?.driver?.name || 'Driver'} • ★ {data?.driver?.rating || '4.8'}</span>
+                                </div>
+                            </div>
+                            <div className="text-right flex flex-col">
+                                <span className="text-white font-bold text-xs">{data?.eta || '3 mins'}</span>
+                                <span className="text-gray-400 text-[10px]">ETA</span>
+                            </div>
+                        </div>
+                        <button className="mt-1 w-full py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-xs font-bold rounded-lg transition-colors border border-blue-500/20">
+                            Track Ride
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        if (type === 'gift') {
+            let data = {};
+            try { data = JSON.parse(cnt); } catch(e){}
+            return (
+                <div className="flex flex-col gap-0 min-w-[200px] group cursor-pointer">
+                    <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-pink-500/20 to-rose-500/20 border border-pink-500/30 p-4 flex flex-col items-center justify-center gap-3 transition-colors hover:bg-pink-500/30">
+                        <div className="text-5xl drop-shadow-xl transform transition-transform group-hover:scale-110 group-active:scale-95 group-hover:-rotate-6">
+                            🎁
+                        </div>
+                        <div className="text-center">
+                            <h4 className="text-pink-400 font-bold text-sm">Gift Received!</h4>
+                            <p className="text-white/60 text-xs mt-0.5">Tap to unbox</p>
+                        </div>
+                    </div>
+                    {data.message && (
+                        <p className={`text-xs mt-2 italic px-1 ${isOwn ? 'text-white/80' : 'text-gray-400'}`}>"{data.message}"</p>
+                    )}
+                </div>
+            );
+        }
+
+        if (type === 'birthday') {
+            let data = {};
+            try { data = JSON.parse(cnt); } catch(e){}
+            const themeColor = data.theme?.color || 'from-fuchsia-500 to-pink-500';
+            return (
+                <div className="flex flex-col gap-2 min-w-[220px]">
+                    <div className={`relative overflow-hidden rounded-xl bg-gradient-to-br ${themeColor} p-4 flex flex-col items-center justify-center text-center shadow-lg`}>
+                        <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] mix-blend-overlay"></div>
+                        <div className="text-5xl drop-shadow-2xl animate-bounce mt-2">
+                            {data.theme?.icon || '🎂'}
+                        </div>
+                        <h3 className="text-white font-black text-lg mt-3 drop-shadow-md leading-tight px-1">
+                            {data.message || 'Happy Birthday! 🎉'}
+                        </h3>
+                        {data.includeGift && (
+                            <div className="mt-4 p-2 bg-black/20 rounded-lg w-full flex items-center justify-center gap-2 border border-white/20 backdrop-blur-sm cursor-pointer hover:bg-black/30 transition-colors">
+                                <span className="text-xl">🎁</span>
+                                <span className="text-white text-xs font-bold">Open Gift</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
         if (type === 'sticker') {
             if (cnt.startsWith('http')) {
                 return <img src={cnt} alt="sticker" className="w-24 h-24 object-contain py-1" />;

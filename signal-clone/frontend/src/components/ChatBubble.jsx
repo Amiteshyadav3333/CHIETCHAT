@@ -385,13 +385,15 @@ const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, 
 
 const BirthdayCard = ({ data, isOwn }) => {
     const [isRevealed, setIsRevealed] = useState(false);
-    const [audio] = useState(() => data.playMusic ? new Audio('https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3') : null); // Simple placeholder audio
+    const [audio] = useState(() => data.playMusic ? new Audio('https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3') : null);
 
-    const handleReveal = () => {
+    const handleReveal = (e) => {
+        e.stopPropagation();
+        e.preventDefault();
         setIsRevealed(true);
         if (audio) {
             audio.volume = 0.5;
-            audio.play().catch(e => console.log('Audio play blocked:', e));
+            audio.play().catch(err => console.log('Audio play blocked:', err));
         }
     };
 
@@ -403,43 +405,47 @@ const BirthdayCard = ({ data, isOwn }) => {
         return (
             <div 
                 onClick={handleReveal}
-                className="flex flex-col items-center justify-center min-w-[240px] h-[300px] bg-gradient-to-br from-gray-800 to-black rounded-xl border-2 border-dashed border-fuchsia-500/50 cursor-pointer hover:border-fuchsia-400 group overflow-hidden relative shadow-[0_0_20px_rgba(217,70,239,0.2)]"
+                className="flex flex-col items-center justify-center w-[260px] h-[320px] bg-gradient-to-b from-[#1c2431] to-[#111b21] rounded-2xl border-2 border-dashed border-fuchsia-500/40 cursor-pointer hover:border-fuchsia-400 group overflow-hidden relative shadow-[0_0_30px_rgba(217,70,239,0.15)] transition-all"
             >
-                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10 mix-blend-overlay animate-pulse"></div>
-                <div className="text-6xl drop-shadow-[0_0_15px_rgba(255,255,255,0.4)] animate-bounce group-hover:scale-110 transition-transform duration-300 relative z-10">
+                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20 mix-blend-overlay animate-pulse"></div>
+                <div className="text-7xl drop-shadow-[0_0_20px_rgba(255,255,255,0.5)] animate-bounce group-hover:scale-125 transition-transform duration-500 relative z-10">
                     🎁
                 </div>
-                <div className="mt-4 bg-fuchsia-500/20 text-fuchsia-300 px-4 py-1.5 rounded-full font-bold text-sm border border-fuchsia-500/30 backdrop-blur-sm relative z-10 uppercase tracking-widest shadow-lg group-hover:bg-fuchsia-500/40 transition-colors">
+                <div className="mt-8 bg-fuchsia-500/20 text-fuchsia-300 px-6 py-2 rounded-full font-extrabold text-sm border border-fuchsia-500/50 backdrop-blur-md relative z-10 uppercase tracking-widest shadow-xl group-hover:bg-fuchsia-500/40 transition-colors">
                     Tap to Open
                 </div>
+                <div className="mt-3 text-gray-500 text-[10px] uppercase tracking-wider relative z-10 font-semibold">Special Gift Enclosed</div>
             </div>
         );
     }
 
     return (
-        <div className="flex flex-col gap-2 min-w-[280px] max-w-[320px] animate-open-envelope">
-            <div className={`relative overflow-hidden rounded-xl bg-gradient-to-br ${themeColor} p-6 flex flex-col items-center justify-center text-center shadow-2xl border border-white/20`}>
+        <div className="flex flex-col gap-2 w-[280px] sm:w-[320px] animate-open-envelope origin-center">
+            <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${themeColor} p-8 flex flex-col items-center justify-center text-center shadow-[0_10px_40px_rgba(0,0,0,0.5)] border-2 border-white/30`}>
                 
-                {/* Effects */}
-                <div className="absolute inset-0 opacity-30 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] mix-blend-overlay"></div>
-                {effect === 'confetti' && <div className="absolute inset-0 opacity-50 bg-[url('https://cdn-icons-png.flaticon.com/512/1769/1769062.png')] bg-repeat animate-confetti pointer-events-none z-10 mix-blend-overlay"></div>}
-                {effect === 'balloons' && <div className="absolute inset-0 opacity-40 bg-[url('https://cdn-icons-png.flaticon.com/512/439/439294.png')] bg-repeat animate-float pointer-events-none z-10 mix-blend-overlay"></div>}
-                {effect === 'stars' && <div className="absolute inset-0 opacity-40 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-30 mix-blend-overlay animate-pulse pointer-events-none z-10"></div>}
+                {/* Background Textures & Effects */}
+                <div className="absolute inset-0 opacity-40 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] mix-blend-overlay"></div>
+                {effect === 'confetti' && <div className="absolute inset-0 opacity-60 bg-[url('https://cdn-icons-png.flaticon.com/512/1769/1769062.png')] bg-repeat animate-confetti pointer-events-none z-10 mix-blend-screen"></div>}
+                {effect === 'balloons' && <div className="absolute inset-0 opacity-50 bg-[url('https://cdn-icons-png.flaticon.com/512/439/439294.png')] bg-repeat animate-float pointer-events-none z-10 mix-blend-overlay"></div>}
+                {effect === 'stars' && <div className="absolute inset-0 opacity-60 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-30 mix-blend-overlay animate-pulse pointer-events-none z-10"></div>}
                 
-                <div className="text-7xl drop-shadow-2xl animate-bounce mt-4 relative z-20">
+                {/* Shiny overlay for premium feel */}
+                <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/10 to-white/0 pointer-events-none"></div>
+
+                <div className="text-7xl drop-shadow-[0_10px_20px_rgba(0,0,0,0.4)] animate-bounce mt-2 relative z-20">
                     {data.theme?.icon || '🎂'}
                 </div>
                 
                 <h3 
-                    className="text-white font-bold text-xl mt-6 drop-shadow-lg leading-snug px-2 relative z-20 break-words"
-                    style={{ fontFamily: fontStyle }}
+                    className="text-white font-extrabold text-2xl mt-8 drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)] leading-snug px-2 relative z-20 break-words w-full"
+                    style={{ fontFamily: fontStyle, textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}
                 >
                     {data.message || 'Happy Birthday! 🎉'}
                 </h3>
                 
                 {data.playMusic && (
-                    <div className="mt-6 flex items-center justify-center gap-2 text-white/70 text-[10px] uppercase tracking-widest relative z-20">
-                        <span className="w-2 h-2 rounded-full bg-white animate-ping"></span> Music Playing
+                    <div className="mt-8 flex items-center justify-center gap-2 bg-black/20 px-3 py-1.5 rounded-full border border-white/20 text-white/90 text-[10px] uppercase tracking-widest relative z-20 shadow-inner backdrop-blur-md">
+                        <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.8)]"></span> Music Playing
                     </div>
                 )}
             </div>

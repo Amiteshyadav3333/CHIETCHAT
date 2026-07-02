@@ -383,6 +383,70 @@ const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, 
     );
 };
 
+const BirthdayCard = ({ data, isOwn }) => {
+    const [isRevealed, setIsRevealed] = useState(false);
+    const [audio] = useState(() => data.playMusic ? new Audio('https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3') : null); // Simple placeholder audio
+
+    const handleReveal = () => {
+        setIsRevealed(true);
+        if (audio) {
+            audio.volume = 0.5;
+            audio.play().catch(e => console.log('Audio play blocked:', e));
+        }
+    };
+
+    const themeColor = data.theme?.color || 'from-fuchsia-500 to-pink-500';
+    const fontStyle = data.font?.style || "'Inter', sans-serif";
+    const effect = data.effect?.id || 'none';
+
+    if (!isRevealed && data.interactive) {
+        return (
+            <div 
+                onClick={handleReveal}
+                className="flex flex-col items-center justify-center min-w-[240px] h-[300px] bg-gradient-to-br from-gray-800 to-black rounded-xl border-2 border-dashed border-fuchsia-500/50 cursor-pointer hover:border-fuchsia-400 group overflow-hidden relative shadow-[0_0_20px_rgba(217,70,239,0.2)]"
+            >
+                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10 mix-blend-overlay animate-pulse"></div>
+                <div className="text-6xl drop-shadow-[0_0_15px_rgba(255,255,255,0.4)] animate-bounce group-hover:scale-110 transition-transform duration-300 relative z-10">
+                    🎁
+                </div>
+                <div className="mt-4 bg-fuchsia-500/20 text-fuchsia-300 px-4 py-1.5 rounded-full font-bold text-sm border border-fuchsia-500/30 backdrop-blur-sm relative z-10 uppercase tracking-widest shadow-lg group-hover:bg-fuchsia-500/40 transition-colors">
+                    Tap to Open
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex flex-col gap-2 min-w-[280px] max-w-[320px] animate-open-envelope">
+            <div className={`relative overflow-hidden rounded-xl bg-gradient-to-br ${themeColor} p-6 flex flex-col items-center justify-center text-center shadow-2xl border border-white/20`}>
+                
+                {/* Effects */}
+                <div className="absolute inset-0 opacity-30 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] mix-blend-overlay"></div>
+                {effect === 'confetti' && <div className="absolute inset-0 opacity-50 bg-[url('https://cdn-icons-png.flaticon.com/512/1769/1769062.png')] bg-repeat animate-confetti pointer-events-none z-10 mix-blend-overlay"></div>}
+                {effect === 'balloons' && <div className="absolute inset-0 opacity-40 bg-[url('https://cdn-icons-png.flaticon.com/512/439/439294.png')] bg-repeat animate-float pointer-events-none z-10 mix-blend-overlay"></div>}
+                {effect === 'stars' && <div className="absolute inset-0 opacity-40 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-30 mix-blend-overlay animate-pulse pointer-events-none z-10"></div>}
+                
+                <div className="text-7xl drop-shadow-2xl animate-bounce mt-4 relative z-20">
+                    {data.theme?.icon || '🎂'}
+                </div>
+                
+                <h3 
+                    className="text-white font-bold text-xl mt-6 drop-shadow-lg leading-snug px-2 relative z-20 break-words"
+                    style={{ fontFamily: fontStyle }}
+                >
+                    {data.message || 'Happy Birthday! 🎉'}
+                </h3>
+                
+                {data.playMusic && (
+                    <div className="mt-6 flex items-center justify-center gap-2 text-white/70 text-[10px] uppercase tracking-widest relative z-20">
+                        <span className="w-2 h-2 rounded-full bg-white animate-ping"></span> Music Playing
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 const ChatBubble = ({
     message, isOwn, senderName, onDelete, senderAvatar, showAvatar,
     onReply, replyTo, onTranslate, chatId, chatTranslationLang,
@@ -953,26 +1017,7 @@ const ChatBubble = ({
         if (type === 'birthday') {
             let data = {};
             try { data = JSON.parse(cnt); } catch(e){}
-            const themeColor = data.theme?.color || 'from-fuchsia-500 to-pink-500';
-            return (
-                <div className="flex flex-col gap-2 min-w-[220px]">
-                    <div className={`relative overflow-hidden rounded-xl bg-gradient-to-br ${themeColor} p-4 flex flex-col items-center justify-center text-center shadow-lg`}>
-                        <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] mix-blend-overlay"></div>
-                        <div className="text-5xl drop-shadow-2xl animate-bounce mt-2">
-                            {data.theme?.icon || '🎂'}
-                        </div>
-                        <h3 className="text-white font-black text-lg mt-3 drop-shadow-md leading-tight px-1">
-                            {data.message || 'Happy Birthday! 🎉'}
-                        </h3>
-                        {data.includeGift && (
-                            <div className="mt-4 p-2 bg-black/20 rounded-lg w-full flex items-center justify-center gap-2 border border-white/20 backdrop-blur-sm cursor-pointer hover:bg-black/30 transition-colors">
-                                <span className="text-xl">🎁</span>
-                                <span className="text-white text-xs font-bold">Open Gift</span>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            );
+            return <BirthdayCard data={data} isOwn={isOwn} />;
         }
 
         if (type === 'sticker') {

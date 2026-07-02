@@ -1020,21 +1020,21 @@ const MessageInput = ({
             {showRideModal && (
                 <RideModal 
                     onClose={() => setShowRideModal(false)}
-                    onSend={(payload) => onUpload(JSON.stringify(payload), false, 'ride')}
+                    onSend={(payload) => onSend(JSON.stringify(payload), 'ride')}
                 />
             )}
 
             {showGiftModal && (
                 <GiftModal 
                     onClose={() => setShowGiftModal(false)}
-                    onSend={(payload) => onUpload(JSON.stringify(payload), false, 'gift')}
+                    onSend={(payload) => onSend(JSON.stringify(payload), 'gift')}
                 />
             )}
 
             {showBirthdayModal && (
                 <BirthdayModal 
                     onClose={() => setShowBirthdayModal(false)}
-                    onSend={(payload) => onUpload(JSON.stringify(payload), false, 'birthday')}
+                    onSend={(payload) => onSend(JSON.stringify(payload), 'birthday')}
                 />
             )}
 

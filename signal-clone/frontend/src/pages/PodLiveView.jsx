@@ -7,49 +7,37 @@ const PodLiveView = ({ active, onBack }) => {
     const iframeUrl = 'https://podlive-sigma.vercel.app';
 
     return (
-        <div className="flex flex-col h-full w-full bg-[#0b0f19] text-gray-100 font-sans relative">
-            {/* Header Control Panel */}
-            <header className="flex flex-wrap items-center justify-between px-6 py-4 border-b border-gray-800 bg-[#111625] z-10 gap-4">
-                <div className="flex items-center gap-3">
-                    <button
-                        onClick={onBack}
-                        className="p-2 rounded-lg bg-gray-800/60 hover:bg-gray-700/80 transition-colors text-gray-300"
-                        title="Back to Chats"
-                    >
-                        <ArrowLeftIcon className="w-5 h-5" />
-                    </button>
-                    <div>
-                        <h1 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent flex items-center gap-2">
-                            🎙️ PodLive Portal
-                        </h1>
-                        <p className="text-xs text-gray-400">Next-Generation Live Podcast Platform</p>
-                    </div>
-                </div>
+        <div className="flex flex-col h-full w-full bg-black text-gray-100 font-sans relative overflow-hidden">
+            
+            {/* Floating Back Button (Top Left) */}
+            <button
+                onClick={onBack}
+                className="absolute top-4 left-4 z-50 p-3 rounded-full bg-black/40 hover:bg-black/70 backdrop-blur-md border border-white/10 text-white shadow-xl transition-all hover:scale-105 active:scale-95 group"
+                title="Back to Chats"
+            >
+                <ArrowLeftIcon className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" />
+            </button>
 
-                <div className="flex items-center gap-4">
-                    <a
-                        href={iframeUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-lg shadow-indigo-600/20"
-                    >
-                        Open Standalone
-                        <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" />
-                    </a>
-                </div>
-            </header>
+            {/* Floating Open Standalone Button (Top Right) */}
+            <a
+                href={iframeUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="absolute top-4 right-4 z-50 px-4 py-2 rounded-full bg-indigo-600/80 hover:bg-indigo-600 backdrop-blur-md border border-indigo-400/30 text-white text-xs font-bold flex items-center gap-2 shadow-xl transition-all hover:scale-105 active:scale-95"
+            >
+                Open Full
+                <ArrowTopRightOnSquareIcon className="w-4 h-4" />
+            </a>
 
-            {/* Main Workspace Area */}
-            <main className="flex-1 w-full p-6 bg-[#080c14] relative">
-                <div className="w-full h-full rounded-2xl overflow-hidden border border-gray-800 shadow-2xl bg-black/40 relative">
-                    <iframe
-                        src={iframeUrl}
-                        className="w-full h-full border-none"
-                        title="PodLive App"
-                        allow="microphone; camera; display-capture; autoplay"
-                    />
-                </div>
-            </main>
+            {/* Immersive Fullscreen Iframe */}
+            <div className="w-full h-full flex-1 relative bg-black">
+                <iframe
+                    src={iframeUrl}
+                    className="w-full h-full border-none absolute inset-0"
+                    title="PodLive App"
+                    allow="microphone; camera; display-capture; autoplay; fullscreen"
+                />
+            </div>
         </div>
     );
 };

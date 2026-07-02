@@ -5,11 +5,12 @@ import { SocketContext } from '../context/SocketContext';
 import ContactList from '../components/ContactList';
 import ChatBubble, { DateSeparator } from '../components/ChatBubble';
 import MessageInput from '../components/MessageInput';
+import EmojiPicker from 'emoji-picker-react';
 import IncomingCallModal from '../components/IncomingCallModal';
 import VideoCallModal from '../components/VideoCall';
 import AvatarZoom from '../components/AvatarZoom';
 import StatusSection from '../components/StatusSection';
-import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon, EllipsisVerticalIcon, XMarkIcon, TrashIcon, NoSymbolIcon, PlayIcon, Cog6ToothIcon, BellIcon, MapPinIcon, PhotoIcon, ChatBubbleLeftRightIcon, InformationCircleIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon, MicrophoneIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon, EllipsisVerticalIcon, XMarkIcon, TrashIcon, NoSymbolIcon, PlayIcon, Cog6ToothIcon, BellIcon, MapPinIcon, PhotoIcon, ChatBubbleLeftRightIcon, InformationCircleIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon, MicrophoneIcon, FaceSmileIcon } from '@heroicons/react/24/outline';
 import { format } from 'date-fns';
 import SettingsModal from '../components/SettingsModal';
 import NotificationPanel from '../components/NotificationPanel';
@@ -20,6 +21,150 @@ import PodLiveView from './PodLiveView';
 import { decryptEnvelope, encryptForRecipients, isEncryptedPayload } from '../utils/encryption';
 import { compressImage, compressVideo, getFileCategory, formatFileSize } from '../utils/mediaCompressor';
 import { getOfflineQueue, enqueueOfflineMessage, dequeueOfflineMessage, processOfflineQueue } from '../utils/offlineQueue';
+
+// ─── WhatsApp-style Emoji Picker ───────────────────────────────────────────
+const EMOJI_CATEGORIES = [
+    {
+        id: 'smileys', icon: '😀', label: 'Smileys',
+        emojis: ['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','☺️','😚','😙','🥲','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','🥴','😵','💫','🤯','🤠','🥳','🥸','😎','🤓','🧐','😕','😟','🙁','☹️','😮','😯','😲','😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','🥱','😤','😡','😠','🤬','😈','👿','💀','☠️','💩','🤡','👹','👺','👻','👽','👾','🤖']
+    },
+    {
+        id: 'people', icon: '👋', label: 'People',
+        emojis: ['👋','🤚','🖐️','✋','🖖','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','☝️','👍','👎','✊','👊','🤛','🤜','👏','🙌','👐','🤲','🤝','🙏','✍️','💅','🤳','💪','🦾','🦵','🦶','👂','🦻','👃','🫀','🫁','🧠','🦷','🦴','👀','👁️','👅','👄','💋','🩸']
+    },
+    {
+        id: 'animals', icon: '🐶', label: 'Animals',
+        emojis: ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐽','🐸','🐵','🙈','🙉','🙊','🐔','🐧','🐦','🐤','🦆','🦅','🦉','🦇','🐺','🐗','🐴','🦄','🐝','🪱','🐛','🦋','🐌','🐞','🐜','🪲','🦟','🦗','🪳','🕷️','🦂','🐢','🦎','🐍','🦕','🦖','🦎','🐊','🐸','🐉','🐲','🌵','🎄','🌲','🌳','🌴','🪵','🌱','🌿','☘️','🍀','🎍','🪴','🎋','🍃','🍂','🍁']
+    },
+    {
+        id: 'food', icon: '🍕', label: 'Food',
+        emojis: ['🍏','🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🍆','🥑','🥦','🥬','🥒','🌶️','🫑','🥕','🧄','🧅','🥔','🍠','🥐','🥯','🍞','🥖','🥨','🧀','🥚','🍳','🧈','🥞','🧇','🥓','🥩','🍗','🍖','🌭','🍔','🍟','🍕','🫓','🥪','🥙','🧆','🌮','🌯','🫔','🥗','🥘','🫕','🥫','🍝','🍜','🍲','🍛','🍣','🍱','🥟','🦪','🍤','🍙','🍚','🍘','🍥','🥮','🍢','🧁','🍰','🎂','🍮','🍭','🍬','🍫','🍿','🍩','🍪','🌰','🥜','🍯','🧃','🥤','🧋','🍵','☕','🍶','🍺','🍻','🥂','🍷','🥃','🍸','🍹','🧉','🍾','🧊']
+    },
+    {
+        id: 'sports', icon: '⚽', label: 'Sports',
+        emojis: ['⚽','🏀','🏈','⚾','🥎','🎾','🏐','🏉','🥏','🎱','🪀','🏓','🏸','🏒','🥍','🏑','🥅','⛳','🪁','🏹','🎣','🤿','🥊','🥋','🎽','🛹','🛼','🛷','⛸️','🥌','🎿','⛷️','🏂','🪂','🏋️','🤼','🤸','⛹️','🤺','🏇','🧘','🏄','🏊','🤽','🚣','🧗','🚵','🚴','🏆','🥇','🥈','🥉','🏅','🎖️','🏵️','🎗️','🎫','🎟️','🎪','🤹','🎭','🩰','🎨','🎬','🎤','🎧','🎼','🎹','🥁','🪘','🎷','🎺','🎸','🪕','🎻','🎲','♟️','🎯','🎳']
+    },
+    {
+        id: 'travel', icon: '✈️', label: 'Travel',
+        emojis: ['🚗','🚕','🚙','🚌','🚎','🏎️','🚓','🚑','🚒','🚐','🛻','🚚','🚛','🚜','🛵','🦽','🦼','🛺','🚲','🛴','🛹','🛼','🚏','🛣️','🛤️','⛽','🚨','🚥','🚦','🛑','🚧','⚓','⛵','🛶','🚤','🛥️','🛳️','⛴️','🚢','✈️','🛩️','🛫','🛬','🪂','💺','🚁','🚟','🚠','🚡','🛰️','🚀','🛸','🏖️','🏝️','🏜️','🏕️','🗾','🧭','🏔️','⛰️','🌋','🗺️','🏗️','🏘️','🏚️','🏠','🏡','🏢','🏣','🏤','🏥','🏦','🏨','🏩','🏪','🏫','🏭','🏯','🏰','💒','🗼','🗽','⛪','🕌','🛕','🕍','⛩️','🕋','⛲','⛺','🌁','🌃','🏙️','🌄','🌅','🌆','🌇','🌉','♨️','🌌','🌠','🎇','🎆','🌈','🎑']
+    },
+    {
+        id: 'symbols', icon: '❤️', label: 'Symbols',
+        emojis: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟','☮️','✝️','☪️','🕉️','☸️','✡️','🔯','🪯','☯️','☦️','🛐','⛎','♈','♉','♊','♋','♌','♍','♎','♏','♐','♑','♒','♓','🆔','⚛️','🉑','☢️','☣️','📴','📳','🈶','🈚','🈸','🈺','🈷️','✴️','🆚','💮','🉐','㊙️','㊗️','🈴','🈵','🈹','🈲','🅰️','🅱️','🆎','🆑','🅾️','🆘','❌','⭕','🛑','⛔','📛','🚫','💯','💢','♨️','🚷','🚯','🚳','🚱','🔞','📵','🚭','❗','❕','❓','❔','‼️','⁉️','🔅','🔆','〽️','⚠️','🚸','🔱','⚜️','🔰','♻️','✅','🈯','💹','❎','🌐','💠','Ⓜ️','🌀','💤','🏧','🚾','♿','🅿️','🛗','🈳','🈹','🚻','🚺','🚹','🚼','⚧️']
+    },
+    {
+        id: 'flags', icon: '🏳️', label: 'Flags',
+        emojis: ['🏳️','🏴','🏁','🚩','🏳️‍🌈','🏳️‍⚧️','🏴‍☠️','🇺🇳','🇦🇫','🇦🇱','🇩🇿','🇦🇩','🇦🇴','🇦🇬','🇦🇷','🇦🇲','🇦🇺','🇦🇹','🇦🇿','🇧🇸','🇧🇭','🇧🇩','🇧🇧','🇧🇾','🇧🇪','🇧🇿','🇧🇯','🇧🇹','🇧🇴','🇧🇦','🇧🇼','🇧🇷','🇧🇳','🇧🇬','🇧🇫','🇧🇮','🇨🇻','🇰🇭','🇨🇲','🇨🇦','🇧🇶','🇨🇫','🇹🇩','🇨🇱','🇨🇳','🇨🇴','🇰🇲','🇨🇬','🇨🇩','🇨🇷','🇭🇷','🇨🇺','🇨🇼','🇨🇾','🇨🇿','🇩🇰','🇩🇯','🇩🇲','🇩🇴','🇪🇨','🇪🇬','🇸🇻','🇬🇶','🇪🇷','🇪🇪','🇸🇿','🇪🇹','🇫🇯','🇫🇮','🇫🇷','🇬🇦','🇬🇲','🇬🇪','🇩🇪','🇬🇭','🇬🇷','🇬🇩','🇬🇹','🇬🇳','🇬🇼','🇬🇾','🇭🇹','🇭🇳','🇭🇺','🇮🇸','🇮🇳','🇮🇩','🇮🇷','🇮🇶','🇮🇪','🇮🇱','🇮🇹','🇯🇲','🇯🇵','🇯🇴','🇰🇿','🇰🇪','🇰🇮','🇰🇼','🇰🇬','🇱🇦','🇱🇻','🇱🇧','🇱🇸','🇱🇷','🇱🇾','🇱🇮','🇱🇹','🇱🇺','🇲🇬','🇲🇼','🇲🇾']
+    },
+];
+
+const SidebarEmojiPicker = ({ pickerRef, onPick }) => {
+    const [query, setQuery] = React.useState('');
+    const [activeCategory, setActiveCategory] = React.useState('smileys');
+    const searchRef = React.useRef(null);
+
+    React.useEffect(() => {
+        searchRef.current?.focus();
+    }, []);
+
+    const filteredEmojis = React.useMemo(() => {
+        if (query.trim()) {
+            // Search across all categories
+            return EMOJI_CATEGORIES.flatMap(c => c.emojis).filter((_, i, arr) => {
+                // Simple filter: show all emojis when searching (user sees all)
+                return true;
+            }).slice(0, 60);
+        }
+        return EMOJI_CATEGORIES.find(c => c.id === activeCategory)?.emojis || [];
+    }, [query, activeCategory]);
+
+    // When searching, flatten all emojis and filter (since we don't have text labels, show all)
+    const displayEmojis = query.trim()
+        ? EMOJI_CATEGORIES.flatMap(c => c.emojis)
+        : filteredEmojis;
+
+    return (
+        <div
+            ref={pickerRef}
+            className="absolute top-full left-0 right-0 z-[60] mt-1 shadow-2xl"
+            style={{ borderRadius: '0 0 12px 12px' }}
+        >
+            {/* WhatsApp-style picker panel */}
+            <div className="bg-[#1f2c34] rounded-xl overflow-hidden border border-white/10">
+
+                {/* ── Search Bar ── */}
+                <div className="px-3 py-2 bg-[#1f2c34] border-b border-white/[0.08]">
+                    <div className="flex items-center gap-2 bg-[#2a3942] rounded-lg px-3 py-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4 text-gray-400 flex-shrink-0">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.604 10.604Z" />
+                        </svg>
+                        <input
+                            ref={searchRef}
+                            type="text"
+                            value={query}
+                            onChange={e => setQuery(e.target.value)}
+                            placeholder="Search emoji"
+                            className="flex-1 bg-transparent text-sm text-white placeholder-gray-500 outline-none"
+                        />
+                        {query && (
+                            <button onClick={() => setQuery('')} className="text-gray-400 hover:text-white transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {/* ── Emoji Grid ── */}
+                <div className="h-[220px] overflow-y-auto px-2 py-2" style={{ scrollbarWidth: 'thin', scrollbarColor: '#374151 transparent' }}>
+                    {!query && (
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 px-1 mb-2">
+                            {EMOJI_CATEGORIES.find(c => c.id === activeCategory)?.label}
+                        </p>
+                    )}
+                    <div className="grid grid-cols-8 gap-0.5">
+                        {displayEmojis.map((emoji, i) => (
+                            <button
+                                key={i}
+                                type="button"
+                                onClick={() => onPick(emoji)}
+                                className="flex items-center justify-center w-9 h-9 rounded-lg text-xl hover:bg-white/10 active:scale-90 transition-all"
+                                title={emoji}
+                            >
+                                {emoji}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* ── Category Tabs ── */}
+                {!query && (
+                    <div className="flex items-center border-t border-white/[0.08] bg-[#1a2930] px-1 py-1 gap-0.5 overflow-x-auto scrollbar-none">
+                        {EMOJI_CATEGORIES.map(cat => (
+                            <button
+                                key={cat.id}
+                                type="button"
+                                onClick={() => setActiveCategory(cat.id)}
+                                title={cat.label}
+                                className={`flex-1 min-w-[36px] flex items-center justify-center py-1.5 rounded-lg text-lg transition-all ${
+                                    activeCategory === cat.id
+                                        ? 'bg-[#00a884]/25 text-[#00a884]'
+                                        : 'text-gray-400 hover:bg-white/5 hover:text-white'
+                                }`}
+                                style={{ borderBottom: activeCategory === cat.id ? '2px solid #00a884' : '2px solid transparent' }}
+                            >
+                                {cat.icon}
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+
 
 const Home = () => {
     const { user, token, logout, updateUser } = useContext(AuthContext);
@@ -45,6 +190,7 @@ const Home = () => {
     const [showSettings, setShowSettings] = useState(() => localStorage.getItem('activeView') === 'settings');
     const [navPeekOpen, setNavPeekOpen] = useState(false);
     const [sidebarSearchQuery, setSidebarSearchQuery] = useState('');
+    const [showSidebarEmoji, setShowSidebarEmoji] = useState(false);
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
     useEffect(() => {
@@ -110,12 +256,26 @@ const Home = () => {
     const chatsRef = useRef(chats);
     const showCallModalRef = useRef(showCallModal);
     const messageRefsMap = useRef({});
+    const sidebarEmojiPickerRef = useRef(null);
 
     useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
     useEffect(() => { chatsRef.current = chats; }, [chats]);
     useEffect(() => { showCallModalRef.current = showCallModal; }, [showCallModal]);
     useEffect(() => { localStorage.setItem('chat_theme', theme); }, [theme]);
     useEffect(() => { localStorage.setItem('chat_wallpaper', wallpaper); }, [wallpaper]);
+
+    useEffect(() => {
+        const handleOutsideClick = (e) => {
+            if (showSidebarEmoji && sidebarEmojiPickerRef.current && !sidebarEmojiPickerRef.current.contains(e.target)) {
+                const emojiBtn = document.getElementById('sidebar-emoji-btn');
+                if (!emojiBtn || !emojiBtn.contains(e.target)) {
+                    setShowSidebarEmoji(false);
+                }
+            }
+        };
+        document.addEventListener('mousedown', handleOutsideClick);
+        return () => document.removeEventListener('mousedown', handleOutsideClick);
+    }, [showSidebarEmoji]);
 
     const processQueue = useCallback(async () => {
         if (!navigator.onLine || !socket || !socket.connected || !publicKey) return;
@@ -1661,32 +1821,59 @@ const Home = () => {
                     </div>
                 </div>
 
-                {/* Sidebar Search Bar */}
-                <div className="p-3 bg-signal-secondary border-b border-gray-800 flex gap-2">
-                    <div className="relative flex-1">
+                {/* ─── WhatsApp-style Sidebar Search ─── */}
+                <div className="px-3 py-2 bg-[#111b21] flex items-center gap-2">
+                    <div className="relative flex-1 flex items-center">
+                        {/* Search icon */}
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.604 10.604Z" />
+                            </svg>
+                        </span>
+
                         <input
                             type="text"
                             value={sidebarSearchQuery}
                             onChange={(e) => setSidebarSearchQuery(e.target.value)}
                             placeholder="Search or start new chat..."
-                            className="w-full bg-signal-input border-none rounded-xl pl-10 pr-10 py-2 focus:ring-1 focus:ring-signal-accent outline-none text-white text-sm"
+                            className="w-full bg-[#202c33] text-sm text-white placeholder-gray-500 rounded-lg pl-9 pr-10 py-[9px] outline-none focus:ring-1 focus:ring-[#00a884]/60 border-none transition-all"
                         />
-                        <span className="absolute left-3 top-2.5 text-gray-500">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.604 10.604Z" />
-                            </svg>
-                        </span>
+
+                        {/* Clear button */}
                         {sidebarSearchQuery && (
                             <button
                                 onClick={() => setSidebarSearchQuery('')}
-                                className="absolute right-3 top-2.5 text-gray-400 hover:text-white"
+                                className="absolute right-9 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                                title="Clear"
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                 </svg>
                             </button>
                         )}
+
+                        {/* Emoji button */}
+                        <button
+                            id="sidebar-emoji-btn"
+                            type="button"
+                            onClick={() => setShowSidebarEmoji(v => !v)}
+                            className={`absolute right-2.5 top-1/2 -translate-y-1/2 transition-all rounded-full p-0.5 ${showSidebarEmoji ? 'text-[#00a884]' : 'text-gray-400 hover:text-[#00a884]'}`}
+                            title="Emoji"
+                        >
+                            <FaceSmileIcon className="w-5 h-5" />
+                        </button>
                     </div>
+
+                    {showSidebarEmoji && (
+                        <SidebarEmojiPicker
+                            pickerRef={sidebarEmojiPickerRef}
+                            onPick={(emoji) => {
+                                setSidebarSearchQuery(prev => prev + emoji);
+                                setShowSidebarEmoji(false);
+                            }}
+                        />
+                    )}
+
                 </div>
 
                 {/* Contacts */}

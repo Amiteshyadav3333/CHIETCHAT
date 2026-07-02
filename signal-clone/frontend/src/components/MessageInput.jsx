@@ -308,6 +308,7 @@ const MessageInput = ({
 
     const handleFileChange = (e) => {
         const files = Array.from(e.target.files);
+        if (files.length === 0) return;
         if (files.length > 15) {
             alert('You can only select up to 15 files at once.');
             return;
@@ -595,7 +596,7 @@ const MessageInput = ({
 
             {/* Emoji / GIF / Sticker Picker */}
             {showEmoji && (
-                <div ref={emojiPickerRef} className="absolute bottom-full left-0 z-50 flex flex-col gap-2 rounded-2xl bg-[#202c33] p-3 shadow-2xl w-[350px]">
+                <div ref={emojiPickerRef} className="absolute bottom-full left-0 z-50 flex flex-col gap-2 rounded-2xl bg-[#202c33] p-3 shadow-2xl w-[350px] mb-1 border border-white/10">
                     {/* Tab Header */}
                     <div className="flex bg-black/20 rounded-lg p-0.5 text-xs text-gray-300">
                         {['emoji', 'gif', 'sticker'].map(tab => (
@@ -620,9 +621,10 @@ const MessageInput = ({
                             <EmojiPicker
                                 onEmojiClick={handleEmojiClick}
                                 theme="dark"
-                                height={380}
-                                width={326}
+                                height="100%"
+                                width="100%"
                                 searchDisabled={false}
+                                searchPlaceholder="Search emoji..."
                                 skinTonesDisabled
                                 previewConfig={{ showPreview: false }}
                             />
@@ -765,12 +767,9 @@ const MessageInput = ({
                             onClick={sendUPIPayment}
                         />
                     </div>
-                    <input ref={galleryInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="image/*,video/*" />
-                    <input ref={cameraInputRef} type="file" className="hidden" onChange={handleFileChange} accept="image/*,video/*" capture="environment" />
-                    <input ref={documentInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="*/*" />
-                    <input ref={audioInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="audio/*" />
                 </div>
             )}
+
 
             {showCameraModal && (
                 <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 p-4 animate-fade-in">
@@ -875,46 +874,40 @@ const MessageInput = ({
                 </div>
             )}
 
-            <div className="flex items-end gap-2 px-3 py-2">
-                {/* Emoji + Attach */}
+            {/* ─── WhatsApp-style Input Row ─── */}
+            <div className="flex items-end gap-2 px-2 py-2">
+
+                {/* Left icons: Attach + Translate + AI (emoji moved inside chatbox) */}
                 {!isRecording && !disabled && (
-                    <div className="flex items-center gap-1 flex-shrink-0 pb-1">
+                    <div className="flex items-center gap-0.5 flex-shrink-0 pb-1">
+                        {/* Attach */}
                         <button
-                            id="emoji-btn"
-                            type="button"
-                            onClick={() => { setShowEmoji(v => !v); setShowAttachMenu(false); }}
-                            className={`p-2 rounded-full transition-colors ${showEmoji ? 'text-blue-400' : 'text-gray-400 hover:text-gray-200'}`}
-                            title="Emojis"
-                        >
-                            <FaceSmileIcon className="w-6 h-6" />
-                        </button>
-                        <button 
                             id="attach-btn"
                             type="button"
                             onClick={() => { setShowAttachMenu(v => !v); setShowEmoji(false); }}
-                            className={`p-2 rounded-full transition-colors ${showAttachMenu ? 'text-blue-400 rotate-45' : 'text-gray-400 hover:text-gray-200'}`}
+                            className={`w-10 h-10 flex items-center justify-center rounded-full transition-all active:scale-90 ${showAttachMenu ? 'text-[#00a884] rotate-45' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}`}
                             title="Attachments"
                         >
                             <PaperClipIcon className="w-6 h-6" />
                         </button>
+
+                        {/* Translate */}
                         <button
                             type="button"
-                            onClick={() => {
-                                toggleTranslator();
-                                setShowEmoji(false);
-                                setShowAttachMenu(false);
-                            }}
-                            className={`p-2 rounded-full transition-colors ${showTranslator ? 'text-blue-400' : 'text-gray-400 hover:text-gray-200'}`}
+                            onClick={() => { toggleTranslator(); setShowEmoji(false); setShowAttachMenu(false); }}
+                            className={`w-10 h-10 flex items-center justify-center rounded-full transition-all active:scale-90 ${showTranslator ? 'text-[#00a884]' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}`}
                             title="Translate"
                         >
                             <GlobeIcon className="w-6 h-6" />
                         </button>
+
+                        {/* AI Grammar Fix */}
                         {showAiFeature && (
                             <button
                                 type="button"
                                 onClick={handleGrammarFix}
                                 disabled={!text.trim()}
-                                className={`p-2 rounded-full transition-all ${text.trim() ? 'text-violet-400 hover:text-violet-300 hover:scale-105 active:scale-95' : 'text-gray-600 cursor-not-allowed'}`}
+                                className={`w-10 h-10 flex items-center justify-center rounded-full transition-all active:scale-90 ${text.trim() ? 'text-violet-400 hover:text-violet-300 hover:bg-violet-400/10' : 'text-gray-600 cursor-not-allowed'}`}
                                 title="AI Grammar Fix"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
@@ -925,7 +918,13 @@ const MessageInput = ({
                     </div>
                 )}
 
-                {/* Input */}
+                {/* Hidden file inputs */}
+                <input ref={galleryInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="image/*,video/*" />
+                <input ref={cameraInputRef} type="file" className="hidden" onChange={handleFileChange} accept="image/*,video/*" capture="environment" />
+                <input ref={documentInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="*/*" />
+                <input ref={audioInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="audio/*" />
+
+                {/* Textarea + Emoji (inside) + Send/Mic */}
                 <form onSubmit={handleSubmit} className="flex-1 flex items-end gap-2">
                     {disabled ? (
                         <div className="flex-1 flex items-center bg-[#1c2429]/50 border border-gray-800 rounded-3xl px-4 py-3 text-center justify-center">
@@ -937,24 +936,37 @@ const MessageInput = ({
                             <span className="text-red-400 text-sm font-medium">Recording voice message...</span>
                         </div>
                     ) : (
-                        <textarea
-                            ref={inputRef}
-                            value={text}
-                            onChange={e => {
-                                setText(e.target.value);
-                                onTyping?.(e.target.value.length > 0);
-                                clearTimeout(typingTimerRef.current);
-                                typingTimerRef.current = setTimeout(() => onTyping?.(false), 1400);
-                            }}
-                            onKeyDown={handleKeyDown}
-                            placeholder="Type a message..."
-                            rows={1}
-                            className="flex-1 bg-[#2a3942] text-gray-100 placeholder-gray-500 rounded-3xl px-4 py-3 text-[15px] focus:outline-none resize-none max-h-32 overflow-y-auto leading-relaxed"
-                            style={{ scrollbarWidth: 'none' }}
-                            onClick={() => { setShowEmoji(false); setShowAttachMenu(false); }}
-                            onBlur={() => onTyping?.(false)}
-                        />
+                        <div className="relative flex-1">
+                            <textarea
+                                ref={inputRef}
+                                value={text}
+                                onChange={e => {
+                                    setText(e.target.value);
+                                    onTyping?.(e.target.value.length > 0);
+                                    clearTimeout(typingTimerRef.current);
+                                    typingTimerRef.current = setTimeout(() => onTyping?.(false), 1400);
+                                }}
+                                onKeyDown={handleKeyDown}
+                                placeholder="Type a message..."
+                                rows={1}
+                                className="w-full bg-[#2a3942] text-gray-100 placeholder-gray-500 rounded-3xl pl-4 pr-12 py-3 text-[15px] focus:outline-none resize-none max-h-32 overflow-y-auto leading-relaxed"
+                                style={{ scrollbarWidth: 'none' }}
+                                onClick={() => { setShowEmoji(false); setShowAttachMenu(false); }}
+                                onBlur={() => onTyping?.(false)}
+                            />
+                            {/* Emoji button — RIGHT INSIDE chatbox, vertically centered */}
+                            <button
+                                id="emoji-btn"
+                                type="button"
+                                onClick={() => { setShowEmoji(v => !v); setShowAttachMenu(false); }}
+                                className={`absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full transition-all active:scale-90 ${showEmoji ? 'text-[#00a884]' : 'text-gray-400 hover:text-[#00a884]'}`}
+                                title="Emoji / GIF / Sticker"
+                            >
+                                <FaceSmileIcon className="w-6 h-6" />
+                            </button>
+                        </div>
                     )}
+
 
                     {/* Send / Mic button */}
                     {text.trim() ? (
@@ -981,6 +993,10 @@ const MessageInput = ({
         </div>
     );
 };
+
+
+
+
 
 const AttachOption = ({ label, color, icon, onClick }) => (
     <button

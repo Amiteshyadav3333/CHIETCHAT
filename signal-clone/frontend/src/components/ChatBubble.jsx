@@ -565,6 +565,7 @@ const ChatBubble = ({
     };
 
     const renderContent = (cnt, type) => {
+
         // ── IMAGE ──
         if (type === 'image' || cnt.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
             return (

@@ -50,3 +50,42 @@ body {
 .animate-fade-in {
   animation: fade-in 0.2s ease-out forwards;
 }
+
+/* ── Custom Emoji Picker CSS overrides ── */
+.EmojiPickerReact {
+  --epr-bg-color: #202c33 !important;
+  --epr-category-label-bg-color: #202c33 !important;
+  --epr-text-color: #ffffff !important;
+  --epr-search-input-bg-color: #111b21 !important;
+  --epr-search-input-border-color: rgba(255, 255, 255, 0.1) !important;
+  --epr-search-input-text-color: #ffffff !important;
+  --epr-search-input-placeholder-color: #8696a0 !important;
+  --epr-search-input-bg-color-active: #111b21 !important;
+  border: none !important;
+}
+
+.EmojiPickerReact .epr-search-container {
+  padding: 8px 10px !important;
+  background-color: #202c33 !important;
+}
+
+.EmojiPickerReact input.epr-search {
+  background-color: #111b21 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 10px !important;
+  color: #fff !important;
+  font-size: 13px !important;
+  height: 36px !important;
+  outline: none !important;
+  transition: all 0.2s ease-in-out !important;
+}
+
+.EmojiPickerReact input.epr-search:focus {
+  border-color: #00a884 !important;
+  box-shadow: 0 0 0 1px #00a884 !important;
+}
+
+.EmojiPickerReact .epr-search-icon {
+  opacity: 0.6 !important;
+}
+

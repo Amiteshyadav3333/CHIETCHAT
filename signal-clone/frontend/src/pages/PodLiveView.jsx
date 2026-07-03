@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeftIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 
 const PodLiveView = ({ active, onBack }) => {
     if (!active) return null;
@@ -17,17 +17,6 @@ const PodLiveView = ({ active, onBack }) => {
             >
                 <ArrowLeftIcon className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" />
             </button>
-
-            {/* Floating Open Standalone Button (Top Right) */}
-            <a
-                href={iframeUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="absolute top-4 right-4 z-50 px-4 py-2 rounded-full bg-indigo-600/80 hover:bg-indigo-600 backdrop-blur-md border border-indigo-400/30 text-white text-xs font-bold flex items-center gap-2 shadow-xl transition-all hover:scale-105 active:scale-95"
-            >
-                Open Full
-                <ArrowTopRightOnSquareIcon className="w-4 h-4" />
-            </a>
 
             {/* Immersive Fullscreen Iframe */}
             <div className="w-full h-full flex-1 relative bg-black">

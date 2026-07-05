@@ -676,22 +676,88 @@ def toggle_group_chat(chat_id):
         print(f"Error toggling group chat: {e}")
         return jsonify({"error": str(e)}), 500
 
-FALLBACK_GIFS = [
-    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHB1bWppMTk5amswMTZlY2FhdzF3ejA2eGFoc3V0dmc0dWV2MzhqZSZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/3ntq5FxIfvLfO/giphy.gif",
-    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNmt0bXUxdnp4YWJpdjVpc3ZzMzU3ODl3ZXhhazRhY2dvd2t5YTZuNSZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/t3s3G2f2jO8EM/giphy.gif",
-    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdzB2MGFjNno4NXZrMDk0OHlzZnd6ZXhrbzI4Y2c1amtzdmh1aXQ1diZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/cuPm4p4pClZVC/giphy.gif",
-    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZnNpdGZ2M3l6NWlyOTM4ZGNnaGR2azFsc3NzNHo0ejNlZHkweGR5NyZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/kEKcOWl8RMLde/giphy.gif",
-    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMGxmeTNuaDljdXV6Nmx2bzRtNWZpd3Z0cnlzNzI2eGx6c2g2ODc4NCZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/BCkJ89PNKmOf1s51oR/giphy.gif",
-    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMWNnMXJndXo5bzJ4MXNwdzM2M2VyeWJwb2RucHBwYzRxbGthczY5OCZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/3o7TKoWXm3okO1kgdW/giphy.gif",
-    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYnQydXkweHhsMGZpdzJpczU5dTZyeHpycnhzdmhhMmxlazJ3azh4MyZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/c6SRlotmEgHVMTxazt/giphy.gif",
-    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2RxMzhvczY4MXB5cjJqMzdpa3RteDlsbzB2dDk1bWF6eWp5dG9yMW11bmFseWFvJmVwPXYxX2ludGVybmFsX2dpZl9ieV9naXBoeSZjdD1n/xT0xeJpD8e4DYnCHq8/giphy.gif",
-    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM2FwdGFnMXp1M2lyNG9nbTF2dmhyeHRkNzR0aHAydnVpMjI5Ymx1biZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/l3q2zVr6cu95nF6O4/giphy.gif",
-    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYTN4dnk5ODkxdDZ4YmY0bmcyNWl4bGF0YTZoM3pvMDQ5NmI4MHhqciZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/11sBLVxNs7v6WA/giphy.gif",
+FALLBACK_GIFS_DATA = [
+    {
+        "url": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHB1bWppMTk5amswMTZlY2FhdzF3ejA2eGFoc3V0dmc0dWV2MzhqZSZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/3ntq5FxIfvLfO/giphy.gif",
+        "tags": ["laugh", "funny", "minions", "lol", "happy", "smile", "haha"]
+    },
+    {
+        "url": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNmt0bXUxdnp4YWJpdjVpc3ZzMzU3ODl3ZXhhazRhY2dvd2t5YTZuNSZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/t3s3G2f2jO8EM/giphy.gif",
+        "tags": ["hello", "wave", "hi", "welcome", "bye", "goodbye", "greet"]
+    },
+    {
+        "url": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdzB2MGFjNno4NXZrMDk0OHlzZnd6ZXhrbzI4Y2c1amtzdmh1aXQ1diZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/cuPm4p4pClZVC/giphy.gif",
+        "tags": ["cat", "dance", "happy", "cute", "music", "animal", "dancing"]
+    },
+    {
+        "url": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZnNpdGZ2M3l6NWlyOTM4ZGNnaGR2azFsc3NzNHo0ejNlZHkweGR5NyZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/kEKcOWl8RMLde/giphy.gif",
+        "tags": ["confused", "shrug", "what", "maybe", "idk", "question"]
+    },
+    {
+        "url": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMGxmeTNuaDljdXV6Nmx2bzRtNWZpd3Z0cnlzNzI2eGx6c2g2ODc4NCZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/BCkJ89PNKmOf1s51oR/giphy.gif",
+        "tags": ["laugh", "clapping", "haha", "lol", "clap", "funny", "applause"]
+    },
+    {
+        "url": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMWNnMXJndXo5bzJ4MXNwdzM2M2VyeWJwb2RucHBwYzRxbGthczY5OCZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/3o7TKoWXm3okO1kgdW/giphy.gif",
+        "tags": ["sad", "cry", "crying", "tears", "heartbroken", "depressed"]
+    },
+    {
+        "url": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYnQydXkweHhsMGZpdzJpczU5dTZyeHpycnhzdmhhMmxlazJ3azh4MyZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/c6SRlotmEgHVMTxazt/giphy.gif",
+        "tags": ["shocked", "surprised", "wow", "omg", "gasp"]
+    },
+    {
+        "url": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2RxMzhvczY4MXB5cjJqMzdpa3RteDlsbzB2dDk1bWF6eWp5dG9yMW11bmFseWFvJmVwPXYxX2ludGVybmFsX2dpZl9ieV9naXBoeSZjdD1n/xT0xeJpD8e4DYnCHq8/giphy.gif",
+        "tags": ["angry", "mad", "rage", "furious", "no", "irritated"]
+    },
+    {
+        "url": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM2FwdGFnMXp1M2lyNG9nbTF2dmhyeHRkNzR0aHAydnVpMjI5Ymx1biZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/l3q2zVr6cu95nF6O4/giphy.gif",
+        "tags": ["love", "heart", "kiss", "cute", "sweet", "hug", "romance"]
+    },
+    {
+        "url": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYTN4dnk5ODkxdDZ4YmY0bmcyNWl4bGF0YTZoM3pvMDQ5NmI4MHhqciZlcD12MV9pbnRlcm5hbF9naWZfYnlfZ2lwaHkmY3Q9Zw/11sBLVxNs7v6WA/giphy.gif",
+        "tags": ["yes", "nod", "agree", "ok", "sure", "correct"]
+    },
+    {
+        "url": "https://media.giphy.com/media/XreQmk7ETCak0/giphy.gif",
+        "tags": ["yes", "agree", "ok", "thumbs up", "good", "cool", "like"]
+    },
+    {
+        "url": "https://media.giphy.com/media/3og0INyMrrC67pIwTe/giphy.gif",
+        "tags": ["facepalm", "fail", "stupid", "dumb", "sigh", "disappointed"]
+    },
+    {
+        "url": "https://media.giphy.com/media/hVTouqNmQHjimGo405/giphy.gif",
+        "tags": ["popcorn", "eating", "watching", "drama", "movie", "hungry"]
+    },
+    {
+        "url": "https://media.giphy.com/media/mCRJDo24UvJMA/giphy.gif",
+        "tags": ["dog", "cute", "happy", "puppy", "animal", "pet"]
+    },
+    {
+        "url": "https://media.giphy.com/media/213v8FUmHdwXO/giphy.gif",
+        "tags": ["thank you", "thanks", "grateful", "appreciate", "kind"]
+    },
+    {
+        "url": "https://media.giphy.com/media/12XTNOpsQr1m9u/giphy.gif",
+        "tags": ["no", "nope", "shake", "disagree", "refuse"]
+    },
+    {
+        "url": "https://media.giphy.com/media/13rQ7rrTrvBsVW/giphy.gif",
+        "tags": ["sleepy", "tired", "sleep", "exhausted", "bed", "goodnight", "yawn"]
+    },
+    {
+        "url": "https://media.giphy.com/media/5t9wFB8cAzfQEC1A9z/giphy.gif",
+        "tags": ["wink", "flirt", "cool", "agree", "friendly"]
+    },
+    {
+        "url": "https://media.giphy.com/media/3oEJHV0z8S7EgU8396/giphy.gif",
+        "tags": ["high five", "celebrate", "success", "good job", "yes", "team"]
+    }
 ]
 
 @chats_bp.route('/api/gifs', methods=['GET'])
 def get_gifs_proxy():
-    query = request.args.get('q', 'trending').strip()
+    query = request.args.get('q', 'trending').strip().lower()
     if not query:
         query = 'trending'
     try:
@@ -704,8 +770,20 @@ def get_gifs_proxy():
     except Exception as e:
         print("Error fetching GIPHY proxy:", e)
     
-    # Return subset of fallback gifs containing query match or just random selection if fails
-    return jsonify({"gifs": FALLBACK_GIFS})
+    # Filter fallback GIFs based on user's query matching our tag keywords
+    if query == 'trending':
+        gifs_to_return = [item["url"] for item in FALLBACK_GIFS_DATA]
+    else:
+        gifs_to_return = [
+            item["url"]
+            for item in FALLBACK_GIFS_DATA
+            if any(query in tag for tag in item["tags"])
+        ]
+        # If no query matches, return all fallback gifs instead of an empty screen
+        if not gifs_to_return:
+            gifs_to_return = [item["url"] for item in FALLBACK_GIFS_DATA]
+
+    return jsonify({"gifs": gifs_to_return})
 
 # Star/Unstar Messages
 @chats_bp.route('/api/messages/<int:message_id>/star', methods=['POST'])

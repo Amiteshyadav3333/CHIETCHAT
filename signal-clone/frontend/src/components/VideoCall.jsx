@@ -108,15 +108,20 @@ const VideoCallModal = ({
     const [isMinimized, setIsMinimized] = useState(false);
 
     // PIP Drag State
-    const [pipPos, setPipPos] = useState({ x: window.innerWidth - 140, y: 16 });
+    const [pipPos, setPipPos] = useState({ x: window.innerWidth - 300, y: 80 });
     const isDraggingPipRef = useRef(false);
     const pipOffsetRef = useRef({ x: 0, y: 0 });
+    const startPosRef = useRef({ x: 0, y: 0 });
 
     const handlePipPointerDown = (e) => {
         isDraggingPipRef.current = true;
         pipOffsetRef.current = {
             x: e.clientX - pipPos.x,
             y: e.clientY - pipPos.y
+        };
+        startPosRef.current = {
+            x: e.clientX,
+            y: e.clientY
         };
         e.currentTarget.setPointerCapture(e.pointerId);
     };
@@ -130,8 +135,19 @@ const VideoCallModal = ({
     };
 
     const handlePipPointerUp = (e) => {
+        if (!isDraggingPipRef.current) return;
         isDraggingPipRef.current = false;
         e.currentTarget.releasePointerCapture(e.pointerId);
+
+        // Calculate drag distance
+        const dx = e.clientX - startPosRef.current.x;
+        const dy = e.clientY - startPosRef.current.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // If movement is very small (less than 5px), treat it as a click/tap to expand the video call
+        if (distance < 5) {
+            setIsMinimized(false);
+        }
     };
 
     useEffect(() => { peersRef.current = peers; }, [peers]);
@@ -424,11 +440,15 @@ const VideoCallModal = ({
             if (!e.streams[0]) {
                 remoteStream.addTrack(e.track);
             }
+            const newStream = new MediaStream(remoteStream.getTracks());
+            if (peersRef.current[remoteSocketId]) {
+                peersRef.current[remoteSocketId].stream = newStream;
+            }
             setPeers(prev => ({
                 ...prev,
                 [remoteSocketId]: {
                     ...prev[remoteSocketId],
-                    stream: new MediaStream(remoteStream.getTracks())
+                    stream: newStream
                 }
             }));
             // Set up E2EE decryption for receiving
@@ -472,13 +492,15 @@ const VideoCallModal = ({
         });
 
         const remoteParticipant = activeChat.participants.find(p => p.id === remoteUserId);
+        const peerItem = {
+            pc,
+            stream: null,
+            user: { id: remoteUserId, username: remoteParticipant?.username || `User ${remoteUserId}`, avatar: remoteParticipant?.avatar }
+        };
+        peersRef.current[remoteSocketId] = peerItem;
         setPeers(prev => ({
             ...prev,
-            [remoteSocketId]: {
-                pc,
-                stream: null,
-                user: { id: remoteUserId, username: remoteParticipant?.username || `User ${remoteUserId}`, avatar: remoteParticipant?.avatar }
-            }
+            [remoteSocketId]: peerItem
         }));
 
         if (isInitiator) {
@@ -1028,6 +1050,7 @@ const VideoCallModal = ({
                             </span>
                             <span className="text-white/40 text-xs">•</span>
                             <button 
+                                onPointerDown={(e) => e.stopPropagation()}
                                 onClick={(e) => { e.stopPropagation(); setShowSafetyModal(true); }}
                                 className="flex items-center gap-1 bg-green-500/25 border border-green-500/30 px-2 py-0.5 rounded-full text-[10px] text-green-400 font-bold hover:bg-green-500/35 transition"
                             >
@@ -1041,6 +1064,7 @@ const VideoCallModal = ({
                 <div className="flex items-center">
                     {isMinimized ? (
                         <button 
+                            onPointerDown={(e) => e.stopPropagation()}
                             onClick={(e) => { e.stopPropagation(); setIsMinimized(false); }}
                             className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md pointer-events-auto"
                             title="Expand Call"
@@ -1049,6 +1073,7 @@ const VideoCallModal = ({
                         </button>
                     ) : (
                         <button 
+                            onPointerDown={(e) => e.stopPropagation()}
                             onClick={(e) => { e.stopPropagation(); setIsMinimized(true); }}
                             className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md pointer-events-auto"
                             title="Minimize to Chat"

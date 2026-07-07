@@ -104,6 +104,11 @@ const VideoCallModal = ({
     const controlsTimerRef = useRef(null);
     const facingModeRef = useRef('user');
     const [showMoreMenu, setShowMoreMenu] = useState(false);
+    const [isVoiceCancellationOn, setIsVoiceCancellationOn] = useState(false);
+    const cancellationAudioCtxRef = useRef(null);
+    const cancellationDestRef = useRef(null);
+    const originalAudioTrackRef = useRef(null);
+    const activeAudioTrackRef = useRef(null);
 
     const [isMinimized, setIsMinimized] = useState(false);
 
@@ -258,6 +263,9 @@ const VideoCallModal = ({
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 streamRef.current = stream;
                 cameraTrackRef.current = stream.getVideoTracks()[0] || null;
+                const audioTrack = stream.getAudioTracks()[0] || null;
+                originalAudioTrackRef.current = audioTrack;
+                activeAudioTrackRef.current = audioTrack;
                 setLocalStream(stream);
                 socket.emit('join_call', { chatId: activeChat.id, userId: user.id });
 
@@ -334,6 +342,12 @@ const VideoCallModal = ({
             streamRef.current?.getTracks().forEach(t => t.stop());
             streamRef.current = null;
             setLocalStream(null);
+            if (cancellationDestRef.current) {
+                cancellationDestRef.current.stream.getTracks().forEach(t => t.stop());
+            }
+            if (cancellationAudioCtxRef.current) {
+                cancellationAudioCtxRef.current.close().catch(() => {});
+            }
             socket.off('user_joined_call');
             socket.off('user_left_call');
             socket.off('peer_ringing');
@@ -346,6 +360,91 @@ const VideoCallModal = ({
             socket.off('call_transitioned');
         };
     }, [activeChat?.id]);
+
+    useEffect(() => {
+        const applyVoiceCancellation = async () => {
+            if (isVoiceCancellationOn) {
+                try {
+                    const audioTrack = originalAudioTrackRef.current;
+                    if (!audioTrack) return;
+
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    const ctx = new AudioContext();
+                    cancellationAudioCtxRef.current = ctx;
+
+                    const source = ctx.createMediaStreamSource(new MediaStream([audioTrack]));
+                    
+                    const hpFilter = ctx.createBiquadFilter();
+                    hpFilter.type = 'highpass';
+                    hpFilter.frequency.value = 120;
+
+                    const lpFilter = ctx.createBiquadFilter();
+                    lpFilter.type = 'lowpass';
+                    lpFilter.frequency.value = 4000;
+
+                    const presenceFilter = ctx.createBiquadFilter();
+                    presenceFilter.type = 'peaking';
+                    presenceFilter.frequency.value = 2000;
+                    presenceFilter.Q.value = 1.2;
+                    presenceFilter.gain.value = 6;
+
+                    const compressor = ctx.createDynamicsCompressor();
+                    compressor.threshold.value = -24;
+                    compressor.knee.value = 30;
+                    compressor.ratio.value = 12;
+                    compressor.attack.value = 0.003;
+                    compressor.release.value = 0.25;
+
+                    source.connect(hpFilter);
+                    hpFilter.connect(lpFilter);
+                    lpFilter.connect(presenceFilter);
+                    presenceFilter.connect(compressor);
+
+                    const dest = ctx.createMediaStreamDestination();
+                    compressor.connect(dest);
+                    cancellationDestRef.current = dest;
+
+                    const refinedTrack = dest.stream.getAudioTracks()[0];
+                    activeAudioTrackRef.current = refinedTrack;
+
+                    Object.values(peersRef.current).forEach(({ pc }) => {
+                        const sender = pc.getSenders().find(s => s.track?.kind === 'audio');
+                        if (sender) {
+                            sender.replaceTrack(refinedTrack);
+                        }
+                    });
+                    console.log("Voice cancellation enabled.");
+                } catch (e) {
+                    console.error("Failed to enable voice cancellation:", e);
+                    setIsVoiceCancellationOn(false);
+                }
+            } else {
+                const originalTrack = originalAudioTrackRef.current;
+                activeAudioTrackRef.current = originalTrack;
+
+                if (cancellationDestRef.current) {
+                    cancellationDestRef.current.stream.getTracks().forEach(t => t.stop());
+                    cancellationDestRef.current = null;
+                }
+                if (cancellationAudioCtxRef.current) {
+                    cancellationAudioCtxRef.current.close().catch(() => {});
+                    cancellationAudioCtxRef.current = null;
+                }
+
+                if (originalTrack) {
+                    Object.values(peersRef.current).forEach(({ pc }) => {
+                        const sender = pc.getSenders().find(s => s.track?.kind === 'audio');
+                        if (sender) {
+                            sender.replaceTrack(originalTrack);
+                        }
+                    });
+                }
+                console.log("Voice cancellation disabled.");
+            }
+        };
+
+        applyVoiceCancellation();
+    }, [isVoiceCancellationOn]);
 
 
     const setMediaBitrates = async (pc) => {
@@ -480,7 +579,11 @@ const VideoCallModal = ({
         };
 
         stream.getTracks().forEach(track => {
-            const sender = pc.addTrack(track, stream);
+            let trackToSend = track;
+            if (track.kind === 'audio' && activeAudioTrackRef.current) {
+                trackToSend = activeAudioTrackRef.current;
+            }
+            const sender = pc.addTrack(trackToSend, stream);
             // Set up E2EE encryption for sending
             const sharedKey = `chietchat_call_secret_${activeChat.id}`;
             setupE2EE(sender, sharedKey, 'sender');
@@ -883,6 +986,15 @@ const VideoCallModal = ({
                                     <span>{isScreenSharing ? 'Stop Screen Share' : 'Screen Share'}</span>
                                 </button>
                                 <button
+                                    onClick={() => { setIsVoiceCancellationOn(prev => !prev); setShowMoreMenu(false); }}
+                                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition text-sm text-left font-medium w-full ${isVoiceCancellationOn ? 'text-green-400 bg-green-500/10 hover:bg-green-500/20' : 'text-white hover:bg-white/10'}`}
+                                >
+                                    <span className="w-5 h-5 flex items-center justify-center text-base">
+                                        {isVoiceCancellationOn ? '🎙️✨' : '🎙️'}
+                                    </span>
+                                    <span>{isVoiceCancellationOn ? 'Voice Cancellation: On' : 'Voice Cancellation: Off'}</span>
+                                </button>
+                                <button
                                     onClick={() => { toggleRecording(); setShowMoreMenu(false); }}
                                     className={`flex items-center gap-3 px-4 py-3 rounded-xl transition text-sm text-left font-medium w-full ${isRecording ? 'text-red-400 bg-red-500/10 hover:bg-red-500/20' : 'text-white hover:bg-white/10'}`}
                                 >
@@ -1133,6 +1245,15 @@ const VideoCallModal = ({
                             >
                                 <ComputerDesktopIcon className="w-5 h-5" />
                                 <span>{isScreenSharing ? 'Stop Screen Share' : 'Screen Share'}</span>
+                            </button>
+                            <button
+                                onClick={() => { setIsVoiceCancellationOn(prev => !prev); setShowMoreMenu(false); }}
+                                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition text-sm text-left font-medium w-full ${isVoiceCancellationOn ? 'text-green-400 bg-green-500/10 hover:bg-green-500/20' : 'text-white hover:bg-white/10'}`}
+                            >
+                                <span className="w-5 h-5 flex items-center justify-center text-base">
+                                    {isVoiceCancellationOn ? '🎙️✨' : '🎙️'}
+                                </span>
+                                <span>{isVoiceCancellationOn ? 'Voice Cancellation: On' : 'Voice Cancellation: Off'}</span>
                             </button>
                             <button
                                 onClick={() => { toggleRecording(); setShowMoreMenu(false); }}

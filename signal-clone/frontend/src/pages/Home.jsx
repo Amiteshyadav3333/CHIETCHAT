@@ -743,8 +743,8 @@ const Home = () => {
         });
 
         socket.on('message_reaction_update', ({ id, chatId, reactions }) => {
-            if (activeChatRef.current?.id === chatId) {
-                setMessages(prev => prev.map(m => m.id === id ? { ...m, reactions } : m));
+            if (activeChatRef.current && String(activeChatRef.current.id) === String(chatId)) {
+                setMessages(prev => prev.map(m => String(m.id) === String(id) ? { ...m, reactions } : m));
             }
         });
 
@@ -1224,7 +1224,7 @@ const Home = () => {
             const res = await axios.post(`/api/messages/${message.id}/react`, { emoji }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setMessages(prev => prev.map(m => m.id === message.id ? { ...m, reactions: res.data.reactions } : m));
+            setMessages(prev => prev.map(m => String(m.id) === String(message.id) ? { ...m, reactions: res.data.reactions } : m));
         } catch (err) { console.error(err); }
     };
 

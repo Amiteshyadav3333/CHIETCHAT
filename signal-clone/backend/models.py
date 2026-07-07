@@ -309,3 +309,13 @@ class MessageDeletion(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False)
     deleted_at = db.Column(db.DateTime, default=utc_now)
     __table_args__ = (db.UniqueConstraint('message_id', 'user_id', name='uq_message_user_deletion'),)
+
+
+class AiConversation(db.Model):
+    """Stores AI chat history per user for memory"""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    role = db.Column(db.String(20), nullable=False)   # 'user' | 'assistant'
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now)
+    user = db.relationship('User')

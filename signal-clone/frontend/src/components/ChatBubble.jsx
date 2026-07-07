@@ -637,7 +637,7 @@ const ChatBubble = ({
     const renderContent = (cnt, type) => {
 
         // ── IMAGE ──
-        if (type === 'image' || cnt.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+        if (type === 'image' || type === 'gif' || cnt.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
             return (
                 <div
                     className="relative group/media cursor-pointer rounded-2xl overflow-hidden"
@@ -1224,7 +1224,7 @@ const ChatBubble = ({
                             </div>
 
                             {hasReactions && (
-                                <div className={`absolute -bottom-5 ${isOwn ? 'left-2' : 'right-2'} rounded-full bg-[#111b21] px-2 py-0.5 text-xs shadow border border-white/10`}>
+                                <div className={`absolute -bottom-5 ${isOwn ? 'left-2' : 'right-2'} rounded-full bg-[#111b21] px-2 py-0.5 text-xs shadow border border-white/10 z-10`}>
                                     {Object.values(reactionsObj).join(' ')}
                                 </div>
                             )}

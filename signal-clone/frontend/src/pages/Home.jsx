@@ -10,7 +10,8 @@ import IncomingCallModal from '../components/IncomingCallModal';
 import VideoCallModal from '../components/VideoCall';
 import AvatarZoom from '../components/AvatarZoom';
 import StatusSection from '../components/StatusSection';
-import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon, EllipsisVerticalIcon, XMarkIcon, TrashIcon, NoSymbolIcon, PlayIcon, Cog6ToothIcon, BellIcon, MapPinIcon, PhotoIcon, ChatBubbleLeftRightIcon, InformationCircleIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon, MicrophoneIcon, FaceSmileIcon } from '@heroicons/react/24/outline';
+import AiChat from '../components/AiChat';
+import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon, EllipsisVerticalIcon, XMarkIcon, TrashIcon, NoSymbolIcon, PlayIcon, Cog6ToothIcon, BellIcon, MapPinIcon, PhotoIcon, ChatBubbleLeftRightIcon, InformationCircleIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon, MicrophoneIcon, FaceSmileIcon, SparklesIcon } from '@heroicons/react/24/outline';
 import { format } from 'date-fns';
 import SettingsModal from '../components/SettingsModal';
 import NotificationPanel from '../components/NotificationPanel';
@@ -185,6 +186,7 @@ const Home = () => {
     const [blockedUsers, setBlockedUsers] = useState([]);
     const [showReels, setShowReels] = useState(() => localStorage.getItem('activeView') === 'reels');
     const [showSocial, setShowSocial] = useState(() => localStorage.getItem('activeView') === 'social');
+    const [showAiChat, setShowAiChat] = useState(() => localStorage.getItem('activeView') === 'ai');
     const [showPodlive, setShowPodlive] = useState(() => localStorage.getItem('activeView') === 'podlive');
     const [socialDeepLink, setSocialDeepLink] = useState(null); // { type: 'post'|'profile', id }
     const [showSettings, setShowSettings] = useState(() => localStorage.getItem('activeView') === 'settings');
@@ -1471,9 +1473,10 @@ const Home = () => {
                 localStorage.removeItem('activeChatId');
             }
         },
-        { label: 'Reels', icon: PlayIcon, active: showReels, action: () => { hideAppNavForFeature(); setShowSocial(false); setShowPodlive(false); setShowReels(true); } },
-        { label: 'Social', icon: PhotoIcon, active: showSocial, action: () => { hideAppNavForFeature(); setShowReels(false); setShowPodlive(false); setShowSocial(true); } },
-        { label: 'PodLive', icon: MicrophoneIcon, active: showPodlive, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(true); } },
+        { label: 'Reels', icon: PlayIcon, active: showReels, action: () => { hideAppNavForFeature(); setShowSocial(false); setShowPodlive(false); setShowReels(true); setShowAiChat(false); } },
+        { label: 'Social', icon: PhotoIcon, active: showSocial, action: () => { hideAppNavForFeature(); setShowReels(false); setShowPodlive(false); setShowSocial(true); setShowAiChat(false); } },
+        { label: 'PodLive', icon: MicrophoneIcon, active: showPodlive, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(true); setShowAiChat(false); } },
+        { label: 'AI', icon: SparklesIcon, active: showAiChat, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(false); setShowAiChat(true); } },
         { label: 'Notify', icon: BellIcon, active: showNotifications, action: openNotifications, badge: unreadCount },
         { label: 'New', icon: PlusIcon, active: showSearchModal, action: () => { setShowNotifications(false); setShowSettings(false); setShowSearchModal(true); } },
         { label: 'Settings', icon: Cog6ToothIcon, active: showSettings, action: () => { setShowNotifications(false); setShowSearchModal(false); setShowSettings(true); } }
@@ -2405,6 +2408,16 @@ const Home = () => {
             </div>
 
             {showSettings && <SettingsModal user={user} token={token} onClose={() => setShowSettings(false)} onLogout={logout} onUserUpdate={updateUser} theme={theme} wallpaper={wallpaper} onThemeChange={setTheme} onWallpaperChange={setWallpaper} />}
+
+            {/* AI Chat Overlay */}
+            <div className={`fixed inset-0 z-50 bg-[#0b141a] transition-opacity duration-200 ${showAiChat ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+                {showAiChat && (
+                    <AiChat
+                        onBack={() => setShowAiChat(false)}
+                        onClose={() => setShowAiChat(false)}
+                    />
+                )}
+            </div>
             {showNotifications && (
                 <NotificationPanel
                     notifications={notifications}

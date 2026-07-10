@@ -88,6 +88,15 @@ def add_missing_columns(inspector, table_name, columns):
 
 def ensure_database_schema():
     try:
+        # Quick connectivity check before heavy operations
+        db.session.execute(text('SELECT 1'))
+        db.session.commit()
+    except Exception as e:
+        print(f"⚠️  DB not reachable, skipping schema migration: {e}")
+        db.session.rollback()
+        return
+
+    try:
         db.create_all()
         inspector = inspect(db.engine)
         

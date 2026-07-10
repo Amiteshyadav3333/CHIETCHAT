@@ -192,6 +192,9 @@ def ensure_database_schema():
         add_missing_columns(inspector, 'reel_comment', {
             'parent_id': db.Integer(),
         })
+        add_missing_columns(inspector, 'user', {
+            'gender': db.String(10),
+        })
 
 
         if 'user' in inspector.get_table_names():
@@ -383,7 +386,7 @@ def serialize_user(user, viewer_id=None):
         "readReceipts": bool(user.read_receipts),
         "profilePhotoPrivacy": user.profile_photo_privacy,
         "twoFactorEnabled": bool(user.two_factor_enabled),
-        "gender": user.gender or ""
+        "gender": getattr(user, 'gender', None) or ""
     }
 
 def emit_to_user_chat_contacts(user_id, event, payload):

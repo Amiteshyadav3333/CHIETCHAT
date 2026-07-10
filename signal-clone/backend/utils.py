@@ -382,7 +382,8 @@ def serialize_user(user, viewer_id=None):
         "hideOnlineStatus": bool(user.hide_online_status),
         "readReceipts": bool(user.read_receipts),
         "profilePhotoPrivacy": user.profile_photo_privacy,
-        "twoFactorEnabled": bool(user.two_factor_enabled)
+        "twoFactorEnabled": bool(user.two_factor_enabled),
+        "gender": user.gender or ""
     }
 
 def emit_to_user_chat_contacts(user_id, event, payload):

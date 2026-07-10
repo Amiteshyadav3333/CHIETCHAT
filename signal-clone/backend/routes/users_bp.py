@@ -363,6 +363,9 @@ def update_profile():
         if existing:
             return jsonify({"error": "This handle is already taken"}), 409
         user.platform_id = new_platform_id
+    # Gender update
+    if 'gender' in data and data['gender'] in ('male', 'female', ''):
+        user.gender = data['gender'] or None
     db.session.commit()
     payload = serialize_user(user)
     emit_to_user_chat_contacts(user_id, 'user_profile_updated', {"user": payload})

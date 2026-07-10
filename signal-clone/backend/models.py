@@ -31,6 +31,7 @@ class User(db.Model):
     two_factor_secret = db.Column(db.String(100), nullable=True)
     bio_expires_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now)
+    gender = db.Column(db.String(10), nullable=True)  # 'male' | 'female' | None
 
 class PendingRegistration(db.Model):
     id = db.Column(db.Integer, primary_key=True)

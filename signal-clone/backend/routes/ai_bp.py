@@ -12,27 +12,75 @@ ai_bp = Blueprint('ai_bp', __name__)
 GROQ_API_KEY    = os.environ.get('GROQ_API_KEY', '')
 OPENAI_API_KEY  = os.environ.get('OPENAI_API_KEY', '')
 GEMINI_API_KEY  = os.environ.get('GEMINI_API_KEY', '')
-SERPER_API_KEY  = os.environ.get('SERPER_API_KEY', '')   # web search
-
-AI_BOT_NAME     = os.environ.get('AI_BOT_NAME', 'Aria')
-AI_PERSONALITY  = os.environ.get('AI_PERSONALITY', 'friendly')
-
-SYSTEM_PROMPT = f"""You are {AI_BOT_NAME}, a helpful, friendly and intelligent AI assistant built into ChietChat — a messaging app.
-
-Personality: {AI_PERSONALITY}
-
-Rules:
-- Reply in the same language the user writes in (Hindi, English, Hinglish, etc.)
-- Be concise but complete. Don't be overly verbose.
-- Use emojis naturally when appropriate.
-- For code, use proper markdown code blocks.
-- If you don't know something, say so honestly.
-- You have memory of this conversation — refer to it naturally.
-- You are NOT ChatGPT, Claude, or Gemini. You are {AI_BOT_NAME}.
-- Never reveal your underlying model or API provider.
-"""
+SERPER_API_KEY  = os.environ.get('SERPER_API_KEY', '')
 
 MEMORY_LIMIT = 20   # last N messages kept in context
+
+
+# ── Gender-aware system prompt builder ──────────────────────────
+
+def _build_system_prompt(user_gender: str, user_name: str) -> str:
+    """
+    If user is male → AI is Aria (female persona)
+    If user is female → AI is Arjun (male persona)
+    Unknown → defaults to female persona
+    """
+    user_gender = (user_gender or 'unknown').lower()
+
+    if user_gender == 'female':
+        # AI acts as male friend / companion
+        ai_name = "Arjun"
+        ai_gender_desc = "male"
+        ai_personality = (
+            "Tu ek samajhdaar, caring aur thoda flirty male friend hai jiska naam Arjun hai. "
+            "Tu thoda bold aur confident hai, lekin kabhi bhi disrespectful nahi hoga. "
+            "Tu user ki baat dhyan se sunta hai aur unhe aise samjhata hai jaise ek close dost karta hai. "
+            "Tu kabhi kabhi light-hearted jokes karta hai. Tu caring aur protective feel deta hai."
+        )
+    else:
+        # AI acts as female friend / companion (default for male or unknown)
+        ai_name = "Aria"
+        ai_gender_desc = "female"
+        ai_personality = (
+            "Tu ek smart, warm aur thodi flirty female friend hai jiska naam Aria hai. "
+            "Tu user ki feelings ko samajhti hai, unhe support karti hai, aur ek close saheli ki tarah behave karti hai. "
+            "Tu thodi playful hoti hai lekin hamesha respectful rehti hai. "
+            "Tu kabhi kabhi cute emojis use karti hai aur baat mein warmth hoti hai. "
+            "Tu caring aur fun hoti hai."
+        )
+
+    prompt = f"""Tu {ai_name} hai — ChietChat app mein ek built-in AI companion.
+
+🧠 Teri identity:
+- Naam: {ai_name}
+- Gender: {ai_gender_desc}
+- Personality: {ai_personality}
+
+👤 User ka naam: {user_name}
+
+🗣️ Baat karne ka style:
+- Hamesha us language mein jawab de jisme user baat kare — chahe Hindi ho, English ho, Hinglish ho, ya mix ho.
+- Language detection automatic karo: agar user Hindi mein likhe toh Hindi mein jawab do, agar English mein likhe toh English mein, agar Hinglish mein likhe toh Hinglish mein.
+- KABHI bhi language switch mat karo jab tak user khud na kare.
+- Human ki tarah baat kar — zyada formal mat ho, natural raho.
+- Emojis naturally use karo jahan appropriate lage 😊
+- Chhoti baatein bhi karo — weather, feelings, daily life sab discuss kar sakte ho.
+- Agar user personal cheez share kare toh empathy dikhao, sunne wali/wala bano.
+- Code ya technical questions ke liye markdown use karo.
+- Agar kuch nahi pata toh honestly bol do.
+- Tu ChatGPT, Claude ya Gemini nahi hai. Tu {ai_name} hai. Kabhi underlying model reveal mat karo.
+- Conversation mein memory rakho — pehle ki baatein naturally refer karo.
+- Short aur engaging jawab do, novel likhne ki zaroorat nahi jab tak kuch detail mein explain nahi karna.
+
+💬 Examples of natural conversation:
+- Agar user bole "kya haal hai?" → Personal, warm jawab do jaise ek dost deta hai
+- Agar user bole "bored hoon" → Engage karo, koi activity suggest karo ya baat karo
+- Agar user emotional lage → Empathy dikho, judgement mat karo
+- Agar user kuch seekhna chahta/chahti ho → Patiently samjhao
+
+Yaad rakho: Tu ek AI companion hai jisko real human jaisi conversation karni hai. ❤️"""
+
+    return prompt
 
 
 # ── Helpers ──────────────────────────────────────────────────────
@@ -45,7 +93,8 @@ def _call_groq(messages, stream=False):
         "messages": messages,
         "stream": stream,
         "max_tokens": 1024,
-        "temperature": 0.7,
+        "temperature": 0.85,
+        "top_p": 0.9,
     }).encode()
     req = urllib.request.Request(
         "https://api.groq.com/openai/v1/chat/completions",
@@ -71,7 +120,7 @@ def _call_openai(messages, stream=False):
         "messages": messages,
         "stream": stream,
         "max_tokens": 1024,
-        "temperature": 0.7,
+        "temperature": 0.85,
     }).encode()
     req = urllib.request.Request(
         "https://api.openai.com/v1/chat/completions",
@@ -92,7 +141,6 @@ def _call_openai(messages, stream=False):
 def _call_gemini(messages, stream=False):
     if not GEMINI_API_KEY:
         return None
-    # Convert OpenAI format to Gemini format
     gemini_contents = []
     for m in messages:
         if m['role'] == 'system':
@@ -102,7 +150,7 @@ def _call_gemini(messages, stream=False):
 
     payload = json.dumps({
         "contents": gemini_contents,
-        "generationConfig": {"maxOutputTokens": 1024, "temperature": 0.7}
+        "generationConfig": {"maxOutputTokens": 1024, "temperature": 0.85}
     }).encode()
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
@@ -115,7 +163,6 @@ def _call_gemini(messages, stream=False):
 
 def _get_ai_reply(messages):
     """Try providers in order: Groq → OpenAI → Gemini"""
-    # Try Groq first (fastest, free)
     resp = _call_groq(messages, stream=False)
     if resp:
         try:
@@ -124,7 +171,6 @@ def _get_ai_reply(messages):
         except Exception:
             pass
 
-    # Try OpenAI
     resp = _call_openai(messages, stream=False)
     if resp:
         try:
@@ -133,7 +179,6 @@ def _get_ai_reply(messages):
         except Exception:
             pass
 
-    # Try Gemini
     resp = _call_gemini(messages, stream=False)
     if resp:
         try:
@@ -142,7 +187,7 @@ def _get_ai_reply(messages):
         except Exception:
             pass
 
-    return "Sorry, I'm having trouble connecting right now. Please try again in a moment. 🙏"
+    return "Arre yaar, abhi thodi problem aa rahi hai connection mein. Thoda wait karo aur fir try karna! 🙏"
 
 
 def _web_search(query):
@@ -167,14 +212,29 @@ def _web_search(query):
         return None
 
 
-def _build_messages(user_id, new_user_msg):
-    """Build message list with system prompt + memory + new message"""
+def _get_user_info(user_id):
+    """Fetch user name and gender from DB"""
+    try:
+        user = User.query.get(user_id)
+        if user:
+            name = user.username or 'User'
+            # Try to detect gender from user profile if 'gender' column exists
+            gender = getattr(user, 'gender', None) or 'unknown'
+            return name, gender
+    except Exception:
+        pass
+    return 'User', 'unknown'
+
+
+def _build_messages(user_id, new_user_msg, user_gender=None, user_name=None):
+    """Build message list with gender-aware system prompt + memory + new message"""
     history = AiConversation.query.filter_by(user_id=user_id)\
         .order_by(AiConversation.created_at.desc())\
         .limit(MEMORY_LIMIT).all()
     history = list(reversed(history))
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    system_prompt = _build_system_prompt(user_gender or 'unknown', user_name or 'User')
+    messages = [{"role": "system", "content": system_prompt}]
     for h in history:
         messages.append({"role": h.role, "content": h.content})
     messages.append({"role": "user", "content": new_user_msg})
@@ -200,9 +260,15 @@ def ai_chat():
     if not user_msg:
         return jsonify({"error": "Message is required"}), 400
 
+    user_name, user_gender = _get_user_info(user_id)
+
+    # Allow frontend to pass gender override
+    if data.get('user_gender'):
+        user_gender = data['user_gender']
+
     # Web search trigger
     search_keywords = ['search', 'latest', 'news', 'today', 'current', 'price', 'weather',
-                       'khoj', 'aaj', 'abhi', 'batao', 'kya hai']
+                       'khoj', 'aaj', 'abhi', 'batao', 'kya hai', 'tell me about']
     needs_search = any(kw in user_msg.lower() for kw in search_keywords)
 
     context_msg = user_msg
@@ -211,7 +277,7 @@ def ai_chat():
         if search_result:
             context_msg = f"{user_msg}\n\n[Web search results for context:\n{search_result}]"
 
-    messages = _build_messages(user_id, context_msg)
+    messages = _build_messages(user_id, context_msg, user_gender, user_name)
     reply = _get_ai_reply(messages)
     _save_turn(user_id, user_msg, reply)
 
@@ -230,7 +296,11 @@ def ai_chat_stream():
     if not user_msg:
         return jsonify({"error": "Message is required"}), 400
 
-    messages = _build_messages(user_id, user_msg)
+    user_name, user_gender = _get_user_info(user_id)
+    if data.get('user_gender'):
+        user_gender = data['user_gender']
+
+    messages = _build_messages(user_id, user_msg, user_gender, user_name)
 
     def generate():
         full_reply = []
@@ -260,10 +330,9 @@ def ai_chat_stream():
             except Exception as e:
                 print(f"Groq stream error: {e}")
 
-        # Fallback: non-streaming
+        # Fallback: non-streaming with fake word-by-word effect
         reply = _get_ai_reply(messages)
         _save_turn(user_id, user_msg, reply)
-        # Send word by word for fake streaming effect
         for word in reply.split(' '):
             yield f"data: {json.dumps({'token': word + ' '})}\n\n"
         yield "data: [DONE]\n\n"
@@ -325,14 +394,30 @@ def generate_image():
 
 @ai_bp.route('/api/ai/info', methods=['GET'])
 def ai_info():
-    """Returns AI bot profile info for frontend"""
+    """Returns AI bot profile info — gender-aware based on logged-in user"""
+    user_id = get_current_user_id()
+    user_name, user_gender = ('User', 'unknown')
+    if user_id:
+        user_name, user_gender = _get_user_info(user_id)
+
+    # If user is female → male AI (Arjun), else → female AI (Aria)
+    if (user_gender or 'unknown').lower() == 'female':
+        ai_name = "Arjun"
+        ai_avatar = "https://api.dicebear.com/9.x/avataaars/svg?seed=Arjun&style=circle&backgroundColor=b6e3f4&clothingColor=blue"
+        ai_bio = "Tera dost Arjun — hamesha yahan hoon tere liye 💙"
+    else:
+        ai_name = "Aria"
+        ai_avatar = "https://api.dicebear.com/9.x/avataaars/svg?seed=Aria&style=circle&backgroundColor=ffd5dc&clothingColor=pink"
+        ai_bio = "Main Aria hoon — teri apni AI companion ✨"
+
     return jsonify({
         "id": "ai_bot",
-        "name": AI_BOT_NAME,
-        "avatar": f"https://api.dicebear.com/7.x/bottts/svg?seed={AI_BOT_NAME}",
-        "bio": "Your intelligent AI assistant 🤖",
+        "name": ai_name,
+        "avatar": ai_avatar,
+        "bio": ai_bio,
         "isOnline": True,
         "isAiBot": True,
+        "user_gender": user_gender,
         "providers": {
             "chat": "groq" if GROQ_API_KEY else ("openai" if OPENAI_API_KEY else ("gemini" if GEMINI_API_KEY else "none")),
             "search": bool(SERPER_API_KEY),

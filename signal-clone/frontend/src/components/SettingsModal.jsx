@@ -40,7 +40,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     const [message, setMessage] = useState(null);
     const [busy, setBusy] = useState(false);
     const [businessTitle, setBusinessTitle] = useState('Business tools');
-    const [profile, setProfile] = useState({ username: user?.username || '', bio: user?.bio || '', websiteUrl: user?.websiteUrl || '', platformId: user?.platformId || '' });
+    const [profile, setProfile] = useState({ username: user?.username || '', bio: user?.bio || '', websiteUrl: user?.websiteUrl || '', platformId: user?.platformId || '', gender: user?.gender || '' });
     const [passwords, setPasswords] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
     
     // Sessions and 2FA states
@@ -354,6 +354,20 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                             </div>
                             <Field label="Bio" value={profile.bio} onChange={value => setProfile({ ...profile, bio: value })} />
                             <Field label="Website" value={profile.websiteUrl} onChange={value => setProfile({ ...profile, websiteUrl: value })} placeholder="https://example.com" />
+                            <div>
+                                <label className="block">
+                                    <span className="mb-2 block text-sm font-medium text-gray-200">Gender <span className="text-xs text-gray-500">(AI will adopt opposite gender persona)</span></span>
+                                    <select
+                                        value={profile.gender}
+                                        onChange={e => setProfile({ ...profile, gender: e.target.value })}
+                                        className="w-full rounded-lg border border-gray-700 bg-[#202c33] py-3 px-4 text-sm text-white outline-none focus:border-violet-500"
+                                    >
+                                        <option value="">Prefer not to say</option>
+                                        <option value="male">Male (AI will be female — Aria ✨)</option>
+                                        <option value="female">Female (AI will be male — Arjun 😎)</option>
+                                    </select>
+                                </label>
+                            </div>
                             <PrimaryButton busy={busy}>Save profile</PrimaryButton>
                         </SettingsForm>
                     )}

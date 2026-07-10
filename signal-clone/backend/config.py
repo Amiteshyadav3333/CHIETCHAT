@@ -13,6 +13,32 @@ class Config:
 
     SQLALCHEMY_DATABASE_URI = database_url or 'sqlite:///db.sqlite'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+    # ── Fix: Supabase/PostgreSQL "server closed the connection unexpectedly" ──
+    # pool_pre_ping → test connection before using it (detects stale connections)
+    # pool_recycle  → recycle connections every 5 min (before Supabase kills them)
+    # pool_size     → max persistent connections
+    # max_overflow  → extra connections allowed under load
+    # connect_args  → TCP keepalive so idle connections stay alive
+    _is_postgres = bool(database_url)
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_recycle": 300,          # recycle every 5 minutes
+        "pool_size": 5,
+        "max_overflow": 10,
+        "pool_timeout": 30,
+        **(
+            {
+                "connect_args": {
+                    "connect_timeout": 10,
+                    "keepalives": 1,
+                    "keepalives_idle": 30,
+                    "keepalives_interval": 5,
+                    "keepalives_count": 5,
+                }
+            } if _is_postgres else {}
+        ),
+    }
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'jwt-secret-key-change-this'
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=7)
     SUPABASE_URL = (os.environ.get('SUPABASE_URL') or '').rstrip('/')

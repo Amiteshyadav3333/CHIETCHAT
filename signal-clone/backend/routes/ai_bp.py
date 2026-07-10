@@ -9,6 +9,7 @@ from utils import get_current_user_id, utc_now
 ai_bp = Blueprint('ai_bp', __name__)
 
 # ── Provider config ──────────────────────────────────────────────
+GROK_API_KEY    = os.environ.get('GROK_API_KEY', '')
 GROQ_API_KEY    = os.environ.get('GROQ_API_KEY', '')
 OPENAI_API_KEY  = os.environ.get('OPENAI_API_KEY', '')
 GEMINI_API_KEY  = os.environ.get('GEMINI_API_KEY', '')
@@ -84,6 +85,32 @@ Yaad rakho: Tu ek AI companion hai jisko real human jaisi conversation karni hai
 
 
 # ── Helpers ──────────────────────────────────────────────────────
+
+def _call_grok(messages, stream=False):
+    if not GROK_API_KEY:
+        return None
+    payload = json.dumps({
+        "model": "grok-2-latest",
+        "messages": messages,
+        "stream": stream,
+        "max_tokens": 1024,
+        "temperature": 0.85,
+    }).encode()
+    req = urllib.request.Request(
+        "https://api.x.ai/v1/chat/completions",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {GROK_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        method="POST"
+    )
+    try:
+        return urllib.request.urlopen(req, timeout=30)
+    except Exception as e:
+        print(f"Grok error: {e}")
+        return None
+
 
 def _call_groq(messages, stream=False):
     if not GROQ_API_KEY:
@@ -170,7 +197,15 @@ def _call_gemini(messages, stream=False):
 
 
 def _get_ai_reply(messages):
-    """Try providers in order: Groq → OpenAI → Gemini"""
+    """Try providers in order: Grok → Groq → OpenAI → Gemini"""
+    resp = _call_grok(messages, stream=False)
+    if resp:
+        try:
+            data = json.loads(resp.read().decode())
+            return data['choices'][0]['message']['content']
+        except Exception:
+            pass
+
     resp = _call_groq(messages, stream=False)
     if resp:
         try:
@@ -313,7 +348,32 @@ def ai_chat_stream():
     def generate():
         full_reply = []
 
-        # Try Groq streaming
+        # Try Grok streaming first
+        resp = _call_grok(messages, stream=True)
+        if resp:
+            try:
+                for line in resp:
+                    line = line.decode('utf-8').strip()
+                    if line.startswith('data: '):
+                        chunk = line[6:]
+                        if chunk == '[DONE]':
+                            break
+                        try:
+                            obj = json.loads(chunk)
+                            token = obj['choices'][0]['delta'].get('content', '')
+                            if token:
+                                full_reply.append(token)
+                                yield f"data: {json.dumps({'token': token})}\n\n"
+                        except Exception:
+                            pass
+                if full_reply:
+                    _save_turn(user_id, user_msg, ''.join(full_reply))
+                    yield "data: [DONE]\n\n"
+                    return
+            except Exception as e:
+                print(f"Grok stream error: {e}")
+
+        # Try Groq streaming fallback
         resp = _call_groq(messages, stream=True)
         if resp:
             try:
@@ -427,7 +487,7 @@ def ai_info():
         "isAiBot": True,
         "user_gender": user_gender,
         "providers": {
-            "chat": "groq" if GROQ_API_KEY else ("openai" if OPENAI_API_KEY else ("gemini" if GEMINI_API_KEY else "none")),
+            "chat": "grok" if GROK_API_KEY else ("groq" if GROQ_API_KEY else ("openai" if OPENAI_API_KEY else ("gemini" if GEMINI_API_KEY else "none"))),
             "search": bool(SERPER_API_KEY),
             "image": True,
         }

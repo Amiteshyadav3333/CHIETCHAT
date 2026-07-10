@@ -142,16 +142,24 @@ def _call_gemini(messages, stream=False):
     if not GEMINI_API_KEY:
         return None
     gemini_contents = []
+    system_instruction = None
     for m in messages:
         if m['role'] == 'system':
+            system_instruction = m['content']
             continue
         role = 'user' if m['role'] == 'user' else 'model'
         gemini_contents.append({"role": role, "parts": [{"text": m['content']}]})
 
-    payload = json.dumps({
+    payload_dict = {
         "contents": gemini_contents,
         "generationConfig": {"maxOutputTokens": 1024, "temperature": 0.85}
-    }).encode()
+    }
+    if system_instruction:
+        payload_dict["systemInstruction"] = {
+            "parts": [{"text": system_instruction}]
+        }
+    
+    payload = json.dumps(payload_dict).encode()
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
     try:

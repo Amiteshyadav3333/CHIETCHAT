@@ -6,6 +6,12 @@ _os.environ['EVENTLET_NO_GREENDNS'] = 'yes'
 import eventlet
 eventlet.monkey_patch()
 
+try:
+    import psycogreen.eventlet
+    psycogreen.eventlet.patch_psycopg()
+except ImportError:
+    pass
+
 import os
 from dotenv import load_dotenv
 load_dotenv()

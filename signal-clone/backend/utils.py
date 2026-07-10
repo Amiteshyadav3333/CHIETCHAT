@@ -253,7 +253,8 @@ def get_current_user_id():
             if not session:
                 return None  # Session revoked
         return user_id
-    except Exception:
+    except Exception as e:
+        print(f"JWT Token validation failed: {e}")
         return None
 
 def user_is_chat_participant(user_id, chat_id):

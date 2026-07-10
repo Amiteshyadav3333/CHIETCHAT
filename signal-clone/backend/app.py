@@ -1,3 +1,8 @@
+import os as _os
+# Fix: Disable eventlet's buggy DNS resolver (greendns) which causes
+# [Errno 2] Lookup timed out and IPv6 hangs in production.
+_os.environ['EVENTLET_NO_GREENDNS'] = 'yes'
+
 import eventlet
 eventlet.monkey_patch()
 

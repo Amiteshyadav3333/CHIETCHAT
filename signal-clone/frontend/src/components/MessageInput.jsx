@@ -105,6 +105,8 @@ const MessageInput = ({
     const [smartReplies, setSmartReplies] = useState([]);
 
     const [showCameraModal, setShowCameraModal] = useState(false);
+    const [cameraFacing, setCameraFacing] = useState('user');
+    const streamRef = useRef(null);
     const [showGameCreator, setShowGameCreator] = useState(false);
     const [gameType, setGameType] = useState('Tic-Tac-Toe');
     const [gameMode, setGameMode] = useState('vs-friend');
@@ -237,26 +239,44 @@ const MessageInput = ({
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [showAttachMenu, showEmoji]);
 
+    const startCamera = React.useCallback(async (facing) => {
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(t => t.stop());
+            streamRef.current = null;
+        }
+        try {
+            const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing }, audio: false });
+            streamRef.current = s;
+            if (videoRef.current) videoRef.current.srcObject = s;
+        } catch (err) {
+            console.error('Camera error:', err);
+            alert('Could not access camera. Please check permissions.');
+            setShowCameraModal(false);
+        }
+    }, []);
+
     React.useEffect(() => {
-        let stream = null;
         if (showCameraModal) {
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
-                .then(s => {
-                    stream = s;
-                    if (videoRef.current) videoRef.current.srcObject = s;
-                })
-                .catch(err => {
-                    console.error("Camera access error:", err);
-                    alert("Could not access camera. Please check permissions.");
-                    setShowCameraModal(false);
-                });
+            startCamera(cameraFacing);
+        } else {
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(t => t.stop());
+                streamRef.current = null;
+            }
         }
         return () => {
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(t => t.stop());
+                streamRef.current = null;
             }
         };
     }, [showCameraModal]);
+
+    const flipCamera = () => {
+        const next = cameraFacing === 'user' ? 'environment' : 'user';
+        setCameraFacing(next);
+        startCamera(next);
+    };
 
     const capturePhoto = () => {
         const video = videoRef.current;
@@ -797,37 +817,55 @@ const MessageInput = ({
 
 
             {showCameraModal && (
-                <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 p-4 animate-fade-in">
-                    <div className="w-full max-w-md rounded-3xl bg-[#202c33] p-4 border border-white/10 shadow-2xl space-y-4">
-                        <div className="flex items-center justify-between">
-                            <h3 className="text-md font-bold text-white">📸 Take a Photo</h3>
-                            <button 
-                                onClick={() => setShowCameraModal(false)}
-                                className="p-1 rounded-full bg-white/5 hover:bg-white/10 text-gray-300"
-                            >
-                                <XMarkIcon className="w-5 h-5" />
-                            </button>
-                        </div>
-                        <div className="relative rounded-2xl overflow-hidden bg-black aspect-video flex items-center justify-center">
-                            <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
-                        </div>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => {
-                                    cameraInputRef.current?.click();
-                                    setShowCameraModal(false);
-                                }}
-                                className="flex-1 py-2.5 rounded-xl border border-white/10 text-white/80 hover:bg-white/5 font-bold text-xs"
-                            >
-                                Upload File
-                            </button>
-                            <button
-                                onClick={capturePhoto}
-                                className="flex-1 py-2.5 rounded-xl bg-[#00a884] text-white hover:bg-[#008f72] font-bold text-xs shadow-md"
-                            >
-                                📸 Capture & Send
-                            </button>
-                        </div>
+                <div className="fixed inset-0 z-[110] bg-black flex flex-col animate-fade-in">
+                    {/* Fullscreen video */}
+                    <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        className="absolute inset-0 w-full h-full object-cover"
+                        style={{ transform: cameraFacing === 'user' ? 'scaleX(-1)' : 'none' }}
+                    />
+                    {/* Top bar */}
+                    <div className="relative z-10 flex items-center justify-between px-4 pt-10 pb-4">
+                        <button
+                            onClick={() => setShowCameraModal(false)}
+                            className="p-2 rounded-full bg-black/50 text-white"
+                        >
+                            <XMarkIcon className="w-6 h-6" />
+                        </button>
+                        <span className="text-white font-bold text-sm bg-black/40 px-3 py-1 rounded-full">
+                            {cameraFacing === 'user' ? '🤳 Front' : '📷 Back'}
+                        </span>
+                        {/* Flip camera */}
+                        <button
+                            onClick={flipCamera}
+                            className="p-2 rounded-full bg-black/50 text-white"
+                            title="Flip Camera"
+                        >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-6 h-6">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M16 3h5v5M8 21H3v-5M21 3l-7 7M3 21l7-7" />
+                                <circle cx="12" cy="12" r="3" />
+                            </svg>
+                        </button>
+                    </div>
+                    {/* Bottom controls */}
+                    <div className="relative z-10 mt-auto flex items-center justify-around px-8 pb-12">
+                        <button
+                            onClick={() => { cameraInputRef.current?.click(); setShowCameraModal(false); }}
+                            className="p-3 rounded-full bg-black/50 text-white"
+                            title="Upload from gallery"
+                        >
+                            <PhotoIcon className="w-7 h-7" />
+                        </button>
+                        {/* Shutter */}
+                        <button
+                            onClick={capturePhoto}
+                            className="w-20 h-20 rounded-full border-4 border-white bg-white/20 hover:bg-white/40 active:scale-95 transition-all shadow-2xl flex items-center justify-center"
+                        >
+                            <div className="w-14 h-14 rounded-full bg-white" />
+                        </button>
+                        <div className="w-14" />
                     </div>
                 </div>
             )}

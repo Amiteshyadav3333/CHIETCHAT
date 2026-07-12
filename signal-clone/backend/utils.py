@@ -253,7 +253,7 @@ def get_current_user_id():
             if not session:
                 return None  # Session revoked
         return user_id
-    except Exception as e:
+    except jwt.InvalidTokenError as e:
         print(f"JWT Token validation failed: {e}")
         return None
 

@@ -457,7 +457,7 @@ const ChatBubble = ({
     message, isOwn, senderName, onDelete, senderAvatar, showAvatar,
     onReply, replyTo, onTranslate, chatId, chatTranslationLang,
     onEdit, onCopy, onForward, onReact, onPin, isLastMessage,
-    socket
+    socket, showTranslateBtn = true
 }) => {
     const [showActionMenu, setShowActionMenu] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
@@ -865,15 +865,35 @@ const ChatBubble = ({
             try {
                 const loc = JSON.parse(cnt);
                 const mapUrl = `https://www.google.com/maps?q=${loc.lat},${loc.lng}`;
+                const staticMapUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${loc.lat},${loc.lng}&zoom=15&size=260x140&markers=color:red%7C${loc.lat},${loc.lng}&key=AIzaSyD-9tSrke72PouQMnMX-a7eZSW0jkFMBWY`;
+                const osmUrl = `https://www.openstreetmap.org/?mlat=${loc.lat}&mlon=${loc.lng}&zoom=15`;
                 return (
-                    <a href={mapUrl} target="_blank" rel="noreferrer" className="flex flex-col gap-2 min-w-[180px] group/loc">
-                        <div className="bg-white/10 rounded-xl p-3 flex items-center gap-3 group-hover/loc:bg-white/20 transition-colors">
-                            <div className={`p-2 ${type === 'live_location' ? 'bg-red-500/20 animate-pulse' : 'bg-green-500/20'} rounded-full`}>
-                                <MapPinIcon className={`w-6 h-6 ${type === 'live_location' ? 'text-red-500' : 'text-green-500'}`} />
+                    <a href={mapUrl} target="_blank" rel="noreferrer" className="flex flex-col gap-0 min-w-[220px] group/loc rounded-xl overflow-hidden border border-white/10">
+                        {/* Map thumbnail via OSM tile */}
+                        <div className="relative h-28 bg-[#1a2634] overflow-hidden">
+                            <img
+                                src={`https://staticmap.openstreetmap.de/staticmap.php?center=${loc.lat},${loc.lng}&zoom=15&size=260x112&markers=${loc.lat},${loc.lng},red`}
+                                alt="map"
+                                className="w-full h-full object-cover group-hover/loc:scale-105 transition-transform duration-300"
+                                onError={e => { e.target.style.display='none'; }}
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <div className={`p-2 rounded-full shadow-xl ${type === 'live_location' ? 'bg-red-500 animate-pulse' : 'bg-[#00a884]'}`}>
+                                    <MapPinIcon className="w-5 h-5 text-white" />
+                                </div>
                             </div>
-                            <div>
-                                <p className="text-sm font-bold text-white">{type === 'live_location' ? 'Live Location' : 'Location'}</p>
-                                <p className="text-[10px] text-white/60">Tap to view on Map</p>
+                            {type === 'live_location' && (
+                                <div className="absolute top-2 left-2 bg-red-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                                    LIVE
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2 px-3 py-2 bg-[#202c33] group-hover/loc:bg-[#2a3942] transition-colors">
+                            <MapPinIcon className={`w-4 h-4 flex-shrink-0 ${type === 'live_location' ? 'text-red-400' : 'text-[#00a884]'}`} />
+                            <div className="min-w-0">
+                                <p className="text-white text-xs font-bold">{type === 'live_location' ? 'Live Location' : 'Location'}</p>
+                                <p className="text-gray-400 text-[10px] truncate">{loc.lat?.toFixed(4)}, {loc.lng?.toFixed(4)} · Tap to open</p>
                             </div>
                         </div>
                     </a>
@@ -1002,20 +1022,33 @@ const ChatBubble = ({
         if (type === 'gift') {
             let data = {};
             try { data = JSON.parse(cnt); } catch(e){}
+            const tpl = data.template || {};
             return (
-                <div className="flex flex-col gap-0 min-w-[200px] group cursor-pointer">
-                    <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-pink-500/20 to-rose-500/20 border border-pink-500/30 p-4 flex flex-col items-center justify-center gap-3 transition-colors hover:bg-pink-500/30">
-                        <div className="text-5xl drop-shadow-xl transform transition-transform group-hover:scale-110 group-active:scale-95 group-hover:-rotate-6">
-                            🎁
-                        </div>
-                        <div className="text-center">
-                            <h4 className="text-pink-400 font-bold text-sm">Gift Received!</h4>
-                            <p className="text-white/60 text-xs mt-0.5">Tap to unbox</p>
+                <div className="flex flex-col gap-0 min-w-[220px] group cursor-pointer">
+                    <div className={`relative overflow-hidden rounded-xl bg-gradient-to-br ${tpl.bg || 'from-pink-500/20 to-rose-500/20'} border border-pink-500/30 p-4 flex flex-col items-center justify-center gap-3 transition-colors hover:opacity-90`}>
+                        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20" />
+                        {data.photo ? (
+                            <img src={data.photo} alt="gift" className="w-20 h-20 rounded-full object-cover border-4 border-white/40 shadow-xl relative z-10" />
+                        ) : (
+                            <div className="text-5xl drop-shadow-xl transform transition-transform group-hover:scale-110 relative z-10">
+                                {tpl.icon || '🎁'}
+                            </div>
+                        )}
+                        <div className="text-center relative z-10">
+                            <h4 className="text-white font-bold text-sm">{data.message || "Here's a gift for you!"}</h4>
+                            {data.myntraLink && (
+                                <a
+                                    href={data.myntraLink}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    onClick={e => e.stopPropagation()}
+                                    className="mt-2 inline-flex items-center gap-1 text-xs bg-pink-500/30 text-pink-300 px-3 py-1 rounded-full font-bold hover:bg-pink-500/50 transition-colors"
+                                >
+                                    🛍️ View on Myntra
+                                </a>
+                            )}
                         </div>
                     </div>
-                    {data.message && (
-                        <p className={`text-xs mt-2 italic px-1 ${isOwn ? 'text-white/80' : 'text-gray-400'}`}>"{data.message}"</p>
-                    )}
                 </div>
             );
         }
@@ -1109,7 +1142,7 @@ const ChatBubble = ({
                             </svg>
                         </button>
 
-                        {isTextMessage && (
+                        {isTextMessage && showTranslateBtn && (
                             <button
                                 onClick={(e) => { e.stopPropagation(); setShowTranslatorMenu(true); }}
                                 className={`opacity-0 group-hover/bubble:opacity-100 transition-opacity p-1 text-gray-500 hover:text-gray-200 mb-1 flex-shrink-0 ${isOwn ? 'order-first' : 'order-last'}`}

@@ -222,6 +222,54 @@ const Home = () => {
     const [chatToDelete, setChatToDelete] = useState(null);
     const [showBioBanner, setShowBioBanner] = useState(true);
 
+    // ── Archive / Mute / Nickname / Pin (local device storage) ──
+    const [archivedChats, setArchivedChats] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('archived_chats') || '[]'); } catch { return []; }
+    });
+    const [mutedChats, setMutedChats] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('muted_chats') || '[]'); } catch { return []; }
+    });
+    const [pinnedChats, setPinnedChats] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('pinned_chats') || '[]'); } catch { return []; }
+    });
+    const [nicknames, setNicknames] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('chat_nicknames') || '{}'); } catch { return {}; }
+    });
+    const [showArchive, setShowArchive] = useState(false);
+    const [editNicknameChat, setEditNicknameChat] = useState(null);
+    const [nicknameInput, setNicknameInput] = useState('');
+    const [showTranslateEnabled, setShowTranslateEnabled] = useState(() => localStorage.getItem('translate_btn_enabled') !== 'false');
+
+    const toggleArchive = (chatId) => {
+        setArchivedChats(prev => {
+            const next = prev.includes(chatId) ? prev.filter(id => id !== chatId) : [...prev, chatId];
+            localStorage.setItem('archived_chats', JSON.stringify(next));
+            return next;
+        });
+    };
+    const toggleMute = (chatId) => {
+        setMutedChats(prev => {
+            const next = prev.includes(chatId) ? prev.filter(id => id !== chatId) : [...prev, chatId];
+            localStorage.setItem('muted_chats', JSON.stringify(next));
+            return next;
+        });
+    };
+    const togglePinChat = (chatId) => {
+        setPinnedChats(prev => {
+            const next = prev.includes(chatId) ? prev.filter(id => id !== chatId) : [...prev, chatId];
+            localStorage.setItem('pinned_chats', JSON.stringify(next));
+            return next;
+        });
+    };
+    const saveNickname = (chatId, name) => {
+        setNicknames(prev => {
+            const next = { ...prev, [chatId]: name };
+            localStorage.setItem('chat_nicknames', JSON.stringify(next));
+            return next;
+        });
+    };
+    const getChatDisplayName = (chat) => nicknames[chat.id] || chat.name;
+
     useEffect(() => {
         setShowBioBanner(true);
     }, [activeChat]);
@@ -247,9 +295,16 @@ const Home = () => {
         ? chats.find(chat => chat.id === activeChat.id) || activeChat
         : null;
 
-    const filteredChats = chats.filter(chat => 
-        chat.name?.toLowerCase().includes(sidebarSearchQuery.toLowerCase())
-    );
+    const filteredChats = chats
+        .filter(chat => !archivedChats.includes(chat.id))
+        .filter(chat => chat.name?.toLowerCase().includes(sidebarSearchQuery.toLowerCase()))
+        .sort((a, b) => {
+            const aPin = pinnedChats.includes(a.id) ? 1 : 0;
+            const bPin = pinnedChats.includes(b.id) ? 1 : 0;
+            return bPin - aPin;
+        });
+
+    const archivedChatsList = chats.filter(chat => archivedChats.includes(chat.id));
 
     // Non-Encrypted Ref
     const messagesEndRef = useRef(null);
@@ -1881,12 +1936,78 @@ const Home = () => {
 
                 {/* Contacts */}
                 <StatusSection user={user} token={token} />
-                <ContactList
-                    chats={filteredChats}
-                    activeChat={activeChat}
-                    onSelectChat={setActiveChat}
-                    loading={loadingChats}
-                />
+                {/* Archive toggle button */}
+                {archivedChatsList.length > 0 && (
+                    <button
+                        onClick={() => setShowArchive(v => !v)}
+                        className="flex items-center gap-2 px-4 py-2 text-xs text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+                    >
+                        <span>📦</span>
+                        <span className="font-semibold">{showArchive ? 'Hide Archived' : `Archived (${archivedChatsList.length})`}</span>
+                    </button>
+                )}
+
+                {showArchive ? (
+                    <ContactList
+                        chats={archivedChatsList}
+                        activeChat={activeChat}
+                        onSelectChat={(chat) => { setActiveChat(chat); setShowArchive(false); }}
+                        loading={false}
+                        nicknames={nicknames}
+                        mutedChats={mutedChats}
+                        pinnedChats={pinnedChats}
+                    />
+                ) : (
+                    <ContactList
+                        chats={filteredChats}
+                        activeChat={activeChat}
+                        onSelectChat={setActiveChat}
+                        loading={loadingChats}
+                        nicknames={nicknames}
+                        mutedChats={mutedChats}
+                        pinnedChats={pinnedChats}
+                    />
+                )}
+
+                {/* Nickname Edit Modal */}
+                {editNicknameChat && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setEditNicknameChat(null)}>
+                        <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#1f2c34] p-6 text-white shadow-2xl animate-scale-up" onClick={e => e.stopPropagation()}>
+                            <h3 className="text-lg font-bold mb-4">Edit Nickname</h3>
+                            <input
+                                type="text"
+                                value={nicknameInput}
+                                onChange={(e) => setNicknameInput(e.target.value)}
+                                placeholder="Enter custom name..."
+                                className="w-full bg-[#202c33] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:ring-1 focus:ring-[#00a884] outline-none mb-4"
+                                autoFocus
+                            />
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => {
+                                        if (nicknameInput.trim()) {
+                                            saveNickname(editNicknameChat.id, nicknameInput.trim());
+                                        }
+                                        setEditNicknameChat(null);
+                                        setNicknameInput('');
+                                    }}
+                                    className="flex-1 rounded-xl bg-[#00a884] hover:bg-[#008f72] py-3 text-sm font-semibold transition"
+                                >
+                                    Save
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setEditNicknameChat(null);
+                                        setNicknameInput('');
+                                    }}
+                                    className="flex-1 rounded-xl bg-white/10 hover:bg-white/15 py-3 text-sm font-semibold transition"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Chat Room */}
@@ -1952,7 +2073,7 @@ const Home = () => {
                                 size="w-10 h-10"
                             />
                             <div className="min-w-0">
-                                <h3 className="font-bold text-sm md:text-base truncate">{visibleActiveChat.name}</h3>
+                                <h3 className="font-bold text-sm md:text-base truncate">{getChatDisplayName(visibleActiveChat)}</h3>
                                 <p className={`text-xs ${getOtherParticipant(visibleActiveChat)?.isOnline ? 'text-green-500' : 'text-gray-400'}`}>
                                     {getChatStatus(visibleActiveChat)}
                                 </p>
@@ -1990,6 +2111,55 @@ const Home = () => {
                                             >
                                                 <span className="text-[#00a884]">💡</span>
                                                 <span>{smartRepliesEnabled ? 'Disable Smart Replies' : 'Enable Smart Replies'}</span>
+                                            </button>
+                                            {/* Translate toggle */}
+                                            <button
+                                                onClick={() => {
+                                                    const newVal = !showTranslateEnabled;
+                                                    setShowTranslateEnabled(newVal);
+                                                    localStorage.setItem('translate_btn_enabled', String(newVal));
+                                                    setShowTopDropdown(false);
+                                                }}
+                                                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-gray-200 hover:bg-white/10"
+                                            >
+                                                <span className="text-[#53bdeb]">🌐</span>
+                                                <span>{showTranslateEnabled ? 'Disable Translate Button' : 'Enable Translate Button'}</span>
+                                            </button>
+                                            {/* Mute toggle */}
+                                            <button
+                                                onClick={() => { toggleMute(visibleActiveChat.id); setShowTopDropdown(false); }}
+                                                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-gray-200 hover:bg-white/10"
+                                            >
+                                                <span>{mutedChats.includes(visibleActiveChat.id) ? '🔔' : '🔕'}</span>
+                                                <span>{mutedChats.includes(visibleActiveChat.id) ? 'Unmute Chat' : 'Mute Chat'}</span>
+                                            </button>
+                                            {/* Pin chat */}
+                                            <button
+                                                onClick={() => { togglePinChat(visibleActiveChat.id); setShowTopDropdown(false); }}
+                                                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-gray-200 hover:bg-white/10"
+                                            >
+                                                <span>📌</span>
+                                                <span>{pinnedChats.includes(visibleActiveChat.id) ? 'Unpin Chat' : 'Pin Chat'}</span>
+                                            </button>
+                                            {/* Archive chat */}
+                                            <button
+                                                onClick={() => { toggleArchive(visibleActiveChat.id); setActiveChat(null); setShowTopDropdown(false); }}
+                                                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-gray-200 hover:bg-white/10"
+                                            >
+                                                <span>📦</span>
+                                                <span>Archive Chat</span>
+                                            </button>
+                                            {/* Nickname */}
+                                            <button
+                                                onClick={() => {
+                                                    setEditNicknameChat(visibleActiveChat);
+                                                    setNicknameInput(nicknames[visibleActiveChat.id] || '');
+                                                    setShowTopDropdown(false);
+                                                }}
+                                                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-gray-200 hover:bg-white/10"
+                                            >
+                                                <span>✏️</span>
+                                                <span>Edit Nickname</span>
                                             </button>
                                             <button 
                                                 onClick={() => { setShowInfoPanel(true); setShowTopDropdown(false); }} 
@@ -2331,6 +2501,7 @@ const Home = () => {
                                             isLastMessage={idx === messages.length - 1}
                                             socket={socket}
                                             currentUserId={user.id}
+                                            showTranslateBtn={showTranslateEnabled}
                                         />
                                     </div>
                                 </React.Fragment>

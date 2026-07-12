@@ -84,20 +84,8 @@ app.register_blueprint(ai_bp)
 # Register Sockets
 register_socket_events(socketio)
 
-# Database schema update — run in background so server starts immediately
-# even if Supabase is slow or temporarily unreachable
-import threading
-
-def _run_schema_in_background():
-    try:
-        with app.app_context():
-            ensure_database_schema()
-            print("✅ Database schema check complete.")
-    except Exception as e:
-        print(f"⚠️  Schema update failed (non-fatal): {e}")
-
-_schema_thread = threading.Thread(target=_run_schema_in_background, daemon=True)
-_schema_thread.start()
+# Database schema update should be run manually or via a separate migration script
+# to prevent blocking the Gunicorn worker on startup.
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))

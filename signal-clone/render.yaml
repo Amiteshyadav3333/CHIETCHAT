@@ -6,7 +6,7 @@ services:
     plan: free
     rootDir: .
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: gunicorn --worker-class eventlet -w 1 --chdir backend wsgi:app --bind 0.0.0.0:$PORT
+    startCommand: env EVENTLET_NO_GREENDNS=yes gunicorn --worker-class eventlet -w 1 --chdir backend wsgi:app --bind 0.0.0.0:$PORT
     healthCheckPath: /
     envVars:
       - key: DATABASE_URL

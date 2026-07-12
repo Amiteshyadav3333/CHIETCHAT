@@ -5,7 +5,7 @@ services:
     region: oregon
     rootDir: CheatChat
     buildCommand: ./render-build.sh
-    startCommand: gunicorn --worker-class eventlet -w 1 --chdir backend wsgi:app
+    startCommand: env EVENTLET_NO_GREENDNS=yes gunicorn --worker-class eventlet -w 1 --chdir backend wsgi:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9

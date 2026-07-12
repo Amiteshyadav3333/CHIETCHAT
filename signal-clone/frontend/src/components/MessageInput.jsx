@@ -735,6 +735,24 @@ const MessageInput = ({
                 </div>
             )}
 
+            {/* Translate Button - Under Emoji Picker */}
+            {showEmoji && (
+                <div className="absolute bottom-full left-0 z-50 w-[350px] mb-1 flex gap-2 px-3">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            const newVal = !aiEnabled;
+                            localStorage.setItem('ai_grammar_fix_enabled', String(newVal));
+                            // Trigger parent update if needed
+                        }}
+                        className="flex-1 py-2 rounded-lg bg-[#00a884] hover:bg-[#008f72] text-white text-xs font-bold transition-colors flex items-center justify-center gap-1"
+                    >
+                        <span>🌐</span>
+                        Translate
+                    </button>
+                </div>
+            )}
+
             {/* Attachment Menu */}
             {showAttachMenu && (
                 <div ref={attachMenuRef} className="absolute bottom-full left-2 sm:left-10 mb-3 z-50 w-[calc(100vw-1rem)] max-w-sm rounded-3xl bg-[#233138] p-3 shadow-2xl border border-white/10 animate-slide-up">

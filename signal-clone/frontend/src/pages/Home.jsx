@@ -801,7 +801,8 @@ const Home = () => {
 
         socket.on('message_reaction_update', ({ id, chatId, reactions }) => {
             if (activeChatRef.current && String(activeChatRef.current.id) === String(chatId)) {
-                setMessages(prev => prev.map(m => String(m.id) === String(id) ? { ...m, reactions } : m));
+                const reactionsStr = typeof reactions === 'string' ? reactions : JSON.stringify(reactions);
+                setMessages(prev => prev.map(m => String(m.id) === String(id) ? { ...m, reactions: reactionsStr } : m));
             }
         });
 
@@ -1281,7 +1282,8 @@ const Home = () => {
             const res = await axios.post(`/api/messages/${message.id}/react`, { emoji }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setMessages(prev => prev.map(m => String(m.id) === String(message.id) ? { ...m, reactions: res.data.reactions } : m));
+            const reactionsStr = res.data.reactions;
+            setMessages(prev => prev.map(m => String(m.id) === String(message.id) ? { ...m, reactions: reactionsStr } : m));
         } catch (err) { console.error(err); }
     };
 

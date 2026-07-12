@@ -348,9 +348,9 @@ def react_message(message_id):
         reactions[key] = emoji[:12]
     message.reactions = json.dumps(reactions)
     db.session.commit()
-    payload = {"id": message.id, "chatId": message.chat_id, "reactions": reactions}
+    payload = {"id": message.id, "chatId": message.chat_id, "reactions": json.dumps(reactions)}
     emit_message_update(message.chat_id, 'message_reaction_update', payload)
-    return jsonify(payload)
+    return jsonify({"id": message.id, "chatId": message.chat_id, "reactions": json.dumps(reactions)})
 
 @chats_bp.route('/api/messages/<int:message_id>/pin', methods=['POST'])
 def pin_message(message_id):
@@ -761,6 +761,18 @@ def get_gifs_proxy():
     if not query:
         query = 'trending'
     try:
+        # Try Tenor API first (free, no key required)
+        res = requests.get(f"https://api.tenor.com/v1/search?q={query}&limit=20&media_filter=gif", timeout=6)
+        if res.status_code == 200:
+            data = res.json()
+            urls = [item['media_formats']['gif']['url'] for item in data.get('results', []) if 'media_formats' in item and 'gif' in item['media_formats']]
+            if urls:
+                return jsonify({"gifs": urls})
+    except Exception as e:
+        print("Error fetching Tenor GIFs:", e)
+    
+    try:
+        # Fallback to Giphy
         res = requests.get(f"https://api.giphy.com/v1/gifs/search?api_key=dc6zaTOxFJmzC&q={query}&limit=18&rating=g", timeout=6)
         if res.status_code == 200:
             data = res.json()
@@ -768,7 +780,7 @@ def get_gifs_proxy():
             if urls:
                 return jsonify({"gifs": urls})
     except Exception as e:
-        print("Error fetching GIPHY proxy:", e)
+        print("Error fetching GIPHY GIFs:", e)
     
     # Filter fallback GIFs based on user's query matching our tag keywords
     if query == 'trending':

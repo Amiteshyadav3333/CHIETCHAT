@@ -295,7 +295,7 @@ const getDocIcon = (filename) => {
 };
 
 // WhatsApp-style action menu overlay
-const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, onReply, onEdit, onCopy, onForward, onReact, onPin, onDelete, onInfo, onTranslate, isLastMessage }) => {
+const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, onReply, onEdit, onCopy, onForward, onReact, onPin, onDelete, onInfo, onTranslate, isLastMessage, showTranslateBtn = true }) => {
     const menuRef = useRef(null);
 
     useEffect(() => {
@@ -310,7 +310,7 @@ const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, 
         ...(!isDeleted ? [{ icon: '📌', label: message.isPinned ? 'Unpin' : 'Pin', onClick: () => { onPin?.(); onClose(); } }] : []),
         ...(!isDeleted ? [{ icon: '📋', label: 'Copy', onClick: () => { onCopy?.(); onClose(); } }] : []),
         ...(!isDeleted ? [{ icon: '➡️', label: 'Forward', onClick: () => { onForward?.(); onClose(); } }] : []),
-        ...(!isDeleted && isTextMessage ? [{ icon: '🌐', label: 'Translate', onClick: () => { onTranslate?.(); onClose(); } }] : []),
+        ...(!isDeleted && isTextMessage && showTranslateBtn ? [{ icon: '🌐', label: 'Translate', onClick: () => { onTranslate?.(); onClose(); } }] : []),
         { icon: 'ℹ️', label: 'Info', onClick: () => { onInfo?.(); onClose(); } },
         ...(!isDeleted ? [{ icon: '🗑️', label: 'Delete', danger: true, onClick: () => { onDelete?.(); onClose(); } }] : []),
     ];
@@ -1142,17 +1142,7 @@ const ChatBubble = ({
                             </svg>
                         </button>
 
-                        {isTextMessage && showTranslateBtn && (
-                            <button
-                                onClick={(e) => { e.stopPropagation(); setShowTranslatorMenu(true); }}
-                                className={`opacity-0 group-hover/bubble:opacity-100 transition-opacity p-1 text-gray-500 hover:text-gray-200 mb-1 flex-shrink-0 ${isOwn ? 'order-first' : 'order-last'}`}
-                                title="Translate message"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-.778.099-1.533.284-2.253" />
-                                </svg>
-                            </button>
-                        )}
+                        {/* Translate button removed - moved to 3-dot menu */}
 
                         {/* The bubble itself */}
                         <div
@@ -1298,6 +1288,7 @@ const ChatBubble = ({
                     onDelete={() => onDelete && onDelete(message)}
                     onInfo={() => setShowInfoModal(true)}
                     onTranslate={() => { setShowTranslatorMenu(true); }}
+                    showTranslateBtn={showTranslateBtn}
                 />,
                 document.body
             )}

@@ -735,23 +735,7 @@ const MessageInput = ({
                 </div>
             )}
 
-            {/* Translate Button - Under Emoji Picker */}
-            {showEmoji && (
-                <div className="absolute bottom-full left-0 z-50 w-[350px] mb-1 flex gap-2 px-3">
-                    <button
-                        type="button"
-                        onClick={() => {
-                            const newVal = !aiEnabled;
-                            localStorage.setItem('ai_grammar_fix_enabled', String(newVal));
-                            // Trigger parent update if needed
-                        }}
-                        className="flex-1 py-2 rounded-lg bg-[#00a884] hover:bg-[#008f72] text-white text-xs font-bold transition-colors flex items-center justify-center gap-1"
-                    >
-                        <span>🌐</span>
-                        Translate
-                    </button>
-                </div>
-            )}
+
 
             {/* Attachment Menu */}
             {showAttachMenu && (
@@ -1005,7 +989,7 @@ const MessageInput = ({
                 <input ref={documentInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="*/*" />
                 <input ref={audioInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="audio/*" />
 
-                {/* Textarea + Emoji (inside) + Send/Mic */}
+                {/* Textarea + Emoji (inside) + Send/Mic + Translate */}
                 <form onSubmit={handleSubmit} className="flex-1 flex items-end gap-2">
                     {disabled ? (
                         <div className="flex-1 flex items-center bg-[#1c2429]/50 border border-gray-800 rounded-3xl px-4 py-3 text-center justify-center">
@@ -1030,11 +1014,20 @@ const MessageInput = ({
                                 onKeyDown={handleKeyDown}
                                 placeholder="Type a message..."
                                 rows={1}
-                                className="w-full bg-[#2a3942] text-gray-100 placeholder-gray-500 rounded-3xl pl-4 pr-12 py-3 text-[15px] focus:outline-none resize-none max-h-32 overflow-y-auto leading-relaxed"
+                                className="w-full bg-[#2a3942] text-gray-100 placeholder-gray-500 rounded-3xl pl-4 pr-24 py-3 text-[15px] focus:outline-none resize-none max-h-32 overflow-y-auto leading-relaxed"
                                 style={{ scrollbarWidth: 'none' }}
                                 onClick={() => { setShowEmoji(false); setShowAttachMenu(false); }}
                                 onBlur={() => onTyping?.(false)}
                             />
+                            {/* Translate button — RIGHT INSIDE chatbox */}
+                            <button
+                                type="button"
+                                onClick={() => { toggleTranslator(); setShowEmoji(false); setShowAttachMenu(false); }}
+                                className={`absolute right-12 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full transition-all active:scale-90 ${showTranslator ? 'text-[#00a884]' : 'text-gray-400 hover:text-[#00a884]'}`}
+                                title="Translate"
+                            >
+                                <GlobeIcon className="w-6 h-6" />
+                            </button>
                             {/* Emoji button — RIGHT INSIDE chatbox, vertically centered */}
                             <button
                                 id="emoji-btn"

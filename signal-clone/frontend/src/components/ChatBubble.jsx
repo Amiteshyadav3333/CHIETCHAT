@@ -1090,7 +1090,7 @@ const ChatBubble = ({
     return (
         <>
             <div
-                className={`flex items-end gap-2 w-full ${isOwn ? 'flex-row-reverse' : 'flex-row'} ${hasReactions ? 'mb-5' : 'mb-1'}`}
+                className={`flex items-end gap-2 w-full ${isOwn ? 'flex-row-reverse' : 'flex-row'} ${hasReactions ? 'mb-7' : 'mb-1'}`}
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
@@ -1247,8 +1247,13 @@ const ChatBubble = ({
                             </div>
 
                             {hasReactions && (
-                                <div className={`absolute -bottom-5 ${isOwn ? 'left-2' : 'right-2'} rounded-full bg-[#111b21] px-2 py-0.5 text-xs shadow border border-white/10 z-10`}>
-                                    {Object.values(reactionsObj).join(' ')}
+                                <div className={`absolute -bottom-6 ${isOwn ? 'right-0' : 'left-0'} rounded-full bg-[#202c33] px-2.5 py-1 text-sm shadow-lg border border-white/20 z-10 flex items-center gap-0.5 whitespace-nowrap`}>
+                                    {Object.entries(reactionsObj).map(([emoji, count]) => (
+                                        <span key={emoji} className="flex items-center gap-1 text-xs font-medium">
+                                            <span>{emoji}</span>
+                                            {count > 1 && <span className="text-white/60 text-[10px]">{count}</span>}
+                                        </span>
+                                    ))}
                                 </div>
                             )}
 

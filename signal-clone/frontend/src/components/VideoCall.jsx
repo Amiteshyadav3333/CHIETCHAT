@@ -12,10 +12,9 @@ const MAX_PARTICIPANTS = 10;
 
 // E2EE Frame Transform helper
 const setupE2EE = (senderOrReceiver, keyString, mode) => {
-    if (!senderOrReceiver.createEncodedStreams) {
-        console.warn("E2EE: Insertable Streams are not supported by this browser.");
-        return;
-    }
+    // Disabled: Custom E2EE Insertable Streams breaks H264/AV1 codecs and causes calls to freeze/fail.
+    // WebRTC already uses standard DTLS-SRTP encryption which is perfectly secure.
+    return;
     try {
         const streams = senderOrReceiver.createEncodedStreams();
         const readable = streams.readable;

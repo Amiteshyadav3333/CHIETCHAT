@@ -956,16 +956,6 @@ const MessageInput = ({
                             <PaperClipIcon className="w-6 h-6" />
                         </button>
 
-                        {/* Translate */}
-                        <button
-                            type="button"
-                            onClick={() => { toggleTranslator(); setShowEmoji(false); setShowAttachMenu(false); }}
-                            className={`w-10 h-10 flex items-center justify-center rounded-full transition-all active:scale-90 ${showTranslator ? 'text-[#00a884]' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}`}
-                            title="Translate"
-                        >
-                            <GlobeIcon className="w-6 h-6" />
-                        </button>
-
                         {/* AI Grammar Fix */}
                         {showAiFeature && (
                             <button

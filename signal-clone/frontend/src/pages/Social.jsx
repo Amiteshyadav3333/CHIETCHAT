@@ -19,11 +19,17 @@ import NestedComment from '../components/NestedComment';
 
 const authHeaders = (token) => ({ Authorization: `Bearer ${token}` });
 
-const XLogo = ({ className = 'w-8 h-8', style }) => (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} style={style} fill="currentColor">
-        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.747l7.73-8.835L1.254 2.25H8.08l4.258 5.63 5.907-5.63Zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-    </svg>
+const CheetChatLogo = ({ className, style, hideTextOnMobile = true }) => (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, ...style }} className={className}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-8 h-8 text-[#1d9bf0] flex-shrink-0">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 18.97a5.969 5.969 0 01-.774-2.814c0-.19.054-.379.161-.541A7.994 7.994 0 014.5 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+        </svg>
+        <span className={`${hideTextOnMobile ? 'hidden xl:inline' : 'inline'} font-black tracking-wider text-xl bg-gradient-to-r from-blue-400 to-[#1d9bf0] bg-clip-text text-transparent`} style={{ fontFamily: 'system-ui, sans-serif' }}>
+            CHEETCHAT
+        </span>
+    </div>
 );
+
 
 const formatDate = (d) => {
     if (!d) return '';
@@ -56,16 +62,16 @@ const TRENDING = [
     { tag: '#DevLife', posts: '18.9K', category: 'Trending' },
 ];
 
-const XLoading = () => (
+const CheetChatLoading = () => (
     <div style={{ display: 'flex', justifyContent: 'center', padding: '64px 0' }}>
         <div style={{ width: 32, height: 32, border: '4px solid rgba(255,255,255,0.1)', borderTopColor: '#1d9bf0', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
 );
 
-const XEmptyState = ({ text }) => (
+const CheetChatEmptyState = ({ text }) => (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px', textAlign: 'center' }}>
-        <XLogo style={{ width: 48, height: 48, color: '#2f3336', marginBottom: 16 }} />
+        <CheetChatLogo hideTextOnMobile={false} style={{ marginBottom: 16, transform: 'scale(1.2)' }} />
         <p style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Nothing here yet</p>
         <p style={{ fontSize: 14, color: '#71767b' }}>{text}</p>
     </div>
@@ -82,7 +88,7 @@ const TweetAction = ({ icon, count, onClick, active, activeColor, hoverColor, ho
     </button>
 );
 
-const XComposer = ({ avatar, caption, setCaption, media, setMedia, preview, fileRef, posting, onSubmit }) => {
+const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, preview, fileRef, posting, onSubmit }) => {
     const maxChars = 280;
     const remaining = maxChars - caption.length;
     const progress = Math.min((caption.length / maxChars) * 100, 100);
@@ -385,7 +391,7 @@ const ChannelsList = ({ channels, loading, onOpen, onSubscribe, onCreateNew }) =
                 <PlusIcon style={{ width: 16, height: 16 }} />New Space
             </button>
         </div>
-        {loading ? <XLoading /> : channels.length ? channels.map(ch => (
+        {loading ? <CheetChatLoading /> : channels.length ? channels.map(ch => (
             <div key={ch.id} style={{ borderBottom: '1px solid #2f3336' }}
                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
@@ -408,7 +414,7 @@ const ChannelsList = ({ channels, loading, onOpen, onSubscribe, onCreateNew }) =
                         </button>}
                 </div>
             </div>
-        )) : <XEmptyState text="No spaces yet. Create one!" />}
+        )) : <CheetChatEmptyState text="No spaces yet. Create one!" />}
     </div>
 );
 
@@ -447,7 +453,7 @@ const ChannelView = ({ channel, posts, user, preview, media, caption, posting, f
         )}
         {channel.canPost && (
             <div style={{ padding: '12px 16px', borderBottom: '1px solid #2f3336' }}>
-                <XComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} media={media} setMedia={setMedia} preview={preview} fileRef={fileRef} posting={posting} onSubmit={submitPost} />
+                <CheetChatComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} media={media} setMedia={setMedia} preview={preview} fileRef={fileRef} posting={posting} onSubmit={submitPost} />
             </div>
         )}
         {posts.length ? posts.map(post => (
@@ -455,7 +461,7 @@ const ChannelView = ({ channel, posts, user, preview, media, caption, posting, f
                 onLike={() => likePost(post.id)} onRetweet={() => retweetPost(post.id)}
                 onShare={() => sharePost(post.id)} onDelete={() => deletePost(post.id)}
                 onFollow={() => toggleFollow(post.user.id)} onOpenProfile={openProfile} />
-        )) : <XEmptyState text={channel.canPost ? 'No posts yet.' : 'Join this space to see content.'} />}
+        )) : <CheetChatEmptyState text={channel.canPost ? 'No posts yet.' : 'Join this space to see content.'} />}
     </div>
 );
 
@@ -528,7 +534,7 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
         try { await axios.delete('/api/social/posts/' + postId, { headers: authHeaders(token) }); setProfileData(prev => ({ ...prev, posts: prev.posts.filter(p => p.id !== postId) })); } catch { alert('Delete failed'); }
     };
 
-    if (loading) return <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000', color: '#e7e9ea' }}><XLoading /></div>;
+    if (loading) return <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000', color: '#e7e9ea' }}><CheetChatLoading /></div>;
 
     const u = profileData && profileData.user;
     const filteredProfilePosts = (profileData?.posts || []).filter(post => {
@@ -638,12 +644,12 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
                     </div>
                 </div>
 
-                {profileData && profileData.posts && profileData.posts.length ? profileData.posts.map(post => (
+                {filteredProfilePosts.length ? filteredProfilePosts.map(post => (
                     <TweetCard key={post.id} post={post} currentUser={currentUser} token={token}
                         onLike={() => handleLike(post.id)} onRetweet={() => handleRetweet(post.id)}
                         onShare={() => handleShare(post.id)} onDelete={() => handleDelete(post.id)}
                         onFollow={() => {}} onOpenProfile={onOpenProfile} />
-                )) : <XEmptyState text={isOwnProfile ? "You haven't posted yet." : "No posts yet."} />}
+                )) : <CheetChatEmptyState text={isOwnProfile ? "You haven't posted yet." : "No posts yet."} />}
             </div>
         </div>
     );
@@ -802,7 +808,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed }) => {
                 <button onClick={() => setProfileView({ userId: user.id })} className="border-none bg-transparent cursor-pointer flex-shrink-0">
                     <img src={user && user.avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
                 </button>
-                <XLogo className="w-8 h-8 text-white" />
+                <CheetChatLogo hideTextOnMobile={false} />
                 <button onClick={onBack} className="p-2 rounded-full hover:bg-white/10 transition border-none bg-transparent cursor-pointer text-[#e7e9ea]">
                     <ArrowLeftIcon className="w-5 h-5" />
                 </button>
@@ -813,7 +819,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed }) => {
                 <aside className="hidden md:flex flex-col w-[72px] xl:w-[275px] flex-shrink-0 p-2 xl:p-4 border-r border-[#2f3336] h-full justify-between overflow-y-auto scrollbar-hide">
                     <div className="flex flex-col items-center xl:items-start w-full">
                         <div className="px-3 mb-4 mt-2">
-                            <XLogo className="w-8 h-8 text-white" />
+                            <CheetChatLogo hideTextOnMobile={true} />
                         </div>
                         {[
                             { icon: <HomeIcon className="w-7 h-7" />, label: 'Home', action: () => { setSelectedChannel(null); setActiveTab('for-you'); } },
@@ -890,16 +896,16 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed }) => {
                         ) : (
                             <div>
                                 <div className="padding-4 px-4 py-3 border-b border-[#2f3336]">
-                                    <XComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} media={media} setMedia={setMedia} preview={preview} fileRef={fileRef} posting={posting} onSubmit={() => submitPost(null)} />
+                                    <CheetChatComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} media={media} setMedia={setMedia} preview={preview} fileRef={fileRef} posting={posting} onSubmit={() => submitPost(null)} />
                                 </div>
-                                {loading ? <XLoading /> : displayedPosts.length ? displayedPosts.map(post => (
+                                {loading ? <CheetChatLoading /> : displayedPosts.length ? displayedPosts.map(post => (
                                     <div key={post.id} ref={post.id === highlightedPostId ? highlightedRef : null} style={post.id === highlightedPostId ? { outline: '2px solid #1d9bf0' } : {}}>
                                         <TweetCard post={post} currentUser={user} token={token}
                                             onLike={() => likePost(post.id)} onRetweet={() => retweetPost(post.id)}
                                             onShare={() => sharePost(post.id)} onDelete={() => deletePost(post.id)}
                                             onFollow={() => toggleFollow(post.user.id)} onOpenProfile={openProfile} />
                                     </div>
-                                )) : <XEmptyState text={activeTab === 'following' ? 'Follow people to build your feed.' : 'No posts matches search criteria.'} />}
+                                )) : <CheetChatEmptyState text={activeTab === 'following' ? 'Follow people to build your feed.' : 'No posts matches search criteria.'} />}
                             </div>
                         )}
                     </div>

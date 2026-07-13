@@ -2,6 +2,7 @@ import os
 import json
 import urllib.request
 import urllib.parse
+import urllib.error
 from flask import Blueprint, request, jsonify, Response, stream_with_context
 from models import db, AiConversation, User
 from utils import get_current_user_id, utc_now
@@ -111,7 +112,7 @@ def _call_groq(messages, stream=False):
     if not GROQ_API_KEY:
         return None
     payload = json.dumps({
-        "model": "llama3-70b-8192",
+        "model": "llama-3.3-70b-versatile",
         "messages": messages,
         "stream": stream,
         "max_tokens": 1024,
@@ -129,6 +130,10 @@ def _call_groq(messages, stream=False):
     )
     try:
         return urllib.request.urlopen(req, timeout=30)
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode('utf-8', errors='ignore')
+        print(f"Groq HTTPError {e.code}: {e.reason}\nResponse Body: {err_body}")
+        return None
     except Exception as e:
         print(f"Groq error: {e}")
         return None

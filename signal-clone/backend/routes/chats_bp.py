@@ -1,5 +1,6 @@
 import requests
 from flask import Blueprint, jsonify, request
+import json
 from models import db, Chat, ChatParticipant, Message, User, MessageDeletion
 from extensions import socketio
 from utils import (

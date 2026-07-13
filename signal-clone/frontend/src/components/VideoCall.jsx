@@ -447,28 +447,38 @@ const VideoCallModal = ({
 
 
     const setMediaBitrates = async (pc) => {
+        if (pc.isSettingBitrates) return;
+        pc.isSettingBitrates = true;
         try {
             const senders = pc.getSenders();
             for (const sender of senders) {
                 if (!sender.track) continue;
-                const parameters = sender.getParameters();
-                if (!parameters.encodings || parameters.encodings.length === 0) {
-                    parameters.encodings = [{}];
+                try {
+                    const parameters = sender.getParameters();
+                    if (!parameters.encodings || parameters.encodings.length === 0) {
+                        continue;
+                    }
+                    if (sender.track.kind === 'video') {
+                        // HD video: 2.5 Mbps for crisp 1080p quality worldwide
+                        parameters.encodings[0].maxBitrate = 2500000;
+                        parameters.encodings[0].maxFramerate = 30;
+                        parameters.encodings[0].scaleResolutionDownBy = 1.0; // No downscaling for HD
+                        if (parameters.degradationPreference !== undefined) {
+                            parameters.degradationPreference = 'maintain-resolution'; // Keep HD resolution
+                        }
+                    } else if (sender.track.kind === 'audio') {
+                        // High-quality audio: 128 kbps for clear voice
+                        parameters.encodings[0].maxBitrate = 128000;
+                    }
+                    await sender.setParameters(parameters);
+                } catch (senderErr) {
+                    console.warn(`Failed to set parameters for ${sender.track.kind} sender:`, senderErr);
                 }
-                if (sender.track.kind === 'video') {
-                    // HD video: 2.5 Mbps for crisp 1080p quality worldwide
-                    parameters.encodings[0].maxBitrate = 2500000;
-                    parameters.encodings[0].maxFramerate = 30;
-                    parameters.encodings[0].scaleResolutionDownBy = 1.0; // No downscaling for HD
-                    parameters.degradationPreference = 'maintain-resolution'; // Keep HD resolution
-                } else if (sender.track.kind === 'audio') {
-                    // High-quality audio: 128 kbps for clear voice
-                    parameters.encodings[0].maxBitrate = 128000;
-                }
-                await sender.setParameters(parameters);
             }
         } catch (err) {
             console.warn("Failed to set media bitrates:", err);
+        } finally {
+            pc.isSettingBitrates = false;
         }
     };
 

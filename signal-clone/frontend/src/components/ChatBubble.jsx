@@ -477,7 +477,15 @@ const ChatBubble = ({
         return reactions;
     };
     const reactionsObj = getReactions();
-    const hasReactions = Object.keys(reactionsObj).length > 0;
+
+    // Group reactions by emoji
+    const groupedReactions = {};
+
+       Object.values(reactionsObj).forEach((emoji) => {
+          groupedReactions[emoji] = (groupedReactions[emoji] || 0) + 1;
+    });
+
+    const hasReactions = Object.keys(groupedReactions).length > 0;
     const [swipeX, setSwipeX] = useState(0);
     const [swiping, setSwiping] = useState(false);
     const [zoomedMedia, setZoomedMedia] = useState(null);
@@ -1247,15 +1255,28 @@ const ChatBubble = ({
                             </div>
 
                             {hasReactions && (
-                                <div className={`absolute -bottom-6 ${isOwn ? 'right-0' : 'left-0'} rounded-full bg-[#202c33] px-2.5 py-1 text-sm shadow-lg border border-white/20 z-10 flex items-center gap-0.5 whitespace-nowrap`}>
-                                    {Object.entries(reactionsObj).map(([emoji, count]) => (
-                                        <span key={emoji} className="flex items-center gap-1 text-xs font-medium">
-                                            <span>{emoji}</span>
-                                            {count > 1 && <span className="text-white/60 text-[10px]">{count}</span>}
-                                        </span>
-                                    ))}
-                                </div>
-                            )}
+                                        <div
+                                       className={`absolute -bottom-6 ${
+                                         isOwn ? 'right-0' : 'left-0'
+                               } rounded-full bg-[#202c33] px-2.5 py-1 text-sm shadow-lg border border-white/20 z-10 flex items-center gap-1 whitespace-nowrap`}
+    >
+                                {Object.entries(groupedReactions).map(([emoji, count]) => (
+                               <span
+                                key={emoji}
+                               className="flex items-center gap-1 text-xs font-medium"
+                                >
+                               <span>{emoji}</span>
+
+                               {count > 1 && (
+                                  <span className="text-white/60 text-[10px]">
+                        {count}
+                    </span>
+                )}
+                 </span>
+                ))}
+               </div>
+                )}
+            
 
                             {isOwn && message.readAt && (
                                 <div className="mt-1 text-right text-[10px] text-[#53bdeb]">

@@ -360,7 +360,14 @@ const VideoCallModal = ({
         };
     }, [activeChat?.id]);
 
+    const isVoiceCancellationMounted = useRef(false);
+
     useEffect(() => {
+        // Skip on initial mount — don't try to modify peers before call is established
+        if (!isVoiceCancellationMounted.current) {
+            isVoiceCancellationMounted.current = true;
+            return;
+        }
         const applyVoiceCancellation = async () => {
             if (isVoiceCancellationOn) {
                 try {
@@ -486,7 +493,6 @@ const VideoCallModal = ({
         if (peersRef.current[remoteSocketId]) return peersRef.current[remoteSocketId].pc;
 
         const pc = new RTCPeerConnection({
-            encodedInsertableStreams: true, // Enables WebRTC Encoded Transform (E2EE)
             iceTransportPolicy: 'all', // Try all ICE candidates for max global reach
             bundlePolicy: 'max-bundle',
             rtcpMuxPolicy: 'require',
@@ -544,29 +550,46 @@ const VideoCallModal = ({
         };
 
         pc.ontrack = (e) => {
-            const remoteStream = e.streams[0] || new MediaStream();
-            if (!e.streams[0]) {
-                remoteStream.addTrack(e.track);
-            }
-            const newStream = new MediaStream(remoteStream.getTracks());
-            if (peersRef.current[remoteSocketId]) {
-                peersRef.current[remoteSocketId].stream = newStream;
-            }
-            setPeers(prev => ({
-                ...prev,
-                [remoteSocketId]: {
-                    ...prev[remoteSocketId],
-                    stream: newStream
+            // Use the live stream from e.streams[0] directly so all tracks are always present.
+            // Creating a snapshot (new MediaStream(...)) causes black screens because the
+            // snapshot may be taken before all tracks have arrived (audio fires before video).
+            if (e.streams && e.streams[0]) {
+                const liveStream = e.streams[0];
+                if (peersRef.current[remoteSocketId]) {
+                    peersRef.current[remoteSocketId].stream = liveStream;
                 }
-            }));
-            // Set up E2EE decryption for receiving
-            const sharedKey = `chietchat_call_secret_${activeChat.id}`;
-            setupE2EE(e.receiver, sharedKey, 'receiver');
+                setPeers(prev => ({
+                    ...prev,
+                    [remoteSocketId]: {
+                        ...prev[remoteSocketId],
+                        stream: liveStream
+                    }
+                }));
+            } else {
+                // Fallback: no associated stream, accumulate tracks manually
+                const peerObj = peersRef.current[remoteSocketId];
+                let accStream = peerObj?.stream instanceof MediaStream ? peerObj.stream : new MediaStream();
+                accStream.addTrack(e.track);
+                if (peersRef.current[remoteSocketId]) {
+                    peersRef.current[remoteSocketId].stream = accStream;
+                }
+                setPeers(prev => ({
+                    ...prev,
+                    [remoteSocketId]: {
+                        ...prev[remoteSocketId],
+                        stream: accStream
+                    }
+                }));
+            }
+            // E2EE disabled — standard DTLS-SRTP is used
         };
 
         pc.onconnectionstatechange = () => {
             console.log("WebRTC Connection State changed to:", pc.connectionState);
-            if (pc.connectionState === 'failed') {
+            if (pc.connectionState === 'connected') {
+                // Apply bitrate limits AFTER full SDP negotiation so getParameters() returns encodings
+                setTimeout(() => setMediaBitrates(pc), 1000);
+            } else if (pc.connectionState === 'failed') {
                 console.log("Connection failed, attempting ICE restart...");
                 try {
                     pc.restartIce();
@@ -592,15 +615,8 @@ const VideoCallModal = ({
             if (track.kind === 'audio' && activeAudioTrackRef.current) {
                 trackToSend = activeAudioTrackRef.current;
             }
-            const sender = pc.addTrack(trackToSend, stream);
-            // Set up E2EE encryption for sending
-            const sharedKey = `chietchat_call_secret_${activeChat.id}`;
-            setupE2EE(sender, sharedKey, 'sender');
-        });
-
-        // Apply bandwidth constraints once negotiation finishes
-        pc.addEventListener('track', () => {
-            setMediaBitrates(pc);
+            pc.addTrack(trackToSend, stream);
+            // E2EE encryption disabled — DTLS-SRTP provides standard security
         });
 
         const remoteParticipant = activeChat.participants.find(p => p.id === remoteUserId);
@@ -1414,7 +1430,20 @@ const AvatarPlaceholder = ({ avatar, name, small }) => (
 const RemoteVideo = ({ stream, className }) => {
     const videoRef = useRef();
     useEffect(() => {
-        if (videoRef.current && stream) videoRef.current.srcObject = stream;
+        const video = videoRef.current;
+        if (!video) return;
+        if (stream) {
+            video.srcObject = stream;
+            // Explicitly call play() to handle browsers that block autoPlay
+            video.play().catch(err => {
+                // NotAllowedError is expected on some browsers before user interaction
+                if (err.name !== 'NotAllowedError') {
+                    console.warn('RemoteVideo play() failed:', err);
+                }
+            });
+        } else {
+            video.srcObject = null;
+        }
     }, [stream]);
     return <video ref={videoRef} autoPlay playsInline className={className} />;
 };
@@ -1422,7 +1451,18 @@ const RemoteVideo = ({ stream, className }) => {
 const LocalVideo = ({ stream, className, muted = true }) => {
     const videoRef = useRef();
     useEffect(() => {
-        if (videoRef.current && stream) videoRef.current.srcObject = stream;
+        const video = videoRef.current;
+        if (!video) return;
+        if (stream) {
+            video.srcObject = stream;
+            video.play().catch(err => {
+                if (err.name !== 'NotAllowedError') {
+                    console.warn('LocalVideo play() failed:', err);
+                }
+            });
+        } else {
+            video.srcObject = null;
+        }
     }, [stream]);
     return <video ref={videoRef} muted={muted} autoPlay playsInline className={className} />;
 };
@@ -1430,9 +1470,18 @@ const LocalVideo = ({ stream, className, muted = true }) => {
 const AudioPlayer = ({ stream }) => {
     const audioRef = useRef();
     useEffect(() => {
-        if (audioRef.current && stream) audioRef.current.srcObject = stream;
+        const audio = audioRef.current;
+        if (!audio) return;
+        if (stream) {
+            audio.srcObject = stream;
+            audio.play().catch(err => {
+                if (err.name !== 'NotAllowedError') {
+                    console.warn('AudioPlayer play() failed:', err);
+                }
+            });
+        }
     }, [stream]);
-    return <audio ref={audioRef} autoPlay />;
+    return <audio ref={audioRef} autoPlay playsInline />;
 };
 
 export default VideoCallModal;

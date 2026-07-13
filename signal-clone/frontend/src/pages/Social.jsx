@@ -531,29 +531,38 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
     if (loading) return <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000', color: '#e7e9ea' }}><XLoading /></div>;
 
     const u = profileData && profileData.user;
+    const filteredProfilePosts = (profileData?.posts || []).filter(post => {
+        const displayPost = post.isRetweet && post.originalPost ? post.originalPost : post;
+        if (profileTab === 'media') {
+            return !!displayPost.mediaUrl;
+        }
+        if (profileTab === 'likes') {
+            return !!post.isLiked;
+        }
+        return true;
+    });
 
     return (
-        <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#e7e9ea', fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif', overflow: 'hidden' }}>
-            <header style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '8px 16px', flexShrink: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)', position: 'sticky', top: 0, zIndex: 10 }}>
-                <button onClick={onBack} style={{ padding: 8, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', color: '#e7e9ea' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                    <ArrowLeftIcon style={{ width: 20, height: 20 }} />
+        <div className="h-[100dvh] w-full flex flex-col bg-black text-[#e7e9ea] font-sans overflow-hidden">
+            <header className="flex items-center gap-4 px-4 py-2 flex-shrink-0" style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)', borderBottom: '1px solid #2f3336' }}>
+                <button onClick={onBack} className="p-2 rounded-full hover:bg-white/10 transition border-none bg-transparent cursor-pointer text-[#e7e9ea]">
+                    <ArrowLeftIcon className="w-5 h-5" />
                 </button>
                 <div>
-                    <h1 style={{ fontWeight: 800, fontSize: 20, lineHeight: 1.2 }}>{u && u.username}</h1>
-                    <p style={{ fontSize: 13, color: '#71767b' }}>{(profileData && profileData.posts && profileData.posts.length) || 0} posts</p>
+                    <h1 className="font-extrabold text-xl leading-tight">{u?.username}</h1>
+                    <p className="text-sm" style={{ color: '#71767b' }}>{filteredProfilePosts.length} posts</p>
                 </div>
             </header>
-            <div style={{ flex: 1, overflowY: 'auto' }}>
-                <div style={{ height: 144, background: 'linear-gradient(135deg, #1d9bf0 0%, #0747a6 50%, #764ba2 100%)', position: 'relative', flexShrink: 0 }}>
-                    <div style={{ position: 'absolute', inset: 0, opacity: 0.2, background: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.05) 10px, rgba(255,255,255,0.05) 20px)' }} />
+            <div className="flex-1 overflow-y-auto scrollbar-hide">
+                <div className="h-32 sm:h-44 relative flex-shrink-0" style={{ background: 'linear-gradient(135deg, #1d9bf0 0%, #0747a6 50%, #764ba2 100%)' }}>
+                    <div className="absolute inset-0 opacity-20" style={{ background: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.05) 10px, rgba(255,255,255,0.05) 20px)' }} />
                 </div>
-                <div style={{ padding: '0 16px 0' }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginTop: -48, marginBottom: 12 }}>
-                        <div style={{ position: 'relative' }} onMouseEnter={() => setAvatarHover(true)} onMouseLeave={() => setAvatarHover(false)}>
-                            <div style={{ width: 96, height: 96, borderRadius: '50%', overflow: 'hidden', border: '4px solid #000', flexShrink: 0 }}>
-                                <img src={u && u.avatar} alt={u && u.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+
+                <div className="px-4 pb-4">
+                    <div className="flex items-start justify-between -mt-12 sm:-mt-16 mb-3">
+                        <div className="relative">
+                            <div className="w-20 h-20 sm:w-28 sm:h-28 rounded-full overflow-hidden border-4" style={{ borderColor: '#000' }}>
+                                <img src={u?.avatar} alt={u?.username} className="w-full h-full object-cover" />
                             </div>
                             {isOwnProfile && (
                                 <>
@@ -770,134 +779,138 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed }) => {
             onLike={likePost} onRetweet={retweetPost} onShare={sharePost} onDelete={deletePost} onFollow={toggleFollow} />
     );
 
-    const TABS = [{ key: 'for-you', label: 'For You' }, { key: 'following', label: 'Following' }, { key: 'channels', label: 'Spaces' }];
-    const currentPosts = selectedChannel ? channelPosts : posts;
+    const displayedPosts = currentPosts.filter(post => {
+        if (!searchQuery) return true;
+        const q = searchQuery.toLowerCase();
+        const captionMatch = post.caption?.toLowerCase().includes(q);
+        const nameMatch = post.user?.username?.toLowerCase().includes(q);
+        return captionMatch || nameMatch;
+    });
 
-    const SX = {
-        root: { height: '100dvh', width: '100%', display: 'flex', flexDirection: 'column', background: '#000', color: '#e7e9ea', fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif' },
-        body: { display: 'flex', flex: 1, overflow: 'hidden' },
-        leftSidebar: { display: 'flex', flexDirection: 'column', width: 240, flexShrink: 0, padding: '16px 12px', borderRight: '1px solid #2f3336', height: '100%', overflowY: 'auto' },
-        main: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRight: '1px solid #2f3336' },
-        rightSidebar: { width: 320, flexShrink: 0, padding: 16, height: '100%', overflowY: 'auto' },
-    };
+    const displayedChannels = channels.filter(ch => {
+        if (!searchQuery) return true;
+        const q = searchQuery.toLowerCase();
+        return ch.name?.toLowerCase().includes(q) || ch.description?.toLowerCase().includes(q);
+    });
 
     return (
-        <div style={SX.root}>
-            {/* Mobile header */}
-            <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #2f3336', flexShrink: 0 }} className="sm-hide">
-                <button onClick={() => setProfileView({ userId: user.id })} style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}>
-                    <img src={user && user.avatar} alt="" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
+        <div className="h-[100dvh] w-full flex flex-col bg-black text-[#e7e9ea] font-sans antialiased overflow-hidden select-none">
+            {/* Mobile Header */}
+            <header className="flex md:hidden items-center justify-between px-4 py-3 border-b border-[#2f3336] flex-shrink-0 bg-black">
+                <button onClick={() => setProfileView({ userId: user.id })} className="border-none bg-transparent cursor-pointer flex-shrink-0">
+                    <img src={user && user.avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
                 </button>
-                <XLogo style={{ width: 32, height: 32, color: '#fff' }} />
-                <button onClick={() => {}} style={{ padding: 8, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', color: '#e7e9ea' }}>
-                    <MagnifyingGlassIcon style={{ width: 20, height: 20 }} />
+                <XLogo className="w-8 h-8 text-white" />
+                <button onClick={onBack} className="p-2 rounded-full hover:bg-white/10 transition border-none bg-transparent cursor-pointer text-[#e7e9ea]">
+                    <ArrowLeftIcon className="w-5 h-5" />
                 </button>
             </header>
 
-            <div style={SX.body}>
+            <div className="flex flex-1 overflow-hidden w-full max-w-[1250px] mx-auto">
                 {/* LEFT SIDEBAR */}
-                <aside style={SX.leftSidebar}>
-                    <div style={{ padding: '4px 12px', marginBottom: 8 }}>
-                        <XLogo style={{ width: 36, height: 36, color: '#fff' }} />
-                    </div>
-                    {[
-                        { icon: <HomeIcon style={{ width: 28, height: 28 }} />, label: 'Home', action: () => { setSelectedChannel(null); setActiveTab('for-you'); } },
-                        { icon: <HashtagIcon style={{ width: 28, height: 28 }} />, label: 'Explore', action: () => {} },
-                        { icon: <BellIcon style={{ width: 28, height: 28 }} />, label: 'Notifications', action: () => {} },
-                        { icon: <UsersIcon style={{ width: 28, height: 28 }} />, label: 'Spaces', action: () => { setSelectedChannel(null); setActiveTab('channels'); } },
-                        { icon: <UserCircleIcon style={{ width: 28, height: 28 }} />, label: 'Profile', action: () => setProfileView({ userId: user.id }) },
-                        { icon: <ArrowLeftIcon style={{ width: 28, height: 28 }} />, label: 'Back', action: onBack },
-                    ].map(({ icon, label, action }) => (
-                        <button key={label} onClick={action}
-                            style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px', borderRadius: 9999, width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', color: '#e7e9ea', fontSize: 20, fontWeight: 400, marginBottom: 4 }}
-                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                            {icon}<span style={{ fontSize: 18 }}>{label}</span>
-                        </button>
-                    ))}
-                    <button
-                        style={{ width: '100%', padding: '14px', borderRadius: 9999, fontWeight: 700, fontSize: 17, background: '#1d9bf0', color: '#fff', border: 'none', cursor: 'pointer', marginTop: 8 }}
-                        onMouseEnter={e => e.currentTarget.style.background = '#1a8cd8'}
-                        onMouseLeave={e => e.currentTarget.style.background = '#1d9bf0'}
-                        onClick={() => { setSelectedChannel(null); setActiveTab('for-you'); }}>
-                        Post
-                    </button>
-                    <div style={{ flex: 1 }} />
-                    <button onClick={() => setProfileView({ userId: user.id })}
-                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 9999, background: 'transparent', border: 'none', cursor: 'pointer', width: '100%' }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                        <img src={user && user.avatar} alt="" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                        <div style={{ minWidth: 0, flex: 1, textAlign: 'left' }}>
-                            <p style={{ fontWeight: 700, fontSize: 14, color: '#e7e9ea', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user && user.username}</p>
-                            <p style={{ fontSize: 14, color: '#71767b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{user && (user.username || '').toLowerCase().replace(/\s+/g, '_')}</p>
+                <aside className="hidden md:flex flex-col w-[72px] xl:w-[275px] flex-shrink-0 p-2 xl:p-4 border-r border-[#2f3336] h-full justify-between overflow-y-auto scrollbar-hide">
+                    <div className="flex flex-col items-center xl:items-start w-full">
+                        <div className="px-3 mb-4 mt-2">
+                            <XLogo className="w-8 h-8 text-white" />
                         </div>
-                        <EllipsisHorizontalIcon style={{ width: 20, height: 20, color: '#71767b', flexShrink: 0 }} />
+                        {[
+                            { icon: <HomeIcon className="w-7 h-7" />, label: 'Home', action: () => { setSelectedChannel(null); setActiveTab('for-you'); } },
+                            { icon: <HashtagIcon className="w-7 h-7" />, label: 'Explore', action: () => {} },
+                            { icon: <BellIcon className="w-7 h-7" />, label: 'Notifications', action: () => {} },
+                            { icon: <UsersIcon className="w-7 h-7" />, label: 'Spaces', action: () => { setSelectedChannel(null); setActiveTab('channels'); } },
+                            { icon: <UserCircleIcon className="w-7 h-7" />, label: 'Profile', action: () => setProfileView({ userId: user.id }) },
+                            { icon: <ArrowLeftIcon className="w-7 h-7" />, label: 'Back', action: onBack },
+                        ].map(({ icon, label, action }) => (
+                            <button key={label} onClick={action}
+                                className="flex items-center justify-center xl:justify-start gap-4 p-3 rounded-full w-full bg-transparent border-none cursor-pointer text-[#e7e9ea] hover:bg-white/10 transition-colors mb-2"
+                            >
+                                {icon}
+                                <span className="hidden xl:inline text-lg font-medium">{label}</span>
+                            </button>
+                        ))}
+                        <button
+                            onClick={() => { setSelectedChannel(null); setActiveTab('for-you'); }}
+                            className="w-12 h-12 xl:w-full xl:h-auto xl:py-3.5 rounded-full font-bold text-base flex items-center justify-center bg-[#1d9bf0] text-white hover:bg-[#1a8cd8] transition-colors mt-4 border-none cursor-pointer shadow-lg"
+                        >
+                            <span className="hidden xl:inline">Post</span>
+                            <span className="xl:hidden"><PlusIcon className="w-6 h-6" /></span>
+                        </button>
+                    </div>
+
+                    <button onClick={() => setProfileView({ userId: user.id })}
+                        className="flex items-center justify-center xl:justify-start gap-3 p-2 rounded-full bg-transparent border-none cursor-pointer w-full hover:bg-white/10 transition-colors"
+                    >
+                        <img src={user && user.avatar} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                        <div className="hidden xl:block min-w-0 flex-1 text-left">
+                            <p className="font-bold text-sm text-[#e7e9ea] truncate">{user && user.username}</p>
+                            <p className="text-xs text-[#71767b] truncate">@{user && (user.username || '').toLowerCase().replace(/\s+/g, '_')}</p>
+                        </div>
+                        <EllipsisHorizontalIcon className="hidden xl:block w-5 h-5 text-[#71767b] flex-shrink-0" />
                     </button>
                 </aside>
 
-                {/* MAIN */}
-                <main style={SX.main}>
+                {/* MAIN COLUMN */}
+                <main className="flex-1 min-w-0 flex flex-col overflow-hidden border-r border-[#2f3336]">
                     {/* Tab bar / header */}
-                    <div style={{ flexShrink: 0 }}>
+                    <div className="flex-shrink-0">
                         {!selectedChannel ? (
-                            <div style={{ display: 'flex', borderBottom: '1px solid #2f3336' }}>
+                            <div className="flex border-b border-[#2f3336] bg-black/80 backdrop-blur-md sticky top-0 z-10">
                                 {TABS.map(({ key, label }) => (
                                     <button key={key} onClick={() => setActiveTab(key)}
-                                        style={{ flex: 1, padding: '16px 0', fontSize: 15, fontWeight: 600, background: 'transparent', border: 'none', cursor: 'pointer', color: activeTab === key ? '#e7e9ea' : '#71767b', position: 'relative' }}>
+                                        className="flex-1 py-4 text-sm font-bold bg-transparent border-none cursor-pointer transition-colors relative"
+                                        style={{ color: activeTab === key ? '#e7e9ea' : '#71767b' }}>
                                         {label}
-                                        {activeTab === key && <div style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)', height: 4, width: 56, borderRadius: 9999, background: '#1d9bf0' }} />}
+                                        {activeTab === key && <div className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[4px] w-14 rounded-full bg-[#1d9bf0]" />}
                                     </button>
                                 ))}
                             </div>
                         ) : (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: '1px solid #2f3336' }}>
-                                <button onClick={() => setSelectedChannel(null)} style={{ padding: 8, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', color: '#e7e9ea' }}
-                                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                    <ArrowLeftIcon style={{ width: 20, height: 20 }} />
+                            <div className="flex items-center gap-3 px-4 py-3 border-b border-[#2f3336] bg-black/80 backdrop-blur-md sticky top-0 z-10">
+                                <button onClick={() => setSelectedChannel(null)} className="p-2 rounded-full bg-transparent border-none cursor-pointer text-[#e7e9ea] hover:bg-white/10 transition-colors">
+                                    <ArrowLeftIcon className="w-5 h-5" />
                                 </button>
                                 <div>
-                                    <h1 style={{ fontWeight: 800, fontSize: 20 }}>{selectedChannel.name}</h1>
-                                    <p style={{ fontSize: 13, color: '#71767b' }}>{selectedChannel.subscriberCount} members</p>
+                                    <h1 className="font-extrabold text-xl leading-tight">{selectedChannel.name}</h1>
+                                    <p className="text-xs text-[#71767b]">{selectedChannel.subscriberCount} members</p>
                                 </div>
                             </div>
                         )}
                     </div>
 
-                    <div style={{ flex: 1, overflowY: 'auto' }}>
+                    {/* Scrollable feed */}
+                    <div className="flex-1 overflow-y-auto scrollbar-hide">
                         {selectedChannel ? (
                             <ChannelView channel={selectedChannel} posts={currentPosts} user={user} preview={preview} media={media} caption={caption} posting={posting} fileRef={fileRef} setCaption={setCaption} setMedia={setMedia}
                                 submitPost={() => submitPost(selectedChannel.id)} likePost={id => likePost(id, true)} retweetPost={id => retweetPost(id, true)} sharePost={id => sharePost(id, true)} deletePost={id => deletePost(id, true)}
                                 toggleFollow={toggleFollow} requestSubscribe={() => requestSubscribe(selectedChannel.id)} reviewRequest={reviewRequest} openProfile={openProfile} currentUser={user} />
                         ) : activeTab === 'channels' ? (
-                            <ChannelsList channels={channels} loading={loading} onOpen={fetchChannel} onSubscribe={requestSubscribe} onCreateNew={() => setShowChannelForm(true)} />
+                            <ChannelsList channels={displayedChannels} loading={loading} onOpen={fetchChannel} onSubscribe={requestSubscribe} onCreateNew={() => setShowChannelForm(true)} />
                         ) : (
                             <div>
-                                <div style={{ padding: '12px 16px', borderBottom: '1px solid #2f3336' }}>
+                                <div className="padding-4 px-4 py-3 border-b border-[#2f3336]">
                                     <XComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} media={media} setMedia={setMedia} preview={preview} fileRef={fileRef} posting={posting} onSubmit={() => submitPost(null)} />
                                 </div>
-                                {loading ? <XLoading /> : currentPosts.length ? currentPosts.map(post => (
+                                {loading ? <XLoading /> : displayedPosts.length ? displayedPosts.map(post => (
                                     <div key={post.id} ref={post.id === highlightedPostId ? highlightedRef : null} style={post.id === highlightedPostId ? { outline: '2px solid #1d9bf0' } : {}}>
                                         <TweetCard post={post} currentUser={user} token={token}
                                             onLike={() => likePost(post.id)} onRetweet={() => retweetPost(post.id)}
                                             onShare={() => sharePost(post.id)} onDelete={() => deletePost(post.id)}
                                             onFollow={() => toggleFollow(post.user.id)} onOpenProfile={openProfile} />
                                     </div>
-                                )) : <XEmptyState text={activeTab === 'following' ? 'Follow people to build your feed.' : 'No posts yet. Be the first!'} />}
+                                )) : <XEmptyState text={activeTab === 'following' ? 'Follow people to build your feed.' : 'No posts matches search criteria.'} />}
                             </div>
                         )}
                     </div>
 
                     {/* Mobile bottom nav */}
-                    <nav style={{ display: 'flex', borderTop: '1px solid #2f3336', flexShrink: 0, background: '#000' }}>
+                    <nav className="flex md:hidden items-center border-t border-[#2f3336] flex-shrink-0 bg-black py-1">
                         {[
-                            { icon: <HomeIcon style={{ width: 24, height: 24 }} />, action: () => { setSelectedChannel(null); setActiveTab('for-you'); } },
-                            { icon: <MagnifyingGlassIcon style={{ width: 24, height: 24 }} />, action: () => {} },
-                            { icon: <UsersIcon style={{ width: 24, height: 24 }} />, action: () => { setSelectedChannel(null); setActiveTab('channels'); } },
-                            { icon: user && user.avatar ? <img src={user.avatar} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} /> : <UserCircleIcon style={{ width: 24, height: 24 }} />, action: () => setProfileView({ userId: user.id }) },
+                            { icon: <HomeIcon className="w-6 h-6" />, action: () => { setSelectedChannel(null); setActiveTab('for-you'); } },
+                            { icon: <MagnifyingGlassIcon className="w-6 h-6" />, action: () => {} },
+                            { icon: <UsersIcon className="w-6 h-6" />, action: () => { setSelectedChannel(null); setActiveTab('channels'); } },
+                            { icon: user && user.avatar ? <img src={user.avatar} alt="" className="w-6 h-6 rounded-full object-cover" /> : <UserCircleIcon className="w-6 h-6" />, action: () => setProfileView({ userId: user.id }) },
                         ].map((btn, i) => (
-                            <button key={i} onClick={btn.action} style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '12px 0', background: 'transparent', border: 'none', cursor: 'pointer', color: '#e7e9ea' }}>
+                            <button key={i} onClick={btn.action} className="flex-1 flex justify-center py-2.5 bg-transparent border-none cursor-pointer text-[#e7e9ea] hover:opacity-85">
                                 {btn.icon}
                             </button>
                         ))}
@@ -905,17 +918,17 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed }) => {
                 </main>
 
                 {/* RIGHT SIDEBAR */}
-                <aside style={SX.rightSidebar}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderRadius: 9999, background: '#202327', marginBottom: 16 }}>
-                        <MagnifyingGlassIcon style={{ width: 20, height: 20, color: '#71767b', flexShrink: 0 }} />
+                <aside className="hidden lg:flex flex-col w-[290px] xl:w-[350px] flex-shrink-0 p-4 h-full overflow-y-auto space-y-4 border-[#2f3336]">
+                    <div className="flex items-center gap-3 px-4 py-2.5 rounded-full bg-[#202327]">
+                        <MagnifyingGlassIcon className="w-5 h-5 text-[#71767b] flex-shrink-0" />
                         <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search"
-                            style={{ background: 'transparent', border: 'none', outline: 'none', fontSize: 15, color: '#e7e9ea', flex: 1 }} />
+                            className="bg-transparent border-none outline-none text-[15px] text-[#e7e9ea] flex-1" />
                     </div>
 
-                    <div style={{ borderRadius: 16, background: '#16181c', marginBottom: 16, overflow: 'hidden' }}>
-                        <h2 style={{ padding: '12px 16px', fontWeight: 800, fontSize: 20 }}>Trends for you</h2>
+                    <div className="rounded-2xl bg-[#16181c] overflow-hidden border border-[#2f3336]/40">
+                        <h2 className="px-4 py-3 font-extrabold text-lg text-[#e7e9ea]">Trends for you</h2>
                         {TRENDING.map((t, i) => (
-                            <button key={i} style={{ width: '100%', padding: '12px 16px', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', borderTop: '1px solid #2f3336' }}
+                            <button key={i} className="w-full px-4 py-3 bg-transparent border-none cursor-pointer text-left border-t border-[#2f3336] hover:bg-white/5 transition-colors"
                                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
                                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                                 <p style={{ fontSize: 12, color: '#71767b' }}>{t.category} · Trending</p>
@@ -929,15 +942,16 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed }) => {
                 </aside>
             </div>
 
-            {/* Floating compose (mobile) */}
+            {/* Mobile FAB */}
             <button onClick={() => { setSelectedChannel(null); setActiveTab('for-you'); }}
-                style={{ position: 'fixed', bottom: 80, right: 16, width: 56, height: 56, borderRadius: '50%', background: '#1d9bf0', border: 'none', cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(29,155,240,0.5)', zIndex: 40 }}>
-                <PlusIcon style={{ width: 28, height: 28 }} />
+                className="md:hidden fixed bottom-16 right-4 w-14 h-14 rounded-full flex items-center justify-center shadow-2xl bg-[#1d9bf0] text-white hover:bg-[#1a8cd8] transition-colors border-none cursor-pointer z-40"
+            >
+                <PlusIcon className="w-6 h-6" />
             </button>
 
-            {/* Channel modal */}
+            {/* Space Creation Modal */}
             {showChannelForm && (
-                <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
+                <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}>
                     <form onSubmit={createChannel} style={{ width: '100%', maxWidth: 480, background: '#000', border: '1px solid #2f3336', borderRadius: 16, padding: 24, boxShadow: '0 16px 64px rgba(0,0,0,0.8)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                             <h2 style={{ fontWeight: 800, fontSize: 20 }}>Create a Space</h2>

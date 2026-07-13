@@ -108,6 +108,139 @@ const ClockIcon = ({ className }) => (
 const SWIPE_THRESHOLD = 60;
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
+// ── Full Emoji Picker Data ──
+const EMOJI_CATEGORIES = [
+    {
+        label: 'Smileys', icon: '😊',
+        emojis: ['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','😚','😙','🥲','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😶‍🌫️','😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','🥴','😵','😵‍💫','🤯','🤠','🥳','🥸','😎','🤓','🧐','😕','😟','🙁','☹️','😮','😯','😲','😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','🥱','😤','😡','😠','🤬','😈','👿','💀','☠️','💩','🤡','👹','👺','👻','👽','👾','🤖']
+    },
+    {
+        label: 'People', icon: '👋',
+        emojis: ['👋','🤚','🖐️','✋','🖖','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','☝️','👍','👎','✊','👊','🤛','🤜','👏','🙌','🫶','👐','🤲','🤝','🙏','✍️','💅','🤳','💪','🦾','🦿','🦵','🦶','👂','🦻','👃','🧠','🫀','🫁','🦷','🦴','👀','👁️','👅','👄','💋','🫦','👶','🧒','👦','👧','🧑','👱','👨','🧔','🧔‍♂️','🧔‍♀️','👩','🧓','👴','👵','🙍','🙎','🙅','🙆','💁','🙋','🧏','🙇','🤦','🤷','👮','🕵️','💂','🥷','👷','🫅','🤴','👸','👰','🤵','🧙','🧚','🧛','🧜','🧝','🧞','🧟','🧌','💆','💇','🚶','🧍','🧎','🏃','💃','🕺','🕴️','👫','👬','👭','💑','👨‍👩‍👦','👪']
+    },
+    {
+        label: 'Nature', icon: '🌿',
+        emojis: ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐻‍❄️','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🙈','🙉','🙊','🐔','🐧','🐦','🐤','🦆','🦅','🦉','🦇','🐺','🐗','🐴','🦄','🐝','🪱','🐛','🦋','🐌','🐞','🐜','🪲','🦟','🦗','🕷️','🦂','🐢','🐍','🦎','🦖','🦕','🐙','🦑','🦐','🦞','🦀','🪸','🐡','🐠','🐟','🐬','🦭','🐳','🐋','🦈','🦦','🦥','🐾','🐉','🌵','🌲','🌳','🌴','🪴','🌱','🌿','☘️','🍀','🎋','🎍','🍃','🍂','🍁','🪺','🪹','🌾','🌺','🌻','🌹','🥀','🌷','🌸','💐','🍄','🌰','🦔']
+    },
+    {
+        label: 'Food', icon: '🍕',
+        emojis: ['🍏','🍎','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🍆','🥑','🥦','🥬','🥒','🌶️','🫑','🧄','🧅','🥔','🍠','🫘','🌽','🥕','🧆','🧇','🥞','🧈','🍳','🥚','🧀','🥓','🥩','🍗','🍖','🦴','🌭','🍔','🍟','🍕','🫓','🥪','🥙','🧆','🌮','🌯','🫔','🥗','🥘','🫕','🥫','🍝','🍜','🍲','🍛','🍣','🍱','🥟','🦪','🍤','🍙','🍚','🍘','🍥','🥮','🍢','🧁','🍰','🎂','🍮','🍭','🍬','🍫','🍿','🍩','🍪','🌰','🥜','🍯','🧃','🥤','🧋','☕','🍵','🫖','🧉','🍺','🍻','🥂','🍷','🥃','🍸','🍹','🍾','🧊']
+    },
+    {
+        label: 'Activities', icon: '⚽',
+        emojis: ['⚽','🏀','🏈','⚾','🥎','🎾','🏐','🏉','🥏','🎱','🪀','🏓','🏸','🏒','🥍','🏏','🪃','🥅','⛳','🪁','🎣','🤿','🎽','🎿','🛷','🥌','🎯','🪃','🎱','🎮','🕹️','🎰','🎲','♟️','🧩','🪅','🎭','🎨','🖼️','🎪','🤹','🎬','🎤','🎧','🎼','🎹','🥁','🪘','🎷','🎺','🎸','🪕','🎻','🎵','🎶','🎙️','🎚️','🎛️','📻','🎟️','🎫','🎗️','🎀','🎁','🎊','🎉','🎈','🎏','🎐','🧧','🎑']
+    },
+    {
+        label: 'Travel', icon: '✈️',
+        emojis: ['🚗','🚕','🚙','🚌','🚎','🏎️','🚓','🚑','🚒','🚐','🛻','🚚','🚛','🚜','🏍️','🛵','🛺','🚲','🛴','🛹','🛼','🛷','🚏','🛣️','🛤️','⛽','🚨','🚥','🚦','🛑','⚓','🚢','✈️','🛫','🛬','🪂','💺','🚁','🚟','🚠','🚡','🚀','🛸','🛰️','🪐','🌍','🌎','🌏','🗺️','🏔️','⛰️','🌋','🗻','🏕️','🏖️','🏜️','🏝️','🏞️','🏟️','🏛️','🏗️','🧱','🏘️','🏚️','🏠','🏡','🏢','🏣','🏤','🏥','🏦','🏨','🏩','🏪','🏫','🏬','🏭','🗼','🗽','⛪','🕌','🛕','🕍','⛩️','🗾','🎠','🎡','🎢','💈','⛲','⛺','🌁','🌃','🌄','🌅','🌆','🌇','🌉','🎇','🎆','🌌','🌠']
+    },
+    {
+        label: 'Objects', icon: '💡',
+        emojis: ['⌚','📱','📲','💻','⌨️','🖥️','🖨️','🖱️','🖲️','💾','💿','📀','🧮','📷','📸','📹','🎥','📽️','🎞️','📞','☎️','📟','📠','📺','📻','🎙️','⏱️','⏲️','⏰','🕰️','⌛','⏳','📡','🔋','🔌','💡','🔦','🕯️','🪔','🧯','🛢️','💰','💵','💴','💶','💷','💸','💳','🪙','💹','📈','📉','📊','📋','📌','📍','✂️','🖊️','🖋️','✒️','📝','📏','📐','🗃️','🗄️','🗑️','🔒','🔓','🔑','🗝️','🔨','🪓','⛏️','⚒️','🛠️','🗡️','⚔️','🛡️','🔧','🔩','⚙️','🗜️','🔗','⛓️','🧰','🪝','🧲','🪜','🧪','🧫','🧬','🔬','🔭','📡','💉','🩸','💊','🩹','🩺','🏷️','🧹','🪣','🧺','🧻','🪠','🧼','🫧','🪥','🧽','🧴','🛒']
+    },
+    {
+        label: 'Symbols', icon: '❤️',
+        emojis: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❤️‍🔥','❤️‍🩹','❣️','💕','💞','💓','💗','💖','💘','💝','💟','☮️','✝️','☪️','🕉️','☸️','🔯','🪬','🧿','✡️','🕎','☯️','☦️','🛐','⛎','♈','♉','♊','♋','♌','♍','♎','♏','♐','♑','♒','♓','🆔','⚛️','🉑','☢️','☣️','📴','📳','🈶','🈚','🈸','🈺','🈷️','✴️','🆚','💮','🉐','㊙️','㊗️','🈴','🈵','🈹','🈲','🅰️','🅱️','🆎','🆑','🅾️','🆘','❌','⭕','🛑','⛔','📛','🚫','💯','❗','❕','❓','❔','‼️','⁉️','🔅','🔆','🔱','⚜️','🔰','♻️','✅','🈯','💹','❎','🌐','🔀','🔁','🔂','▶️','⏩','⏭️','⏯️','◀️','⏪','⏮️','🔼','⏫','🔽','⏬','⏸️','⏹️','⏺️','🎦','🔊','🔔','📣','🔕','🔇','🔈','🔉','📢','💬','💭','🗯️','♠️','♣️','♥️','♦️','🃏','🀄','🎴']
+    }
+];
+
+// Full Emoji Picker Panel component
+const EmojiPickerPanel = ({ onSelect, onClose }) => {
+    const [activeTab, setActiveTab] = useState(0);
+    const [search, setSearch] = useState('');
+    const panelRef = useRef(null);
+
+    const filteredEmojis = search
+        ? EMOJI_CATEGORIES.flatMap(c => c.emojis).filter(e => e.includes(search))
+        : EMOJI_CATEGORIES[activeTab]?.emojis || [];
+
+    useEffect(() => {
+        const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
+        document.addEventListener('keydown', handleKey);
+        return () => document.removeEventListener('keydown', handleKey);
+    }, [onClose]);
+
+    return (
+        <div
+            ref={panelRef}
+            className="flex flex-col bg-[#1a2634] border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+            style={{ width: 320, maxHeight: 420, animation: 'scaleInMenu 0.18s cubic-bezier(0.34,1.56,0.64,1) both' }}
+            onClick={e => e.stopPropagation()}
+        >
+            {/* Search bar */}
+            <div className="px-3 pt-3 pb-2 flex-shrink-0">
+                <div className="flex items-center gap-2 bg-white/8 border border-white/10 rounded-xl px-3 py-2">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4 text-white/40 flex-shrink-0">
+                        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                    </svg>
+                    <input
+                        type="text"
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        placeholder="Search emoji..."
+                        className="bg-transparent text-white text-sm outline-none flex-1 placeholder-white/30"
+                        autoFocus
+                    />
+                    {search && (
+                        <button onClick={() => setSearch('')} className="text-white/40 hover:text-white/80">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* Category tabs */}
+            {!search && (
+                <div className="flex gap-0 px-2 flex-shrink-0 border-b border-white/8 overflow-x-auto scrollbar-hide">
+                    {EMOJI_CATEGORIES.map((cat, i) => (
+                        <button
+                            key={cat.label}
+                            onClick={() => setActiveTab(i)}
+                            title={cat.label}
+                            className={`flex-shrink-0 px-2 py-2 text-lg transition-all relative ${
+                                activeTab === i
+                                    ? 'opacity-100'
+                                    : 'opacity-50 hover:opacity-80'
+                            }`}
+                        >
+                            {cat.icon}
+                            {activeTab === i && (
+                                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 bg-[#25d366] rounded-full" />
+                            )}
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            {/* Emoji grid */}
+            <div className="flex-1 overflow-y-auto p-2">
+                {search && (
+                    <p className="text-white/30 text-xs px-1 pb-2">{filteredEmojis.length} results</p>
+                )}
+                {!search && (
+                    <p className="text-white/30 text-xs px-1 pb-2 font-medium">{EMOJI_CATEGORIES[activeTab]?.label}</p>
+                )}
+                <div className="grid grid-cols-8 gap-0.5">
+                    {filteredEmojis.map((emoji, i) => (
+                        <button
+                            key={`${emoji}-${i}`}
+                            type="button"
+                            onClick={() => { onSelect(emoji); onClose(); }}
+                            className="w-9 h-9 flex items-center justify-center text-xl rounded-lg hover:bg-white/15 active:scale-90 transition-all"
+                            title={emoji}
+                        >
+                            {emoji}
+                        </button>
+                    ))}
+                    {filteredEmojis.length === 0 && (
+                        <div className="col-span-8 py-6 text-center text-white/30 text-sm">No emojis found</div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const InlineAudioPlayer = ({ src, isOwn, onOpen }) => {
     const audioRef = useRef(null);
     const progressRef = useRef(null);
@@ -297,12 +430,13 @@ const getDocIcon = (filename) => {
 // WhatsApp-style action menu overlay
 const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, onReply, onEdit, onCopy, onForward, onReact, onPin, onDelete, onInfo, onTranslate, isLastMessage, showTranslateBtn = true }) => {
     const menuRef = useRef(null);
+    const [showFullPicker, setShowFullPicker] = useState(false);
 
     useEffect(() => {
-        const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
+        const handleKey = (e) => { if (e.key === 'Escape') { if (showFullPicker) setShowFullPicker(false); else onClose(); } };
         document.addEventListener('keydown', handleKey);
         return () => document.removeEventListener('keydown', handleKey);
-    }, [onClose]);
+    }, [onClose, showFullPicker]);
 
     const actions = [
         { icon: '↩️', label: 'Reply', onClick: () => { onReply?.(); onClose(); } },
@@ -318,9 +452,19 @@ const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, 
     return (
         <div
             className="fixed inset-0 z-[80] flex items-center justify-center"
-            onClick={onClose}
+            onClick={() => { if (showFullPicker) { setShowFullPicker(false); } else { onClose(); } }}
             style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(3px)' }}
         >
+            {/* Full emoji picker — shown on top */}
+            {showFullPicker && (
+                <div className="absolute z-[90]" style={{ bottom: '50%', marginBottom: 8 }}>
+                    <EmojiPickerPanel
+                        onSelect={(emoji) => { onReact?.(emoji); onClose(); }}
+                        onClose={() => setShowFullPicker(false)}
+                    />
+                </div>
+            )}
+
             <div
                 ref={menuRef}
                 className="w-full max-w-xs mx-4 rounded-2xl overflow-hidden shadow-2xl border border-white/10"
@@ -340,20 +484,35 @@ const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, 
                     </div>
                 )}
 
-                {/* Quick reactions row */}
+                {/* Quick reactions + "+" button row */}
                 {!isDeleted && (
-                    <div className="flex items-center justify-around px-3 py-3 border-b border-white/8 bg-white/3">
+                    <div className="flex items-center px-2 py-2.5 border-b border-white/8 bg-white/3 gap-1">
                         {QUICK_REACTIONS.map(emoji => (
                             <button
                                 key={emoji}
                                 type="button"
                                 onClick={() => { onReact?.(emoji); onClose(); }}
-                                className="text-2xl hover:scale-125 active:scale-110 transition-transform duration-150 leading-none p-1 rounded-full hover:bg-white/10"
+                                className="flex-1 flex items-center justify-center text-2xl py-1 rounded-xl hover:bg-white/12 active:scale-90 transition-all duration-150"
                                 title={emoji}
                             >
                                 {emoji}
                             </button>
                         ))}
+                        {/* + button — opens full picker */}
+                        <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setShowFullPicker(prev => !prev); }}
+                            className={`flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl transition-all duration-150 border ${
+                                showFullPicker
+                                    ? 'bg-[#25d366]/20 border-[#25d366]/40 text-[#25d366]'
+                                    : 'bg-white/8 border-white/10 text-white/60 hover:bg-white/15 hover:text-white'
+                            }`}
+                            title="More emoji"
+                        >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-4 h-4">
+                                <path d="M12 5v14M5 12h14" strokeLinecap="round"/>
+                            </svg>
+                        </button>
                     </div>
                 )}
 
@@ -378,10 +537,13 @@ const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, 
                     from { opacity: 0; transform: scale(0.85) translateY(10px); }
                     to { opacity: 1; transform: scale(1) translateY(0); }
                 }
+                .scrollbar-hide::-webkit-scrollbar { display: none; }
+                .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
             `}</style>
         </div>
     );
 };
+
 
 const BirthdayCard = ({ data, isOwn }) => {
     const [isRevealed, setIsRevealed] = useState(false);

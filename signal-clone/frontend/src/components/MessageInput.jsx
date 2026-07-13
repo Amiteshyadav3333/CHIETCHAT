@@ -80,6 +80,8 @@ const STICKERS = [
     'https://api.dicebear.com/7.x/bottts/svg?seed=sticker27',
     'https://api.dicebear.com/7.x/bottts/svg?seed=sticker28'
 ];
+const apiUrl = import.meta.env.VITE_API_URL || '';
+const cleanBaseUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
 
 const MessageInput = ({ 
     onSend, onUpload, onStartLiveLocation, replyTo, onCancelReply, 
@@ -213,7 +215,7 @@ const MessageInput = ({
     React.useEffect(() => {
         if (pickerTab === 'gif' && gifs.length === 0) {
             setLoadingGifs(true);
-            fetch(`/api/gifs?q=trending`)
+            fetch(`${cleanBaseUrl}/api/gifs?q=trending`)
                 .then(res => res.json())
                 .then(data => { setGifs(data.gifs || []); setLoadingGifs(false); })
                 .catch(() => { setGifs([]); setLoadingGifs(false); });
@@ -669,7 +671,7 @@ const MessageInput = ({
                                             if (e.key === 'Enter') {
                                                 e.preventDefault();
                                                 setLoadingGifs(true);
-                                                fetch(`/api/gifs?q=${encodeURIComponent(gifSearch)}`)
+                                                fetch(`${cleanBaseUrl}/api/gifs?q=${encodeURIComponent(gifSearch)}`)
                                                     .then(res => res.json())
                                                     .then(data => { setGifs(data.gifs || []); setLoadingGifs(false); })
                                                     .catch(() => { setGifs([]); setLoadingGifs(false); });
@@ -681,7 +683,7 @@ const MessageInput = ({
                                         type="button"
                                         onClick={() => {
                                             setLoadingGifs(true);
-                                            fetch(`/api/gifs?q=${encodeURIComponent(gifSearch || 'trending')}`)
+                                            fetch(`${cleanBaseUrl}/api/gifs?q=${encodeURIComponent(gifSearch || 'trending')}`)
                                                 .then(res => res.json())
                                                 .then(data => { setGifs(data.gifs || []); setLoadingGifs(false); })
                                                 .catch(() => { setGifs([]); setLoadingGifs(false); });

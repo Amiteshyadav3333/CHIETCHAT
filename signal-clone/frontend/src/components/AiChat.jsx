@@ -188,9 +188,13 @@ const AiChat = ({ onClose, onBack }) => {
             return;
         }
 
+        const baseUrl = import.meta.env.VITE_API_URL || '';
+        const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+        const streamUrl = `${cleanBaseUrl}/api/ai/chat/stream`;
+
         // Streaming chat
         try {
-            const response = await fetch('/api/ai/chat/stream', {
+            const response = await fetch(streamUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

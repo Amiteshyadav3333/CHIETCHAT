@@ -778,6 +778,8 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed }) => {
             onBack={() => setProfileView(null)} onOpenProfile={openProfile}
             onLike={likePost} onRetweet={retweetPost} onShare={sharePost} onDelete={deletePost} onFollow={toggleFollow} />
     );
+    const currentPosts = selectedChannel ? channelPosts : posts;
+    const TABS = [{ key: 'for-you', label: 'For You' }, { key: 'following', label: 'Following' }, { key: 'channels', label: 'Spaces' }];
 
     const displayedPosts = currentPosts.filter(post => {
         if (!searchQuery) return true;

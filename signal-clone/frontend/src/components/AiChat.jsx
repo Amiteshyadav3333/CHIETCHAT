@@ -4,9 +4,62 @@ import { AuthContext } from '../context/AuthContext';
 import {
     XMarkIcon, TrashIcon, SparklesIcon,
     PaperAirplaneIcon, StopIcon, MicrophoneIcon,
-    PhotoIcon, HeartIcon, FaceSmileIcon
+    PhotoIcon, HeartIcon, FaceSmileIcon, PhoneIcon
 } from '@heroicons/react/24/solid';
 import { ArrowLeftIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
+
+/* ─── Canvas-based Waveform Visualizer ─── */
+const WaveformVisualizer = ({ active, color }) => {
+    const canvasRef = useRef(null);
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        let animationId;
+        let phase = 0;
+
+        const render = () => {
+            if (!canvas) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const width = canvas.width;
+            const height = canvas.height;
+            const mid = height / 2;
+            
+            const waves = [
+                { amplitude: active ? 22 : 3, frequency: 0.015, speed: 0.08, opacity: 0.8 },
+                { amplitude: active ? 16 : 2, frequency: 0.02, speed: -0.05, opacity: 0.4 },
+                { amplitude: active ? 9 : 1.5, frequency: 0.01, speed: 0.04, opacity: 0.2 }
+            ];
+
+            waves.forEach(w => {
+                ctx.beginPath();
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2.5;
+                ctx.globalAlpha = w.opacity;
+                
+                for (let x = 0; x < width; x++) {
+                    const y = mid + Math.sin(x * w.frequency + phase * w.speed) * w.amplitude;
+                    if (x === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+            });
+
+            phase += 1.2;
+            animationId = requestAnimationFrame(render);
+        };
+
+        render();
+        return () => cancelAnimationFrame(animationId);
+    }, [active, color]);
+
+    return <canvas ref={canvasRef} width={280} height={60} style={{ display: 'block', margin: '0 auto', opacity: 0.9 }} />;
+};
 
 /* ─── Emoji quick picker ─── */
 const EMOJIS = ['😊','😂','🥺','😍','🔥','💯','👀','🙏','❤️','😎','🤔','😭','✨','🥰','😅'];
@@ -94,6 +147,344 @@ const AiChat = ({ onClose, onBack }) => {
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
     const abortRef = useRef(false);
+
+    // ─── Calling States ───
+    const [isCallActive, setIsCallActive] = useState(false);
+    const [callState, setCallState] = useState('ringing'); // ringing, connected, disconnected
+    const [callDuration, setCallDuration] = useState(0);
+    const [isCallMuted, setIsCallMuted] = useState(false);
+    const [isCallSpeaker, setIsCallSpeaker] = useState(true);
+    const [aiSpeaking, setAiSpeaking] = useState(false);
+    const [userSpeaking, setUserSpeaking] = useState(false);
+
+    // Call Refs to prevent closure stale states
+    const isCallActiveRef = useRef(false);
+    const callStateRef = useRef('ringing');
+    const isCallMutedRef = useRef(false);
+    const aiSpeakingRef = useRef(false);
+
+    const recognitionRef = useRef(null);
+    const ttsUtteranceRef = useRef(null);
+    const ringtoneOscRef = useRef(null);
+    const timerIntervalRef = useRef(null);
+
+    // Keep refs in sync
+    useEffect(() => { isCallActiveRef.current = isCallActive; }, [isCallActive]);
+    useEffect(() => { callStateRef.current = callState; }, [callState]);
+    useEffect(() => { isCallMutedRef.current = isCallMuted; }, [isCallMuted]);
+    useEffect(() => { aiSpeakingRef.current = aiSpeaking; }, [aiSpeaking]);
+
+    // Timer interval for call duration
+    useEffect(() => {
+        if (isCallActive && callState === 'connected') {
+            timerIntervalRef.current = setInterval(() => {
+                setCallDuration(d => d + 1);
+            }, 1000);
+        } else {
+            if (timerIntervalRef.current) {
+                clearInterval(timerIntervalRef.current);
+                timerIntervalRef.current = null;
+            }
+        }
+        return () => {
+            if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+        };
+    }, [isCallActive, callState]);
+
+    // Load Speech Synthesis voices
+    useEffect(() => {
+        if (window.speechSynthesis) {
+            window.speechSynthesis.getVoices();
+            const handleVoices = () => {
+                window.speechSynthesis.getVoices();
+            };
+            window.speechSynthesis.addEventListener('voiceschanged', handleVoices);
+            return () => window.speechSynthesis.removeEventListener('voiceschanged', handleVoices);
+        }
+    }, []);
+
+    // Format Duration
+    const formatDuration = (sec) => {
+        const mins = Math.floor(sec / 60);
+        const secs = sec % 60;
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    // Synthesize local ringtone
+    const startRingtone = () => {
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+            const audioCtx = new AudioCtx();
+            const osc1 = audioCtx.createOscillator();
+            const osc2 = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+
+            osc1.frequency.value = 440;
+            osc2.frequency.value = 480;
+
+            osc1.connect(gainNode);
+            osc2.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+            gainNode.gain.setValueAtTime(0, now);
+            
+            const ringPulse = () => {
+                if (!isCallActiveRef.current || callStateRef.current !== 'ringing') {
+                    try { audioCtx.close(); } catch(e){}
+                    return;
+                }
+                const t = audioCtx.currentTime;
+                gainNode.gain.setValueAtTime(0.08, t);
+                gainNode.gain.setValueAtTime(0, t + 1.2);
+                setTimeout(ringPulse, 3000);
+            };
+
+            osc1.start();
+            osc2.start();
+            ringPulse();
+
+            ringtoneOscRef.current = {
+                stop: () => {
+                    try {
+                        osc1.stop();
+                        osc2.stop();
+                        audioCtx.close();
+                    } catch(e){}
+                }
+            };
+        } catch(e) {
+            console.error("Ringtone error:", e);
+        }
+    };
+
+    // Start Voice Call Flow
+    const startCall = () => {
+        setIsCallActive(true);
+        setCallState('ringing');
+        setCallDuration(0);
+        setIsCallMuted(false);
+        setAiSpeaking(false);
+        setUserSpeaking(false);
+
+        startRingtone();
+
+        // Simulate pickup after 2.5 seconds
+        setTimeout(() => {
+            if (!isCallActiveRef.current) return;
+            
+            if (ringtoneOscRef.current) {
+                ringtoneOscRef.current.stop();
+                ringtoneOscRef.current = null;
+            }
+
+            setCallState('connected');
+
+            // Play AI greeting
+            const greeting = botInfo?.name === 'Arjun'
+                ? "Haan, bolo yaar. Kya chal raha hai?"
+                : "Heyy, bolo na! Kya baat karni hai aaj?";
+            
+            speakAiResponse(greeting);
+        }, 2500);
+    };
+
+    // Speech Recognition
+    const initSpeechRecognition = () => {
+        const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRec) {
+            console.warn("Speech recognition not supported");
+            return null;
+        }
+        const rec = new SpeechRec();
+        rec.continuous = false;
+        rec.interimResults = false;
+        rec.lang = 'hi-IN';
+
+        rec.onstart = () => {
+            setUserSpeaking(true);
+        };
+
+        rec.onend = () => {
+            setUserSpeaking(false);
+            // Auto restart listening after a brief timeout if call is active
+            setTimeout(() => {
+                if (isCallActiveRef.current && callStateRef.current === 'connected' && !isCallMutedRef.current && !aiSpeakingRef.current) {
+                    try {
+                        rec.start();
+                    } catch(e){}
+                }
+            }, 600);
+        };
+
+        rec.onerror = (e) => {
+            console.error("Speech Recognition Error:", e.error);
+            setUserSpeaking(false);
+        };
+
+        rec.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            if (transcript && transcript.trim()) {
+                handleCallUserSpeech(transcript.trim());
+            }
+        };
+
+        recognitionRef.current = rec;
+        return rec;
+    };
+
+    const startListening = () => {
+        if (isCallMutedRef.current) return;
+        if (!recognitionRef.current) {
+            initSpeechRecognition();
+        }
+        if (recognitionRef.current) {
+            try {
+                recognitionRef.current.start();
+            } catch(e){}
+        }
+    };
+
+    const stopListening = () => {
+        if (recognitionRef.current) {
+            try {
+                recognitionRef.current.stop();
+            } catch(e){}
+        }
+        setUserSpeaking(false);
+    };
+
+    const handleCallUserSpeech = async (speechText) => {
+        stopListening();
+
+        const userMsg = {
+            id: Date.now(),
+            role: 'user',
+            content: speechText,
+            timestamp: new Date().toISOString()
+        };
+        setMessages(prev => [...prev, userMsg]);
+        setLoading(true);
+
+        try {
+            const res = await axios.post('/api/ai/chat', {
+                message: speechText,
+                user_gender: userGender
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            const replyText = res.data.reply;
+            const aiMsg = {
+                id: Date.now() + 1,
+                role: 'assistant',
+                content: replyText,
+                timestamp: new Date().toISOString()
+            };
+            setMessages(prev => [...prev, aiMsg]);
+            setLoading(false);
+
+            speakAiResponse(replyText);
+        } catch (e) {
+            console.error(e);
+            setLoading(false);
+            speakAiResponse("Arre yaar, connection me thodi dikkat aa rahi hai. Ek baar aur bolna.");
+        }
+    };
+
+    const speakAiResponse = (text) => {
+        if (!window.speechSynthesis) return;
+
+        window.speechSynthesis.cancel();
+        const cleanText = text.replace(/[*#_`~]/g, '');
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        ttsUtteranceRef.current = utterance;
+
+        const voices = window.speechSynthesis.getVoices();
+        let selectedVoice = null;
+        const isArjun = botInfo?.name === 'Arjun';
+
+        if (isArjun) {
+            selectedVoice = voices.find(v => (v.lang.startsWith('hi') || v.lang.startsWith('en')) && (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('google') && !v.name.toLowerCase().includes('female')));
+            if (!selectedVoice) {
+                selectedVoice = voices.find(v => v.lang.startsWith('hi')) || voices.find(v => v.lang.startsWith('en'));
+            }
+            utterance.pitch = 0.92;
+            utterance.rate = 1.0;
+        } else {
+            selectedVoice = voices.find(v => (v.lang.startsWith('hi') || v.lang.startsWith('en')) && (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('natural') || v.name.toLowerCase().includes('aria') || v.name.toLowerCase().includes('zira') || v.name.toLowerCase().includes('google')));
+            if (!selectedVoice) {
+                selectedVoice = voices.find(v => v.lang.startsWith('hi')) || voices.find(v => v.lang.startsWith('en'));
+            }
+            utterance.pitch = 1.15;
+            utterance.rate = 1.05;
+        }
+
+        if (selectedVoice) {
+            utterance.voice = selectedVoice;
+            utterance.lang = selectedVoice.lang;
+        } else {
+            utterance.lang = 'hi-IN';
+        }
+
+        utterance.onstart = () => {
+            setAiSpeaking(true);
+        };
+
+        utterance.onend = () => {
+            setAiSpeaking(false);
+            setTimeout(() => {
+                if (isCallActiveRef.current && callStateRef.current === 'connected' && !isCallMutedRef.current) {
+                    startListening();
+                }
+            }, 300);
+        };
+
+        utterance.onerror = () => {
+            setAiSpeaking(false);
+            setTimeout(() => {
+                if (isCallActiveRef.current && callStateRef.current === 'connected' && !isCallMutedRef.current) {
+                    startListening();
+                }
+            }, 300);
+        };
+
+        if (!isCallSpeaker) {
+            setTimeout(() => {
+                setAiSpeaking(false);
+                if (isCallActiveRef.current && callStateRef.current === 'connected' && !isCallMutedRef.current) {
+                    startListening();
+                }
+            }, 2000);
+        } else {
+            window.speechSynthesis.speak(utterance);
+        }
+    };
+
+    const endCall = () => {
+        setIsCallActive(false);
+        setCallState('disconnected');
+
+        if (ringtoneOscRef.current) {
+            ringtoneOscRef.current.stop();
+            ringtoneOscRef.current = null;
+        }
+
+        if (window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+        }
+
+        stopListening();
+    };
+
+    useEffect(() => {
+        return () => {
+            if (ringtoneOscRef.current) ringtoneOscRef.current.stop();
+            if (window.speechSynthesis) window.speechSynthesis.cancel();
+            if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+        };
+    }, []);
 
     // Detect gender from user profile or localStorage
     useEffect(() => {
@@ -694,6 +1085,162 @@ const AiChat = ({ onClose, onBack }) => {
                 }
                 .ai-date-divider::before { left: 0; }
                 .ai-date-divider::after { right: 0; }
+
+                /* ─── Call Overlay styles ─── */
+                .ai-call-overlay {
+                    position: absolute;
+                    inset: 0;
+                    z-index: 1000;
+                    display: flex;
+                    flex-direction: column;
+                    background: rgba(11, 20, 26, 0.95);
+                    backdrop-filter: blur(20px);
+                    -webkit-backdrop-filter: blur(20px);
+                    animation: fadeIn 0.3s ease;
+                }
+                .ai-call-bg-blur {
+                    position: absolute;
+                    inset: 0;
+                    background: radial-gradient(circle at center, rgba(124,58,237,0.12) 0%, transparent 70%);
+                    pointer-events: none;
+                }
+                .ai-call-container {
+                    flex: 1;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: space-between;
+                    padding: 40px 24px;
+                    z-index: 10;
+                }
+                .ai-call-header {
+                    text-align: center;
+                    opacity: 0.7;
+                }
+                .ai-call-encryption {
+                    font-size: 11px;
+                    color: #9ca3af;
+                    background: rgba(255,255,255,0.04);
+                    padding: 4px 10px;
+                    border-radius: 12px;
+                }
+                .ai-call-main {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 16px;
+                    margin-bottom: 40px;
+                }
+                .ai-call-avatar-wrap {
+                    position: relative;
+                    width: 140px;
+                    height: 140px;
+                    margin-bottom: 12px;
+                }
+                .ai-call-avatar {
+                    width: 100%;
+                    height: 100%;
+                    border-radius: 50%;
+                    border: 4px solid ${isArjun ? '#60a5fa' : '#c084fc'};
+                    box-shadow: 0 0 24px ${isArjun ? 'rgba(96,165,250,0.3)' : 'rgba(192,132,252,0.3)'};
+                    position: relative;
+                    z-index: 2;
+                    object-fit: cover;
+                }
+                .ai-call-avatar-glow {
+                    position: absolute;
+                    inset: -10px;
+                    border-radius: 50%;
+                    background: ${isArjun ? 'rgba(96,165,250,0.15)' : 'rgba(192,132,252,0.15)'};
+                    z-index: 1;
+                }
+                .ai-call-avatar--ringing .ai-call-avatar-glow {
+                    animation: pulse-glow 1.5s infinite;
+                }
+                .ai-call-avatar--speaking .ai-call-avatar {
+                    transform: scale(1.04);
+                    border-color: #22c55e;
+                    box-shadow: 0 0 32px rgba(34,197,94,0.55);
+                    transition: all 0.15s ease;
+                }
+                @keyframes pulse-glow {
+                    0% { transform: scale(0.95); opacity: 0.8; }
+                    50% { transform: scale(1.2); opacity: 0.3; }
+                    100% { transform: scale(1.4); opacity: 0; }
+                }
+                .ai-call-name {
+                    font-size: 24px;
+                    font-weight: 800;
+                    color: #fff;
+                    margin: 0;
+                }
+                .ai-call-status {
+                    font-size: 14px;
+                    color: #9ca3af;
+                    margin: 0;
+                    font-family: monospace;
+                    letter-spacing: 0.5px;
+                }
+                .ai-call-waves {
+                    width: 100%;
+                    max-width: 300px;
+                    margin-top: 20px;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 8px;
+                }
+                .ai-call-speaker-indicator {
+                    text-align: center;
+                    height: 20px;
+                }
+                .ai-call-controls {
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    gap: 28px;
+                }
+                .ai-call-btn {
+                    width: 56px;
+                    height: 56px;
+                    border-radius: 50%;
+                    border: none;
+                    background: rgba(255,255,255,0.07);
+                    color: #e5e7eb;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                    transition: all 0.25s;
+                }
+                .ai-call-btn:hover {
+                    background: rgba(255,255,255,0.15);
+                    color: #fff;
+                    transform: translateY(-2px);
+                }
+                .ai-call-btn--active {
+                    background: #fff;
+                    color: #111b21;
+                }
+                .ai-call-btn--active:hover {
+                    background: #e5e7eb;
+                    color: #111b21;
+                }
+                .ai-call-btn--danger {
+                    background: #ef4444;
+                    color: #fff;
+                    width: 64px;
+                    height: 64px;
+                }
+                .ai-call-btn--danger:hover {
+                    background: #dc2626;
+                    color: #fff;
+                    box-shadow: 0 4px 16px rgba(239, 68, 68, 0.4);
+                }
+                @keyframes fadeIn {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
             `}</style>
 
             {/* ─── Header ─── */}
@@ -721,6 +1268,9 @@ const AiChat = ({ onClose, onBack }) => {
                 </div>
 
                 <div className="ai-header-actions">
+                    <button onClick={startCall} className="ai-icon-btn" title="Call AI companion" style={{ color: isArjun ? '#60a5fa' : '#c084fc' }}>
+                        <PhoneIcon style={{ width: 18, height: 18 }} />
+                    </button>
                     <button onClick={handleClearMemory} className="ai-icon-btn ai-icon-btn--danger" title="Clear conversation">
                         <TrashIcon style={{ width: 16, height: 16 }} />
                     </button>
@@ -859,6 +1409,113 @@ const AiChat = ({ onClose, onBack }) => {
                     ✨ {botInfo?.name || 'AI'} — Tera apna personal AI companion
                 </p>
             </div>
+
+            {/* ─── Call Overlay Modal ─── */}
+            {isCallActive && (
+                <div className="ai-call-overlay">
+                    <div className="ai-call-bg-blur" />
+                    
+                    <div className="ai-call-container">
+                        <div className="ai-call-header">
+                            <span className="ai-call-encryption">🔒 End-to-end encrypted</span>
+                        </div>
+
+                        <div className="ai-call-main">
+                            <div className={`ai-call-avatar-wrap ${callState === 'ringing' ? 'ai-call-avatar--ringing' : ''} ${aiSpeaking ? 'ai-call-avatar--speaking' : ''}`}>
+                                <img
+                                    src={botInfo?.avatar || `https://api.dicebear.com/9.x/avataaars/svg?seed=Aria`}
+                                    alt={botInfo?.name}
+                                    className="ai-call-avatar"
+                                />
+                                <div className="ai-call-avatar-glow" />
+                            </div>
+
+                            <h2 className="ai-call-name">{botInfo?.name || 'Aria'}</h2>
+                            
+                            <p className="ai-call-status">
+                                {callState === 'ringing' && 'Ringing...'}
+                                {callState === 'connected' && formatDuration(callDuration)}
+                            </p>
+
+                            {/* Waveforms */}
+                            {callState === 'connected' && (
+                                <div className="ai-call-waves">
+                                    <WaveformVisualizer
+                                        active={aiSpeaking || userSpeaking || loading}
+                                        color={botInfo?.name === 'Arjun' ? '#60a5fa' : '#c084fc'}
+                                    />
+                                    <div className="ai-call-speaker-indicator">
+                                        {loading ? (
+                                            <span className="text-white/40 text-[12px] animate-pulse">Thinking...</span>
+                                        ) : aiSpeaking ? (
+                                            <span className="text-white/70 text-[12px]">Speaking...</span>
+                                        ) : userSpeaking ? (
+                                            <span className="text-emerald-400 text-[12px] font-semibold">Listening...</span>
+                                        ) : (
+                                            <span className="text-white/30 text-[12px]">Say something...</span>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Controls */}
+                        <div className="ai-call-controls">
+                            <button
+                                onClick={() => {
+                                    const next = !isCallMuted;
+                                    setIsCallMuted(next);
+                                    if (next) stopListening();
+                                    else if (callState === 'connected' && !aiSpeaking) startListening();
+                                }}
+                                className={`ai-call-btn ${isCallMuted ? 'ai-call-btn--active' : ''}`}
+                                title={isCallMuted ? "Unmute Mic" : "Mute Mic"}
+                            >
+                                {isCallMuted ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+                                        <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.063.922-2.063 2.063v4.875c0 1.141.922 2.062 2.063 2.062h1.932l4.5 4.5c.944.945 2.56.276 2.56-1.06V4.06zM17.78 9.22a.75.75 0 10-1.06 1.06L18.44 12l-1.72 1.72a.75.75 0 001.06 1.06l1.72-1.72 1.72 1.72a.75.75 0 101.06-1.06L20.56 12l1.72-1.72a.75.75 0 00-1.06-1.06l-1.72 1.72-1.72-1.72z" />
+                                    </svg>
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+                                        <path d="M10.94 2.1c-.945-.945-2.56-.276-2.56 1.06v17.68c0 1.336 1.616 2.005 2.56 1.06l4.875-4.875a.75.75 0 00-.53-1.28H10.5V6.15h.775a.75.75 0 00.53-1.28L10.94 2.1z" />
+                                        <path d="M18.27 12a6.25 6.25 0 01-1.83 4.42.75.75 0 101.06 1.06 7.75 7.75 0 000-10.96.75.75 0 10-1.06 1.06A6.25 6.25 0 0118.27 12z" />
+                                    </svg>
+                                )}
+                            </button>
+
+                            <button
+                                onClick={endCall}
+                                className="ai-call-btn ai-call-btn--danger"
+                                title="End Call"
+                            >
+                                <PhoneIcon className="w-6 h-6 rotate-[135deg]" />
+                            </button>
+
+                            <button
+                                onClick={() => {
+                                    const next = !isCallSpeaker;
+                                    setIsCallSpeaker(next);
+                                    if (!next && window.speechSynthesis) {
+                                        window.speechSynthesis.cancel();
+                                    }
+                                }}
+                                className={`ai-call-btn ${!isCallSpeaker ? 'ai-call-btn--active' : ''}`}
+                                title={isCallSpeaker ? "Disable Speaker" : "Enable Speaker"}
+                            >
+                                {isCallSpeaker ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+                                        <path d="M11.54 22.351l.07.04.028.016a.76.76 0 00.723 0l.028-.015.071-.041a16.975 16.975 0 001.144-.742 19.58 19.58 0 002.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827 0-4.363-3.553-7.896-7.896-7.896s-7.896 3.533-7.896 7.896c0 3.847 2.019 6.837 3.963 8.827a19.58 19.58 0 002.682 2.282 16.975 16.975 0 001.145.742zM12 13.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z" />
+                                    </svg>
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+                                        <path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm-1.72 6.97a.75.75 0 10-1.06 1.06L10.94 12l-1.72 1.72a.75.75 0 101.06 1.06L12 13.06l1.72 1.72a.75.75 0 101.06-1.06L13.06 12l1.72-1.72a.75.75 0 10-1.06-1.06L12 10.94l-1.72-1.72z" clipRule="evenodd" />
+                                    </svg>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

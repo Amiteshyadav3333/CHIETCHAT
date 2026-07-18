@@ -1165,17 +1165,22 @@ const Home = () => {
         }
     };
 
-    const startCall = (type = 'video') => {
-        if (!activeChat || !socket) return;
+    const startCallForChat = (chat, type = 'video') => {
+        if (!chat || !socket) return;
+        setActiveChat(chat);
         setCallType(type);
         socket.emit('notify_ring', {
-            chatId: activeChat.id,
+            chatId: chat.id,
             callerName: user.username,
             callerId: user.id,
-            participants: activeChat.participants.map(p => p.id),
+            participants: chat.participants.map(p => p.id),
             callType: type
         });
         setShowCallModal(true);
+    };
+
+    const startCall = (type = 'video') => {
+        startCallForChat(activeChat, type);
     };
 
     const handleDeleteChat = (chatId) => {
@@ -2588,6 +2593,56 @@ const Home = () => {
                     <AiChat
                         onBack={() => setShowAiChat(false)}
                         onClose={() => setShowAiChat(false)}
+                        onActionCall={async (contactName) => {
+                            // 1. Search in existing chats
+                            let targetChat = chats.find(c => {
+                                if (c.isGroup) {
+                                    return c.name && c.name.toLowerCase().includes(contactName.toLowerCase());
+                                } else {
+                                    const other = getOtherParticipant(c);
+                                    return other && (
+                                        other.username.toLowerCase().includes(contactName.toLowerCase()) ||
+                                        (other.platform_id && other.platform_id.toLowerCase().includes(contactName.toLowerCase()))
+                                    );
+                                }
+                            });
+
+                            if (targetChat) {
+                                setShowAiChat(false);
+                                startCallForChat(targetChat, 'video');
+                                return;
+                            }
+
+                            // 2. Search database and auto-create chat
+                            try {
+                                const res = await axios.post('/api/user/search', { query: contactName }, {
+                                    headers: { Authorization: `Bearer ${token}` }
+                                });
+                                if (res.data && res.data.id) {
+                                    const searchedUserObj = res.data;
+                                    const createRes = await axios.post('/api/chats/create', {
+                                        participants: [user.id, searchedUserObj.id],
+                                        isGroup: false
+                                    }, {
+                                        headers: { Authorization: `Bearer ${token}` }
+                                    });
+
+                                    const updatedChats = await fetchChats();
+                                    const newChat = updatedChats.find(chat => chat.id === createRes.data.id);
+                                    if (newChat) {
+                                        setShowAiChat(false);
+                                        startCallForChat(newChat, 'video');
+                                    } else {
+                                        alert(`Could not start call with ${contactName}.`);
+                                    }
+                                } else {
+                                    alert(`Contact "${contactName}" not found.`);
+                                }
+                            } catch (err) {
+                                console.error("AI trigger call search error:", err);
+                                alert(`Contact "${contactName}" not found.`);
+                            }
+                        }}
                     />
                 )}
             </div>

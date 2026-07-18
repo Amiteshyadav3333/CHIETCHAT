@@ -131,7 +131,7 @@ const MessageBubble = ({ msg, botInfo }) => {
 };
 
 /* ─── Main AiChat component ─── */
-const AiChat = ({ onClose, onBack }) => {
+const AiChat = ({ onClose, onBack, onActionCall }) => {
     const { token, user } = useContext(AuthContext);
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
@@ -150,6 +150,7 @@ const AiChat = ({ onClose, onBack }) => {
 
     // ─── Calling States ───
     const [isCallActive, setIsCallActive] = useState(false);
+    const [isCallVideo, setIsCallVideo] = useState(false);
     const [callState, setCallState] = useState('ringing'); // ringing, connected, disconnected
     const [callDuration, setCallDuration] = useState(0);
     const [isCallMuted, setIsCallMuted] = useState(false);
@@ -167,6 +168,12 @@ const AiChat = ({ onClose, onBack }) => {
     const ttsUtteranceRef = useRef(null);
     const ringtoneOscRef = useRef(null);
     const timerIntervalRef = useRef(null);
+
+    // AI Voice & Video refs
+    const shouldListenRef = useRef(false);
+    const ttsAudioRef = useRef(null);
+    const videoStreamRef = useRef(null);
+    const videoRef = useRef(null);
 
     // Keep refs in sync
     useEffect(() => { isCallActiveRef.current = isCallActive; }, [isCallActive]);
@@ -259,14 +266,18 @@ const AiChat = ({ onClose, onBack }) => {
         }
     };
 
+    const pendingActionCallRef = useRef(null);
+
     // Start Voice Call Flow
     const startCall = () => {
+        setIsCallVideo(false);
         setIsCallActive(true);
         setCallState('ringing');
         setCallDuration(0);
         setIsCallMuted(false);
         setAiSpeaking(false);
         setUserSpeaking(false);
+        pendingActionCallRef.current = null;
 
         startRingtone();
 
@@ -290,6 +301,53 @@ const AiChat = ({ onClose, onBack }) => {
         }, 2500);
     };
 
+    // Start Video Call Flow
+    const startVideoCall = async () => {
+        setIsCallVideo(true);
+        setIsCallActive(true);
+        setCallState('ringing');
+        setCallDuration(0);
+        setIsCallMuted(false);
+        setAiSpeaking(false);
+        setUserSpeaking(false);
+        pendingActionCallRef.current = null;
+
+        startRingtone();
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            videoStreamRef.current = stream;
+        } catch (e) {
+            console.error("Camera access error:", e);
+        }
+
+        // Simulate pickup after 2.5 seconds
+        setTimeout(() => {
+            if (!isCallActiveRef.current) return;
+            
+            if (ringtoneOscRef.current) {
+                ringtoneOscRef.current.stop();
+                ringtoneOscRef.current = null;
+            }
+
+            setCallState('connected');
+
+            // Play AI greeting
+            const greeting = botInfo?.name === 'Arjun'
+                ? "Haan, bolo yaar. Main vc par aa gaya hoon. Kya chal raha hai?"
+                : "Heyy, bolo na! Main vc par aa gayi hoon. Kya chal raha hai aaj? 😊";
+            
+            speakAiResponse(greeting);
+        }, 2500);
+    };
+
+    // Effect to bind video feed
+    useEffect(() => {
+        if (isCallActive && isCallVideo && videoStreamRef.current && videoRef.current) {
+            videoRef.current.srcObject = videoStreamRef.current;
+        }
+    }, [isCallActive, isCallVideo, videoStreamRef.current]);
+
     // Speech Recognition
     const initSpeechRecognition = () => {
         const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -308,19 +366,27 @@ const AiChat = ({ onClose, onBack }) => {
 
         rec.onend = () => {
             setUserSpeaking(false);
-            // Auto restart listening after a brief timeout if call is active
+            // Auto restart listening after a brief timeout if call is active and shouldListenRef is true
             setTimeout(() => {
-                if (isCallActiveRef.current && callStateRef.current === 'connected' && !isCallMutedRef.current && !aiSpeakingRef.current) {
+                if (isCallActiveRef.current && callStateRef.current === 'connected' && !isCallMutedRef.current && shouldListenRef.current) {
                     try {
                         rec.start();
                     } catch(e){}
                 }
-            }, 600);
+            }, 300);
         };
 
         rec.onerror = (e) => {
             console.error("Speech Recognition Error:", e.error);
             setUserSpeaking(false);
+            // Auto restart if shouldListenRef is still true
+            setTimeout(() => {
+                if (isCallActiveRef.current && callStateRef.current === 'connected' && !isCallMutedRef.current && shouldListenRef.current) {
+                    try {
+                        rec.start();
+                    } catch(e){}
+                }
+            }, 500);
         };
 
         rec.onresult = (event) => {
@@ -336,6 +402,7 @@ const AiChat = ({ onClose, onBack }) => {
 
     const startListening = () => {
         if (isCallMutedRef.current) return;
+        shouldListenRef.current = true;
         if (!recognitionRef.current) {
             initSpeechRecognition();
         }
@@ -347,6 +414,7 @@ const AiChat = ({ onClose, onBack }) => {
     };
 
     const stopListening = () => {
+        shouldListenRef.current = false;
         if (recognitionRef.current) {
             try {
                 recognitionRef.current.stop();
@@ -355,8 +423,30 @@ const AiChat = ({ onClose, onBack }) => {
         setUserSpeaking(false);
     };
 
+    // Frame capture helper
+    const captureFrame = () => {
+        const video = videoRef.current;
+        if (!video || video.paused || video.ended) return null;
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = 640;
+            canvas.height = 480;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            return canvas.toDataURL('image/jpeg', 0.7);
+        } catch (e) {
+            console.error("Frame capture error:", e);
+            return null;
+        }
+    };
+
     const handleCallUserSpeech = async (speechText) => {
         stopListening();
+
+        let frameData = null;
+        if (isCallVideo) {
+            frameData = captureFrame();
+        }
 
         const userMsg = {
             id: Date.now(),
@@ -370,22 +460,32 @@ const AiChat = ({ onClose, onBack }) => {
         try {
             const res = await axios.post('/api/ai/chat', {
                 message: speechText,
-                user_gender: userGender
+                user_gender: userGender,
+                image: frameData
             }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
             const replyText = res.data.reply;
+            
+            // Extract Call commands: [ACTION:CALL:name]
+            const callMatch = replyText.match(/\[ACTION:CALL:(.*?)\]/);
+            let cleanReplyText = replyText;
+            if (callMatch) {
+                cleanReplyText = replyText.replace(/\[ACTION:CALL:(.*?)\]/g, '').trim();
+                pendingActionCallRef.current = callMatch[1];
+            }
+
             const aiMsg = {
                 id: Date.now() + 1,
                 role: 'assistant',
-                content: replyText,
+                content: cleanReplyText,
                 timestamp: new Date().toISOString()
             };
             setMessages(prev => [...prev, aiMsg]);
             setLoading(false);
 
-            speakAiResponse(replyText);
+            speakAiResponse(cleanReplyText);
         } catch (e) {
             console.error(e);
             setLoading(false);
@@ -393,7 +493,65 @@ const AiChat = ({ onClose, onBack }) => {
         }
     };
 
+    // Custom high-quality speech synthesis method
     const speakAiResponse = (text) => {
+        if (window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+        }
+        if (ttsAudioRef.current) {
+            ttsAudioRef.current.pause();
+            ttsAudioRef.current = null;
+        }
+
+        const isArjun = botInfo?.name === 'Arjun';
+        const gender = isArjun ? 'male' : 'female';
+        
+        stopListening();
+        setAiSpeaking(true);
+        aiSpeakingRef.current = true;
+
+        const audioUrl = `/api/ai/tts?text=${encodeURIComponent(text)}&gender=${gender}&t=${Date.now()}`;
+        const audio = new Audio(audioUrl);
+        ttsAudioRef.current = audio;
+
+        audio.onplay = () => {
+            setAiSpeaking(true);
+            aiSpeakingRef.current = true;
+        };
+
+        audio.onended = () => {
+            setAiSpeaking(false);
+            aiSpeakingRef.current = false;
+            
+            // Trigger call action if pending
+            if (pendingActionCallRef.current && onActionCall) {
+                const target = pendingActionCallRef.current;
+                pendingActionCallRef.current = null;
+                endCall();
+                onActionCall(target);
+                return;
+            }
+
+            setTimeout(() => {
+                if (isCallActiveRef.current && callStateRef.current === 'connected' && !isCallMutedRef.current) {
+                    startListening();
+                }
+            }, 300);
+        };
+
+        audio.onerror = (e) => {
+            console.warn("Custom TTS failed, falling back to Web Speech Synthesis API:", e);
+            fallbackSpeakAiResponse(text);
+        };
+
+        audio.play().catch(err => {
+            console.warn("Audio play failed, falling back to Web Speech Synthesis API:", err);
+            fallbackSpeakAiResponse(text);
+        });
+    };
+
+    // WebSpeech fallback method
+    const fallbackSpeakAiResponse = (text) => {
         if (!window.speechSynthesis) return;
 
         window.speechSynthesis.cancel();
@@ -430,10 +588,22 @@ const AiChat = ({ onClose, onBack }) => {
 
         utterance.onstart = () => {
             setAiSpeaking(true);
+            aiSpeakingRef.current = true;
         };
 
         utterance.onend = () => {
             setAiSpeaking(false);
+            aiSpeakingRef.current = false;
+
+            // Trigger call action if pending
+            if (pendingActionCallRef.current && onActionCall) {
+                const target = pendingActionCallRef.current;
+                pendingActionCallRef.current = null;
+                endCall();
+                onActionCall(target);
+                return;
+            }
+
             setTimeout(() => {
                 if (isCallActiveRef.current && callStateRef.current === 'connected' && !isCallMutedRef.current) {
                     startListening();
@@ -443,6 +613,17 @@ const AiChat = ({ onClose, onBack }) => {
 
         utterance.onerror = () => {
             setAiSpeaking(false);
+            aiSpeakingRef.current = false;
+
+            // Trigger call action if pending
+            if (pendingActionCallRef.current && onActionCall) {
+                const target = pendingActionCallRef.current;
+                pendingActionCallRef.current = null;
+                endCall();
+                onActionCall(target);
+                return;
+            }
+
             setTimeout(() => {
                 if (isCallActiveRef.current && callStateRef.current === 'connected' && !isCallMutedRef.current) {
                     startListening();
@@ -453,6 +634,7 @@ const AiChat = ({ onClose, onBack }) => {
         if (!isCallSpeaker) {
             setTimeout(() => {
                 setAiSpeaking(false);
+                aiSpeakingRef.current = false;
                 if (isCallActiveRef.current && callStateRef.current === 'connected' && !isCallMutedRef.current) {
                     startListening();
                 }
@@ -465,10 +647,21 @@ const AiChat = ({ onClose, onBack }) => {
     const endCall = () => {
         setIsCallActive(false);
         setCallState('disconnected');
+        setIsCallVideo(false);
 
         if (ringtoneOscRef.current) {
             ringtoneOscRef.current.stop();
             ringtoneOscRef.current = null;
+        }
+
+        if (videoStreamRef.current) {
+            videoStreamRef.current.getTracks().forEach(t => t.stop());
+            videoStreamRef.current = null;
+        }
+
+        if (ttsAudioRef.current) {
+            ttsAudioRef.current.pause();
+            ttsAudioRef.current = null;
         }
 
         if (window.speechSynthesis) {
@@ -1086,6 +1279,59 @@ const AiChat = ({ onClose, onBack }) => {
                 .ai-date-divider::before { left: 0; }
                 .ai-date-divider::after { right: 0; }
 
+                /* ─── Video Call Vision Container ─── */
+                .ai-call-video-container {
+                    position: absolute;
+                    top: 80px;
+                    right: 20px;
+                    width: 130px;
+                    height: 180px;
+                    border-radius: 16px;
+                    overflow: hidden;
+                    border: 2px solid rgba(255,255,255,0.15);
+                    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+                    z-index: 100;
+                    background: #000;
+                    backdrop-filter: blur(12px);
+                    -webkit-backdrop-filter: blur(12px);
+                    display: flex;
+                    flex-direction: column;
+                }
+                .ai-call-video-feed {
+                    width: 100%;
+                    height: 100%;
+                    object-fit: cover;
+                    transform: scaleX(-1);
+                }
+                .ai-call-video-badge {
+                    position: absolute;
+                    top: 8px;
+                    left: 8px;
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    background: rgba(0,0,0,0.6);
+                    padding: 4px 8px;
+                    border-radius: 8px;
+                    font-size: 10px;
+                    color: #fff;
+                    font-weight: 600;
+                    z-index: 101;
+                    backdrop-filter: blur(4px);
+                    border: 1px solid rgba(255,255,255,0.08);
+                }
+                .ai-call-video-pulse {
+                    width: 6px;
+                    height: 6px;
+                    background: #ef4444;
+                    border-radius: 50%;
+                    animation: video-pulse-red 1s infinite alternate;
+                }
+                @keyframes video-pulse-red {
+                    0% { transform: scale(0.8); opacity: 0.5; }
+                    100% { transform: scale(1.2); opacity: 1; box-shadow: 0 0 8px #ef4444; }
+                }
+
                 /* ─── Call Overlay styles ─── */
                 .ai-call-overlay {
                     position: absolute;
@@ -1268,6 +1514,11 @@ const AiChat = ({ onClose, onBack }) => {
                 </div>
 
                 <div className="ai-header-actions">
+                    <button onClick={startVideoCall} className="ai-icon-btn" title="Video Call AI companion" style={{ color: isArjun ? '#60a5fa' : '#c084fc', marginRight: 4 }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: 18, height: 18 }}>
+                            <path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3V7.5a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.94-.94 2.56-.27 2.56 1.06v11.38c0 1.33-1.62 2-2.56 1.06z" />
+                        </svg>
+                    </button>
                     <button onClick={startCall} className="ai-icon-btn" title="Call AI companion" style={{ color: isArjun ? '#60a5fa' : '#c084fc' }}>
                         <PhoneIcon style={{ width: 18, height: 18 }} />
                     </button>
@@ -1414,6 +1665,22 @@ const AiChat = ({ onClose, onBack }) => {
             {isCallActive && (
                 <div className="ai-call-overlay">
                     <div className="ai-call-bg-blur" />
+                    
+                    {isCallVideo && (
+                        <div className="ai-call-video-container">
+                            <div className="ai-call-video-badge">
+                                <span className="ai-call-video-pulse"></span>
+                                AI Vision Active
+                            </div>
+                            <video
+                                ref={videoRef}
+                                autoPlay
+                                playsInline
+                                muted
+                                className="ai-call-video-feed"
+                            />
+                        </div>
+                    )}
                     
                     <div className="ai-call-container">
                         <div className="ai-call-header">

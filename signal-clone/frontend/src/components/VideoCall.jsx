@@ -321,7 +321,23 @@ const VideoCallModal = ({
                         }
                     };
 
-                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                let stream;
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia(constraints);
+                } catch (firstErr) {
+                    console.warn("First constraints attempt failed, trying fallback...", firstErr);
+                    try {
+                        const fallbackConstraints = callType === 'voice'
+                            ? { audio: audioConstraints, video: false }
+                            : { audio: audioConstraints, video: true };
+                        stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+                    } catch (secondErr) {
+                        console.warn("Fallback 1 failed, trying audio-only fallback...", secondErr);
+                        stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
+                        setCurrentCallType('voice');
+                        setIsVideoOff(true);
+                    }
+                }
                 streamRef.current = stream;
                 cameraTrackRef.current = stream.getVideoTracks()[0] || null;
                 const audioTrack = stream.getAudioTracks()[0] || null;
@@ -749,10 +765,19 @@ const VideoCallModal = ({
 
     const actuallySwitchToVideo = async () => {
         try {
-            const videoStream = await navigator.mediaDevices.getUserMedia({
-                video: { width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 30 }, facingMode: facingModeRef.current },
-                audio: false
-            });
+            let videoStream;
+            try {
+                videoStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 30 }, facingMode: facingModeRef.current },
+                    audio: false
+                });
+            } catch (err) {
+                console.warn("HD camera switch failed, trying fallback...", err);
+                videoStream = await navigator.mediaDevices.getUserMedia({
+                    video: true,
+                    audio: false
+                });
+            }
             const videoTrack = videoStream.getVideoTracks()[0];
             streamRef.current.addTrack(videoTrack);
             setLocalStream(new MediaStream(streamRef.current.getTracks()));
@@ -792,15 +817,24 @@ const VideoCallModal = ({
         const nextFacingMode = facingModeRef.current === 'user' ? 'environment' : 'user';
 
         try {
-            const nextStream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    width: { ideal: 1280, max: 1920 },
-                    height: { ideal: 720, max: 1080 },
-                    frameRate: { ideal: 30 },
-                    facingMode: { ideal: nextFacingMode }
-                },
-                audio: false
-            });
+            let nextStream;
+            try {
+                nextStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 1280, max: 1920 },
+                        height: { ideal: 720, max: 1080 },
+                        frameRate: { ideal: 30 },
+                        facingMode: { ideal: nextFacingMode }
+                    },
+                    audio: false
+                });
+            } catch (err) {
+                console.warn("HD flip failed, trying fallback...", err);
+                nextStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { ideal: nextFacingMode } },
+                    audio: false
+                });
+            }
             const nextVideoTrack = nextStream.getVideoTracks()[0];
             cameraTrackRef.current = nextVideoTrack;
             const currentStream = streamRef.current;

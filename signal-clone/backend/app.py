@@ -20,7 +20,7 @@ import cloudinary
 from flask import Flask
 
 # Extensions
-from extensions import socketio, cors
+from extensions import socketio, cors, ALLOWED_ORIGINS
 from models import db
 
 # Utils
@@ -57,7 +57,7 @@ app = Flask(__name__, static_folder=static_folder)
 app.config.from_object(Config)
 
 # Initialize extensions
-cors.init_app(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+cors.init_app(app, resources={r"/*": {"origins": ALLOWED_ORIGINS}}, supports_credentials=True)
 db.init_app(app)
 socketio.init_app(app)
 

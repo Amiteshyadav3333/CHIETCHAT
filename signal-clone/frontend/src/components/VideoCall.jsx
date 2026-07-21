@@ -302,14 +302,11 @@ const VideoCallModal = ({
     useEffect(() => {
         const initCall = async () => {
             try {
-                // Audio: mono + low latency for minimum delay. Opus at 48kHz is perfect.
+                // Audio: standard constraints to avoid device-specific driver/hardware latency
                 const audioConstraints = {
                     echoCancellation: true,
                     noiseSuppression: true,
-                    autoGainControl: true,
-                    sampleRate: 48000,
-                    channelCount: 1,  // mono = half bandwidth = half latency
-                    latency: 0        // request minimum hardware latency
+                    autoGainControl: true
                 };
                 // Video: 720p ideal (balance of HD quality vs. network efficiency)
                 const constraints = callType === 'voice'
@@ -356,6 +353,20 @@ const VideoCallModal = ({
                     if (Object.keys(peersRef.current).length >= MAX_PARTICIPANTS - 1) return;
                     const pc = createPeer(data.fromSocket, data.from, stream, false);
                     await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+
+                    // Process queued ICE candidates
+                    const peerObj = peersRef.current[data.fromSocket];
+                    if (peerObj && peerObj.iceQueue) {
+                        while (peerObj.iceQueue.length > 0) {
+                            const candidate = peerObj.iceQueue.shift();
+                            try {
+                                await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                            } catch (e) {
+                                console.error("Error adding queued ICE candidate: ", e);
+                            }
+                        }
+                    }
+
                     const answer = await pc.createAnswer();
                     // Apply VP9 + Opus SDP preferences before setting local description
                     const optimizedAnswer = new RTCSessionDescription({ type: answer.type, sdp: optimizeSDP(answer.sdp) });
@@ -365,16 +376,34 @@ const VideoCallModal = ({
 
                 socket.on('answer', async (data) => {
                     const peerObj = peersRef.current[data.fromSocket];
-                    if (peerObj?.pc) await peerObj.pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+                    if (peerObj?.pc) {
+                        await peerObj.pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+                        // Process queued ICE candidates
+                        if (peerObj.iceQueue) {
+                            while (peerObj.iceQueue.length > 0) {
+                                const candidate = peerObj.iceQueue.shift();
+                                try {
+                                    await peerObj.pc.addIceCandidate(new RTCIceCandidate(candidate));
+                                } catch (e) {
+                                    console.error("Error adding queued ICE candidate on answer: ", e);
+                                }
+                            }
+                        }
+                    }
                 });
 
                 socket.on('ice_candidate', async (data) => {
                     const peerObj = peersRef.current[data.fromSocket];
                     if (peerObj?.pc && data.candidate) {
                         try {
-                            await peerObj.pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                            if (peerObj.pc.remoteDescription && peerObj.pc.remoteDescription.type) {
+                                await peerObj.pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                            } else {
+                                if (!peerObj.iceQueue) peerObj.iceQueue = [];
+                                peerObj.iceQueue.push(data.candidate);
+                            }
                         } catch (err) {
-                            console.error(err);
+                            console.error("Failed to add/queue ICE candidate", err);
                         }
                     }
                 });
@@ -572,20 +601,6 @@ const VideoCallModal = ({
             iceServers: [
                 // Google STUN — global, reliable
                 { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' },
-                { urls: 'stun:stun3.l.google.com:19302' },
-                { urls: 'stun:stun4.l.google.com:19302' },
-                // Mozilla STUN — EU region
-                { urls: 'stun:stun.services.mozilla.com' },
-                // Open STUN servers — additional worldwide fallback
-                { urls: 'stun:stun.ekiga.net' },
-                { urls: 'stun:stun.ideasip.com' },
-                { urls: 'stun:stun.schlund.de' },
-                { urls: 'stun:stun.voiparound.com' },
-                { urls: 'stun:stun.voipbuster.com' },
-                { urls: 'stun:stun.voxgratia.org' },
-                { urls: 'stun:stun.xten.com' },
                 // Cloudflare STUN — Asia/global CDN
                 { urls: 'stun:stun.cloudflare.com:3478' },
                 // Open Relay TURN — worldwide TURN server for restrictive NATs & firewalls
@@ -601,17 +616,11 @@ const VideoCallModal = ({
                 },
                 // Additional free TURN for extra coverage
                 {
-                    urls: 'turn:relay.metered.ca:80',
-                    username: 'e8dd65f422b554671be72eba',
-                    credential: 'gWJTELNy7sMIgIOf'
-                },
-                {
-                    urls: 'turn:relay.metered.ca:443',
-                    username: 'e8dd65f422b554671be72eba',
-                    credential: 'gWJTELNy7sMIgIOf'
-                },
-                {
-                    urls: 'turns:relay.metered.ca:443',
+                    urls: [
+                        'turn:relay.metered.ca:80',
+                        'turn:relay.metered.ca:443',
+                        'turns:relay.metered.ca:443'
+                    ],
                     username: 'e8dd65f422b554671be72eba',
                     credential: 'gWJTELNy7sMIgIOf'
                 }
@@ -698,7 +707,8 @@ const VideoCallModal = ({
         const peerItem = {
             pc,
             stream: null,
-            user: { id: remoteUserId, username: remoteParticipant?.username || `User ${remoteUserId}`, avatar: remoteParticipant?.avatar }
+            user: { id: remoteUserId, username: remoteParticipant?.username || `User ${remoteUserId}`, avatar: remoteParticipant?.avatar },
+            iceQueue: []
         };
         peersRef.current[remoteSocketId] = peerItem;
         setPeers(prev => ({

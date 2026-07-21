@@ -173,9 +173,42 @@ const Home = () => {
     const { privateKey, publicKey } = useEncryption(user, token);
     const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-    const [chats, setChats] = useState([]);
-    const [activeChat, setActiveChat] = useState(null);
-    const [messages, setMessages] = useState([]);
+    const [chats, setChats] = useState(() => {
+        try {
+            const cached = localStorage.getItem('cached_chats');
+            return cached ? JSON.parse(cached) : [];
+        } catch {
+            return [];
+        }
+    });
+    const [activeChat, setActiveChat] = useState(() => {
+        try {
+            const savedChatId = localStorage.getItem('activeChatId');
+            if (savedChatId) {
+                const cachedChatsStr = localStorage.getItem('cached_chats');
+                if (cachedChatsStr) {
+                    const cachedChats = JSON.parse(cachedChatsStr);
+                    const found = cachedChats.find(c => c.id === parseInt(savedChatId, 10));
+                    if (found) return found;
+                }
+            }
+        } catch (e) {
+            console.error("Failed to restore active chat synchronously", e);
+        }
+        return null;
+    });
+    const [messages, setMessages] = useState(() => {
+        try {
+            const savedChatId = localStorage.getItem('activeChatId');
+            if (savedChatId) {
+                const cachedMsgs = localStorage.getItem(`cached_messages_${savedChatId}`);
+                return cachedMsgs ? JSON.parse(cachedMsgs) : [];
+            }
+        } catch (e) {
+            console.error("Failed to restore messages synchronously", e);
+        }
+        return [];
+    });
     const [loadingChats, setLoadingChats] = useState(true);
     const [showCallModal, setShowCallModal] = useState(false);
     const [callType, setCallType] = useState('video');
@@ -659,6 +692,29 @@ const Home = () => {
         }
     }, [activeChat]);
 
+    // Persist chats list on changes
+    useEffect(() => {
+        if (chats && chats.length > 0) {
+            try {
+                localStorage.setItem('cached_chats', JSON.stringify(chats));
+            } catch (e) {
+                console.error("Failed to cache chats", e);
+            }
+        }
+    }, [chats]);
+
+    // Persist messages list for active chat on changes
+    useEffect(() => {
+        if (activeChat?.id && messages) {
+            try {
+                const persistentMessages = messages.filter(m => m.id && !m.id.toString().startsWith('temp_'));
+                localStorage.setItem(`cached_messages_${activeChat.id}`, JSON.stringify(persistentMessages));
+            } catch (e) {
+                console.error("Failed to cache messages", e);
+            }
+        }
+    }, [messages, activeChat?.id]);
+
     useEffect(() => {
         if (activeChat) {
             const stored = localStorage.getItem(`chat_translation_lang_${activeChat.id}`) || '';
@@ -923,14 +979,38 @@ const Home = () => {
     }, [socket, user, fetchChats, decryptMessageForCurrentUser, processQueue]);
 
     useEffect(() => {
+        if (!activeChat) {
+            setMessages([]);
+            return;
+        }
+
+        // Load from cache synchronously
+        try {
+            const cached = localStorage.getItem(`cached_messages_${activeChat.id}`);
+            if (cached) {
+                setMessages(JSON.parse(cached));
+                setTimeout(scrollToBottom, 50);
+            } else {
+                setMessages([]);
+            }
+        } catch (e) {
+            console.error("Failed to load cached messages", e);
+        }
+
         const fetchMessages = async () => {
-            if (!activeChat || !privateKey) return;
+            if (!privateKey) return;
             try {
                 const res = await axios.get(`/api/chats/${activeChat.id}/messages`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
 
-                setMessages(await decryptMessagesForCurrentUser(res.data));
+                const decrypted = await decryptMessagesForCurrentUser(res.data);
+                setMessages(decrypted);
+
+                // Save to cache
+                const persistentMessages = decrypted.filter(m => m.id && !m.id.toString().startsWith('temp_'));
+                localStorage.setItem(`cached_messages_${activeChat.id}`, JSON.stringify(persistentMessages));
+                
                 scrollToBottom();
 
                 socket?.emit('join_room', { room: activeChat.id });

@@ -13,7 +13,13 @@ export const SocketProvider = ({ children }) => {
             // We can pass token in auth object
             const url = import.meta.env.VITE_API_URL || '/';
             const newSocket = io(url, {
-                auth: { token }
+                auth: { token },
+                transports: ['websocket', 'polling'],
+                upgrade: true,
+                reconnection: true,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000,
+                timeout: 15000
             });
             setSocket(newSocket);
 

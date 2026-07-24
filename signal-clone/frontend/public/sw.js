@@ -1,4 +1,4 @@
-const SHELL_CACHE = 'cheetchat-shell-v3';
+const SHELL_CACHE = 'cheetchat-shell-v4';
 
 self.addEventListener('install', (event) => {
     event.waitUntil(
@@ -30,10 +30,14 @@ self.addEventListener('fetch', (event) => {
             caches.match('/index.html').then(cached => {
                 const refresh = fetch(request).then(response => {
                     if (response.ok) {
-                        caches.open(SHELL_CACHE).then(cache => cache.put('/index.html', response.clone()));
+                        // Clone synchronously, before the browser starts consuming the body.
+                        const cacheCopy = response.clone();
+                        caches.open(SHELL_CACHE)
+                            .then(cache => cache.put('/index.html', cacheCopy))
+                            .catch(() => {});
                     }
                     return response;
-                });
+                }).catch(() => cached);
                 return cached || refresh;
             })
         );
@@ -44,10 +48,13 @@ self.addEventListener('fetch', (event) => {
         event.respondWith(
             caches.match(request).then(cached => cached || fetch(request).then(response => {
                 if (response.ok) {
-                    caches.open(SHELL_CACHE).then(cache => cache.put(request, response.clone()));
+                    const cacheCopy = response.clone();
+                    caches.open(SHELL_CACHE)
+                        .then(cache => cache.put(request, cacheCopy))
+                        .catch(() => {});
                 }
                 return response;
-            }))
+            }).catch(() => caches.match(request)))
         );
     }
 });

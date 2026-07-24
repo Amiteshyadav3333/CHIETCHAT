@@ -16,10 +16,10 @@ const MAX_PARTICIPANTS = 10;
 // Layer 2 (this code):  AES-GCM application-level encryption on each RTP frame via
 //   Encoded Transforms API (Chrome 86+, Safari 15.4+). Falls back gracefully.
 
-const E2EE_SUPPORT = (() => {
-    try { return typeof RTCRtpSender !== 'undefined' && typeof RTCRtpSender.prototype.createEncodedStreams === 'function'; }
-    catch { return false; }
-})();
+// Encoded transforms are not interoperable when one participant's browser does
+// not support them (a common Chrome ↔ Safari/mobile black-screen cause).
+// DTLS-SRTP remains mandatory and encrypts every WebRTC audio/video stream.
+const E2EE_SUPPORT = false;
 
 const _e2eeKeyCache = {};
 
@@ -322,9 +322,9 @@ const VideoCallModal = ({
                     : {
                         audio: audioConstraints,
                         video: {
-                            width: { ideal: 1280, max: 1920 },
-                            height: { ideal: 720, max: 1080 },
-                            frameRate: { ideal: 30 },
+                            width: { ideal: 960, max: 1280 },
+                            height: { ideal: 540, max: 720 },
+                            frameRate: { ideal: 24, max: 24 },
                             facingMode: facingModeRef.current
                         }
                     };
@@ -356,8 +356,6 @@ const VideoCallModal = ({
                 // Derive AES-GCM-256 E2EE session key for this call
                 const e2eeKey = await deriveE2EEKey(activeChat.id);
                 e2eeKeyRef.current = e2eeKey;
-
-                socket.emit('join_call', { chatId: activeChat.id, userId: user.id });
 
                 socket.on('user_joined_call', (data) => {
                     if (Object.keys(peersRef.current).length >= MAX_PARTICIPANTS - 1) return;
@@ -454,6 +452,11 @@ const VideoCallModal = ({
                         await onTransitionCall(data.newChatId);
                     }
                 });
+
+                // Join only after every signaling listener is ready. Previously
+                // an existing peer could answer immediately and its offer was
+                // lost, leaving the new participant on a black screen.
+                socket.emit('join_call', { chatId: activeChat.id, userId: user.id });
 
             } catch (err) {
                 console.error(err);
@@ -601,13 +604,16 @@ const VideoCallModal = ({
                     const parameters = sender.getParameters();
                     if (!parameters.encodings || parameters.encodings.length === 0) continue;
                     if (sender.track.kind === 'video') {
-                        // 2 Mbps for 720p VP9 — high quality, low buffer delay
-                        parameters.encodings[0].maxBitrate = 2000000;
-                        parameters.encodings[0].maxFramerate = 30;
-                        parameters.encodings[0].scaleResolutionDownBy = 1.0;
-                        // 'maintain-resolution' reduces fps before resolution — keeps HD look
+                        // Mesh calls upload one copy per peer. Keep total upload
+                        // bounded so adding people does not kill the connection.
+                        const participantCount = Object.keys(peersRef.current).length + 1;
+                        parameters.encodings[0].maxBitrate =
+                            participantCount <= 2 ? 900000 :
+                            participantCount <= 4 ? 600000 : 350000;
+                        parameters.encodings[0].maxFramerate = participantCount <= 4 ? 24 : 18;
+                        parameters.encodings[0].scaleResolutionDownBy = participantCount >= 5 ? 1.5 : 1.0;
                         if ('degradationPreference' in parameters) {
-                            parameters.degradationPreference = 'maintain-resolution';
+                            parameters.degradationPreference = 'balanced';
                         }
                     } else if (sender.track.kind === 'audio') {
                         // 64 kbps Opus — crystal clear voice, minimal latency
@@ -634,6 +640,7 @@ const VideoCallModal = ({
             iceTransportPolicy: 'all', // Try all ICE candidates for max global reach
             bundlePolicy: 'max-bundle',
             rtcpMuxPolicy: 'require',
+            iceCandidatePoolSize: 10,
             iceServers: [
                 // Google STUN — global, reliable
                 { urls: 'stun:stun.l.google.com:19302' },
@@ -751,6 +758,11 @@ const VideoCallModal = ({
             ...prev,
             [remoteSocketId]: peerItem
         }));
+        setTimeout(() => {
+            Object.values(peersRef.current).forEach(({ pc: activePc }) => {
+                if (activePc.connectionState === 'connected') setMediaBitrates(activePc);
+            });
+        }, 1500);
 
         if (isInitiator) {
             pc.onnegotiationneeded = async () => {
@@ -772,6 +784,11 @@ const VideoCallModal = ({
         setPeers(prev => { const next = { ...prev }; delete next[socketId]; return next; });
         delete peersRef.current[socketId];
         if (mainView === socketId) setMainView('remote');
+        setTimeout(() => {
+            Object.values(peersRef.current).forEach(({ pc }) => {
+                if (pc.connectionState === 'connected') setMediaBitrates(pc);
+            });
+        }, 250);
     };
 
     const switchToVideo = async () => {
@@ -788,7 +805,7 @@ const VideoCallModal = ({
             let videoStream;
             try {
                 videoStream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 30 }, facingMode: facingModeRef.current },
+                    video: { width: { ideal: 960, max: 1280 }, height: { ideal: 540, max: 720 }, frameRate: { ideal: 24, max: 24 }, facingMode: facingModeRef.current },
                     audio: false
                 });
             } catch (err) {
@@ -927,10 +944,8 @@ const VideoCallModal = ({
 
         try {
             const displayStream = await navigator.mediaDevices.getDisplayMedia({
-                video: { frameRate: { ideal: 30, max: 30 } },
+                video: { frameRate: { ideal: 20, max: 24 } },
                 audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-                preferCurrentTab: true,
-                selfBrowserSurface: 'exclude',
                 surfaceSwitching: 'include',
                 systemAudio: 'include'
             });
@@ -947,14 +962,14 @@ const VideoCallModal = ({
             await Promise.all([screenVideo.play(), cameraTrack ? faceVideo.play() : Promise.resolve()]);
 
             const canvas = document.createElement('canvas');
-            canvas.width = 1280;
-            canvas.height = 720;
+            canvas.width = 960;
+            canvas.height = 540;
             const ctx = canvas.getContext('2d');
             const sizeRatio = { small: 0.18, medium: 0.25, large: 0.34 };
 
             const drawPicture = () => {
-                const sw = screenVideo.videoWidth || 1280;
-                const sh = screenVideo.videoHeight || 720;
+                const sw = screenVideo.videoWidth || 960;
+                const sh = screenVideo.videoHeight || 540;
                 const scale = Math.min(canvas.width / sw, canvas.height / sh);
                 const dw = sw * scale;
                 const dh = sh * scale;
@@ -984,7 +999,7 @@ const VideoCallModal = ({
                 }
             };
 
-            const composedStream = canvas.captureStream(30);
+            const composedStream = canvas.captureStream(20);
             const composedTrack = composedStream.getVideoTracks()[0];
             let mixedAudioTrack = activeAudioTrackRef.current;
             let mixContext = null;
@@ -993,7 +1008,8 @@ const VideoCallModal = ({
                 ...displayStream.getAudioTracks()
             ].filter(Boolean);
             if (audioTracks.length > 1) {
-                mixContext = new AudioContext();
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                mixContext = new AudioContextClass();
                 const destination = mixContext.createMediaStreamDestination();
                 audioTracks.forEach(track => {
                     const source = mixContext.createMediaStreamSource(new MediaStream([track]));
@@ -1170,7 +1186,7 @@ const VideoCallModal = ({
                                 onClick={(e) => { e.stopPropagation(); setShowSafetyModal(true); }}
                                 className="flex items-center gap-1 bg-green-500/25 border border-green-500/30 px-2.5 py-0.5 rounded-full text-[11px] text-green-400 font-bold hover:bg-green-500/35 transition"
                             >
-                                🔒 E2EE Verified
+                                🔒 WebRTC Encrypted
                             </button>
                         </div>
                     </div>
@@ -1411,7 +1427,7 @@ const VideoCallModal = ({
                                 onClick={(e) => { e.stopPropagation(); setShowSafetyModal(true); }}
                                 className="flex items-center gap-1 bg-green-500/25 border border-green-500/30 px-2 py-0.5 rounded-full text-[10px] text-green-400 font-bold hover:bg-green-500/35 transition"
                             >
-                                🔒 E2EE Verified
+                                🔒 WebRTC Encrypted
                             </button>
                         </div>
                     </div>
@@ -1720,16 +1736,22 @@ const RemoteVideo = ({ stream, className }) => {
         if (!video) return;
         if (stream) {
             video.srcObject = stream;
-            // Explicitly call play() to handle browsers that block autoPlay
-            video.play().catch(err => {
+            const playVideo = () => video.play().catch(err => {
                 // NotAllowedError is expected on some browsers before user interaction
-                if (err.name !== 'NotAllowedError') {
+                if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
                     console.warn('RemoteVideo play() failed:', err);
                 }
             });
+            video.onloadedmetadata = playVideo;
+            stream.getVideoTracks().forEach(track => { track.onunmute = playVideo; });
+            playVideo();
         } else {
             video.srcObject = null;
         }
+        return () => {
+            video.onloadedmetadata = null;
+            stream?.getVideoTracks().forEach(track => { track.onunmute = null; });
+        };
     }, [stream]);
     return <video ref={videoRef} autoPlay playsInline className={className} />;
 };

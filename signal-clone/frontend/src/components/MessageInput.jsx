@@ -108,6 +108,8 @@ const MessageInput = ({
     const [smartReplies, setSmartReplies] = useState([]);
     const [showScheduleModal, setShowScheduleModal] = useState(false);
     const [scheduleAt, setScheduleAt] = useState('');
+    const [showShoppingModal, setShowShoppingModal] = useState(false);
+    const [shoppingQuery, setShoppingQuery] = useState('');
 
     const [showCameraModal, setShowCameraModal] = useState(false);
     const [cameraFacing, setCameraFacing] = useState('user');
@@ -620,6 +622,42 @@ const MessageInput = ({
                 </div>
             )}
 
+            {showShoppingModal && (
+                <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4">
+                    <div className="w-full max-w-sm overflow-hidden rounded-3xl border border-white/10 bg-[#131921] text-white shadow-2xl">
+                        <div className="flex items-center justify-between bg-[#232f3e] px-5 py-4">
+                            <div><h3 className="text-lg font-bold">Shopping</h3><p className="text-xs text-gray-300">Search products on Amazon India</p></div>
+                            <button onClick={() => setShowShoppingModal(false)} className="rounded-full p-2 hover:bg-white/10"><XMarkIcon className="h-5 w-5" /></button>
+                        </div>
+                        <div className="p-5">
+                            <form onSubmit={e => {
+                                e.preventDefault();
+                                if (!shoppingQuery.trim()) return;
+                                window.open(`https://www.amazon.in/s?k=${encodeURIComponent(shoppingQuery.trim())}`, '_blank', 'noopener,noreferrer');
+                            }} className="flex gap-2">
+                                <input autoFocus value={shoppingQuery} onChange={e => setShoppingQuery(e.target.value)} placeholder="Search mobiles, fashion, books…" className="min-w-0 flex-1 rounded-xl bg-white px-4 py-3 text-sm text-black outline-none" />
+                                <button className="rounded-xl bg-[#ff9900] px-4 text-sm font-bold text-black">Search</button>
+                            </form>
+                            <p className="mb-3 mt-5 text-xs font-bold uppercase tracking-wider text-gray-400">Popular categories</p>
+                            <div className="grid grid-cols-2 gap-2">
+                                {[
+                                    ['📱', 'Mobiles'], ['👕', 'Fashion'], ['💻', 'Electronics'],
+                                    ['🏠', 'Home'], ['📚', 'Books'], ['🎮', 'Gaming']
+                                ].map(([icon, label]) => (
+                                    <button key={label} onClick={() => window.open(`https://www.amazon.in/s?k=${encodeURIComponent(label)}`, '_blank', 'noopener,noreferrer')} className="flex items-center gap-2 rounded-xl bg-white/5 p-3 text-left text-sm font-semibold hover:bg-white/10">
+                                        <span className="text-xl">{icon}</span>{label}
+                                    </button>
+                                ))}
+                            </div>
+                            <button onClick={() => window.open('https://www.amazon.in/', '_blank', 'noopener,noreferrer')} className="mt-4 w-full rounded-xl border border-[#ff9900]/50 py-3 text-sm font-bold text-[#ffb84d] hover:bg-[#ff9900]/10">
+                                Open Amazon India ↗
+                            </button>
+                            <p className="mt-3 text-center text-[10px] text-gray-500">Amazon opens in a new tab. CHEETCHAT does not process purchases.</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Reply Preview Bar */}
             {replyTo && (
                 <div className="flex items-center gap-2 px-4 py-2 bg-[#2a3942] border-b border-gray-700 animate-slide-up">
@@ -813,6 +851,12 @@ const MessageInput = ({
                             color="bg-sky-600"
                             icon={<span className="text-2xl text-white">◷</span>}
                             onClick={() => { setShowScheduleModal(true); setShowAttachMenu(false); }}
+                        />
+                        <AttachOption
+                            label="Shopping"
+                            color="bg-[#ff9900]"
+                            icon={<ShoppingBagIcon className="w-6 h-6 text-white" />}
+                            onClick={() => { setShowShoppingModal(true); setShowAttachMenu(false); }}
                         />
                         <AttachOption
                             label="Document"

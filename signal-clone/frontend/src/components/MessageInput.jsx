@@ -809,6 +809,12 @@ const MessageInput = ({
                             onClick={() => setShowCameraModal(true)}
                         />
                         <AttachOption
+                            label="Schedule"
+                            color="bg-sky-600"
+                            icon={<span className="text-2xl text-white">◷</span>}
+                            onClick={() => { setShowScheduleModal(true); setShowAttachMenu(false); }}
+                        />
+                        <AttachOption
                             label="Document"
                             color="bg-indigo-500"
                             icon={<DocumentIcon className="w-6 h-6 text-white" />}
@@ -1060,9 +1066,6 @@ const MessageInput = ({
                                 </svg>
                             </button>
                         )}
-                        <button type="button" onClick={() => setShowScheduleModal(true)} disabled={!text.trim()} className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${text.trim() ? 'text-sky-400 hover:bg-sky-400/10' : 'text-gray-600'}`} title="Schedule message">
-                            <span className="text-xl">◷</span>
-                        </button>
                     </div>
                 )}
 

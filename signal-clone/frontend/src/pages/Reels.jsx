@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext, useRef } from 'react';
 import axios from 'axios';
 import ReelCard from '../components/ReelCard';
 import { AuthContext } from '../context/AuthContext';
-import { ArrowLeftIcon, PlusIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, PlusIcon, UserPlusIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import ReelUploader from '../components/ReelUploader';
 import ReelProfile from '../components/ReelProfile';
 import ReelReactor from '../components/ReelReactor';
@@ -27,6 +27,9 @@ const Reels = ({ active, onBack, onShareToChat }) => {
     const [showUploader, setShowUploader] = useState(false);
     const [selectedProfileUserId, setSelectedProfileUserId] = useState(null);
     const [reactingToReel, setReactingToReel] = useState(null);
+    const [suggestions, setSuggestions] = useState([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [followingIds, setFollowingIds] = useState({});
     const { user, token } = useContext(AuthContext);
     const hasFetched = useRef(false);
 
@@ -56,6 +59,24 @@ const Reels = ({ active, onBack, onShareToChat }) => {
             }
         }
     }, [token]);
+
+    useEffect(() => {
+        if (!token) return;
+        axios.get('/api/users/suggestions?limit=8', { headers: { Authorization: `Bearer ${token}` } })
+            .then(res => setSuggestions(res.data))
+            .catch(() => setSuggestions([]));
+    }, [token]);
+
+    const followSuggestedUser = async (suggestedUser) => {
+        setFollowingIds(state => ({ ...state, [suggestedUser.id]: true }));
+        try {
+            const res = await axios.post(`/api/users/${suggestedUser.id}/follow`, {}, { headers: { Authorization: `Bearer ${token}` } });
+            if (res.data.isFollowing) {
+                setTimeout(() => setSuggestions(list => list.filter(item => item.id !== suggestedUser.id)), 500);
+            }
+        } catch { }
+        finally { setFollowingIds(state => ({ ...state, [suggestedUser.id]: false })); }
+    };
 
     // When filter changes, always fetch fresh
     useEffect(() => {
@@ -137,6 +158,29 @@ const Reels = ({ active, onBack, onShareToChat }) => {
                     <PlusIcon className="w-6 h-6" />
                 </button>
             </div>
+
+            {suggestions.length > 0 && (
+                <div className="absolute right-3 top-20 z-40">
+                    {!showSuggestions ? (
+                        <button onClick={() => setShowSuggestions(true)} className="flex items-center gap-2 rounded-full border border-white/20 bg-black/65 px-3 py-2 text-xs font-bold text-white shadow-xl backdrop-blur-md">
+                            <UserPlusIcon className="h-4 w-4" /> Discover people
+                        </button>
+                    ) : (
+                        <div className="w-[290px] max-w-[calc(100vw-24px)] rounded-2xl border border-white/15 bg-[#111]/95 p-3 text-white shadow-2xl backdrop-blur-xl">
+                            <div className="mb-2 flex items-center justify-between"><div><p className="text-sm font-bold">Suggested for you</p><p className="text-[10px] text-white/45">People you may like</p></div><button onClick={() => setShowSuggestions(false)}><XMarkIcon className="h-5 w-5" /></button></div>
+                            <div className="max-h-[360px] space-y-1 overflow-y-auto">
+                                {suggestions.map(account => (
+                                    <div key={account.id} className="flex items-center gap-3 rounded-xl p-2 hover:bg-white/5">
+                                        <button onClick={() => setSelectedProfileUserId(account.id)}><img src={account.avatar} alt="" className="h-10 w-10 rounded-full object-cover ring-1 ring-white/20" /></button>
+                                        <button onClick={() => setSelectedProfileUserId(account.id)} className="min-w-0 flex-1 text-left"><p className="truncate text-sm font-semibold">{account.username}</p><p className="truncate text-[10px] text-white/45">{account.suggestionReason}</p></button>
+                                        <button disabled={followingIds[account.id]} onClick={() => followSuggestedUser(account)} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-black disabled:opacity-60">{followingIds[account.id] ? 'Following' : 'Follow'}</button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Scroll Container */}
             <div className={`flex-1 overflow-y-auto snap-y snap-mandatory hide-scrollbar ${showUploader ? 'hidden' : ''}`}>

@@ -341,19 +341,12 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onDel
 
 const WhoToFollow = ({ token, currentUser, onOpenProfile, onFollow }) => {
     const [suggestions, setSuggestions] = useState([]);
+    const [busyIds, setBusyIds] = useState({});
     useEffect(() => {
         if (!token) return;
-        axios.get('/api/social/posts?feed=all', { headers: authHeaders(token) }).then(res => {
-            const seen = new Set(); const users = [];
-            for (const post of res.data) {
-                const u = post.user;
-                if (u && u.id !== (currentUser && currentUser.id) && !seen.has(u.id) && !u.isFollowing) {
-                    seen.add(u.id); users.push(u);
-                    if (users.length >= 3) break;
-                }
-            }
-            setSuggestions(users);
-        }).catch(() => {});
+        axios.get('/api/users/suggestions?limit=5', { headers: authHeaders(token) })
+            .then(res => setSuggestions(res.data))
+            .catch(() => {});
     }, [token]);
     if (!suggestions.length) return null;
     return (
@@ -368,11 +361,17 @@ const WhoToFollow = ({ token, currentUser, onOpenProfile, onFollow }) => {
                     </button>
                     <button onClick={() => onOpenProfile(u.id)} style={{ flex: 1, minWidth: 0, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' }}>
                         <p style={{ fontWeight: 700, fontSize: 14, color: '#e7e9ea', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.username}</p>
-                        <p style={{ fontSize: 14, color: '#71767b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{(u.username || '').toLowerCase().replace(/\s+/g, '_')}</p>
+                        <p style={{ fontSize: 14, color: '#71767b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{u.platformId || (u.username || '').toLowerCase().replace(/\s+/g, '_')}</p>
+                        <p style={{ fontSize: 11, color: '#536471' }}>{u.suggestionReason}</p>
                     </button>
-                    <button onClick={() => onFollow(u.id)}
+                    <button disabled={busyIds[u.id]} onClick={async () => {
+                        setBusyIds(x => ({ ...x, [u.id]: true }));
+                        const result = await onFollow(u.id);
+                        if (result?.isFollowing) setSuggestions(list => list.filter(x => x.id !== u.id));
+                        setBusyIds(x => ({ ...x, [u.id]: false }));
+                    }}
                         style={{ padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, background: '#e7e9ea', color: '#0f1419', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
-                        Follow
+                        {busyIds[u.id] ? '…' : 'Follow'}
                     </button>
                 </div>
             ))}
@@ -751,7 +750,8 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed }) => {
             const res = await axios.post('/api/users/' + targetUserId + '/follow', {}, { headers: authHeaders(token) });
             const patch = p => p.user.id === targetUserId ? { ...p, user: { ...p.user, isFollowing: res.data.isFollowing } } : p;
             setPosts(p => p.map(patch)); setChannelPosts(p => p.map(patch));
-        } catch { }
+            return res.data;
+        } catch { return null; }
     };
     const requestSubscribe = async (channelId) => {
         try { const res = await axios.post('/api/social/channels/' + channelId + '/subscribe', {}, { headers: authHeaders(token) }); setChannels(p => p.map(ch => ch.id === channelId ? { ...ch, role: res.data.role } : ch)); if (selectedChannel && selectedChannel.id === channelId) setSelectedChannel(p => ({ ...p, role: res.data.role })); } catch { }

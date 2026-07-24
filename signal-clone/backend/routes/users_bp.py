@@ -400,6 +400,33 @@ def toggle_follow(followed_id):
     
     return jsonify({"isFollowing": True})
 
+
+@users_bp.route('/api/users/suggestions', methods=['GET'])
+def suggested_users():
+    """Suggest real accounts the viewer does not already follow."""
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    limit = min(max(request.args.get('limit', 8, type=int), 1), 20)
+    followed_ids = [row.followed_id for row in Follow.query.filter_by(follower_id=user_id).all()]
+    excluded_ids = followed_ids + [user_id]
+    users = (
+        User.query
+        .filter(~User.id.in_(excluded_ids))
+        .order_by(User.created_at.desc(), User.id.desc())
+        .limit(limit)
+        .all()
+    )
+    payload = []
+    for account in users:
+        item = serialize_user(account, viewer_id=user_id)
+        item["isFollowing"] = False
+        item["followersCount"] = Follow.query.filter_by(followed_id=account.id).count()
+        item["suggestionReason"] = "New on CHEETCHAT" if item["followersCount"] < 3 else "Popular on CHEETCHAT"
+        payload.append(item)
+    return jsonify(payload)
+
 @users_bp.route('/api/user/privacy', methods=['PUT'])
 def update_privacy_settings():
     user_id = get_current_user_id()

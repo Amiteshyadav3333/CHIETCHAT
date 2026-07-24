@@ -1318,10 +1318,16 @@ const ChatBubble = ({
                         <div
                             onClick={handleBubbleClick}
                             className={`relative ${isMedia ? 'p-1' : 'px-3 py-2'} rounded-2xl shadow-sm cursor-pointer select-none
+                                ${isOwn && message._isOptimistic ? 'animate-[sendBubble_650ms_cubic-bezier(.2,.9,.2,1)]' : ''}
                                 ${isOwn
                                     ? 'bg-[#005c4b] text-white rounded-tr-sm'
                                     : 'bg-[#202c33] text-gray-100 rounded-tl-sm'
                                 }`}
+                            style={isOwn ? {
+                                backgroundColor: localStorage.getItem('chat_bubble_color') || '#005c4b',
+                                fontSize: localStorage.getItem('chat_font_size') === 'large' ? '17px' : localStorage.getItem('chat_font_size') === 'small' ? '13px' : '15px',
+                                fontFamily: localStorage.getItem('chat_custom_font') === 'serif' ? 'Georgia, serif' : localStorage.getItem('chat_custom_font') === 'mono' ? 'ui-monospace, monospace' : localStorage.getItem('chat_custom_font') === 'rounded' ? 'Nunito, system-ui, sans-serif' : 'inherit'
+                            } : undefined}
                         >
                             {/* Reply preview */}
                             {replyTo && (

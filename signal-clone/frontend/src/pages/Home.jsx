@@ -11,7 +11,8 @@ import VideoCallModal from '../components/VideoCall';
 import AvatarZoom from '../components/AvatarZoom';
 import StatusSection from '../components/StatusSection';
 import AiChat from '../components/AiChat';
-import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon, EllipsisVerticalIcon, XMarkIcon, TrashIcon, NoSymbolIcon, PlayIcon, Cog6ToothIcon, BellIcon, MapPinIcon, PhotoIcon, ChatBubbleLeftRightIcon, InformationCircleIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon, MicrophoneIcon, FaceSmileIcon, SparklesIcon } from '@heroicons/react/24/outline';
+import AiSmartSpace from '../components/AiSmartSpace';
+import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon, EllipsisVerticalIcon, XMarkIcon, TrashIcon, NoSymbolIcon, PlayIcon, Cog6ToothIcon, BellIcon, MapPinIcon, PhotoIcon, ChatBubbleLeftRightIcon, InformationCircleIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon, MicrophoneIcon, FaceSmileIcon, SparklesIcon, MagnifyingGlassIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 import { format } from 'date-fns';
 import SettingsModal from '../components/SettingsModal';
 import NotificationPanel from '../components/NotificationPanel';
@@ -220,6 +221,7 @@ const Home = () => {
     const [showReels, setShowReels] = useState(() => localStorage.getItem('activeView') === 'reels');
     const [showSocial, setShowSocial] = useState(() => localStorage.getItem('activeView') === 'social');
     const [showAiChat, setShowAiChat] = useState(() => localStorage.getItem('activeView') === 'ai');
+    const [showSmartSpace, setShowSmartSpace] = useState(() => localStorage.getItem('activeView') === 'smart-space');
     const [showPodlive, setShowPodlive] = useState(() => localStorage.getItem('activeView') === 'podlive');
     const [socialDeepLink, setSocialDeepLink] = useState(null); // { type: 'post'|'profile', id }
     const [showSettings, setShowSettings] = useState(() => localStorage.getItem('activeView') === 'settings');
@@ -310,6 +312,8 @@ const Home = () => {
     const [wallpaper, setWallpaper] = useState(() => localStorage.getItem('chat_wallpaper') || 'white');
     const [disappearingTtl, setDisappearingTtl] = useState(0);
     const [showTopDropdown, setShowTopDropdown] = useState(false);
+    const [showMessageSearch, setShowMessageSearch] = useState(false);
+    const [messageSearchQuery, setMessageSearchQuery] = useState('');
     const [showTopReactions, setShowTopReactions] = useState(false);
     const [topInfoMessage, setTopInfoMessage] = useState(null);
     // Upload progress state
@@ -347,6 +351,26 @@ const Home = () => {
     const showCallModalRef = useRef(showCallModal);
     const messageRefsMap = useRef({});
     const sidebarEmojiPickerRef = useRef(null);
+    const sendScheduledRef = useRef(null);
+
+    const scheduleMessage = (content, sendAt) => {
+        const key = 'cheetchat_scheduled_messages';
+        const scheduled = JSON.parse(localStorage.getItem(key) || '[]');
+        scheduled.push({ id: `${Date.now()}`, chatId: visibleActiveChat.id, content, sendAt });
+        localStorage.setItem(key, JSON.stringify(scheduled));
+    };
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            if (!navigator.onLine || !activeChatRef.current) return;
+            const key = 'cheetchat_scheduled_messages';
+            const scheduled = JSON.parse(localStorage.getItem(key) || '[]');
+            const dueHere = scheduled.filter(item => item.chatId === activeChatRef.current.id && new Date(item.sendAt).getTime() <= Date.now());
+            dueHere.forEach(item => sendScheduledRef.current?.(item.content, 'text', null, 0));
+            if (dueHere.length) localStorage.setItem(key, JSON.stringify(scheduled.filter(item => !dueHere.includes(item))));
+        }, 15000);
+        return () => clearInterval(timer);
+    }, []);
 
     useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
     useEffect(() => { chatsRef.current = chats; }, [chats]);
@@ -415,9 +439,9 @@ const Home = () => {
 
     // Persist active view for refresh survival
     useEffect(() => {
-        const view = showReels ? 'reels' : showSocial ? 'social' : showPodlive ? 'podlive' : showSettings ? 'settings' : 'chats';
+        const view = showReels ? 'reels' : showSocial ? 'social' : showPodlive ? 'podlive' : showSmartSpace ? 'smart-space' : showSettings ? 'settings' : 'chats';
         localStorage.setItem('activeView', view);
-    }, [showReels, showSocial, showPodlive, showSettings]);
+    }, [showReels, showSocial, showPodlive, showSmartSpace, showSettings]);
 
     const fetchChats = useCallback(async ({ restoreActive = false } = {}) => {
         if (!token) return [];
@@ -1116,6 +1140,8 @@ const Home = () => {
         }
     };
 
+    sendScheduledRef.current = handleSendMessage;
+
     const handleUpload = async (file) => {
         if (!token) { logout(); return; }
 
@@ -1599,6 +1625,7 @@ const Home = () => {
         setShowNotifications(false);
         setShowSearchModal(false);
         setShowSettings(false);
+        setShowSmartSpace(false);
     };
 
     const navItems = [
@@ -1619,6 +1646,7 @@ const Home = () => {
         { label: 'Social', icon: PhotoIcon, active: showSocial, action: () => { hideAppNavForFeature(); setShowReels(false); setShowPodlive(false); setShowSocial(true); setShowAiChat(false); } },
         { label: 'PodLive', icon: MicrophoneIcon, active: showPodlive, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(true); setShowAiChat(false); } },
         { label: 'AI', icon: SparklesIcon, active: showAiChat, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(false); setShowAiChat(true); } },
+        { label: 'Smart', icon: CheckCircleIcon, active: showSmartSpace, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(false); setShowAiChat(false); setShowSmartSpace(true); } },
         { label: 'Notify', icon: BellIcon, active: showNotifications, action: openNotifications, badge: unreadCount },
         { label: 'New', icon: PlusIcon, active: showSearchModal, action: () => { setShowNotifications(false); setShowSettings(false); setShowSearchModal(true); } },
         { label: 'Settings', icon: Cog6ToothIcon, active: showSettings, action: () => { setShowNotifications(false); setShowSearchModal(false); setShowSettings(true); } }
@@ -2167,6 +2195,7 @@ const Home = () => {
                             </div>
                         </div>
                         <div className="flex gap-3 text-signal-accent items-center relative">
+                            <button onClick={() => setShowMessageSearch(v => !v)} title="Search messages"><MagnifyingGlassIcon className="w-6 h-6" /></button>
                             <button onClick={() => startCall('voice')} title="Voice Call"><PhoneIcon className="w-6 h-6" /></button>
                             <button onClick={() => startCall('video')} title="Video Call"><VideoCameraIcon className="w-6 h-6" /></button>
                             <div className="relative">
@@ -2335,6 +2364,14 @@ const Home = () => {
                             </div>
                         </div>
                     </div>
+                    {showMessageSearch && (
+                        <div className="flex items-center gap-2 border-b border-white/5 bg-[#202c33] px-4 py-2">
+                            <MagnifyingGlassIcon className="h-4 w-4 text-gray-400" />
+                            <input autoFocus value={messageSearchQuery} onChange={e => setMessageSearchQuery(e.target.value)} placeholder="Search text, links, images or documents…" className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-gray-500" />
+                            <span className="text-xs text-gray-500">{messages.filter(m => !messageSearchQuery || `${m.content || ''} ${m.type || ''}`.toLowerCase().includes(messageSearchQuery.toLowerCase())).length} found</span>
+                            <button onClick={() => { setShowMessageSearch(false); setMessageSearchQuery(''); }}><XMarkIcon className="h-5 w-5 text-gray-400" /></button>
+                        </div>
+                    )}
 
                     {/* Info Panel */}
                     {showInfoPanel && (() => {
@@ -2550,7 +2587,7 @@ const Home = () => {
                                 </div>
                             );
                         })()}
-                        {messages.map((msg, idx) => {
+                        {messages.filter(msg => !messageSearchQuery || `${msg.content || ''} ${msg.type || ''}`.toLowerCase().includes(messageSearchQuery.toLowerCase())).map((msg, idx, shownMessages) => {
                             const prevMsg = messages[idx - 1];
                             const currDate = new Date(msg.timestamp).toDateString();
                             const prevDate = prevMsg ? new Date(prevMsg.timestamp).toDateString() : null;
@@ -2585,7 +2622,7 @@ const Home = () => {
                                             onTranslate={handleTranslate}
                                             chatId={visibleActiveChat.id}
                                             chatTranslationLang={chatTranslationLang}
-                                            isLastMessage={idx === messages.length - 1}
+                                            isLastMessage={idx === shownMessages.length - 1}
                                             socket={socket}
                                             currentUserId={user.id}
                                             showTranslateBtn={showTranslateEnabled}
@@ -2626,6 +2663,7 @@ const Home = () => {
                         showAiFeature={aiEnabled}
                         showSmartReplies={smartRepliesEnabled}
                         currentUserId={user?.id}
+                        onSchedule={scheduleMessage}
                     />
                 </div>
             ) : (
@@ -2723,6 +2761,16 @@ const Home = () => {
                                 alert(`Contact "${contactName}" not found.`);
                             }
                         }}
+                    />
+                )}
+            </div>
+            <div className={`fixed inset-0 z-50 bg-[#07110f] transition-opacity duration-200 ${showSmartSpace ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+                {showSmartSpace && (
+                    <AiSmartSpace
+                        chats={chats}
+                        token={token}
+                        onClose={() => setShowSmartSpace(false)}
+                        onOpenChat={(chat) => { setActiveChat(chat); setShowSmartSpace(false); }}
                     />
                 )}
             </div>

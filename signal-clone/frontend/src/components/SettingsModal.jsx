@@ -65,9 +65,18 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
         callSounds: localStorage.getItem('call_sounds') !== '0',
         mediaAutoDownload: localStorage.getItem('media_auto_download') !== '0',
         dataSaver: localStorage.getItem('data_saver') === '1',
+        hdMedia: localStorage.getItem('hd_media') === '1',
+        screenshotAlerts: localStorage.getItem('screenshot_alerts') === '1',
+        spamDetection: localStorage.getItem('spam_detection') !== '0',
+        appLock: localStorage.getItem('app_lock_enabled') === '1',
+        animatedTheme: localStorage.getItem('animated_theme') === '1',
         autoReply: localStorage.getItem('business_auto_reply') === '1',
         showCatalog: localStorage.getItem('business_catalog') === '1',
     }));
+    const [fontSize, setFontSize] = useState(() => localStorage.getItem('chat_font_size') || 'medium');
+    const [bubbleColor, setBubbleColor] = useState(() => localStorage.getItem('chat_bubble_color') || '#00a884');
+    const [customFont, setCustomFont] = useState(() => localStorage.getItem('chat_custom_font') || 'system');
+    const [notificationSoundName, setNotificationSoundName] = useState(() => localStorage.getItem('custom_notification_name') || '');
 
     const go = (next) => {
         setMessage(null);
@@ -444,6 +453,9 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                             
                             <SectionLabel>Security</SectionLabel>
                             <SettingsGroup>
+                                <SettingsToggle icon={<LockClosedIcon />} title="App lock" subtitle="Use this device's PIN, fingerprint or Face ID support" value={prefs.appLock} onClick={() => togglePref('appLock', 'app_lock_enabled')} />
+                                <SettingsToggle icon={<ShieldCheckIcon />} title="Screenshot alerts" subtitle="Alerts on browsers that expose screen capture events" value={prefs.screenshotAlerts} onClick={() => togglePref('screenshotAlerts', 'screenshot_alerts')} />
+                                <SettingsToggle icon={<ShieldCheckIcon />} title="Spam detection" subtitle="Warn about suspicious links and repeated unknown messages" value={prefs.spamDetection} onClick={() => togglePref('spamDetection', 'spam_detection')} />
                                 <InfoRow title="End-to-end encryption" text="Messages and calls are secured between participants using RSA-256 and AES-GCM envelopes." />
                                 <InfoRow title="Blocked contacts" text="Block or unblock a user from that contact's chat info." />
                             </SettingsGroup>
@@ -536,19 +548,41 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                         <>
                             <SectionLabel>Display</SectionLabel>
                             <SettingsGroup>
-                                <ChoiceRow title="App theme" value={theme} onChange={onThemeChange} options={[['dark', 'Dark'], ['midnight', 'Midnight'], ['business', 'Business']]} />
+                                <ChoiceRow title="App theme" value={theme} onChange={onThemeChange} options={[['light', 'Light'], ['dark', 'Dark'], ['midnight', 'Midnight'], ['business', 'Business']]} />
                                 <ChoiceRow title="Default chat wallpaper" value={wallpaper} onChange={onWallpaperChange} options={[['white', 'White'], ['gradient', 'Dark'], ['dots', 'Dots'], ['emerald', 'Emerald']]} />
+                                <ChoiceRow title="Font size" value={fontSize} onChange={val => { setFontSize(val); localStorage.setItem('chat_font_size', val); }} options={[['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']]} />
+                                <ChoiceRow title="Chat font" value={customFont} onChange={val => { setCustomFont(val); localStorage.setItem('chat_custom_font', val); }} options={[['system', 'System'], ['rounded', 'Rounded'], ['serif', 'Classic Serif'], ['mono', 'Mono']]} />
+                                <SettingsToggle icon={<FilmIcon />} title="Animated theme" subtitle="Subtle moving wallpaper effects" value={prefs.animatedTheme} onClick={() => togglePref('animatedTheme', 'animated_theme')} />
                             </SettingsGroup>
+                            <div className="mx-5 mt-4 rounded-xl border border-gray-800 bg-[#202c33] p-4">
+                                <label className="text-sm font-medium text-white">Sent bubble colour</label>
+                                <div className="mt-3 flex items-center gap-3">
+                                    <input type="color" value={bubbleColor} onChange={e => { setBubbleColor(e.target.value); localStorage.setItem('chat_bubble_color', e.target.value); }} className="h-10 w-14 rounded border-0 bg-transparent" />
+                                    <span className="text-xs text-gray-400">New messages pop colourfully, then settle into this colour.</span>
+                                </div>
+                            </div>
                             <div className="m-5 h-44 overflow-hidden rounded-xl border border-gray-700 bg-white p-3"><div className="ml-auto mt-5 max-w-[70%] rounded-lg rounded-tr-none bg-[#d9fdd3] px-3 py-2 text-sm text-[#111b21] shadow">Wallpaper preview <span className="ml-2 text-[10px] text-gray-500">10:30</span></div></div>
                         </>
                     )}
 
                     {screen === 'notifications' && (
-                        <SettingsGroup>
-                            <SettingsToggle icon={<BellIcon />} title="Message sounds" subtitle="Play sounds for new messages" value={prefs.messageSounds} onClick={() => togglePref('messageSounds', 'message_sounds')} />
-                            <SettingsToggle icon={<ComputerDesktopIcon />} title="Desktop alerts" subtitle="Show notifications while using the app" value={prefs.desktopAlerts} onClick={() => togglePref('desktopAlerts', 'desktop_alerts')} />
-                            <SettingsToggle icon={<BellIcon />} title="Call sounds" subtitle="Play a ringtone for incoming calls" value={prefs.callSounds} onClick={() => togglePref('callSounds', 'call_sounds')} />
-                        </SettingsGroup>
+                        <>
+                            <SettingsGroup>
+                                <SettingsToggle icon={<BellIcon />} title="Message sounds" subtitle="Play sounds for new messages" value={prefs.messageSounds} onClick={() => togglePref('messageSounds', 'message_sounds')} />
+                                <SettingsToggle icon={<ComputerDesktopIcon />} title="Desktop alerts" subtitle="Show notifications while using the app" value={prefs.desktopAlerts} onClick={() => togglePref('desktopAlerts', 'desktop_alerts')} />
+                                <SettingsToggle icon={<BellIcon />} title="Call sounds" subtitle="Play a ringtone for incoming calls" value={prefs.callSounds} onClick={() => togglePref('callSounds', 'call_sounds')} />
+                            </SettingsGroup>
+                            <label className="m-5 block rounded-xl border border-gray-800 bg-[#202c33] p-4">
+                                <span className="block text-sm font-semibold text-white">Personal notification sound</span>
+                                <span className="mb-3 block text-xs text-gray-400">{notificationSoundName || 'Choose an audio file from this device'}</span>
+                                <input type="file" accept="audio/*" className="text-xs text-gray-300" onChange={e => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    setNotificationSoundName(file.name);
+                                    localStorage.setItem('custom_notification_name', file.name);
+                                }} />
+                            </label>
+                        </>
                     )}
 
                     {screen === 'storage' && (
@@ -557,6 +591,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                             <SettingsGroup>
                                 <SettingsToggle icon={<ComputerDesktopIcon />} title="Media auto-download" subtitle="Automatically download received media" value={prefs.mediaAutoDownload} onClick={() => togglePref('mediaAutoDownload', 'media_auto_download')} />
                                 <SettingsToggle icon={<ChartBarIcon />} title="Data saver" subtitle="Reduce media quality on limited networks" value={prefs.dataSaver} onClick={() => togglePref('dataSaver', 'data_saver')} />
+                                <SettingsToggle icon={<PhotoIcon />} title="HD media" subtitle="Send original-quality images and videos with lighter compression" value={prefs.hdMedia} onClick={() => togglePref('hdMedia', 'hd_media')} />
                             </SettingsGroup>
                         </>
                     )}

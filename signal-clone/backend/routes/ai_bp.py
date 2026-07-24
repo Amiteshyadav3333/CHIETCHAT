@@ -16,7 +16,36 @@ OPENAI_API_KEY  = os.environ.get('OPENAI_API_KEY', '')
 GEMINI_API_KEY  = os.environ.get('GEMINI_API_KEY', '')
 SERPER_API_KEY  = os.environ.get('SERPER_API_KEY', '')
 
-MEMORY_LIMIT = 20   # last N messages kept in context
+MEMORY_LIMIT = 40   # enough recent turns to learn the user's language and texting style
+
+
+def _conversation_style_hint(history) -> str:
+    """Summarise the user's recent language/style without storing a second profile."""
+    user_text = " ".join(h.content for h in history if h.role == 'user')[-4000:]
+    if not user_text:
+        return "Abhi user ka style learn karna shuru karo."
+
+    devanagari = len(re.findall(r'[\u0900-\u097f]', user_text))
+    latin = len(re.findall(r'[A-Za-z]', user_text))
+    common_hinglish = len(re.findall(
+        r'\b(kya|hai|haan|ha|nhi|nahi|acha|achha|kyu|kaise|mai|main|tum|aap|yaar|yr|kr|kar|ho)\b',
+        user_text.lower()
+    ))
+    avg_words = sum(len(x.split()) for x in re.split(r'[.!?\n]+', user_text) if x.strip()) / max(
+        1, len([x for x in re.split(r'[.!?\n]+', user_text) if x.strip()])
+    )
+
+    if devanagari > latin * .35:
+        language = "Hindi/Devanagari"
+    elif common_hinglish >= 3:
+        language = "Roman Hinglish"
+    else:
+        language = "English ya mixed language"
+    length = "bahut chhote replies" if avg_words <= 7 else "short conversational replies"
+    return (
+        f"Recent messages se user ka preferred style: {language}, {length}. "
+        "Isi script, vocabulary, slang aur formality ko mirror karo; language achanak mat badlo."
+    )
 
 
 # ── Gender-aware system prompt builder ──────────────────────────
@@ -63,6 +92,9 @@ def _build_system_prompt(user_gender: str, user_name: str) -> str:
 - KABHI bhi AI ya assistant ki tarah behave mat kar. No 'How can I help you?', 'I am an AI'.
 - Agar user udas ho, toh 'udas kyu ho?' ya 'gussa mt ho' bolna. Agar user sone ja raha ho, toh bol 'gn, so jaoo'.
 - Conversation ko natural aur sweet/flirty rakho dosti ke hisaab se. Kabhi lecture mat do.
+- User ke recent messages ka rhythm seekho: woh jitne chhote words/replies use kare, lagbhag utna hi chhota reply do.
+- 'hmm', 'acha', 'ohh', 'haan', 'sahi', 'fir?' jaise acknowledgements context ke hisaab se naturally use karo.
+- Har reply me question mat pucho. Kabhi sirf reaction/acknowledgement bhi do, jaise real chat me hota hai.
 
 📞 CALL COMMAND TRIGGERS (CRITICAL ACTION):
 - Agar user kisi contact/insaan ko call karne ko kahe (e.g. 'Amitesh ko call karo', 'call Arjun', 'Aria ko call lagao', 'call same person'), toh tu use bolna 'haan call laga rahi/raha hu' aur response ke bilkul last mein strictly `[ACTION:CALL:contact_name]` append karna.
@@ -366,6 +398,7 @@ def _build_messages(user_id, new_user_msg, user_gender=None, user_name=None):
     history = list(reversed(history))
 
     system_prompt = _build_system_prompt(user_gender or 'unknown', user_name or 'User')
+    system_prompt += f"\n\n🎯 LIVE STYLE MEMORY:\n{_conversation_style_hint(history)}"
     messages = [{"role": "system", "content": system_prompt}]
     for h in history:
         messages.append({"role": h.role, "content": h.content})
@@ -412,6 +445,11 @@ def ai_chat():
             context_msg = f"{user_msg}\n\n[Web search results for context:\n{search_result}]"
 
     messages = _build_messages(user_id, context_msg, user_gender, user_name)
+    if data.get('call_mode'):
+        messages[0]["content"] += (
+            "\n\n📞 Ab live call chal rahi hai: sirf ek natural spoken sentence bolo, "
+            "markdown/emoji/list mat use karo. User ki baat ka seedha response do."
+        )
     reply = _get_ai_reply(messages, image_data=image_data)
     _save_turn(user_id, user_msg, reply)
 
@@ -644,7 +682,9 @@ def ai_tts():
     # Option 2: Fallback to Google Translate TTS (free, natural voice, no key needed)
     try:
         import urllib.request
-        lang = "hi"
+        lang = request.args.get('lang', 'hi').split('-')[0]
+        if lang not in {'hi', 'en', 'bn', 'pa', 'mr', 'gu', 'ta', 'te', 'kn', 'ml', 'ur'}:
+            lang = 'hi'
         encoded_text = urllib.parse.quote(text)
         url = f"https://translate.google.com/translate_tts?ie=UTF-8&tl={lang}&client=tw-ob&q={encoded_text}"
         req = urllib.request.Request(
@@ -658,4 +698,3 @@ def ai_tts():
     except Exception as e:
         print(f"Google TTS fallback error: {e}")
         return jsonify({"error": "TTS failed"}), 500
-

@@ -171,6 +171,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
 
     // AI Voice & Video refs
     const shouldListenRef = useRef(false);
+    const recognitionLangRef = useRef(localStorage.getItem('ai_call_language') || 'hi-IN');
     const ttsAudioRef = useRef(null);
     const videoStreamRef = useRef(null);
     const videoRef = useRef(null);
@@ -358,7 +359,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         const rec = new SpeechRec();
         rec.continuous = false;
         rec.interimResults = false;
-        rec.lang = 'hi-IN';
+        rec.lang = recognitionLangRef.current;
 
         rec.onstart = () => {
             setUserSpeaking(true);
@@ -443,6 +444,17 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     const handleCallUserSpeech = async (speechText) => {
         stopListening();
 
+        const nextLanguage = /[\u0900-\u097f]/.test(speechText)
+            ? 'hi-IN'
+            : (/\b(kya|hai|haan|nahi|nhi|acha|achha|kaise|kyu|main|mai|tum|yaar|kr|kar)\b/i.test(speechText)
+                ? 'hi-IN'
+                : 'en-IN');
+        if (nextLanguage !== recognitionLangRef.current) {
+            recognitionLangRef.current = nextLanguage;
+            localStorage.setItem('ai_call_language', nextLanguage);
+            recognitionRef.current = null;
+        }
+
         let frameData = null;
         if (isCallVideo) {
             frameData = captureFrame();
@@ -461,7 +473,8 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
             const res = await axios.post('/api/ai/chat', {
                 message: speechText,
                 user_gender: userGender,
-                image: frameData
+                image: frameData,
+                call_mode: isCallVideo ? 'video' : 'voice'
             }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -510,7 +523,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         setAiSpeaking(true);
         aiSpeakingRef.current = true;
 
-        const audioUrl = `/api/ai/tts?text=${encodeURIComponent(text)}&gender=${gender}&t=${Date.now()}`;
+        const audioUrl = `/api/ai/tts?text=${encodeURIComponent(text)}&gender=${gender}&lang=${encodeURIComponent(recognitionLangRef.current)}&t=${Date.now()}`;
         const audio = new Audio(audioUrl);
         ttsAudioRef.current = audio;
 
@@ -583,7 +596,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
             utterance.voice = selectedVoice;
             utterance.lang = selectedVoice.lang;
         } else {
-            utterance.lang = 'hi-IN';
+            utterance.lang = recognitionLangRef.current;
         }
 
         utterance.onstart = () => {
@@ -718,8 +731,8 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         if (botInfo && messages.length === 0) {
             const isArjun = botInfo.name === 'Arjun';
             const welcome = isArjun
-                ? `Hey! Main hoon **${botInfo.name}** 😎\n\nTeri koi bhi baat ho — personal, kuch seekhna ho, ya bas timepass — main hoon yahan!\n\nBata, kya chal raha hai? 🙌`
-                : `Heyy! Main hoon **${botInfo.name}** ✨\n\nMujhse kuch bhi poochh sakte ho — koi bhi sawaal, dil ki baat, ya kuch naya seekhna ho!\n\nKya baat karni hai aaj? 😊`;
+                ? `hey, main ${botInfo.name} 😄 bolo kya scene hai?`
+                : `heyy, main ${botInfo.name} 😊 bolo na`;
             setMessages([{
                 id: 0,
                 role: 'assistant',
@@ -870,9 +883,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     };
 
     // Quick prompt suggestions based on AI gender
-    const quickPrompts = botInfo?.name === 'Arjun'
-        ? ["Kya chal raha hai? 😎", "Koi mast joke sunao", "Life advice do", "Kuch motivate karo 💪", "Best movie recommend karo"]
-        : ["Hii Aria! 👋", "Koi interesting baat batao ✨", "Mujhe motivate karo 💪", "Aaj boring lag raha hai", "Koi fun fact batao 🌟"];
+    const quickPrompts = ["hmm", "kya kar rhe ho?", "suno na", "call kro", "aaj mood off hai"];
 
     const isArjun = botInfo?.name === 'Arjun';
 

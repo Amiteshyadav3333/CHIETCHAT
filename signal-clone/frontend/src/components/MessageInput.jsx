@@ -92,7 +92,8 @@ const MessageInput = ({
     lastMessageText = "",
     showAiFeature = false,
     showSmartReplies = false,
-    currentUserId
+    currentUserId,
+    onSchedule
 }) => {
     const [text, setText] = useState('');
     const [showEmoji, setShowEmoji] = useState(false);
@@ -105,10 +106,22 @@ const MessageInput = ({
     const [showPollCreator, setShowPollCreator] = useState(false);
     const [pollData, setPollData] = useState({ question: '', options: ['', ''] });
     const [smartReplies, setSmartReplies] = useState([]);
+    const [showScheduleModal, setShowScheduleModal] = useState(false);
+    const [scheduleAt, setScheduleAt] = useState('');
 
     const [showCameraModal, setShowCameraModal] = useState(false);
     const [cameraFacing, setCameraFacing] = useState('user');
+    const [cameraFilter, setCameraFilter] = useState('normal');
+    const [capturedSnap, setCapturedSnap] = useState(null);
     const streamRef = useRef(null);
+    const FILTERS = [
+        { id: 'normal', label: 'Normal', css: 'none' },
+        { id: 'glow', label: 'Glow', css: 'brightness(1.12) saturate(1.18) contrast(.95)' },
+        { id: 'warm', label: 'Warm', css: 'sepia(.22) saturate(1.35) hue-rotate(-8deg)' },
+        { id: 'cool', label: 'Cool', css: 'saturate(1.15) hue-rotate(18deg)' },
+        { id: 'mono', label: 'B&W', css: 'grayscale(1) contrast(1.12)' },
+        { id: 'vivid', label: 'Vivid', css: 'saturate(1.8) contrast(1.08)' }
+    ];
     const [showGameCreator, setShowGameCreator] = useState(false);
     const [gameType, setGameType] = useState('Tic-Tac-Toe');
     const [gameMode, setGameMode] = useState('vs-friend');
@@ -287,15 +300,38 @@ const MessageInput = ({
         canvas.width = video.videoWidth || 640;
         canvas.height = video.videoHeight || 480;
         const ctx = canvas.getContext('2d');
+        ctx.filter = FILTERS.find(f => f.id === cameraFilter)?.css || 'none';
+        if (cameraFacing === 'user') {
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+        }
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         
         canvas.toBlob((blob) => {
             if (blob) {
-                const file = new File([blob], `camera-${Date.now()}.png`, { type: 'image/png' });
-                onUpload(file);
-                setShowCameraModal(false);
+                setCapturedSnap({
+                    blob,
+                    url: URL.createObjectURL(blob)
+                });
             }
         }, 'image/png');
+    };
+
+    const closeCamera = () => {
+        if (capturedSnap?.url) URL.revokeObjectURL(capturedSnap.url);
+        setCapturedSnap(null);
+        setShowCameraModal(false);
+    };
+
+    const retakeSnap = () => {
+        if (capturedSnap?.url) URL.revokeObjectURL(capturedSnap.url);
+        setCapturedSnap(null);
+    };
+
+    const sendSnap = () => {
+        if (!capturedSnap?.blob) return;
+        onUpload(new File([capturedSnap.blob], `snap-${Date.now()}.png`, { type: 'image/png' }));
+        closeCamera();
     };
 
     const handleSubmit = async (e) => {
@@ -567,6 +603,23 @@ const MessageInput = ({
                 </div>
             )}
 
+            {showScheduleModal && (
+                <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4">
+                    <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#202c33] p-5 text-white shadow-2xl">
+                        <div className="mb-4 flex items-center justify-between">
+                            <h3 className="font-bold">Schedule message</h3>
+                            <button onClick={() => setShowScheduleModal(false)}><XMarkIcon className="h-5 w-5" /></button>
+                        </div>
+                        <p className="mb-3 rounded-xl bg-[#111b21] p-3 text-sm text-gray-200">{text || 'Type a message first'}</p>
+                        <input type="datetime-local" value={scheduleAt} min={new Date(Date.now() + 60000).toISOString().slice(0, 16)} onChange={e => setScheduleAt(e.target.value)} className="w-full rounded-xl border border-white/10 bg-[#111b21] p-3 text-sm outline-none focus:border-[#00a884]" />
+                        <button disabled={!text.trim() || !scheduleAt} onClick={() => {
+                            onSchedule?.(text.trim(), new Date(scheduleAt).toISOString());
+                            setText(''); setScheduleAt(''); setShowScheduleModal(false);
+                        }} className="mt-4 w-full rounded-xl bg-[#00a884] py-3 text-sm font-bold disabled:opacity-40">Schedule</button>
+                    </div>
+                </div>
+            )}
+
             {/* Reply Preview Bar */}
             {replyTo && (
                 <div className="flex items-center gap-2 px-4 py-2 bg-[#2a3942] border-b border-gray-700 animate-slide-up">
@@ -822,27 +875,33 @@ const MessageInput = ({
 
             {showCameraModal && (
                 <div className="fixed inset-0 z-[110] bg-black flex flex-col animate-fade-in">
-                    {/* Fullscreen video */}
-                    <video
-                        ref={videoRef}
-                        autoPlay
-                        playsInline
-                        className="absolute inset-0 w-full h-full object-cover"
-                        style={{ transform: cameraFacing === 'user' ? 'scaleX(-1)' : 'none' }}
-                    />
+                    {capturedSnap ? (
+                        <img src={capturedSnap.url} alt="Snap preview" className="absolute inset-0 w-full h-full object-cover" />
+                    ) : (
+                        <video
+                            ref={videoRef}
+                            autoPlay
+                            playsInline
+                            className="absolute inset-0 w-full h-full object-cover"
+                            style={{
+                                transform: cameraFacing === 'user' ? 'scaleX(-1)' : 'none',
+                                filter: FILTERS.find(f => f.id === cameraFilter)?.css || 'none'
+                            }}
+                        />
+                    )}
                     {/* Top bar */}
                     <div className="relative z-10 flex items-center justify-between px-4 pt-10 pb-4">
                         <button
-                            onClick={() => setShowCameraModal(false)}
+                            onClick={closeCamera}
                             className="p-2 rounded-full bg-black/50 text-white"
                         >
                             <XMarkIcon className="w-6 h-6" />
                         </button>
                         <span className="text-white font-bold text-sm bg-black/40 px-3 py-1 rounded-full">
-                            {cameraFacing === 'user' ? '🤳 Front' : '📷 Back'}
+                            {capturedSnap ? 'Snap ready ✨' : (cameraFacing === 'user' ? '🤳 Front' : '📷 Back')}
                         </span>
                         {/* Flip camera */}
-                        <button
+                        {!capturedSnap && <button
                             onClick={flipCamera}
                             className="p-2 rounded-full bg-black/50 text-white"
                             title="Flip Camera"
@@ -851,10 +910,37 @@ const MessageInput = ({
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M16 3h5v5M8 21H3v-5M21 3l-7 7M3 21l7-7" />
                                 <circle cx="12" cy="12" r="3" />
                             </svg>
-                        </button>
+                        </button>}
                     </div>
+                    {!capturedSnap && (
+                        <div className="relative z-10 mt-auto mb-5 flex gap-3 overflow-x-auto px-4 pb-1 justify-start sm:justify-center">
+                            {FILTERS.map(filter => (
+                                <button
+                                    key={filter.id}
+                                    type="button"
+                                    onClick={() => setCameraFilter(filter.id)}
+                                    className={`flex-shrink-0 rounded-full px-4 py-2 text-xs font-bold text-white border transition-all ${
+                                        cameraFilter === filter.id ? 'bg-white text-black border-white scale-105' : 'bg-black/45 border-white/30'
+                                    }`}
+                                >
+                                    {filter.label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                     {/* Bottom controls */}
-                    <div className="relative z-10 mt-auto flex items-center justify-around px-8 pb-12">
+                    <div className={`relative z-10 ${capturedSnap ? 'mt-auto' : ''} flex items-center justify-around px-8 pb-12`}>
+                        {capturedSnap ? (
+                            <>
+                                <button onClick={retakeSnap} className="rounded-full bg-black/55 px-5 py-3 text-sm font-bold text-white border border-white/30">
+                                    Retake
+                                </button>
+                                <button onClick={sendSnap} className="rounded-full bg-[#00a884] px-7 py-3 text-sm font-bold text-white shadow-xl">
+                                    Send snap ➤
+                                </button>
+                            </>
+                        ) : (
+                            <>
                         <button
                             onClick={() => { cameraInputRef.current?.click(); setShowCameraModal(false); }}
                             className="p-3 rounded-full bg-black/50 text-white"
@@ -870,6 +956,8 @@ const MessageInput = ({
                             <div className="w-14 h-14 rounded-full bg-white" />
                         </button>
                         <div className="w-14" />
+                            </>
+                        )}
                     </div>
                 </div>
             )}
@@ -972,6 +1060,9 @@ const MessageInput = ({
                                 </svg>
                             </button>
                         )}
+                        <button type="button" onClick={() => setShowScheduleModal(true)} disabled={!text.trim()} className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${text.trim() ? 'text-sky-400 hover:bg-sky-400/10' : 'text-gray-600'}`} title="Schedule message">
+                            <span className="text-xl">◷</span>
+                        </button>
                     </div>
                 )}
 

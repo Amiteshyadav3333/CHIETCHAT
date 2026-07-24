@@ -2284,6 +2284,14 @@ const Home = () => {
                             <button onClick={() => setShowMessageSearch(v => !v)} title="Search messages"><MagnifyingGlassIcon className="w-6 h-6" /></button>
                             <button onClick={() => startCall('voice')} title="Voice Call"><PhoneIcon className="w-6 h-6" /></button>
                             <button onClick={() => startCall('video')} title="Video Call"><VideoCameraIcon className="w-6 h-6" /></button>
+                            <button
+                                onClick={() => startCall('picture')}
+                                title="Picture group call: screen + face + voice"
+                                className="flex items-center gap-1 rounded-full bg-violet-500/15 px-2 py-1.5 text-violet-300 hover:bg-violet-500/25"
+                            >
+                                <PhotoIcon className="w-5 h-5" />
+                                <span className="hidden lg:inline text-xs font-bold">Picture</span>
+                            </button>
                             <div className="relative">
                                 <button onClick={() => { setShowTopDropdown(v => !v); setShowTopReactions(false); }} className="text-gray-400 hover:text-white">
                                     <EllipsisVerticalIcon className="w-6 h-6" />
@@ -2897,6 +2905,7 @@ const Home = () => {
             {incomingCall && (
                 <IncomingCallModal
                     callerName={incomingCall.callerName}
+                    callType={incomingCall.callType}
                     onAccept={acceptCall}
                     onReject={rejectCall}
                 />

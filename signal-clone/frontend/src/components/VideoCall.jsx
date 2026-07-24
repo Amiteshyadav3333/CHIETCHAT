@@ -167,6 +167,7 @@ const VideoCallModal = ({
     const pictureSessionRef = useRef(null);
     const [pictureFaceSize, setPictureFaceSize] = useState('medium');
     const [pictureFaceCorner, setPictureFaceCorner] = useState('bottom-right');
+    const [showPictureLauncher, setShowPictureLauncher] = useState(callType === 'picture');
     const pictureFaceSizeRef = useRef('medium');
     const pictureFaceCornerRef = useRef('bottom-right');
 
@@ -1017,6 +1018,7 @@ const VideoCallModal = ({
             setCurrentCallType('video');
             setIsVideoOff(false);
             setIsScreenSharing(true);
+            setShowPictureLauncher(false);
             Object.keys(peersRef.current).forEach(socketId => socket.emit('screen_share_started', { to: socketId, fromSocket: socket.id }));
             screenTrack.onended = stopPictureSharing;
         } catch (err) {
@@ -1442,6 +1444,35 @@ const VideoCallModal = ({
             </div>
 
             {/* ── BOTTOM CONTROLS ── */}
+            {showPictureLauncher && !isScreenSharing && !isMinimized && (
+                <div
+                    className="absolute inset-x-4 bottom-32 z-30 mx-auto max-w-md rounded-3xl border border-violet-400/25 bg-[#151b27]/95 p-5 text-center text-white shadow-2xl backdrop-blur-xl"
+                    onClick={e => e.stopPropagation()}
+                >
+                    <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/20 text-2xl">▣</div>
+                    <h3 className="text-lg font-black">Picture group call</h3>
+                    <p className="mt-1 text-xs leading-5 text-gray-300">
+                        Share your screen or phone video with its audio and keep your face visible. Up to 10 people can talk and choose any participant to enlarge.
+                    </p>
+                    <div className="mt-4 flex gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setShowPictureLauncher(false)}
+                            className="flex-1 rounded-xl bg-white/10 px-4 py-3 text-sm font-bold hover:bg-white/15"
+                        >
+                            Camera only
+                        </button>
+                        <button
+                            type="button"
+                            onClick={picture}
+                            className="flex-1 rounded-xl bg-violet-500 px-4 py-3 text-sm font-black shadow-lg shadow-violet-500/25 hover:bg-violet-400"
+                        >
+                            Start Picture
+                        </button>
+                    </div>
+                    <p className="mt-2 text-[10px] text-gray-500">Choose “share audio” in the browser picker to send video sound.</p>
+                </div>
+            )}
             {isScreenSharing && !isMinimized && (
                 <div
                     className="absolute bottom-32 left-1/2 z-20 -translate-x-1/2 rounded-2xl border border-white/15 bg-[#172229]/95 px-4 py-3 text-white shadow-2xl backdrop-blur-md"

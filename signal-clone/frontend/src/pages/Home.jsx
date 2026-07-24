@@ -5,24 +5,24 @@ import { SocketContext } from '../context/SocketContext';
 import ContactList from '../components/ContactList';
 import ChatBubble, { DateSeparator } from '../components/ChatBubble';
 import MessageInput from '../components/MessageInput';
-import EmojiPicker from 'emoji-picker-react';
 import IncomingCallModal from '../components/IncomingCallModal';
 import VideoCallModal from '../components/VideoCall';
 import AvatarZoom from '../components/AvatarZoom';
 import StatusSection from '../components/StatusSection';
-import AiChat from '../components/AiChat';
-import AiSmartSpace from '../components/AiSmartSpace';
 import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon, EllipsisVerticalIcon, XMarkIcon, TrashIcon, NoSymbolIcon, PlayIcon, Cog6ToothIcon, BellIcon, MapPinIcon, PhotoIcon, ChatBubbleLeftRightIcon, InformationCircleIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon, MicrophoneIcon, FaceSmileIcon, SparklesIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { format } from 'date-fns';
-import SettingsModal from '../components/SettingsModal';
-import NotificationPanel from '../components/NotificationPanel';
 import { useEncryption } from '../hooks/useEncryption';
-import Reels from './Reels';
-import Social from './Social';
-import PodLiveView from './PodLiveView';
 import { decryptEnvelope, encryptForRecipients, isEncryptedPayload } from '../utils/encryption';
 import { compressImage, compressVideo, getFileCategory, formatFileSize } from '../utils/mediaCompressor';
 import { getOfflineQueue, enqueueOfflineMessage, dequeueOfflineMessage, processOfflineQueue } from '../utils/offlineQueue';
+
+const Reels = React.lazy(() => import('./Reels'));
+const Social = React.lazy(() => import('./Social'));
+const PodLiveView = React.lazy(() => import('./PodLiveView'));
+const AiChat = React.lazy(() => import('../components/AiChat'));
+const AiSmartSpace = React.lazy(() => import('../components/AiSmartSpace'));
+const SettingsModal = React.lazy(() => import('../components/SettingsModal'));
+const NotificationPanel = React.lazy(() => import('../components/NotificationPanel'));
 
 // ─── WhatsApp-style Emoji Picker ───────────────────────────────────────────
 const EMOJI_CATEGORIES = [
@@ -166,6 +166,12 @@ const SidebarEmojiPicker = ({ pickerRef, onPick }) => {
     );
 };
 
+const FeatureLoader = () => (
+    <div className="flex h-full w-full items-center justify-center bg-[#111b21] text-sm font-semibold text-[#00a884]">
+        <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-[#00a884]/30 border-t-[#00a884]" />
+        Opening…
+    </div>
+);
 
 
 const Home = () => {
@@ -210,7 +216,10 @@ const Home = () => {
         }
         return [];
     });
-    const [loadingChats, setLoadingChats] = useState(true);
+    const [loadingChats, setLoadingChats] = useState(() => {
+        try { return !JSON.parse(localStorage.getItem('cached_chats') || '[]').length; }
+        catch { return true; }
+    });
     const [showCallModal, setShowCallModal] = useState(false);
     const [callType, setCallType] = useState('video');
     const [incomingCall, setIncomingCall] = useState(null);
@@ -230,6 +239,12 @@ const Home = () => {
     const [sidebarSearchQuery, setSidebarSearchQuery] = useState('');
     const [showSidebarEmoji, setShowSidebarEmoji] = useState(false);
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+    const [mobileHomeTab, setMobileHomeTab] = useState('chats');
+    const [storyUserIds, setStoryUserIds] = useState([]);
+
+    const handleStatusGroupsChange = useCallback((groups) => {
+        setStoryUserIds(groups.map(group => group.user?.id).filter(Boolean));
+    }, []);
 
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -343,6 +358,7 @@ const Home = () => {
         });
 
     const archivedChatsList = chats.filter(chat => archivedChats.includes(chat.id));
+    const totalUnreadMessages = chats.reduce((sum, chat) => sum + Number(chat.unreadCount || 0), 0);
 
     // Non-Encrypted Ref
     const messagesEndRef = useRef(null);
@@ -714,6 +730,9 @@ const Home = () => {
     useEffect(() => {
         if (activeChat) {
             localStorage.setItem('activeChatId', activeChat.id);
+            setChats(prev => prev.map(chat => (
+                chat.id === activeChat.id ? { ...chat, unreadCount: 0 } : chat
+            )));
         }
     }, [activeChat]);
 
@@ -782,6 +801,9 @@ const Home = () => {
 
         socket.on('connect', () => {
             processQueue();
+            // Cached conversations are already visible; reconcile silently once
+            // the network/socket is ready so the latest messages appear.
+            fetchChats();
         });
 
         socket.on('incoming_call', (data) => {
@@ -847,6 +869,11 @@ const Home = () => {
                     timestamp: readableMsg.timestamp,
                     type: readableMsg.type
                 };
+                if (readableMsg.senderId !== user.id && activeChatRef.current?.id !== readableMsg.chatId) {
+                    targetChat.unreadCount = Number(targetChat.unreadCount || 0) + 1;
+                } else if (activeChatRef.current?.id === readableMsg.chatId) {
+                    targetChat.unreadCount = 0;
+                }
                 return [targetChat, ...updatedChats];
             });
         });
@@ -2049,10 +2076,12 @@ const Home = () => {
 
                 </div>
 
-                {/* Contacts */}
-                <StatusSection user={user} token={token} />
+                {/* Stories stay above chats on desktop; mobile gets a dedicated WhatsApp-style tab. */}
+                <div className="hidden md:block">
+                    <StatusSection user={user} token={token} onStatusGroupsChange={handleStatusGroupsChange} />
+                </div>
                 {/* Archive toggle button */}
-                {archivedChatsList.length > 0 && (
+                {(!isMobile || mobileHomeTab === 'chats') && archivedChatsList.length > 0 && (
                     <button
                         onClick={() => setShowArchive(v => !v)}
                         className="flex items-center gap-2 px-4 py-2 text-xs text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
@@ -2062,7 +2091,26 @@ const Home = () => {
                     </button>
                 )}
 
-                {showArchive ? (
+                {isMobile && mobileHomeTab === 'stories' ? (
+                    <StatusSection
+                        user={user}
+                        token={token}
+                        onStatusGroupsChange={handleStatusGroupsChange}
+                        mobileFull
+                    />
+                ) : isMobile && mobileHomeTab === 'calls' ? (
+                    <ContactList
+                        chats={filteredChats}
+                        activeChat={activeChat}
+                        onSelectChat={setActiveChat}
+                        loading={loadingChats}
+                        currentUserId={user?.id}
+                        storyUserIds={storyUserIds}
+                        callsMode
+                        onVoiceCall={(chat) => startCallForChat(chat, 'voice')}
+                        onVideoCall={(chat) => startCallForChat(chat, 'video')}
+                    />
+                ) : showArchive ? (
                     <ContactList
                         chats={archivedChatsList}
                         activeChat={activeChat}
@@ -2071,18 +2119,51 @@ const Home = () => {
                         nicknames={nicknames}
                         mutedChats={mutedChats}
                         pinnedChats={pinnedChats}
+                        currentUserId={user?.id}
+                        storyUserIds={storyUserIds}
                     />
                 ) : (
                     <ContactList
-                        chats={filteredChats}
+                        chats={isMobile && mobileHomeTab === 'groups' ? filteredChats.filter(chat => chat.isGroup) : filteredChats}
                         activeChat={activeChat}
                         onSelectChat={setActiveChat}
                         loading={loadingChats}
                         nicknames={nicknames}
                         mutedChats={mutedChats}
                         pinnedChats={pinnedChats}
+                        currentUserId={user?.id}
+                        storyUserIds={storyUserIds}
                     />
                 )}
+
+                {/* Phone navigation: familiar WhatsApp information architecture. */}
+                <nav className="md:hidden grid grid-cols-4 border-t border-white/10 bg-[#111b21] px-1 pb-[max(6px,env(safe-area-inset-bottom))] pt-1">
+                    {[
+                        { id: 'chats', label: 'Chats', icon: '◉', badge: totalUnreadMessages },
+                        { id: 'stories', label: 'Stories', icon: '◎' },
+                        { id: 'groups', label: 'Groups', icon: '👥' },
+                        { id: 'calls', label: 'Calls', icon: '☎' }
+                    ].map(tab => (
+                        <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => { setMobileHomeTab(tab.id); setShowArchive(false); }}
+                            className={`relative flex flex-col items-center gap-0.5 rounded-xl py-2 text-[11px] font-semibold transition ${
+                                mobileHomeTab === tab.id ? 'text-[#25d366]' : 'text-gray-400'
+                            }`}
+                        >
+                            <span className={`relative text-xl leading-5 ${mobileHomeTab === tab.id ? 'rounded-full bg-[#25d366]/15 px-4 py-1' : 'py-1'}`}>
+                                {tab.icon}
+                                {tab.badge > 0 && (
+                                    <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#25d366] px-1 text-[9px] font-black text-[#07150f]">
+                                        {tab.badge > 99 ? '99+' : tab.badge}
+                                    </span>
+                                )}
+                            </span>
+                            {tab.label}
+                        </button>
+                    ))}
+                </nav>
 
                 {/* Nickname Edit Modal */}
                 {editNicknameChat && (
@@ -2689,9 +2770,10 @@ const Home = () => {
                     <p>Select a chat or click + to start messaging.</p>
                 </div>
             )}
-            {/* Reels Overlay */}
-            <div className={`fixed inset-0 z-50 bg-black transition-opacity duration-200 ${showReels ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-                <Reels 
+            {/* Heavy feature screens load only when opened, keeping chat startup fast. */}
+            {showReels && <div className="fixed inset-0 z-50 bg-black">
+                <React.Suspense fallback={<FeatureLoader />}>
+                <Reels
                     active={showReels && !incomingCall && !showCallModal}
                     onBack={() => setShowReels(false)} 
                     onShareToChat={(reel) => {
@@ -2700,31 +2782,37 @@ const Home = () => {
                         alert(`Sharing reel ${reel.id} to chat (Feature coming soon)`);
                     }}
                 />
-            </div>
+                </React.Suspense>
+            </div>}
 
             {/* Social Overlay */}
-            <div className={`fixed inset-0 z-50 bg-[#0b0f14] transition-opacity duration-200 ${showSocial ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+            {showSocial && <div className="fixed inset-0 z-50 bg-[#0b0f14]">
+                <React.Suspense fallback={<FeatureLoader />}>
                 <Social
                     active={showSocial && !incomingCall && !showCallModal}
                     onBack={() => { setShowSocial(false); setSocialDeepLink(null); }}
                     deepLink={socialDeepLink}
                     onDeepLinkConsumed={() => setSocialDeepLink(null)}
                 />
-            </div>
+                </React.Suspense>
+            </div>}
 
             {/* PodLive Overlay */}
-            <div className={`fixed inset-0 z-50 bg-[#0b0f19] transition-opacity duration-200 ${showPodlive ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+            {showPodlive && <div className="fixed inset-0 z-50 bg-[#0b0f19]">
+                <React.Suspense fallback={<FeatureLoader />}>
                 <PodLiveView
                     active={showPodlive && !incomingCall && !showCallModal}
                     onBack={() => setShowPodlive(false)}
                 />
-            </div>
+                </React.Suspense>
+            </div>}
 
-            {showSettings && <SettingsModal user={user} token={token} onClose={() => setShowSettings(false)} onLogout={logout} onUserUpdate={updateUser} theme={theme} wallpaper={wallpaper} onThemeChange={setTheme} onWallpaperChange={setWallpaper} onOpenSmartSpace={() => { setShowSettings(false); setShowSmartSpace(true); }} smartSpaceButtonEnabled={smartSpaceButtonEnabled} onSmartSpaceButtonChange={(enabled) => { setSmartSpaceButtonEnabled(enabled); localStorage.setItem('smart_space_button_enabled', enabled ? '1' : '0'); }} />}
+            {showSettings && <React.Suspense fallback={<FeatureLoader />}><SettingsModal user={user} token={token} onClose={() => setShowSettings(false)} onLogout={logout} onUserUpdate={updateUser} theme={theme} wallpaper={wallpaper} onThemeChange={setTheme} onWallpaperChange={setWallpaper} onOpenSmartSpace={() => { setShowSettings(false); setShowSmartSpace(true); }} smartSpaceButtonEnabled={smartSpaceButtonEnabled} onSmartSpaceButtonChange={(enabled) => { setSmartSpaceButtonEnabled(enabled); localStorage.setItem('smart_space_button_enabled', enabled ? '1' : '0'); }} /></React.Suspense>}
 
             {/* AI Chat Overlay */}
             <div className={`fixed inset-0 z-50 bg-[#0b141a] transition-opacity duration-200 ${showAiChat ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
                 {showAiChat && (
+                    <React.Suspense fallback={<FeatureLoader />}>
                     <AiChat
                         onBack={() => setShowAiChat(false)}
                         onClose={() => setShowAiChat(false)}
@@ -2779,19 +2867,23 @@ const Home = () => {
                             }
                         }}
                     />
+                    </React.Suspense>
                 )}
             </div>
             <div className={`fixed inset-0 z-50 bg-[#07110f] transition-opacity duration-200 ${showSmartSpace ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
                 {showSmartSpace && (
+                    <React.Suspense fallback={<FeatureLoader />}>
                     <AiSmartSpace
                         chats={chats}
                         token={token}
                         onClose={() => setShowSmartSpace(false)}
                         onOpenChat={(chat) => { setActiveChat(chat); setShowSmartSpace(false); }}
                     />
+                    </React.Suspense>
                 )}
             </div>
             {showNotifications && (
+                <React.Suspense fallback={<FeatureLoader />}>
                 <NotificationPanel
                     notifications={notifications}
                     onClose={() => setShowNotifications(false)}
@@ -2799,6 +2891,7 @@ const Home = () => {
                     onMarkAllRead={handleMarkAllRead}
                     onNavigate={handleNotificationNavigate}
                 />
+                </React.Suspense>
             )}
 
             {incomingCall && (

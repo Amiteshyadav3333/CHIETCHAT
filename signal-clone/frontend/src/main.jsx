@@ -17,6 +17,14 @@ if (import.meta.env.VITE_API_URL) {
     axios.defaults.baseURL = import.meta.env.VITE_API_URL;
 }
 
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(error => {
+            console.warn('Offline app shell registration failed', error);
+        });
+    });
+}
+
 const ProtectedRoute = ({ children }) => {
     const { token, loading } = React.useContext(AuthContext);
     if (loading) return <div>Loading...</div>;
@@ -24,14 +32,16 @@ const ProtectedRoute = ({ children }) => {
 };
 
 const SplashScreen = () => {
-    const [render, setRender] = React.useState(true);
+    const [render, setRender] = React.useState(() => !sessionStorage.getItem('app_shell_seen'));
     const [fade, setFade] = React.useState(false);
     
     React.useEffect(() => {
-        const timer1 = setTimeout(() => setFade(true), 1500);
-        const timer2 = setTimeout(() => setRender(false), 2000);
+        if (!render) return undefined;
+        sessionStorage.setItem('app_shell_seen', '1');
+        const timer1 = setTimeout(() => setFade(true), 120);
+        const timer2 = setTimeout(() => setRender(false), 280);
         return () => { clearTimeout(timer1); clearTimeout(timer2); };
-    }, []);
+    }, [render]);
 
     if (!render) return null;
 

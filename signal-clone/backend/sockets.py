@@ -236,8 +236,23 @@ def register_socket_events(socketio):
             return
 
         room = f"call_{chat_id}"
+        # Enforce the product limit on the server as well as in the UI. A set is
+        # used because the Socket.IO manager can return namespace/socket tuples.
+        participants = list(socketio.server.manager.get_participants('/', room))
+        participant_sids = {item[0] if isinstance(item, tuple) else item for item in participants}
+        if request.sid not in participant_sids and len(participant_sids) >= 10:
+            emit('call_error', {
+                "error": "This Picture call is full (maximum 10 people).",
+                "code": "CALL_FULL"
+            })
+            return
+
         join_room(room)
-        socketio.emit('user_joined_call', {"userId": user_id, "socketId": request.sid}, room=room, include_self=False)
+        socketio.emit('user_joined_call', {
+            "userId": user_id,
+            "socketId": request.sid,
+            "participantCount": len(participant_sids) + 1
+        }, room=room, include_self=False)
 
     @socketio.on('leave_call')
     def on_leave_call(data):
@@ -253,7 +268,6 @@ def register_socket_events(socketio):
         room = f"call_{chat_id}"
         leave_room(room)
         socketio.emit('user_left_call', {"userId": user_id, "socketId": request.sid}, room=room, include_self=False)
-        socketio.emit('call_ended', {"userId": user_id}, room=room, include_self=False)
 
     @socketio.on('transition_call')
     def on_transition_call(data):

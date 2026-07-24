@@ -164,6 +164,11 @@ const VideoCallModal = ({
     const originalAudioTrackRef = useRef(null);
     const activeAudioTrackRef = useRef(null);
     const e2eeKeyRef = useRef(null); // AES-GCM session key for this call
+    const pictureSessionRef = useRef(null);
+    const [pictureFaceSize, setPictureFaceSize] = useState('medium');
+    const [pictureFaceCorner, setPictureFaceCorner] = useState('bottom-right');
+    const pictureFaceSizeRef = useRef('medium');
+    const pictureFaceCornerRef = useRef('bottom-right');
 
     const [isMinimized, setIsMinimized] = useState(false);
 
@@ -212,6 +217,8 @@ const VideoCallModal = ({
 
     useEffect(() => { peersRef.current = peers; }, [peers]);
     useEffect(() => { facingModeRef.current = facingMode; }, [facingMode]);
+    useEffect(() => { pictureFaceSizeRef.current = pictureFaceSize; }, [pictureFaceSize]);
+    useEffect(() => { pictureFaceCornerRef.current = pictureFaceCorner; }, [pictureFaceCorner]);
 
     useEffect(() => {
         if (initialRingStatus) {
@@ -425,6 +432,10 @@ const VideoCallModal = ({
                 });
 
                 socket.on('call_ended', () => onClose());
+                socket.on('call_error', (data) => {
+                    alert(data?.error || 'Could not join this call.');
+                    if (data?.code === 'CALL_FULL') onClose();
+                });
 
                 socket.on('request_video_upgrade', (data) => {
                     const peer = peersRef.current[data.fromSocket];
@@ -456,6 +467,13 @@ const VideoCallModal = ({
             socket.emit('leave_call', { chatId: activeChat?.id, userId: user?.id });
             Object.values(peersRef.current).forEach(p => p.pc?.close());
             streamRef.current?.getTracks().forEach(t => t.stop());
+            cameraTrackRef.current?.stop();
+            if (pictureSessionRef.current) {
+                cancelAnimationFrame(pictureSessionRef.current.animationFrame);
+                pictureSessionRef.current.displayStream?.getTracks().forEach(t => t.stop());
+                pictureSessionRef.current.audioContext?.close().catch(() => {});
+                pictureSessionRef.current = null;
+            }
             streamRef.current = null;
             setLocalStream(null);
             if (cancellationDestRef.current) {
@@ -470,6 +488,7 @@ const VideoCallModal = ({
             socket.off('offer');
             socket.off('answer');
             socket.off('ice_candidate');
+            socket.off('call_error');
             socket.off('call_ended');
             socket.off('request_video_upgrade');
             socket.off('video_upgrade_accepted');
@@ -861,26 +880,38 @@ const VideoCallModal = ({
         }
     };
 
-    const toggleScreenShare = async () => {
+    const stopPictureSharing = () => {
+        const session = pictureSessionRef.current;
+        const cameraTrack = cameraTrackRef.current;
+        if (!session) return;
+
+        cancelAnimationFrame(session.animationFrame);
+        session.displayStream?.getTracks().forEach(track => {
+            track.onended = null;
+            track.stop();
+        });
+        session.composedTrack?.stop();
+        session.mixedAudioTrack?.stop();
+        session.audioContext?.close().catch(() => {});
+
+        Object.values(peersRef.current).forEach(({ pc }) => {
+            pc.getSenders().find(s => s.track?.kind === 'video')?.replaceTrack(cameraTrack || null);
+            pc.getSenders().find(s => s.track?.kind === 'audio')?.replaceTrack(activeAudioTrackRef.current || null);
+        });
+
+        const restoredTracks = [cameraTrack, activeAudioTrackRef.current].filter(Boolean);
+        streamRef.current = new MediaStream(restoredTracks);
+        setLocalStream(new MediaStream(restoredTracks));
+        pictureSessionRef.current = null;
+        setIsScreenSharing(false);
+        Object.keys(peersRef.current).forEach(socketId => socket.emit('screen_share_stopped', { to: socketId, fromSocket: socket.id }));
+    };
+
+    // Picture mode: shares the selected screen with its audio while keeping the
+    // presenter's live face in a configurable picture-in-picture overlay.
+    const picture = async () => {
         if (isScreenSharing) {
-            const cameraTrack = cameraTrackRef.current;
-            if (!cameraTrack) return;
-            Object.values(peersRef.current).forEach(({ pc }) => {
-                const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-                sender?.replaceTrack(cameraTrack);
-            });
-            streamRef.current?.getVideoTracks().forEach(track => {
-                if (track !== cameraTrack) {
-                    streamRef.current.removeTrack(track);
-                    track.stop();
-                }
-            });
-            if (!streamRef.current?.getVideoTracks().includes(cameraTrack)) {
-                streamRef.current?.addTrack(cameraTrack);
-            }
-            setLocalStream(new MediaStream(streamRef.current.getTracks()));
-            setIsScreenSharing(false);
-            Object.keys(peersRef.current).forEach(socketId => socket.emit('screen_share_stopped', { to: socketId, fromSocket: socket.id }));
+            stopPictureSharing();
             return;
         }
 
@@ -894,40 +925,107 @@ const VideoCallModal = ({
         }
 
         try {
-            const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+            const displayStream = await navigator.mediaDevices.getDisplayMedia({
+                video: { frameRate: { ideal: 30, max: 30 } },
+                audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+                preferCurrentTab: true,
+                selfBrowserSurface: 'exclude',
+                surfaceSwitching: 'include',
+                systemAudio: 'include'
+            });
             const screenTrack = displayStream.getVideoTracks()[0];
-            const currentVideo = streamRef.current?.getVideoTracks()[0];
-            if (currentVideo && !cameraTrackRef.current) cameraTrackRef.current = currentVideo;
+            const cameraTrack = cameraTrackRef.current;
+            if (!screenTrack) throw new Error('No screen video was selected.');
+
+            const screenVideo = document.createElement('video');
+            const faceVideo = document.createElement('video');
+            screenVideo.srcObject = new MediaStream([screenTrack]);
+            screenVideo.muted = true;
+            faceVideo.srcObject = cameraTrack ? new MediaStream([cameraTrack]) : null;
+            faceVideo.muted = true;
+            await Promise.all([screenVideo.play(), cameraTrack ? faceVideo.play() : Promise.resolve()]);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = 1280;
+            canvas.height = 720;
+            const ctx = canvas.getContext('2d');
+            const sizeRatio = { small: 0.18, medium: 0.25, large: 0.34 };
+
+            const drawPicture = () => {
+                const sw = screenVideo.videoWidth || 1280;
+                const sh = screenVideo.videoHeight || 720;
+                const scale = Math.min(canvas.width / sw, canvas.height / sh);
+                const dw = sw * scale;
+                const dh = sh * scale;
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(screenVideo, (canvas.width - dw) / 2, (canvas.height - dh) / 2, dw, dh);
+
+                if (cameraTrack?.readyState === 'live' && faceVideo.readyState >= 2) {
+                    const pipW = canvas.width * sizeRatio[pictureFaceSizeRef.current];
+                    const pipH = pipW * 9 / 16;
+                    const gap = 22;
+                    const corner = pictureFaceCornerRef.current;
+                    const x = corner.includes('right') ? canvas.width - pipW - gap : gap;
+                    const y = corner.includes('bottom') ? canvas.height - pipH - gap : gap;
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.roundRect(x, y, pipW, pipH, 18);
+                    ctx.clip();
+                    ctx.drawImage(faceVideo, x, y, pipW, pipH);
+                    ctx.restore();
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 4;
+                    ctx.strokeRect(x, y, pipW, pipH);
+                }
+                if (pictureSessionRef.current) {
+                    pictureSessionRef.current.animationFrame = requestAnimationFrame(drawPicture);
+                }
+            };
+
+            const composedStream = canvas.captureStream(30);
+            const composedTrack = composedStream.getVideoTracks()[0];
+            let mixedAudioTrack = activeAudioTrackRef.current;
+            let mixContext = null;
+            const audioTracks = [
+                activeAudioTrackRef.current,
+                ...displayStream.getAudioTracks()
+            ].filter(Boolean);
+            if (audioTracks.length > 1) {
+                mixContext = new AudioContext();
+                const destination = mixContext.createMediaStreamDestination();
+                audioTracks.forEach(track => {
+                    const source = mixContext.createMediaStreamSource(new MediaStream([track]));
+                    source.connect(destination);
+                });
+                mixedAudioTrack = destination.stream.getAudioTracks()[0];
+            }
+
+            pictureSessionRef.current = {
+                displayStream, composedTrack, mixedAudioTrack,
+                audioContext: mixContext, animationFrame: requestAnimationFrame(drawPicture)
+            };
 
             Object.values(peersRef.current).forEach(({ pc }) => {
-                const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-                sender?.replaceTrack(screenTrack);
+                pc.getSenders().find(s => s.track?.kind === 'video')?.replaceTrack(composedTrack);
+                if (mixedAudioTrack) {
+                    pc.getSenders().find(s => s.track?.kind === 'audio')?.replaceTrack(mixedAudioTrack);
+                }
             });
-            streamRef.current?.getVideoTracks().forEach(track => streamRef.current.removeTrack(track));
-            streamRef.current?.addTrack(screenTrack);
+            streamRef.current = new MediaStream([composedTrack, mixedAudioTrack].filter(Boolean));
             setLocalStream(new MediaStream(streamRef.current.getTracks()));
             setCurrentCallType('video');
             setIsVideoOff(false);
             setIsScreenSharing(true);
             Object.keys(peersRef.current).forEach(socketId => socket.emit('screen_share_started', { to: socketId, fromSocket: socket.id }));
-            screenTrack.onended = () => {
-                const cameraTrack = cameraTrackRef.current;
-                if (cameraTrack && streamRef.current) {
-                    Object.values(peersRef.current).forEach(({ pc }) => {
-                        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-                        sender?.replaceTrack(cameraTrack);
-                    });
-                    streamRef.current.getVideoTracks().forEach(track => streamRef.current.removeTrack(track));
-                    streamRef.current.addTrack(cameraTrack);
-                    setLocalStream(new MediaStream(streamRef.current.getTracks()));
-                }
-                setIsScreenSharing(false);
-            };
+            screenTrack.onended = stopPictureSharing;
         } catch (err) {
             console.error(err);
             alert("Could not start screen sharing: " + (err.name === 'NotAllowedError' ? 'Permission denied by user or browser.' : err.message || err));
         }
     };
+
+    const toggleScreenShare = picture;
 
     const toggleRecording = () => {
         if (isRecording) {
@@ -1344,6 +1442,43 @@ const VideoCallModal = ({
             </div>
 
             {/* ── BOTTOM CONTROLS ── */}
+            {isScreenSharing && !isMinimized && (
+                <div
+                    className="absolute bottom-32 left-1/2 z-20 -translate-x-1/2 rounded-2xl border border-white/15 bg-[#172229]/95 px-4 py-3 text-white shadow-2xl backdrop-blur-md"
+                    onClick={e => e.stopPropagation()}
+                >
+                    <div className="mb-2 flex items-center justify-between gap-6">
+                        <span className="text-xs font-bold text-emerald-400">Picture mode live · screen + face + voice</span>
+                        <button onClick={picture} className="text-xs font-semibold text-red-300 hover:text-red-200">Stop</button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="text-white/60">Face size</span>
+                        {['small', 'medium', 'large'].map(size => (
+                            <button
+                                key={size}
+                                onClick={() => setPictureFaceSize(size)}
+                                className={`rounded-lg px-2 py-1 capitalize ${pictureFaceSize === size ? 'bg-emerald-500 text-black' : 'bg-white/10 hover:bg-white/20'}`}
+                            >
+                                {size}
+                            </button>
+                        ))}
+                        <span className="ml-2 text-white/60">Position</span>
+                        {[
+                            ['top-left', '↖'], ['top-right', '↗'],
+                            ['bottom-left', '↙'], ['bottom-right', '↘']
+                        ].map(([corner, label]) => (
+                            <button
+                                key={corner}
+                                title={corner}
+                                onClick={() => setPictureFaceCorner(corner)}
+                                className={`rounded-lg px-2 py-1 ${pictureFaceCorner === corner ? 'bg-blue-500' : 'bg-white/10 hover:bg-white/20'}`}
+                            >
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
             {!isMinimized && (
                 <div
                     className={`absolute bottom-0 left-0 right-0 z-10 flex justify-center gap-5 pb-10 pt-6 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
@@ -1389,7 +1524,7 @@ const VideoCallModal = ({
                                 className={`flex items-center gap-3 px-4 py-3 rounded-xl transition text-sm text-left font-medium w-full ${isScreenSharing ? 'text-blue-400 bg-blue-500/10 hover:bg-blue-500/20' : 'text-white hover:bg-white/10'}`}
                             >
                                 <ComputerDesktopIcon className="w-5 h-5" />
-                                <span>{isScreenSharing ? 'Stop Screen Share' : 'Screen Share'}</span>
+                                <span>{isScreenSharing ? 'Stop Picture' : 'Picture: screen + face'}</span>
                             </button>
                             <button
                                 onClick={() => { setIsVoiceCancellationOn(prev => !prev); setShowMoreMenu(false); }}
@@ -1601,7 +1736,7 @@ const AudioPlayer = ({ stream }) => {
             });
         }
     }, [stream]);
-    return <audio ref={audioRef} autoPlay playsInline />;
+    return <audio ref={audioRef} autoPlay />;
 };
 
 export default VideoCallModal;

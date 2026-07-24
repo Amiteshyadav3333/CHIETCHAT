@@ -99,6 +99,10 @@ def get_chats():
                 query = query.filter(Message.timestamp > p_deleted_at)
 
             last_msg = query.order_by(Message.timestamp.desc()).first()
+            unread_count = query.filter(
+                Message.sender_id != user_id,
+                Message.status != 'read'
+            ).count()
 
             # Hide chat if deleted for me and there are no messages after deletion
             if p_deleted_at and not last_msg:
@@ -122,6 +126,7 @@ def get_chats():
                 "groupAdminId": chat.group_admin_id,
                 "isPublic": getattr(chat, 'is_public', False),
                 "isChatDisabled": getattr(chat, 'is_chat_disabled', False),
+                "unreadCount": unread_count,
                 "lastMessage": {
                     "content": last_msg.content if last_msg and last_msg.type == 'text' else (last_msg.type if last_msg else "No messages"),
                     "timestamp": iso_utc(last_msg.timestamp) if last_msg else None,

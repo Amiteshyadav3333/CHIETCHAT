@@ -4,7 +4,7 @@ import { PlusIcon } from '@heroicons/react/24/solid';
 import StatusViewer from './StatusViewer';
 import StatusUploader from './StatusUploader';
 
-const StatusSection = ({ user, token }) => {
+const StatusSection = ({ user, token, onStatusGroupsChange, mobileFull = false }) => {
     const [statusGroups, setStatusGroups] = useState([]);
     const [viewerOpen, setViewerOpen] = useState(false);
     const [viewerIndex, setViewerIndex] = useState(0);
@@ -16,10 +16,11 @@ const StatusSection = ({ user, token }) => {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setStatusGroups(res.data);
+            onStatusGroupsChange?.(res.data);
         } catch (err) {
             console.error(err);
         }
-    }, [token]);
+    }, [token, onStatusGroupsChange]);
 
     useEffect(() => {
         fetchStatuses();
@@ -47,7 +48,7 @@ const StatusSection = ({ user, token }) => {
 
     return (
         <>
-            <div className="px-2 py-3 border-b border-gray-800">
+            <div className={`px-2 py-3 border-b border-gray-800 ${mobileFull ? 'flex-1 overflow-y-auto' : ''}`}>
                 <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider px-2 mb-2">Status</p>
 
                 <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">

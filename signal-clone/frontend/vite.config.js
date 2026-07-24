@@ -24,12 +24,18 @@ export default defineConfig({
         port: 3000
     },
     build: {
-        chunkSizeWarningLimit: 1000,
+        chunkSizeWarningLimit: 700,
         rollupOptions: {
             output: {
                 manualChunks(id) {
-                    if (id.includes('node_modules')) {
-                        return 'vendor';
+                    if (
+                        id.includes('node_modules/react/') ||
+                        id.includes('node_modules/react-dom/') ||
+                        id.includes('node_modules/react-router') ||
+                        id.includes('node_modules/socket.io-client') ||
+                        id.includes('node_modules/axios/')
+                    ) {
+                        return 'core';
                     }
                 }
             }

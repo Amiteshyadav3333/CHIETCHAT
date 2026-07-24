@@ -1,7 +1,11 @@
 import React from 'react';
 import AvatarZoom from './AvatarZoom';
 
-const ContactList = ({ chats, activeChat, onSelectChat, loading, nicknames = {}, mutedChats = [], pinnedChats = [] }) => {
+const ContactList = ({
+    chats, activeChat, onSelectChat, loading, nicknames = {}, mutedChats = [],
+    pinnedChats = [], storyUserIds = [], currentUserId, callsMode = false,
+    onVoiceCall, onVideoCall
+}) => {
     if (loading) {
         return (
             <div className="flex-1 flex items-center justify-center text-sm text-gray-500">
@@ -34,18 +38,32 @@ const ContactList = ({ chats, activeChat, onSelectChat, loading, nicknames = {},
                 const isMuted = mutedChats.includes(chat.id);
                 const isPinned = pinnedChats.includes(chat.id);
                 const isOnline = chat.participants?.some(p => p.username === chat.name && p.isOnline);
+                const otherUser = !chat.isGroup
+                    ? chat.participants?.find(p => p.id !== currentUserId)
+                    : null;
+                const hasStory = Boolean(otherUser && storyUserIds.includes(otherUser.id));
+                const unreadCount = Number(chat.unreadCount || 0);
 
                 return (
                     <div
                         key={chat.id}
-                        onClick={() => onSelectChat(chat)}
+                        onClick={() => !callsMode && onSelectChat(chat)}
                         className={`flex items-center px-3 py-3 cursor-pointer transition-colors mx-1 rounded-xl ${
                             activeChat?.id === chat.id ? 'bg-[#2a3942]' : 'hover:bg-[#202c33]'
                         }`}
                     >
                         <div className="relative flex-shrink-0">
-                            <AvatarZoom src={chat.avatar || null} name={chat.name} size="w-12 h-12" />
+                            <div className={`rounded-full ${hasStory ? 'p-[2px] bg-gradient-to-tr from-[#00a884] via-emerald-300 to-[#00a884]' : ''}`}>
+                                <div className={hasStory ? 'rounded-full border-2 border-[#111b21]' : ''}>
+                                    <AvatarZoom src={chat.avatar || null} name={chat.name} size="w-12 h-12" />
+                                </div>
+                            </div>
                             <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-[#111b21] ${isOnline ? 'bg-green-500' : 'bg-gray-600'}`} />
+                            {unreadCount > 0 && !callsMode && (
+                                <span className="absolute -right-2 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-[#111b21] bg-[#25d366] px-1 text-[10px] font-black text-[#07150f] shadow">
+                                    {unreadCount > 99 ? '99+' : unreadCount}
+                                </span>
+                            )}
                         </div>
 
                         <div className="ml-3 flex-1 min-w-0">
@@ -61,10 +79,20 @@ const ContactList = ({ chats, activeChat, onSelectChat, loading, nicknames = {},
                                     </span>
                                 )}
                             </div>
-                            <p className="text-xs text-gray-400 truncate mt-0.5">
-                                {getLastMsgPreview(chat)}
-                            </p>
+                            {callsMode ? (
+                                <p className="text-xs text-gray-400 truncate mt-0.5">Tap a button to start a call</p>
+                            ) : (
+                                <p className={`text-xs truncate mt-0.5 ${unreadCount ? 'font-semibold text-gray-100' : 'text-gray-400'}`}>
+                                    {getLastMsgPreview(chat)}
+                                </p>
+                            )}
                         </div>
+                        {callsMode && (
+                            <div className="ml-2 flex items-center gap-1">
+                                <button onClick={(e) => { e.stopPropagation(); onVoiceCall?.(chat); }} className="rounded-full p-2 text-[#00a884] hover:bg-white/10" title="Voice call">☎</button>
+                                <button onClick={(e) => { e.stopPropagation(); onVideoCall?.(chat); }} className="rounded-full p-2 text-[#00a884] hover:bg-white/10" title="Video call">▣</button>
+                            </div>
+                        )}
                     </div>
                 );
             })}

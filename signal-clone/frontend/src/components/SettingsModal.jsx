@@ -6,7 +6,7 @@ import {
     ComputerDesktopIcon, ExclamationTriangleIcon, EyeSlashIcon, KeyIcon,
     LifebuoyIcon, LockClosedIcon, QuestionMarkCircleIcon, ShieldCheckIcon,
     ShoppingBagIcon, TrashIcon, UserCircleIcon, XMarkIcon, NoSymbolIcon,
-    HeartIcon, ChatBubbleOvalLeftIcon, FilmIcon, PhotoIcon
+    HeartIcon, ChatBubbleOvalLeftIcon, FilmIcon, PhotoIcon, SparklesIcon
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartSolid } from '@heroicons/react/24/solid';
 
@@ -35,7 +35,7 @@ const timeAgo = (dateStr) => {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
-const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wallpaper, onThemeChange, onWallpaperChange }) => {
+const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wallpaper, onThemeChange, onWallpaperChange, onOpenSmartSpace, smartSpaceButtonEnabled, onSmartSpaceButtonChange }) => {
     const [screen, setScreen] = useState('settings');
     const [message, setMessage] = useState(null);
     const [busy, setBusy] = useState(false);
@@ -546,6 +546,11 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
 
                     {screen === 'chats' && (
                         <>
+                            <SectionLabel>AI communication assistant</SectionLabel>
+                            <SettingsGroup>
+                                <SettingsRow icon={<SparklesIcon />} title="Open AI Smart Space" subtitle="Daily summaries, pending replies, tasks, notes and reminders" onClick={onOpenSmartSpace} />
+                                <SettingsToggle icon={<SparklesIcon />} title="Show Smart Space in chat header" subtitle="Adds an optional shortcut beside call and search buttons" value={smartSpaceButtonEnabled} onClick={() => onSmartSpaceButtonChange?.(!smartSpaceButtonEnabled)} />
+                            </SettingsGroup>
                             <SectionLabel>Display</SectionLabel>
                             <SettingsGroup>
                                 <ChoiceRow title="App theme" value={theme} onChange={onThemeChange} options={[['light', 'Light'], ['dark', 'Dark'], ['midnight', 'Midnight'], ['business', 'Business']]} />

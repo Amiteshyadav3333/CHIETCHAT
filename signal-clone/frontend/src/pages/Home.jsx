@@ -12,7 +12,7 @@ import AvatarZoom from '../components/AvatarZoom';
 import StatusSection from '../components/StatusSection';
 import AiChat from '../components/AiChat';
 import AiSmartSpace from '../components/AiSmartSpace';
-import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon, EllipsisVerticalIcon, XMarkIcon, TrashIcon, NoSymbolIcon, PlayIcon, Cog6ToothIcon, BellIcon, MapPinIcon, PhotoIcon, ChatBubbleLeftRightIcon, InformationCircleIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon, MicrophoneIcon, FaceSmileIcon, SparklesIcon, MagnifyingGlassIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon, EllipsisVerticalIcon, XMarkIcon, TrashIcon, NoSymbolIcon, PlayIcon, Cog6ToothIcon, BellIcon, MapPinIcon, PhotoIcon, ChatBubbleLeftRightIcon, InformationCircleIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon, MicrophoneIcon, FaceSmileIcon, SparklesIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { format } from 'date-fns';
 import SettingsModal from '../components/SettingsModal';
 import NotificationPanel from '../components/NotificationPanel';
@@ -221,7 +221,8 @@ const Home = () => {
     const [showReels, setShowReels] = useState(() => localStorage.getItem('activeView') === 'reels');
     const [showSocial, setShowSocial] = useState(() => localStorage.getItem('activeView') === 'social');
     const [showAiChat, setShowAiChat] = useState(() => localStorage.getItem('activeView') === 'ai');
-    const [showSmartSpace, setShowSmartSpace] = useState(() => localStorage.getItem('activeView') === 'smart-space');
+    const [showSmartSpace, setShowSmartSpace] = useState(false);
+    const [smartSpaceButtonEnabled, setSmartSpaceButtonEnabled] = useState(() => localStorage.getItem('smart_space_button_enabled') === '1');
     const [showPodlive, setShowPodlive] = useState(() => localStorage.getItem('activeView') === 'podlive');
     const [socialDeepLink, setSocialDeepLink] = useState(null); // { type: 'post'|'profile', id }
     const [showSettings, setShowSettings] = useState(() => localStorage.getItem('activeView') === 'settings');
@@ -1646,7 +1647,6 @@ const Home = () => {
         { label: 'Social', icon: PhotoIcon, active: showSocial, action: () => { hideAppNavForFeature(); setShowReels(false); setShowPodlive(false); setShowSocial(true); setShowAiChat(false); } },
         { label: 'PodLive', icon: MicrophoneIcon, active: showPodlive, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(true); setShowAiChat(false); } },
         { label: 'AI', icon: SparklesIcon, active: showAiChat, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(false); setShowAiChat(true); } },
-        { label: 'Smart', icon: CheckCircleIcon, active: showSmartSpace, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(false); setShowAiChat(false); setShowSmartSpace(true); } },
         { label: 'Notify', icon: BellIcon, active: showNotifications, action: openNotifications, badge: unreadCount },
         { label: 'New', icon: PlusIcon, active: showSearchModal, action: () => { setShowNotifications(false); setShowSettings(false); setShowSearchModal(true); } },
         { label: 'Settings', icon: Cog6ToothIcon, active: showSettings, action: () => { setShowNotifications(false); setShowSearchModal(false); setShowSettings(true); } }
@@ -2195,6 +2195,11 @@ const Home = () => {
                             </div>
                         </div>
                         <div className="flex gap-3 text-signal-accent items-center relative">
+                            {smartSpaceButtonEnabled && (
+                                <button onClick={() => { setShowTopDropdown(false); setShowSmartSpace(true); }} title="Open AI Smart Space" className="rounded-full bg-emerald-400/10 p-1.5 text-emerald-400 hover:bg-emerald-400/20">
+                                    <SparklesIcon className="w-5 h-5" />
+                                </button>
+                            )}
                             <button onClick={() => setShowMessageSearch(v => !v)} title="Search messages"><MagnifyingGlassIcon className="w-6 h-6" /></button>
                             <button onClick={() => startCall('voice')} title="Voice Call"><PhoneIcon className="w-6 h-6" /></button>
                             <button onClick={() => startCall('video')} title="Video Call"><VideoCameraIcon className="w-6 h-6" /></button>
@@ -2216,6 +2221,18 @@ const Home = () => {
                                             >
                                                 <span className="text-[#a78bfa]">✨</span>
                                                 <span>{aiEnabled ? 'Disable AI Grammar' : 'Enable AI Grammar'}</span>
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    const next = !smartSpaceButtonEnabled;
+                                                    setSmartSpaceButtonEnabled(next);
+                                                    localStorage.setItem('smart_space_button_enabled', next ? '1' : '0');
+                                                    setShowTopDropdown(false);
+                                                }}
+                                                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-gray-200 hover:bg-white/10"
+                                            >
+                                                <span>🧠</span>
+                                                <span>{smartSpaceButtonEnabled ? 'Hide AI Smart Space button' : 'Enable AI Smart Space button'}</span>
                                             </button>
                                             <button 
                                                 onClick={() => {
@@ -2703,7 +2720,7 @@ const Home = () => {
                 />
             </div>
 
-            {showSettings && <SettingsModal user={user} token={token} onClose={() => setShowSettings(false)} onLogout={logout} onUserUpdate={updateUser} theme={theme} wallpaper={wallpaper} onThemeChange={setTheme} onWallpaperChange={setWallpaper} />}
+            {showSettings && <SettingsModal user={user} token={token} onClose={() => setShowSettings(false)} onLogout={logout} onUserUpdate={updateUser} theme={theme} wallpaper={wallpaper} onThemeChange={setTheme} onWallpaperChange={setWallpaper} onOpenSmartSpace={() => { setShowSettings(false); setShowSmartSpace(true); }} smartSpaceButtonEnabled={smartSpaceButtonEnabled} onSmartSpaceButtonChange={(enabled) => { setSmartSpaceButtonEnabled(enabled); localStorage.setItem('smart_space_button_enabled', enabled ? '1' : '0'); }} />}
 
             {/* AI Chat Overlay */}
             <div className={`fixed inset-0 z-50 bg-[#0b141a] transition-opacity duration-200 ${showAiChat ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>

@@ -136,7 +136,7 @@ export const compressVideo = (file, options = {}) => {
         video.muted = true;
         video.playsInline = true;
 
-        video.onloadedmetadata = () => {
+        video.onloadedmetadata = async () => {
             // Skip if video is already short and small
             if (video.duration < 10 && file.size < 10 * 1024 * 1024) {
                 URL.revokeObjectURL(objectUrl);
@@ -160,14 +160,44 @@ export const compressVideo = (file, options = {}) => {
             const ctx = canvas.getContext('2d');
             const stream = canvas.captureStream(30);
 
-            // Add audio track from video if available
+            // A canvas stream only contains video. Capture the source element's
+            // audio track and add it explicitly; otherwise the compressed upload
+            // is silent. Safari/iOS does not expose captureStream(), so keep the
+            // original file there instead of silently removing its audio.
+            const captureSourceStream = video.captureStream || video.mozCaptureStream;
+            if (typeof captureSourceStream !== 'function') {
+                URL.revokeObjectURL(objectUrl);
+                resolve(file);
+                return;
+            }
+
+            let sourceStream;
+            try {
+                await video.play();
+                sourceStream = captureSourceStream.call(video);
+                const audioTracks = sourceStream.getAudioTracks();
+                if (audioTracks.length === 0) {
+                    video.pause();
+                    URL.revokeObjectURL(objectUrl);
+                    resolve(file);
+                    return;
+                }
+                audioTracks.forEach(track => stream.addTrack(track));
+            } catch {
+                URL.revokeObjectURL(objectUrl);
+                resolve(file);
+                return;
+            }
+
             let mediaRecorder;
             try {
                 mediaRecorder = new MediaRecorder(stream, {
                     mimeType: supportedMime,
-                    videoBitsPerSecond
+                    videoBitsPerSecond,
+                    audioBitsPerSecond: 128000
                 });
             } catch {
+                video.pause();
                 URL.revokeObjectURL(objectUrl);
                 resolve(file);
                 return;
@@ -179,6 +209,7 @@ export const compressVideo = (file, options = {}) => {
             };
 
             mediaRecorder.onstop = () => {
+                sourceStream?.getTracks().forEach(track => track.stop());
                 URL.revokeObjectURL(objectUrl);
                 const blob = new Blob(chunks, { type: supportedMime });
                 // Only use compressed if smaller
@@ -212,12 +243,7 @@ export const compressVideo = (file, options = {}) => {
             };
 
             mediaRecorder.start(100);
-            video.play().then(() => {
-                requestAnimationFrame(drawFrame);
-            }).catch(() => {
-                URL.revokeObjectURL(objectUrl);
-                resolve(file);
-            });
+            requestAnimationFrame(drawFrame);
         };
 
         video.onerror = () => {

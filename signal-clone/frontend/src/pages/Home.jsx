@@ -232,6 +232,7 @@ const Home = () => {
     const [showAiChat, setShowAiChat] = useState(() => localStorage.getItem('activeView') === 'ai');
     const [showSmartSpace, setShowSmartSpace] = useState(false);
     const [smartSpaceButtonEnabled, setSmartSpaceButtonEnabled] = useState(() => localStorage.getItem('smart_space_button_enabled') === '1');
+    const [pictureCallEnabled, setPictureCallEnabled] = useState(() => localStorage.getItem('picture_call_enabled') === '1');
     const [showPodlive, setShowPodlive] = useState(() => localStorage.getItem('activeView') === 'podlive');
     const [socialDeepLink, setSocialDeepLink] = useState(null); // { type: 'post'|'profile', id }
     const [showSettings, setShowSettings] = useState(() => localStorage.getItem('activeView') === 'settings');
@@ -1299,8 +1300,35 @@ const Home = () => {
         }
     };
 
-    const startCallForChat = (chat, type = 'video') => {
+    const requestCallPermissions = async (type = 'video') => {
+        if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+            alert('Calls need camera/microphone access in a secure HTTPS browser window.');
+            return false;
+        }
+
+        try {
+            const permissionStream = await navigator.mediaDevices.getUserMedia({
+                audio: true,
+                video: type !== 'voice'
+            });
+            permissionStream.getTracks().forEach(track => track.stop());
+            return true;
+        } catch (err) {
+            const device = type === 'voice' ? 'microphone' : 'camera and microphone';
+            if (err?.name === 'NotAllowedError' || err?.name === 'SecurityError') {
+                alert(`Please allow ${device} access in your browser settings, then try the call again.`);
+            } else if (err?.name === 'NotFoundError') {
+                alert(`No usable ${device} was found on this device.`);
+            } else {
+                alert(`Could not access the ${device}. Close other apps using them and try again.`);
+            }
+            return false;
+        }
+    };
+
+    const startCallForChat = async (chat, type = 'video') => {
         if (!chat || !socket) return;
+        if (!(await requestCallPermissions(type))) return;
         setActiveChat(chat);
         setCallType(type);
         socket.emit('notify_ring', {
@@ -1313,8 +1341,8 @@ const Home = () => {
         setShowCallModal(true);
     };
 
-    const startCall = (type = 'video') => {
-        startCallForChat(activeChat, type);
+    const startCall = async (type = 'video') => {
+        await startCallForChat(activeChat, type);
     };
 
     const handleDeleteChat = (chatId) => {
@@ -1469,6 +1497,8 @@ const Home = () => {
 
     const acceptCall = async () => {
         if (incomingCall) {
+            const incomingType = incomingCall.callType || 'video';
+            if (!(await requestCallPermissions(incomingType))) return;
             let chat = chats.find(c => c.id === incomingCall.chatId);
             if (!chat) {
                 const updatedChats = await fetchChats();
@@ -1476,7 +1506,7 @@ const Home = () => {
             }
             if (chat) {
                 setActiveChat(chat);
-                setCallType(incomingCall.callType || 'video');
+                setCallType(incomingType);
                 setShowCallModal(true);
             } else {
                 alert("Could not load chat information for this call.");
@@ -2284,14 +2314,6 @@ const Home = () => {
                             <button onClick={() => setShowMessageSearch(v => !v)} title="Search messages"><MagnifyingGlassIcon className="w-6 h-6" /></button>
                             <button onClick={() => startCall('voice')} title="Voice Call"><PhoneIcon className="w-6 h-6" /></button>
                             <button onClick={() => startCall('video')} title="Video Call"><VideoCameraIcon className="w-6 h-6" /></button>
-                            <button
-                                onClick={() => startCall('picture')}
-                                title="Picture group call: screen + face + voice"
-                                className="flex items-center gap-1 rounded-full bg-violet-500/15 px-2 py-1.5 text-violet-300 hover:bg-violet-500/25"
-                            >
-                                <PhotoIcon className="w-5 h-5" />
-                                <span className="hidden lg:inline text-xs font-bold">Picture</span>
-                            </button>
                             <div className="relative">
                                 <button onClick={() => { setShowTopDropdown(v => !v); setShowTopReactions(false); }} className="text-gray-400 hover:text-white">
                                     <EllipsisVerticalIcon className="w-6 h-6" />
@@ -2300,6 +2322,30 @@ const Home = () => {
                                     const lastMessage = messages[messages.length - 1];
                                     return (
                                         <div className="absolute right-0 top-8 z-50 w-52 overflow-hidden rounded-xl bg-[#111b21] shadow-2xl border border-white/10 text-white text-xs">
+                                            {pictureCallEnabled && (
+                                                <button
+                                                    onClick={() => {
+                                                        setShowTopDropdown(false);
+                                                        startCall('picture');
+                                                    }}
+                                                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-violet-300 hover:bg-white/10"
+                                                >
+                                                    <PhotoIcon className="w-4 h-4" />
+                                                    <span>Start Picture Call</span>
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={() => {
+                                                    const next = !pictureCallEnabled;
+                                                    setPictureCallEnabled(next);
+                                                    localStorage.setItem('picture_call_enabled', next ? '1' : '0');
+                                                    setShowTopDropdown(false);
+                                                }}
+                                                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-gray-200 hover:bg-white/10"
+                                            >
+                                                <PhotoIcon className="w-4 h-4 text-violet-300" />
+                                                <span>{pictureCallEnabled ? 'Disable Picture Call' : 'Enable Picture Call'}</span>
+                                            </button>
                                             <button 
                                                 onClick={() => {
                                                     const newVal = !aiEnabled;

@@ -651,6 +651,7 @@ const ChatBubble = ({
     const [swipeX, setSwipeX] = useState(0);
     const [swiping, setSwiping] = useState(false);
     const [zoomedMedia, setZoomedMedia] = useState(null);
+    const [videoNoteExpanded, setVideoNoteExpanded] = useState(false);
 
     const [translatedText, setTranslatedText] = useState('');
 
@@ -809,18 +810,42 @@ const ChatBubble = ({
         // ── WHATSAPP-STYLE VIDEO NOTE ──
         if (type === 'video_note') {
             return (
-                <div className="relative w-52 h-52 rounded-full overflow-hidden bg-black border-4 border-white/10 shadow-xl group/video-note">
+                <div
+                    className={`relative rounded-full overflow-hidden bg-black shadow-xl group/video-note cursor-pointer transition-all duration-300 ease-out ${
+                        videoNoteExpanded
+                            ? 'w-[min(78vw,360px)] h-[min(78vw,360px)] border-[5px] border-[#25d366]'
+                            : 'w-40 h-40 sm:w-52 sm:h-52 border-4 border-white/10'
+                    }`}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        const video = event.currentTarget.querySelector('video');
+                        if (videoNoteExpanded) {
+                            video?.pause();
+                        } else {
+                            video?.play().catch(() => {});
+                        }
+                        setVideoNoteExpanded(expanded => !expanded);
+                    }}
+                    title={videoNoteExpanded ? 'Tap to minimize' : 'Tap to expand and play'}
+                >
                     <video
                         src={cnt}
                         className="w-full h-full object-cover"
                         preload="metadata"
                         playsInline
-                        controls
-                        onClick={e => e.stopPropagation()}
                     />
                     <span className="absolute top-3 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-black/55 text-white text-[9px] font-semibold pointer-events-none">
-                        VIDEO NOTE
+                        {videoNoteExpanded ? 'TAP TO MINIMIZE' : 'VIDEO NOTE'}
                     </span>
+                    {!videoNoteExpanded && (
+                        <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <span className="w-12 h-12 rounded-full bg-black/55 border border-white/30 flex items-center justify-center">
+                                <svg viewBox="0 0 24 24" fill="white" className="w-7 h-7 ml-0.5">
+                                    <path d="M8 5v14l11-7z" />
+                                </svg>
+                            </span>
+                        </span>
+                    )}
                 </div>
             );
         }

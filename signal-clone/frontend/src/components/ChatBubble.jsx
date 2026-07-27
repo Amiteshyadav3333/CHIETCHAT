@@ -683,7 +683,7 @@ const ChatBubble = ({
     const content = message.content || '';
     const isDeleted = message.type === 'deleted' || message.deletedAt;
 
-    const isMedia = ['image', 'video'].includes(message.type) ||
+    const isMedia = ['image', 'video', 'video_note'].includes(message.type) ||
         content.match(/\.(jpg|jpeg|png|gif|webp|mp4|webm|ogg)$/i);
 
     const isTextMessage = (!message.type || message.type === 'text') && !isMedia;
@@ -805,6 +805,25 @@ const ChatBubble = ({
     };
 
     const renderContent = (cnt, type) => {
+
+        // ── WHATSAPP-STYLE VIDEO NOTE ──
+        if (type === 'video_note') {
+            return (
+                <div className="relative w-52 h-52 rounded-full overflow-hidden bg-black border-4 border-white/10 shadow-xl group/video-note">
+                    <video
+                        src={cnt}
+                        className="w-full h-full object-cover"
+                        preload="metadata"
+                        playsInline
+                        controls
+                        onClick={e => e.stopPropagation()}
+                    />
+                    <span className="absolute top-3 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-black/55 text-white text-[9px] font-semibold pointer-events-none">
+                        VIDEO NOTE
+                    </span>
+                </div>
+            );
+        }
 
         // ── IMAGE ──
         if (type === 'image' || type === 'gif' || cnt.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {

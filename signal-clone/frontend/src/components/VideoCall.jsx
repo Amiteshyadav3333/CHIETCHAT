@@ -125,13 +125,14 @@ const generateSafetyNumber = (userA, userB) => {
 
 const VideoCallModal = ({ 
     activeChat, onClose, callType = 'video', initialRingStatus = 'calling',
-    token, onTransitionCall 
+    token, onTransitionCall, preparedStream = null, onPreparedStreamConsumed
 }) => {
     const { socket } = useContext(SocketContext);
     const { user } = useContext(AuthContext);
 
     const [peers, setPeers] = useState({});
     const peersRef = useRef({});
+    const pendingIceRef = useRef({});
     const streamRef = useRef(null);
 
     const [isMuted, setIsMuted] = useState(false);
@@ -329,9 +330,10 @@ const VideoCallModal = ({
                         }
                     };
 
-                let stream;
+                let stream = preparedStream?.active ? preparedStream : null;
+                if (stream) onPreparedStreamConsumed?.();
                 try {
-                    stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    if (!stream) stream = await navigator.mediaDevices.getUserMedia(constraints);
                 } catch (firstErr) {
                     console.warn("First constraints attempt failed, trying fallback...", firstErr);
                     try {
@@ -427,6 +429,11 @@ const VideoCallModal = ({
                         } catch (err) {
                             console.error("Failed to add/queue ICE candidate", err);
                         }
+                    } else if (data.candidate) {
+                        // Trickle ICE may arrive just before its offer/peer object.
+                        // Preserve it so restrictive mobile networks do not get a black screen.
+                        if (!pendingIceRef.current[data.fromSocket]) pendingIceRef.current[data.fromSocket] = [];
+                        pendingIceRef.current[data.fromSocket].push(data.candidate);
                     }
                 });
 
@@ -751,8 +758,9 @@ const VideoCallModal = ({
             pc,
             stream: null,
             user: { id: remoteUserId, username: remoteParticipant?.username || `User ${remoteUserId}`, avatar: remoteParticipant?.avatar },
-            iceQueue: []
+            iceQueue: pendingIceRef.current[remoteSocketId] || []
         };
+        delete pendingIceRef.current[remoteSocketId];
         peersRef.current[remoteSocketId] = peerItem;
         setPeers(prev => ({
             ...prev,

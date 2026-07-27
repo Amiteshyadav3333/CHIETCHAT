@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { 
     PaperAirplaneIcon, FaceSmileIcon, PaperClipIcon, MicrophoneIcon, 
     StopIcon, XMarkIcon, ChartBarIcon, MapPinIcon, DocumentIcon,
-    MusicalNoteIcon, PhotoIcon, CameraIcon, UserCircleIcon, PlayIcon
+    MusicalNoteIcon, PhotoIcon, CameraIcon, VideoCameraIcon, UserCircleIcon, PlayIcon
 } from '@heroicons/react/24/solid';
 import { ArrowUturnLeftIcon, GiftIcon, ShoppingBagIcon } from '@heroicons/react/24/outline';
 import EmojiPicker from 'emoji-picker-react';
@@ -103,6 +103,9 @@ const MessageInput = ({
     const [loadingGifs, setLoadingGifs] = useState(false);
     const [showAttachMenu, setShowAttachMenu] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
+    const [showVideoNote, setShowVideoNote] = useState(false);
+    const [isVideoNoteRecording, setIsVideoNoteRecording] = useState(false);
+    const [videoNoteSeconds, setVideoNoteSeconds] = useState(0);
     const [showPollCreator, setShowPollCreator] = useState(false);
     const [pollData, setPollData] = useState({ question: '', options: ['', ''] });
     const [smartReplies, setSmartReplies] = useState([]);
@@ -211,6 +214,11 @@ const MessageInput = ({
     
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
+    const videoNoteRecorderRef = useRef(null);
+    const videoNoteStreamRef = useRef(null);
+    const videoNoteChunksRef = useRef([]);
+    const videoNotePreviewRef = useRef(null);
+    const videoNoteTimerRef = useRef(null);
     const inputRef = useRef(null);
     const galleryInputRef = useRef(null);
     const cameraInputRef = useRef(null);
@@ -224,7 +232,11 @@ const MessageInput = ({
     const videoRef = useRef(null);
 
     React.useEffect(() => {
-        return () => clearTimeout(typingTimerRef.current);
+        return () => {
+            clearTimeout(typingTimerRef.current);
+            clearInterval(videoNoteTimerRef.current);
+            videoNoteStreamRef.current?.getTracks().forEach(track => track.stop());
+        };
     }, []);
 
     React.useEffect(() => {
@@ -517,6 +529,85 @@ const MessageInput = ({
     const stopRecording = () => {
         mediaRecorderRef.current?.stop();
         setIsRecording(false);
+    };
+
+    const openVideoNote = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: { echoCancellation: true, noiseSuppression: true },
+                video: {
+                    facingMode: 'user',
+                    width: { ideal: 480 },
+                    height: { ideal: 480 },
+                    frameRate: { ideal: 24, max: 30 }
+                }
+            });
+            videoNoteStreamRef.current = stream;
+            setShowVideoNote(true);
+            requestAnimationFrame(() => {
+                if (videoNotePreviewRef.current) {
+                    videoNotePreviewRef.current.srcObject = stream;
+                    videoNotePreviewRef.current.play().catch(() => {});
+                }
+            });
+        } catch {
+            alert('Video note ke liye camera aur microphone permission allow karein.');
+        }
+    };
+
+    const closeVideoNote = () => {
+        clearInterval(videoNoteTimerRef.current);
+        if (videoNoteRecorderRef.current?.state === 'recording') {
+            videoNoteRecorderRef.current.onstop = null;
+            videoNoteRecorderRef.current.stop();
+        }
+        videoNoteStreamRef.current?.getTracks().forEach(track => track.stop());
+        videoNoteStreamRef.current = null;
+        setIsVideoNoteRecording(false);
+        setVideoNoteSeconds(0);
+        setShowVideoNote(false);
+    };
+
+    const startVideoNoteRecording = () => {
+        const stream = videoNoteStreamRef.current;
+        if (!stream) return;
+        const preferredType = ['video/webm;codecs=vp8,opus', 'video/webm']
+            .find(type => MediaRecorder.isTypeSupported?.(type));
+        const recorder = new MediaRecorder(stream, preferredType ? { mimeType: preferredType } : undefined);
+        videoNoteChunksRef.current = [];
+        videoNoteRecorderRef.current = recorder;
+        recorder.ondataavailable = event => {
+            if (event.data.size) videoNoteChunksRef.current.push(event.data);
+        };
+        recorder.onstop = () => {
+            clearInterval(videoNoteTimerRef.current);
+            const blob = new Blob(videoNoteChunksRef.current, { type: recorder.mimeType || 'video/webm' });
+            const file = new File([blob], `video-note-${Date.now()}.webm`, { type: blob.type });
+            videoNoteStreamRef.current?.getTracks().forEach(track => track.stop());
+            videoNoteStreamRef.current = null;
+            setShowVideoNote(false);
+            setIsVideoNoteRecording(false);
+            setVideoNoteSeconds(0);
+            if (blob.size > 0) onUpload(file);
+        };
+        recorder.start(250);
+        setIsVideoNoteRecording(true);
+        setVideoNoteSeconds(0);
+        videoNoteTimerRef.current = setInterval(() => {
+            setVideoNoteSeconds(seconds => {
+                if (seconds >= 59) {
+                    setTimeout(() => recorder.state === 'recording' && recorder.stop(), 0);
+                    return 60;
+                }
+                return seconds + 1;
+            });
+        }, 1000);
+    };
+
+    const stopVideoNoteRecording = () => {
+        if (videoNoteRecorderRef.current?.state === 'recording') {
+            videoNoteRecorderRef.current.stop();
+        }
     };
 
     const handleTranslateText = async () => {
@@ -1181,19 +1272,60 @@ const MessageInput = ({
                             <PaperAirplaneIcon className="w-5 h-5 text-white" />
                         </button>
                     ) : (
-                        <button
-                            type="button"
-                            onClick={isRecording ? stopRecording : startRecording}
-                            className={`w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 transition-all active:scale-90 shadow-lg ${isRecording ? 'bg-red-500 hover:bg-red-600' : 'bg-signal-accent hover:bg-signal-accentHover'}`}
-                        >
-                            {isRecording
-                                ? <StopIcon className="w-5 h-5 text-white" />
-                                : <MicrophoneIcon className="w-5 h-5 text-white" />
-                            }
-                        </button>
+                        <div className="flex items-center gap-1">
+                            {!isRecording && (
+                                <button
+                                    type="button"
+                                    onClick={openVideoNote}
+                                    className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 transition-all active:scale-90 shadow-lg bg-[#2a3942] hover:bg-[#34434c] text-[#25d366]"
+                                    title="Video note"
+                                >
+                                    <VideoCameraIcon className="w-5 h-5" />
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={isRecording ? stopRecording : startRecording}
+                                className={`w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 transition-all active:scale-90 shadow-lg ${isRecording ? 'bg-red-500 hover:bg-red-600' : 'bg-signal-accent hover:bg-signal-accentHover'}`}
+                                title={isRecording ? 'Stop recording' : 'Voice note'}
+                            >
+                                {isRecording
+                                    ? <StopIcon className="w-5 h-5 text-white" />
+                                    : <MicrophoneIcon className="w-5 h-5 text-white" />
+                                }
+                            </button>
+                        </div>
                     )}
                 </form>
             </div>
+
+            {showVideoNote && (
+                <div className="fixed inset-0 z-[250] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="w-full max-w-sm bg-[#111b21] rounded-3xl p-6 flex flex-col items-center shadow-2xl border border-white/10">
+                        <div className="w-full flex items-center justify-between mb-5">
+                            <button onClick={closeVideoNote} className="p-2 rounded-full text-white/70 hover:bg-white/10" title="Cancel">
+                                <XMarkIcon className="w-6 h-6" />
+                            </button>
+                            <span className="text-white font-semibold">Video note</span>
+                            <span className={`text-sm tabular-nums ${isVideoNoteRecording ? 'text-red-400' : 'text-white/50'}`}>
+                                0:{String(videoNoteSeconds).padStart(2, '0')}
+                            </span>
+                        </div>
+                        <div className={`relative w-64 h-64 rounded-full overflow-hidden bg-black border-4 ${isVideoNoteRecording ? 'border-red-500' : 'border-[#25d366]'}`}>
+                            <video ref={videoNotePreviewRef} autoPlay muted playsInline className="w-full h-full object-cover -scale-x-100" />
+                            {isVideoNoteRecording && <div className="absolute top-4 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-red-500 animate-pulse" />}
+                        </div>
+                        <p className="text-white/50 text-xs mt-4">Maximum 60 seconds</p>
+                        <button
+                            type="button"
+                            onClick={isVideoNoteRecording ? stopVideoNoteRecording : startVideoNoteRecording}
+                            className={`mt-5 w-16 h-16 rounded-full flex items-center justify-center shadow-xl active:scale-95 transition ${isVideoNoteRecording ? 'bg-red-500' : 'bg-[#25d366]'}`}
+                        >
+                            {isVideoNoteRecording ? <StopIcon className="w-7 h-7 text-white" /> : <span className="w-6 h-6 rounded-full bg-white" />}
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Modals for new premium features */}
             {showRideModal && (

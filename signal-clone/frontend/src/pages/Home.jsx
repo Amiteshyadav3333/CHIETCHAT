@@ -224,6 +224,7 @@ const Home = () => {
     const [callType, setCallType] = useState('video');
     const [incomingCall, setIncomingCall] = useState(null);
     const [callRingState, setCallRingState] = useState({});
+    const preparedCallStreamRef = useRef(null);
     const [replyTo, setReplyTo] = useState(null);
     const [showInfoPanel, setShowInfoPanel] = useState(false);
     const [blockedUsers, setBlockedUsers] = useState([]);
@@ -1252,7 +1253,7 @@ const Home = () => {
 
             if (isImage) type = 'image';
             else if (isAudio) type = 'audio';
-            else if (isVideo) type = 'video';
+            else if (isVideo) type = file.name.startsWith('video-note-') ? 'video_note' : 'video';
 
             setUploadProgress(null);
             handleSendMessage(url, type, null, disappearingTtl);
@@ -1308,11 +1309,15 @@ const Home = () => {
 
         try {
             const permissionStream = await navigator.mediaDevices.getUserMedia({
-                audio: true,
-                video: type !== 'voice'
+                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+                video: type === 'voice' ? false : {
+                    facingMode: 'user',
+                    width: { ideal: 960, max: 1280 },
+                    height: { ideal: 540, max: 720 },
+                    frameRate: { ideal: 24, max: 30 }
+                }
             });
-            permissionStream.getTracks().forEach(track => track.stop());
-            return true;
+            return permissionStream;
         } catch (err) {
             const device = type === 'voice' ? 'microphone' : 'camera and microphone';
             if (err?.name === 'NotAllowedError' || err?.name === 'SecurityError') {
@@ -1322,13 +1327,16 @@ const Home = () => {
             } else {
                 alert(`Could not access the ${device}. Close other apps using them and try again.`);
             }
-            return false;
+            return null;
         }
     };
 
     const startCallForChat = async (chat, type = 'video') => {
         if (!chat || !socket) return;
-        if (!(await requestCallPermissions(type))) return;
+        const preparedStream = await requestCallPermissions(type);
+        if (!preparedStream) return;
+        preparedCallStreamRef.current?.getTracks().forEach(track => track.stop());
+        preparedCallStreamRef.current = preparedStream;
         setActiveChat(chat);
         setCallType(type);
         socket.emit('notify_ring', {
@@ -1498,7 +1506,10 @@ const Home = () => {
     const acceptCall = async () => {
         if (incomingCall) {
             const incomingType = incomingCall.callType || 'video';
-            if (!(await requestCallPermissions(incomingType))) return;
+            const preparedStream = await requestCallPermissions(incomingType);
+            if (!preparedStream) return;
+            preparedCallStreamRef.current?.getTracks().forEach(track => track.stop());
+            preparedCallStreamRef.current = preparedStream;
             let chat = chats.find(c => c.id === incomingCall.chatId);
             if (!chat) {
                 const updatedChats = await fetchChats();
@@ -3007,6 +3018,8 @@ const Home = () => {
                     callType={callType} 
                     initialRingStatus={callRingState[activeChat?.id] || 'calling'}
                     token={token}
+                    preparedStream={preparedCallStreamRef.current}
+                    onPreparedStreamConsumed={() => { preparedCallStreamRef.current = null; }}
                     onTransitionCall={async (newChatId) => {
                         const updatedChats = await fetchChats();
                         const newChatObj = updatedChats.find(c => c.id === newChatId);

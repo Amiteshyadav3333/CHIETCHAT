@@ -146,6 +146,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     const inputRef = useRef(null);
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
+    const dictationRecognitionRef = useRef(null);
     const abortRef = useRef(false);
 
     // ─── Calling States ───
@@ -430,11 +431,13 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         if (!video || video.paused || video.ended) return null;
         try {
             const canvas = document.createElement('canvas');
-            canvas.width = 640;
-            canvas.height = 480;
+            if (!video.videoWidth || !video.videoHeight) return null;
+            const scale = Math.min(1, 960 / video.videoWidth);
+            canvas.width = Math.round(video.videoWidth * scale);
+            canvas.height = Math.round(video.videoHeight * scale);
             const ctx = canvas.getContext('2d');
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            return canvas.toDataURL('image/jpeg', 0.7);
+            return canvas.toDataURL('image/jpeg', 0.86);
         } catch (e) {
             console.error("Frame capture error:", e);
             return null;
@@ -471,7 +474,9 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
 
         try {
             const res = await axios.post('/api/ai/chat', {
-                message: speechText,
+                message: frameData
+                    ? `${speechText}\n[Live camera frame attached. Inspect it carefully before answering.]`
+                    : speechText,
                 user_gender: userGender,
                 image: frameData,
                 call_mode: isCallVideo ? 'video' : 'voice'
@@ -860,6 +865,37 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     };
 
     const startRecording = async () => {
+        const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (SpeechRec) {
+            const rec = new SpeechRec();
+            rec.continuous = false;
+            rec.interimResults = true;
+            rec.lang = recognitionLangRef.current;
+            let finalTranscript = '';
+            rec.onresult = (event) => {
+                let interim = '';
+                for (let i = event.resultIndex; i < event.results.length; i += 1) {
+                    const part = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) finalTranscript += part;
+                    else interim += part;
+                }
+                setInput((finalTranscript || interim).trim());
+            };
+            rec.onend = () => {
+                dictationRecognitionRef.current = null;
+                setIsRecording(false);
+                if (finalTranscript.trim()) sendMessage(finalTranscript.trim());
+            };
+            rec.onerror = () => {
+                dictationRecognitionRef.current = null;
+                setIsRecording(false);
+            };
+            dictationRecognitionRef.current = rec;
+            setIsRecording(true);
+            rec.start();
+            return;
+        }
+
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const mr = new MediaRecorder(stream);
@@ -868,7 +904,8 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
             mr.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
             mr.onstop = async () => {
                 stream.getTracks().forEach(t => t.stop());
-                sendMessage("🎤 Voice message (transcription coming soon)");
+                setInput('');
+                alert('Is browser mein voice transcription support nahi hai. Chrome ya Edge mein try karo.');
             };
             mr.start();
             setIsRecording(true);
@@ -878,12 +915,16 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     };
 
     const stopRecording = () => {
+        if (dictationRecognitionRef.current) {
+            dictationRecognitionRef.current.stop();
+            return;
+        }
         mediaRecorderRef.current?.stop();
         setIsRecording(false);
     };
 
     // Quick prompt suggestions based on AI gender
-    const quickPrompts = ["hmm", "kya kar rhe ho?", "suno na", "call kro", "aaj mood off hai"];
+    const quickPrompts = ["hmm", "kya kar rhe ho?", "suno na", "interview ki taiyari kara do", "aaj mood off hai"];
 
     const isArjun = botInfo?.name === 'Arjun';
 

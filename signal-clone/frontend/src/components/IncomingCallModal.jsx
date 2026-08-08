@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { PhoneIcon, XMarkIcon } from '@heroicons/react/24/solid';
 
-const IncomingCallModal = ({ callerName, callType = 'video', onAccept, onReject }) => {
+const IncomingCallModal = ({ callerName, callType = 'video', onAccept, onReject, playSound = true }) => {
     const ringtoneRef = useRef(null);
 
     useEffect(() => {
@@ -9,7 +9,7 @@ const IncomingCallModal = ({ callerName, callType = 'video', onAccept, onReject 
         let timeoutId = null;
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
 
-        if (!AudioContextClass) return undefined;
+        if (!playSound || !AudioContextClass) return undefined;
 
         const audioContext = new AudioContextClass();
         ringtoneRef.current = {
@@ -60,7 +60,7 @@ const IncomingCallModal = ({ callerName, callType = 'video', onAccept, onReject 
             clearTimeout(timeoutId);
             audioContext.close().catch(() => {});
         };
-    }, []);
+    }, [playSound]);
 
     const stopRingtone = () => {
         ringtoneRef.current?.stop();
@@ -84,7 +84,7 @@ const IncomingCallModal = ({ callerName, callType = 'video', onAccept, onReject 
                 </div>
                 <h3 className="text-xl font-bold text-white mb-1">{callerName}</h3>
                 <p className="text-gray-400 mb-8 animate-pulse">
-                    {callType === 'picture' ? 'Incoming Picture Group Call…' : callType === 'voice' ? 'Incoming Voice Call…' : 'Incoming Video Call…'}
+                    {callType === 'voice' ? 'Incoming Voice Call…' : 'Incoming Video Call…'}
                 </p>
 
                 <div className="flex gap-8 w-full justify-center">

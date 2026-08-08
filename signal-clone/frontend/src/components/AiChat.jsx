@@ -2,133 +2,14 @@ import React, { useState, useEffect, useRef, useContext } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import {
-    XMarkIcon, TrashIcon, SparklesIcon,
+    XMarkIcon, TrashIcon,
     PaperAirplaneIcon, StopIcon, MicrophoneIcon,
-    PhotoIcon, HeartIcon, FaceSmileIcon, PhoneIcon
+    FaceSmileIcon, PhoneIcon
 } from '@heroicons/react/24/solid';
-import { ArrowLeftIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon } from '@heroicons/react/24/outline';
+import UserAvatar from './UserAvatar';
+import { EMOJIS, MessageBubble, TypingDots, WaveformVisualizer, renderMarkdown } from './AiChatPresentation';
 
-/* ─── Canvas-based Waveform Visualizer ─── */
-const WaveformVisualizer = ({ active, color }) => {
-    const canvasRef = useRef(null);
-
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        let animationId;
-        let phase = 0;
-
-        const render = () => {
-            if (!canvas) return;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            const width = canvas.width;
-            const height = canvas.height;
-            const mid = height / 2;
-            
-            const waves = [
-                { amplitude: active ? 22 : 3, frequency: 0.015, speed: 0.08, opacity: 0.8 },
-                { amplitude: active ? 16 : 2, frequency: 0.02, speed: -0.05, opacity: 0.4 },
-                { amplitude: active ? 9 : 1.5, frequency: 0.01, speed: 0.04, opacity: 0.2 }
-            ];
-
-            waves.forEach(w => {
-                ctx.beginPath();
-                ctx.strokeStyle = color;
-                ctx.lineWidth = 2.5;
-                ctx.globalAlpha = w.opacity;
-                
-                for (let x = 0; x < width; x++) {
-                    const y = mid + Math.sin(x * w.frequency + phase * w.speed) * w.amplitude;
-                    if (x === 0) {
-                        ctx.moveTo(x, y);
-                    } else {
-                        ctx.lineTo(x, y);
-                    }
-                }
-                ctx.stroke();
-            });
-
-            phase += 1.2;
-            animationId = requestAnimationFrame(render);
-        };
-
-        render();
-        return () => cancelAnimationFrame(animationId);
-    }, [active, color]);
-
-    return <canvas ref={canvasRef} width={280} height={60} style={{ display: 'block', margin: '0 auto', opacity: 0.9 }} />;
-};
-
-/* ─── Emoji quick picker ─── */
-const EMOJIS = ['😊','😂','🥺','😍','🔥','💯','👀','🙏','❤️','😎','🤔','😭','✨','🥰','😅'];
-
-/* ─── Markdown renderer (bold, code, inline code) ─── */
-const renderMarkdown = (text) => {
-    const parts = text.split(/(```[\s\S]*?```|`[^`]+`|\*\*[^*]+\*\*)/g);
-    return parts.map((part, i) => {
-        if (part.startsWith('```') && part.endsWith('```')) {
-            const code = part.slice(3, -3).replace(/^\w+\n/, '');
-            return (
-                <pre key={i} className="ai-code-block">
-                    {code}
-                </pre>
-            );
-        }
-        if (part.startsWith('`') && part.endsWith('`')) {
-            return <code key={i} className="ai-inline-code">{part.slice(1, -1)}</code>;
-        }
-        if (part.startsWith('**') && part.endsWith('**')) {
-            return <strong key={i}>{part.slice(2, -2)}</strong>;
-        }
-        return <span key={i}>{part}</span>;
-    });
-};
-
-/* ─── Typing dots ─── */
-const TypingDots = () => (
-    <div className="ai-typing-dots">
-        <span /><span /><span />
-    </div>
-);
-
-/* ─── Message bubble ─── */
-const MessageBubble = ({ msg, botInfo }) => {
-    const isUser = msg.role === 'user';
-    const isImage = !!msg.imageUrl;
-
-    return (
-        <div className={`ai-msg-row ${isUser ? 'ai-msg-row--user' : 'ai-msg-row--bot'}`}>
-            {!isUser && (
-                <div className="ai-avatar-sm">
-                    <img src={botInfo?.avatar} alt={botInfo?.name} />
-                    <span className="ai-avatar-online" />
-                </div>
-            )}
-            <div className={`ai-bubble ${isUser ? 'ai-bubble--user' : 'ai-bubble--bot'}`}>
-                {isImage ? (
-                    <>
-                        <p className="ai-bubble-text">{msg.content}</p>
-                        <img
-                            src={msg.imageUrl}
-                            alt="AI Generated"
-                            className="ai-gen-img"
-                            onClick={() => window.open(msg.imageUrl, '_blank')}
-                        />
-                    </>
-                ) : (
-                    <div className="ai-bubble-text">
-                        {renderMarkdown(msg.content)}
-                    </div>
-                )}
-                <span className="ai-bubble-time">
-                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
-            </div>
-        </div>
-    );
-};
 
 /* ─── Main AiChat component ─── */
 const AiChat = ({ onClose, onBack, onActionCall }) => {
@@ -1548,8 +1429,9 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                 </button>
 
                 <div className="ai-header-avatar">
-                    <img
-                        src={botInfo?.avatar || `https://api.dicebear.com/9.x/avataaars/svg?seed=Aria`}
+                    <UserAvatar
+                        src={botInfo?.avatar}
+                        name={botInfo?.name || 'Aria'}
                         alt={botInfo?.name}
                     />
                     <span className="ai-header-online" />
@@ -1736,13 +1618,14 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                     
                     <div className="ai-call-container">
                         <div className="ai-call-header">
-                            <span className="ai-call-encryption">🔒 End-to-end encrypted</span>
+                            <span className="ai-call-encryption">🔒 Secure HTTPS connection · AI processes this conversation</span>
                         </div>
 
                         <div className="ai-call-main">
                             <div className={`ai-call-avatar-wrap ${callState === 'ringing' ? 'ai-call-avatar--ringing' : ''} ${aiSpeaking ? 'ai-call-avatar--speaking' : ''}`}>
-                                <img
-                                    src={botInfo?.avatar || `https://api.dicebear.com/9.x/avataaars/svg?seed=Aria`}
+                                <UserAvatar
+                                    src={botInfo?.avatar}
+                                    name={botInfo?.name || 'Aria'}
                                     alt={botInfo?.name}
                                     className="ai-call-avatar"
                                 />

@@ -6,31 +6,24 @@ import { ArrowLeftIcon, PlusIcon, UserPlusIcon, XMarkIcon } from '@heroicons/rea
 import ReelUploader from '../components/ReelUploader';
 import ReelProfile from '../components/ReelProfile';
 import ReelReactor from '../components/ReelReactor';
-
-const REELS_CACHE_KEY = 'reels_cache';
+import { loadReelCache, saveReelCache } from '../utils/reelCache';
 
 const Reels = ({ active, onBack, onShareToChat }) => {
+    const { user, token } = useContext(AuthContext);
     const [reels, setReels] = useState(() => {
-        // Load from cache instantly — no loading delay
-        try {
-            const cached = sessionStorage.getItem(REELS_CACHE_KEY);
-            return cached ? JSON.parse(cached) : [];
-        } catch { return []; }
+        return loadReelCache(user?.id);
     });
     const [loading, setLoading] = useState(() => {
-        // Only show loading spinner if no cached data exists
-        try {
-            return !sessionStorage.getItem(REELS_CACHE_KEY);
-        } catch { return true; }
+        return !loadReelCache(user?.id).length;
     });
     const [filter, setFilter] = useState('foryou'); // 'foryou' | 'following'
     const [showUploader, setShowUploader] = useState(false);
     const [selectedProfileUserId, setSelectedProfileUserId] = useState(null);
+    const [selectedProfileReel, setSelectedProfileReel] = useState(null);
     const [reactingToReel, setReactingToReel] = useState(null);
     const [suggestions, setSuggestions] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [followingIds, setFollowingIds] = useState({});
-    const { user, token } = useContext(AuthContext);
     const hasFetched = useRef(false);
 
     const fetchReels = async (f = filter, silent = false) => {
@@ -42,7 +35,7 @@ const Reels = ({ active, onBack, onShareToChat }) => {
             setReels(res.data);
             // Cache for instant load next time
             if (f === 'foryou') {
-                try { sessionStorage.setItem(REELS_CACHE_KEY, JSON.stringify(res.data)); } catch {}
+                try { saveReelCache(user?.id, res.data); } catch {}
             }
         } catch (err) { console.error(err); }
         finally { setLoading(false); }
@@ -120,15 +113,50 @@ const Reels = ({ active, onBack, onShareToChat }) => {
         );
     }
 
+    if (selectedProfileReel) {
+        return (
+            <div className="relative h-full w-full bg-black">
+                <ReelCard
+                    reel={selectedProfileReel}
+                    currentUser={user}
+                    onShare={onShareToChat}
+                    onProfileClick={(uid) => {
+                        setSelectedProfileReel(null);
+                        setSelectedProfileUserId(uid);
+                    }}
+                    onReact={(reel) => setReactingToReel(reel)}
+                    onDelete={() => setSelectedProfileReel(null)}
+                    active={active}
+                />
+                <button
+                    type="button"
+                    onClick={() => setSelectedProfileReel(null)}
+                    aria-label="Back to reel profile"
+                    className="absolute left-4 top-4 z-40 rounded-full bg-black/60 p-2 text-white backdrop-blur-md"
+                >
+                    <ArrowLeftIcon className="h-6 w-6" />
+                </button>
+                {reactingToReel && (
+                    <ReelReactor
+                        originalReel={reactingToReel}
+                        onClose={() => setReactingToReel(null)}
+                        onSuccess={() => {
+                            setReactingToReel(null);
+                            setSelectedProfileReel(null);
+                            fetchReels(filter, true);
+                        }}
+                    />
+                )}
+            </div>
+        );
+    }
+
     if (selectedProfileUserId) {
         return (
             <ReelProfile 
                 userId={selectedProfileUserId} 
                 onBack={() => setSelectedProfileUserId(null)}
-                onSelectReel={() => {
-                    // Logic to show specific reel (can be improved later)
-                    setSelectedProfileUserId(null);
-                }}
+                onSelectReel={setSelectedProfileReel}
             />
         );
     }

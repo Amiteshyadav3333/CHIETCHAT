@@ -1,15 +1,22 @@
 import datetime
+import json
 from flask import Blueprint, jsonify, request
 from werkzeug.utils import secure_filename
 from models import db, Status, StatusView, StatusReaction, Message, ChatParticipant
 from utils import (
     get_current_user_id, get_contact_user_ids, utc_now, serialize_user, 
     iso_utc, upload_to_cloudinary, get_json_data, has_contact, get_or_create_direct_chat,
-    is_blocked, is_user_online
+    is_blocked, is_user_online, queue_media_deletion, process_media_deletion_task,
+    claim_upload_asset, queue_claimed_upload_assets
 )
 from extensions import socketio
+from scheduled_messages import valid_encrypted_envelope
 
 status_bp = Blueprint('status_bp', __name__)
+
+STATUS_DEFAULT_LIMIT = 100
+STATUS_MAX_LIMIT = 200
+MAX_STATUS_CAPTION_LENGTH = 300
 
 @status_bp.route('/api/status', methods=['GET'])
 def get_statuses():
@@ -22,10 +29,11 @@ def get_statuses():
     contact_user_ids = set(get_contact_user_ids(user_id))
     contact_user_ids.add(user_id)  # apna khud ka status bhi dikhega
 
+    limit = min(max(request.args.get('limit', STATUS_DEFAULT_LIMIT, type=int), 1), STATUS_MAX_LIMIT)
     statuses = Status.query.filter(
         Status.expires_at > now,
         Status.user_id.in_(contact_user_ids)
-    ).order_by(Status.created_at.desc()).all()
+    ).order_by(Status.created_at.desc()).limit(limit).all()
 
     users_map = {}
     for s in statuses:
@@ -73,6 +81,10 @@ def create_status():
     if not file.filename:
         return jsonify({"error": "No file selected"}), 400
 
+    caption = request.form.get('caption', '').strip()
+    if len(caption) > MAX_STATUS_CAPTION_LENGTH:
+        return jsonify({"error": f"Caption must be {MAX_STATUS_CAPTION_LENGTH} characters or less"}), 400
+
     filename = secure_filename(file.filename)
     ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
 
@@ -90,12 +102,14 @@ def create_status():
 
     try:
         media_url = upload_to_cloudinary(file, folder='chietchat/status', resource_type=resource_type)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": f"Upload failed: {str(e)}"}), 500
 
-    caption = request.form.get('caption', '')
     music_url = request.form.get('musicUrl', None)
     music_name = request.form.get('musicName', None)
+    music_asset_id = request.form.get('musicAssetId')
     try:
         duration = min(max(int(request.form.get('duration', 15)), 1), 15)
     except (TypeError, ValueError):
@@ -113,7 +127,14 @@ def create_status():
         expires_at=expires_at
     )
     db.session.add(status)
-    db.session.commit()
+    try:
+        db.session.flush()
+        if music_asset_id:
+            claim_upload_asset(music_asset_id, user_id, 'status', status.id, {'audio'})
+        db.session.commit()
+    except ValueError as error:
+        db.session.rollback()
+        return jsonify({"error": str(error)}), 400
 
     socketio.emit('new_status', {"userId": user_id}, room=f"user_{user_id}")
     return jsonify({"message": "Status posted", "id": status.id}), 201
@@ -124,6 +145,11 @@ def view_status(status_id):
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
 
+    status = db.session.get(Status, status_id)
+    if not status or status.expires_at <= utc_now():
+        return jsonify({"error": "Status not found"}), 404
+    if status.user_id != user_id and not has_contact(user_id, status.user_id):
+        return jsonify({"error": "Forbidden"}), 403
     existing = StatusView.query.filter_by(status_id=status_id, viewer_id=user_id).first()
     if not existing:
         db.session.add(StatusView(status_id=status_id, viewer_id=user_id))
@@ -137,8 +163,11 @@ def react_to_status(status_id):
         return jsonify({"error": "Unauthorized"}), 401
 
     data = get_json_data()
-    emoji = (data.get('emoji') or '').strip()[:12]
-    status = Status.query.get(status_id)
+    raw_emoji = data.get('emoji')
+    if raw_emoji is not None and not isinstance(raw_emoji, str):
+        return jsonify({"error": "Reaction must be text"}), 400
+    emoji = (raw_emoji or '').strip()[:12]
+    status = db.session.get(Status, status_id)
     if not status or status.expires_at <= utc_now():
         return jsonify({"error": "Status not found"}), 404
     if status.user_id != user_id and not has_contact(user_id, status.user_id):
@@ -161,57 +190,6 @@ def react_to_status(status_id):
     for reaction in StatusReaction.query.filter_by(status_id=status_id).all():
         counts[reaction.emoji] = counts.get(reaction.emoji, 0) + 1
 
-    if active_reaction:
-        try:
-            chat = get_or_create_direct_chat(user_id, status.user_id)
-            status_label = status.caption.strip() if status.caption else status.media_type
-            message_content = f"Reacted to status: {active_reaction}"
-            new_msg = Message(
-                chat_id=chat.id,
-                sender_id=user_id,
-                content=message_content,
-                type='text',
-                reply_content=status.media_url,
-                reply_sender_name='Status'
-            )
-            db.session.add(new_msg)
-            db.session.commit()
-
-            payload = {
-                "id": new_msg.id,
-                "senderId": new_msg.sender_id,
-                "content": new_msg.content,
-                "type": new_msg.type,
-                "timestamp": iso_utc(new_msg.timestamp),
-                "chatId": chat.id,
-                "replyToId": new_msg.reply_to_id,
-                "replyContent": new_msg.reply_content,
-                "replySenderName": new_msg.reply_sender_name,
-                "deliveredAt": None,
-                "readAt": None,
-                "reactions": {},
-                "isPinned": False
-            }
-
-            participants = ChatParticipant.query.filter_by(chat_id=chat.id).all()
-            any_recipient_online = False
-            for participant in participants:
-                if participant.user_id != user_id and is_user_online(participant.user_id):
-                    any_recipient_online = True
-                    break
-
-            if any_recipient_online:
-                new_msg.status = 'delivered'
-                new_msg.delivered_at = utc_now()
-                db.session.commit()
-                payload["status"] = 'delivered'
-                payload["deliveredAt"] = iso_utc(new_msg.delivered_at)
-
-            for participant in participants:
-                socketio.emit('receive_message', payload, room=f"user_{participant.user_id}")
-        except Exception as e:
-            print(f"Error sending reaction message to chat: {e}")
-
     return jsonify({"ok": True, "reactions": counts, "myReaction": active_reaction})
 
 @status_bp.route('/api/status/<int:status_id>/reply', methods=['POST'])
@@ -221,13 +199,14 @@ def reply_to_status(status_id):
         return jsonify({"error": "Unauthorized"}), 401
 
     data = get_json_data()
-    reply_text = (data.get('message') or '').strip()
-    if not reply_text:
-        return jsonify({"error": "Reply message is required"}), 400
-    if len(reply_text) > 1000:
-        return jsonify({"error": "Reply is too long"}), 400
+    encrypted_content = data.get('content')
+    client_message_id = str(data.get('clientMessageId') or '').strip()[:100]
+    if not valid_encrypted_envelope(encrypted_content):
+        return jsonify({"error": "A valid encrypted reply envelope is required"}), 400
+    if not client_message_id:
+        return jsonify({"error": "clientMessageId is required"}), 400
 
-    status = Status.query.get(status_id)
+    status = db.session.get(Status, status_id)
     if not status or status.expires_at <= utc_now():
         return jsonify({"error": "Status not found"}), 404
     if status.user_id == user_id:
@@ -238,15 +217,19 @@ def reply_to_status(status_id):
         return jsonify({"error": "Blocked"}), 403
 
     chat = get_or_create_direct_chat(user_id, status.user_id)
-    status_label = status.caption.strip() if status.caption else status.media_type
-    message_content = f"Replied to your status ({status_label}):\n{reply_text}"
+    participant_ids = {str(row.user_id) for row in ChatParticipant.query.filter_by(chat_id=chat.id).all()}
+    envelope_recipients = set(json.loads(encrypted_content)['recipients'])
+    if not participant_ids.issubset(envelope_recipients):
+        return jsonify({"error": "Encrypted envelope is missing a chat participant"}), 400
+    existing = Message.query.filter_by(sender_id=user_id, client_message_id=client_message_id).first()
+    if existing:
+        return jsonify({"ok": True, "chatId": chat.id, "messageId": existing.id, "duplicate": True}), 200
     new_msg = Message(
         chat_id=chat.id,
         sender_id=user_id,
-        content=message_content,
-        type='text',
-        reply_content=status.media_url,
-        reply_sender_name='Status'
+        client_message_id=client_message_id,
+        content=encrypted_content,
+        type='text'
     )
     db.session.add(new_msg)
     db.session.commit()
@@ -292,10 +275,20 @@ def delete_status(status_id):
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
 
-    status = Status.query.get(status_id)
+    status = db.session.get(Status, status_id)
     if not status or status.user_id != user_id:
         return jsonify({"error": "Not found"}), 404
 
+    task_ids = queue_claimed_upload_assets('status', status.id)
+    for media_url, resource_type in (
+        (status.media_url, status.media_type), (status.music_url, 'video'),
+    ):
+        deletion_task = queue_media_deletion(media_url, resource_type)
+        if deletion_task:
+            db.session.flush()
+            task_ids.append(deletion_task.id)
     db.session.delete(status)
     db.session.commit()
+    for task_id in set(task_ids):
+        process_media_deletion_task(task_id)
     return jsonify({"message": "Deleted"})

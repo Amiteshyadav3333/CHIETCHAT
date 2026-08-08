@@ -3,16 +3,72 @@ import jwt
 import datetime
 import json
 import uuid
+import hashlib
 import urllib.parse
 import urllib.request
-from flask import request, current_app
+from pathlib import Path
+from flask import request, current_app, has_request_context
 from werkzeug.utils import secure_filename
 from sqlalchemy import inspect, text
 from extensions import socketio, socket_users, user_connection_counts
-from models import db, User, Chat, ChatParticipant, Contact, Block, Notification
+from models import (
+    db, User, Chat, ChatParticipant, Contact, Block, Notification,
+    ProfileAudienceAvatar, MediaDeletionTask, UploadAsset,
+)
 import cloudinary.uploader
+from observability import report_safe_exception
+
+UPLOAD_EXTENSIONS = {
+    'image': {'jpg', 'jpeg', 'png', 'gif', 'webp'},
+    'video': {'mp4', 'mov', 'webm', 'avi'},
+    'audio': {'mp3', 'wav', 'm4a', 'aac', 'oga', 'ogg', 'flac'},
+    'document': {'pdf', 'txt', 'docx', 'xlsx', 'pptx'},
+}
+
+
+def _detected_upload_kind(header, extension):
+    if header.startswith(b'\xff\xd8\xff') or header.startswith(b'\x89PNG\r\n\x1a\n') or header[:6] in (b'GIF87a', b'GIF89a'):
+        return 'image'
+    if header.startswith(b'RIFF') and header[8:12] == b'WEBP': return 'image'
+    if header.startswith(b'%PDF-'): return 'document'
+    if header.startswith(b'PK\x03\x04') and extension in {'docx', 'xlsx', 'pptx'}: return 'document'
+    if header[4:8] == b'ftyp': return 'audio' if extension == 'm4a' else 'video'
+    if header.startswith(b'\x1aE\xdf\xa3'): return 'video'
+    if header.startswith(b'RIFF') and header[8:12] == b'AVI ': return 'video'
+    if header.startswith(b'RIFF') and header[8:12] == b'WAVE': return 'audio'
+    if header.startswith((b'ID3', b'OggS', b'fLaC')) or (len(header) > 1 and header[0] == 0xff and header[1] & 0xe0 == 0xe0): return 'audio'
+    if extension == 'txt':
+        try:
+            header.decode('utf-8'); return 'document'
+        except UnicodeDecodeError: return None
+    return None
+
+
+def validate_upload(file, allowed_kinds, max_bytes):
+    filename = secure_filename(getattr(file, 'filename', '') or '')
+    extension = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    allowed_extensions = set().union(*(UPLOAD_EXTENSIONS[kind] for kind in allowed_kinds))
+    if not extension or extension not in allowed_extensions:
+        raise ValueError('This file type is not allowed')
+    current = file.stream.tell()
+    file.stream.seek(0, os.SEEK_END)
+    size = file.stream.tell()
+    file.stream.seek(0)
+    header = file.stream.read(64)
+    file.stream.seek(current)
+    if size <= 0 or size > max_bytes:
+        raise ValueError(f'File must be between 1 byte and {max_bytes // (1024 * 1024)} MB')
+    detected_kind = _detected_upload_kind(header, extension)
+    if detected_kind not in allowed_kinds or extension not in UPLOAD_EXTENSIONS[detected_kind]:
+        raise ValueError('File contents do not match the selected file type')
+    return detected_kind
 
 def upload_to_cloudinary(file, folder='chietchat', resource_type='auto'):
+    if not isinstance(file, (bytes, bytearray)):
+        if resource_type == 'image': validate_upload(file, {'image'}, 10 * 1024 * 1024)
+        elif resource_type == 'video': validate_upload(file, {'video', 'audio'}, 100 * 1024 * 1024)
+        elif resource_type == 'raw': validate_upload(file, {'document'}, 25 * 1024 * 1024)
+        else: validate_upload(file, {'image', 'video', 'audio', 'document'}, 100 * 1024 * 1024)
     cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME')
     api_key = os.environ.get('CLOUDINARY_API_KEY')
     api_secret = os.environ.get('CLOUDINARY_API_SECRET')
@@ -36,7 +92,7 @@ def upload_to_cloudinary(file, folder='chietchat', resource_type='auto'):
         err_str = str(e).lower()
         # If uploading disabled or quota exceeded, fallback to local
         if 'disabled' in err_str or 'quota' in err_str or 'limit' in err_str or 'upgrade' in err_str:
-            print(f"Cloudinary unavailable ({e}), falling back to local storage")
+            report_safe_exception('cloudinary_fallback_used', e)
             return _save_locally(file_data, getattr(file, 'filename', 'upload'))
         raise
 
@@ -65,6 +121,136 @@ def _save_locally(file, filename=None):
             base = 'http://localhost:5001'
     return f"{base}/uploads/{local_name}"
 
+
+def get_managed_media_reference(media_url, resource_type='image'):
+    """Resolve only CHEETCHAT-owned local or Cloudinary media targets."""
+    try:
+        parsed = urllib.parse.urlparse(str(media_url or ''))
+    except ValueError:
+        return None
+    if parsed.scheme not in {'http', 'https'} or not parsed.hostname:
+        return None
+
+    path_parts = [urllib.parse.unquote(part) for part in parsed.path.split('/') if part]
+    if len(path_parts) == 2 and path_parts[0] == 'uploads':
+        allowed_hosts = set()
+        configured_backend = os.environ.get('BACKEND_URL', '').strip()
+        if configured_backend:
+            configured_host = urllib.parse.urlparse(configured_backend).hostname
+            if configured_host:
+                allowed_hosts.add(configured_host)
+        if has_request_context():
+            allowed_hosts.add(request.host.split(':', 1)[0])
+        if not allowed_hosts or parsed.hostname not in allowed_hosts:
+            return None
+        filename = secure_filename(path_parts[1])
+        if filename != path_parts[1] or not filename:
+            return None
+        upload_root = Path(current_app.config['UPLOAD_FOLDER']).resolve()
+        target = (upload_root / filename).resolve()
+        if target.parent != upload_root:
+            return None
+        return {'provider': 'local', 'target': target}
+
+    configured_cloud = os.environ.get('CLOUDINARY_CLOUD_NAME', '').strip()
+    if parsed.hostname != 'res.cloudinary.com' or not configured_cloud or not path_parts:
+        return None
+    if path_parts[0] != configured_cloud or 'upload' not in path_parts:
+        return None
+    upload_index = path_parts.index('upload')
+    public_parts = path_parts[upload_index + 1:]
+    if public_parts and public_parts[0].startswith('v') and public_parts[0][1:].isdigit():
+        public_parts = public_parts[1:]
+    if not public_parts:
+        return None
+    public_id = '/'.join(public_parts)
+    if resource_type != 'raw' and '.' in public_parts[-1]:
+        public_id = '/'.join(public_parts[:-1] + [public_parts[-1].rsplit('.', 1)[0]])
+    return {'provider': 'cloudinary', 'public_id': public_id, 'resource_type': resource_type}
+
+
+def delete_managed_media(media_url, resource_type='image'):
+    reference = get_managed_media_reference(media_url, resource_type)
+    if not reference:
+        raise ValueError('Media URL is not a configured CHEETCHAT-managed asset')
+    if reference['provider'] == 'local':
+        reference['target'].unlink(missing_ok=True)
+        return True
+    result = cloudinary.uploader.destroy(
+        reference['public_id'], resource_type=reference['resource_type'], invalidate=True
+    )
+    if result.get('result') not in {'ok', 'not found'}:
+        raise RuntimeError(f"Cloudinary deletion returned {result.get('result', 'unknown')}")
+    return True
+
+
+def queue_media_deletion(media_url, resource_type='image', trusted=False):
+    if not media_url:
+        return None
+    if not trusted and not get_managed_media_reference(media_url, resource_type):
+        return None
+    existing = MediaDeletionTask.query.filter_by(media_url=media_url).first()
+    if existing:
+        return existing
+    task = MediaDeletionTask(media_url=media_url, resource_type=resource_type)
+    db.session.add(task)
+    return task
+
+
+def process_media_deletion_task(task_id):
+    task = db.session.get(MediaDeletionTask, task_id)
+    if not task:
+        return True
+    try:
+        delete_managed_media(task.media_url, task.resource_type)
+        db.session.delete(task)
+        db.session.commit()
+        return True
+    except Exception as error:
+        db.session.rollback()
+        task = db.session.get(MediaDeletionTask, task_id)
+        if task:
+            task.attempts = (task.attempts or 0) + 1
+            task.last_error = str(error)[:500]
+            db.session.commit()
+        current_app.logger.warning('media_deletion_deferred', extra={'taskId': task_id})
+        return False
+
+
+def claim_upload_asset(asset_id, owner_id, claim_type, claim_id, allowed_kinds=None):
+    asset_id = str(asset_id or '').strip()
+    if not asset_id:
+        return None
+    asset = db.session.get(UploadAsset, asset_id)
+    if not asset or asset.owner_id != owner_id:
+        raise ValueError('Upload asset was not found')
+    if asset.status == 'pending' and asset.expires_at <= utc_now():
+        raise ValueError('Upload asset has expired')
+    if allowed_kinds and asset.media_kind not in allowed_kinds:
+        raise ValueError('Upload asset type does not match the message')
+    normalized_claim_id = str(claim_id)
+    if asset.status == 'claimed':
+        if asset.claim_type == claim_type and asset.claim_id == normalized_claim_id:
+            return asset
+        raise ValueError('Upload asset has already been claimed')
+    asset.status = 'claimed'
+    asset.claim_type = claim_type
+    asset.claim_id = normalized_claim_id
+    asset.claimed_at = utc_now()
+    return asset
+
+
+def queue_claimed_upload_assets(claim_type, claim_id):
+    task_ids = []
+    assets = UploadAsset.query.filter_by(claim_type=claim_type, claim_id=str(claim_id)).all()
+    for asset in assets:
+        task = queue_media_deletion(asset.media_url, asset.resource_type, trusted=True)
+        if task:
+            db.session.flush()
+            task_ids.append(task.id)
+        db.session.delete(asset)
+    return task_ids
+
 def add_missing_columns(inspector, table_name, columns):
     if table_name not in inspector.get_table_names():
         return
@@ -84,19 +270,35 @@ def add_missing_columns(inspector, table_name, columns):
             db.session.commit()
         except Exception as e:
             db.session.rollback()
-            print(f"Error adding column {column_name} to {table_name}: {e}")
+            raise RuntimeError(f"Could not add {table_name}.{column_name}: {e}") from e
 
-def ensure_database_schema():
+SCHEMA_VERSION = '20260802_13_ai_memory_retention'
+
+
+def ensure_database_schema(force=False):
     try:
         # Quick connectivity check before heavy operations
         db.session.execute(text('SELECT 1'))
         db.session.commit()
     except Exception as e:
-        print(f"⚠️  DB not reachable, skipping schema migration: {e}")
         db.session.rollback()
+        if force:
+            raise RuntimeError(f'Database is not reachable: {e}') from e
+        report_safe_exception('database_schema_check_failed', e)
         return
 
     try:
+        db.session.execute(text(
+            'CREATE TABLE IF NOT EXISTS schema_migration '
+            '(version VARCHAR(100) PRIMARY KEY, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)'
+        ))
+        db.session.commit()
+        already_applied = db.session.execute(
+            text('SELECT 1 FROM schema_migration WHERE version = :version'),
+            {'version': SCHEMA_VERSION}
+        ).first()
+        if already_applied:
+            return
         db.create_all()
         inspector = inspect(db.engine)
         
@@ -107,6 +309,8 @@ def ensure_database_schema():
         add_missing_columns(inspector, 'user', {
             'email': db.String(120),
             'public_key': db.Text(),
+            'encrypted_private_key': db.Text(),
+            'encrypted_recovery_key': db.Text(),
             'avatar': db.String(200),
             'last_seen': db.DateTime(),
             'created_at': db.DateTime(),
@@ -135,6 +339,10 @@ def ensure_database_schema():
             'two_factor_enabled': db.Boolean(),
             'two_factor_secret': db.String(100),
             'bio_expires_at': db.DateTime(),
+        })
+        add_missing_columns(inspector, 'pending_registration', {
+            'encrypted_private_key': db.Text(),
+            'encrypted_recovery_key': db.Text(),
         })
         add_missing_columns(inspector, 'chat_participant', {
             'is_archived': db.Boolean(),
@@ -185,12 +393,64 @@ def ensure_database_schema():
             'delivered_at': db.DateTime(),
             'reactions': db.Text(),
             'is_pinned': db.Boolean(),
+            'client_message_id': db.String(100),
         })
+        add_missing_columns(inspector, 'payment_order', {
+            'provider_refund_id': db.String(100),
+            'refund_requested_at': db.DateTime(),
+            'refunded_at': db.DateTime(),
+            'payer_ref': db.String(64),
+            'payee_ref': db.String(64),
+            'retention_until': db.DateTime(),
+            'chat_ref': db.String(64),
+            'client_request_id': db.String(100),
+        })
+        if db.engine.dialect.name == 'postgresql' and 'payment_order' in inspector.get_table_names():
+            db.session.execute(text('ALTER TABLE payment_order ALTER COLUMN payer_id DROP NOT NULL'))
+            db.session.execute(text('ALTER TABLE payment_order ALTER COLUMN payee_id DROP NOT NULL'))
+            db.session.execute(text('ALTER TABLE payment_order ALTER COLUMN chat_id DROP NOT NULL'))
+        add_missing_columns(inspector, 'push_subscription', {
+            'session_id': db.Integer(),
+        })
+        if 'message' in inspector.get_table_names():
+            message_indexes = {index['name'] for index in inspector.get_indexes('message')}
+            if 'uq_message_sender_client_id' not in message_indexes:
+                try:
+                    db.session.execute(text(
+                        'CREATE UNIQUE INDEX uq_message_sender_client_id '
+                        'ON message (sender_id, client_message_id)'
+                    ))
+                    db.session.commit()
+                except Exception as index_error:
+                    db.session.rollback()
+                    raise RuntimeError(f'Could not create message idempotency index: {index_error}') from index_error
         add_missing_columns(inspector, 'status', {
             'music_url': db.String(500),
             'music_name': db.String(200),
             'duration': db.Integer(),
         })
+        if 'status_view' in inspector.get_table_names():
+            db.session.execute(text(
+                'DELETE FROM status_view WHERE id NOT IN '
+                '(SELECT MIN(id) FROM status_view GROUP BY status_id, viewer_id)'
+            ))
+            status_view_indexes = {index['name'] for index in inspect(db.engine).get_indexes('status_view')}
+            if 'uq_status_viewer' not in status_view_indexes:
+                db.session.execute(text(
+                    'CREATE UNIQUE INDEX uq_status_viewer ON status_view (status_id, viewer_id)'
+                ))
+        if 'payment_order' in inspector.get_table_names():
+            payment_indexes = {index['name'] for index in inspect(db.engine).get_indexes('payment_order')}
+            if 'uq_payment_provider_refund_id' not in payment_indexes:
+                db.session.execute(text(
+                    'CREATE UNIQUE INDEX uq_payment_provider_refund_id '
+                    'ON payment_order (provider_refund_id)'
+                ))
+            if 'uq_payment_payer_request' not in payment_indexes:
+                db.session.execute(text(
+                    'CREATE UNIQUE INDEX uq_payment_payer_request '
+                    'ON payment_order (payer_id, client_request_id)'
+                ))
         add_missing_columns(inspector, 'social_post', {
             'retweet_of_id': db.Integer(),
             'share_count': db.Integer(),
@@ -201,6 +461,16 @@ def ensure_database_schema():
         add_missing_columns(inspector, 'reel_comment', {
             'parent_id': db.Integer(),
         })
+        if 'ai_conversation' in inspector.get_table_names():
+            ai_indexes = {index['name'] for index in inspect(db.engine).get_indexes('ai_conversation')}
+            if 'ix_ai_conversation_user_id' not in ai_indexes:
+                db.session.execute(text(
+                    'CREATE INDEX ix_ai_conversation_user_id ON ai_conversation (user_id)'
+                ))
+            if 'ix_ai_conversation_created_at' not in ai_indexes:
+                db.session.execute(text(
+                    'CREATE INDEX ix_ai_conversation_created_at ON ai_conversation (created_at)'
+                ))
         add_missing_columns(inspector, 'user', {
             'gender': db.String(10),
         })
@@ -222,12 +492,16 @@ def ensure_database_schema():
                         db.session.delete(r)
                 print("Cleaned up broken reels from db")
             except Exception as re_err:
-                print(f"Error checking broken reels: {re_err}")
+                report_safe_exception('broken_reel_cleanup_failed', re_err)
 
+        db.session.execute(
+            text('INSERT INTO schema_migration (version) VALUES (:version) ON CONFLICT (version) DO NOTHING'),
+            {'version': SCHEMA_VERSION}
+        )
         db.session.commit()
     except Exception as e:
-        print(f"Database schema check timed out or failed: {e}")
         db.session.rollback()
+        raise RuntimeError(f"Database migration failed: {e}") from e
 
 def get_json_data():
     return request.get_json(silent=True) or {}
@@ -239,23 +513,42 @@ def is_valid_phone(phone):
     return len(phone) == 10
 
 def get_current_user_id():
-    auth_header = request.headers.get('Authorization', '')
-    if not auth_header.startswith('Bearer '):
+    token = get_request_auth_token()
+    if not token:
         return None
     try:
-        token = auth_header.split(' ', 1)[1]
         payload = jwt.decode(token, current_app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
         user_id = payload.get('user_id')
         session_id = payload.get('session_id')
         if session_id:
             from models import ActiveSession
-            session = ActiveSession.query.get(session_id)
+            session = db.session.get(ActiveSession, session_id)
             if not session:
                 return None  # Session revoked
         return user_id
     except jwt.InvalidTokenError as e:
-        print(f"JWT Token validation failed: {e}")
+        report_safe_exception('jwt_validation_failed', e)
         return None
+
+def get_current_session_id():
+    token = get_request_auth_token()
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(
+            token, current_app.config['JWT_SECRET_KEY'], algorithms=['HS256']
+        )
+        return payload.get('session_id')
+    except jwt.InvalidTokenError:
+        return None
+
+def get_request_auth_token():
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        token = auth_header.split(' ', 1)[1].strip()
+        if token and token not in ('null', 'undefined', 'cookie-session'):
+            return token
+    return request.cookies.get(current_app.config.get('AUTH_COOKIE_NAME', 'cheetchat_session'))
 
 def user_is_chat_participant(user_id, chat_id):
     return ChatParticipant.query.filter_by(user_id=user_id, chat_id=chat_id).first() is not None
@@ -274,7 +567,7 @@ def find_direct_chat(user_a_id, user_b_id):
     first_user_chats = ChatParticipant.query.filter_by(user_id=user_a_id).all()
     target_ids = {user_a_id, user_b_id}
     for participation in first_user_chats:
-        chat = Chat.query.get(participation.chat_id)
+        chat = db.session.get(Chat, participation.chat_id)
         if not chat or chat.is_group:
             continue
         participant_ids = {p.user_id for p in ChatParticipant.query.filter_by(chat_id=chat.id).all()}
@@ -317,7 +610,7 @@ def get_contact_user_ids(owner_id):
     ]
 
 def user_can_access_chat(user_id, chat_id):
-    chat = Chat.query.get(chat_id)
+    chat = db.session.get(Chat, chat_id)
     return bool(chat and user_is_chat_participant(user_id, chat_id))
 
 def is_blocked(user_a_id, user_b_id):
@@ -328,14 +621,21 @@ def is_blocked(user_a_id, user_b_id):
     return blocked is not None
 
 def decode_socket_user_id(auth, secret_key):
-    if not auth:
-        return None
-    token = auth.get('token')
+    token = auth.get('token') if isinstance(auth, dict) else None
+    if not token or token in ('null', 'undefined', 'cookie-session'):
+        token = request.cookies.get(current_app.config.get('AUTH_COOKIE_NAME', 'cheetchat_session'))
     if not token:
         return None
     try:
         payload = jwt.decode(token, secret_key, algorithms=['HS256'])
-        return payload.get('user_id')
+        user_id = payload.get('user_id')
+        session_id = payload.get('session_id')
+        if session_id:
+            from models import ActiveSession
+            session = ActiveSession.query.filter_by(id=session_id, user_id=user_id).first()
+            if not session:
+                return None
+        return user_id
     except Exception:
         return None
 
@@ -361,6 +661,15 @@ def serialize_user(user, viewer_id=None):
         if not has_contact(user.id, viewer_id):
             avatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=hidden"
 
+    # An explicitly selected per-contact photo takes precedence over the public
+    # default and broad visibility rule for that one trusted contact.
+    if viewer_id and viewer_id != user.id:
+        audience_avatar = ProfileAudienceAvatar.query.filter_by(
+            owner_id=user.id, viewer_id=viewer_id
+        ).first()
+        if audience_avatar:
+            avatar = audience_avatar.avatar_url
+
     # Last seen privacy rules
     show_last_seen = True
     if user.hide_last_seen:
@@ -384,6 +693,7 @@ def serialize_user(user, viewer_id=None):
         "username": user.username,
         "phone": user.phone,
         "avatar": avatar,
+        "hasCustomAudienceAvatar": bool(viewer_id and viewer_id != user.id and avatar != user.avatar),
         "publicKey": user.public_key,
         "bio": user_bio or "",
         "websiteUrl": user.website_url or "",
@@ -396,6 +706,7 @@ def serialize_user(user, viewer_id=None):
         "readReceipts": bool(user.read_receipts),
         "profilePhotoPrivacy": user.profile_photo_privacy,
         "twoFactorEnabled": bool(user.two_factor_enabled),
+        "recoveryKeyEnabled": bool(user.encrypted_recovery_key) if viewer_id == user.id else None,
         "gender": getattr(user, 'gender', None) or ""
     }
 
@@ -413,7 +724,6 @@ def emit_to_user_chat_contacts(user_id, event, payload):
 def create_notification(recipient_id, sender_id, n_type, content=None, target_id=None):
     if recipient_id == sender_id:
         return None
-    
     # Avoid duplicate notifications for same target/type/sender (e.g. liking multiple times)
     existing = Notification.query.filter_by(
         recipient_id=recipient_id,
@@ -442,7 +752,7 @@ def create_notification(recipient_id, sender_id, n_type, content=None, target_id
     post_preview = None
     if n_type in ('like', 'comment', 'comment_reply', 'retweet', 'share') and target_id:
         from models import SocialPost
-        post = SocialPost.query.get(target_id)
+        post = db.session.get(SocialPost, target_id)
         if post and post.caption:
             post_preview = post.caption[:80] + ('…' if len(post.caption) > 80 else '')
 
@@ -466,6 +776,39 @@ def create_notification(recipient_id, sender_id, n_type, content=None, target_id
     }, room=f"user_{recipient_id}")
     
     return new_n
+
+def send_push_notification(user_id, title, body, url='/'):
+    """Best-effort Web Push; invalid/expired endpoints are removed."""
+    from models import PushSubscription
+    private_key = os.environ.get('VAPID_PRIVATE_KEY', '')
+    subject = os.environ.get('VAPID_SUBJECT', '')
+    if not private_key or not subject:
+        return 0
+    try:
+        from pywebpush import webpush, WebPushException
+    except ImportError:
+        return 0
+    delivered = 0
+    notification_tag = f"cheetchat-{hashlib.sha256(str(url).encode()).hexdigest()[:16]}"
+    payload = json.dumps({
+        'title': title, 'body': body, 'url': url,
+        'icon': '/icons/icon-192.png', 'tag': notification_tag,
+    })
+    for subscription in PushSubscription.query.filter_by(user_id=user_id).all():
+        try:
+            webpush(
+                subscription_info=json.loads(subscription.subscription_json), data=payload,
+                vapid_private_key=private_key, vapid_claims={'sub': subject}, ttl=60,
+            )
+            delivered += 1
+        except WebPushException as exc:
+            status = getattr(getattr(exc, 'response', None), 'status_code', None)
+            if status in (404, 410):
+                db.session.delete(subscription)
+        except Exception:
+            continue
+    db.session.commit()
+    return delivered
 
 def search_itunes_tracks(query, limit=12):
     params = urllib.parse.urlencode({
@@ -531,7 +874,7 @@ def verify_totp(secret, token, window=1):
             if get_totp_token(base32_secret, now + i) == token:
                 return True
     except Exception as e:
-        print(f"TOTP verification error: {e}")
+        report_safe_exception('totp_verification_failed', e)
     return False
 
 def generate_totp_secret():

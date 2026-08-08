@@ -14,69 +14,33 @@ const RideModal = ({ onClose, onSend }) => {
     const [pickup, setPickup] = useState('Current Location');
     const [destination, setDestination] = useState('');
     const [selectedCar, setSelectedCar] = useState(CARS[0]);
-    const [isBooking, setIsBooking] = useState(false);
-    const [showRapidoWeb, setShowRapidoWeb] = useState(false);
 
     const handleBook = () => {
-        if (!destination) {
+        if (!destination.trim()) {
             alert("Please enter a destination");
             return;
         }
-        // Open Rapido website in iframe if rapido selected
-        if (selectedCar.app === 'rapido') {
-            setShowRapidoWeb(true);
-            return;
-        }
-        setIsBooking(true);
-        setTimeout(() => {
-            onSend({
-                pickup,
-                destination,
-                car: selectedCar,
-                status: 'Driver Assigned',
-                driver: { name: 'Rajesh Kumar', rating: '4.8', vehicle: 'MH02 XX 1234' },
-                eta: '3 mins'
-            });
-            onClose();
-        }, 1500);
+        const partnerUrl = selectedCar.app === 'rapido' ? 'https://www.rapido.bike' : 'https://www.uber.com/in/en/ride/';
+        window.open(partnerUrl, '_blank', 'noopener,noreferrer');
+        onSend({
+            pickup: pickup.trim(),
+            destination: destination.trim(),
+            car: selectedCar,
+            status: 'Ride plan shared — booking not verified',
+            eta: selectedCar.time,
+            partnerUrl,
+        });
+        onClose();
     };
 
     return (
         <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            {showRapidoWeb ? (
-                <div className="fixed inset-0 z-[1000] flex flex-col bg-black">
-                    <div className="flex items-center justify-between px-4 py-3 bg-[#111b21] border-b border-white/10">
-                        <button onClick={() => setShowRapidoWeb(false)} className="p-2 rounded-full bg-white/10 text-white">
-                            <XMarkIcon className="w-5 h-5" />
-                        </button>
-                        <span className="text-white font-bold text-sm">🏍️ Rapido</span>
-                        <button
-                            onClick={() => {
-                                onSend({ pickup, destination, car: selectedCar, status: 'Booked via Rapido', driver: { name: 'Rapido Driver', rating: '4.7', vehicle: 'MH XX 0000' }, eta: '2 mins' });
-                                onClose();
-                            }}
-                            className="text-xs bg-yellow-500 text-black font-bold px-3 py-1.5 rounded-lg"
-                        >
-                            Send to Chat
-                        </button>
-                    </div>
-                    <iframe
-                        src="https://www.rapido.bike"
-                        className="flex-1 w-full border-none"
-                        title="Rapido"
-                        allow="geolocation"
-                    />
-                </div>
-            ) : (
             <div className="w-full max-w-sm bg-[#111b21] rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
                 
                 {/* Header (Map Mockup) */}
                 <div className="relative h-48 bg-gray-800 shrink-0">
-                    <img 
-                        src="https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=800&auto=format&fit=crop" 
-                        alt="Map" 
-                        className="w-full h-full object-cover opacity-60"
-                    />
+                    <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.05)_1px,transparent_1px)] bg-[size:24px_24px]" />
+                    <div className="absolute inset-0 flex items-center justify-center text-6xl opacity-30" aria-hidden="true">🚕</div>
                     <div className="absolute inset-0 bg-gradient-to-t from-[#111b21] to-transparent" />
                     
                     <button onClick={onClose} className="absolute top-4 left-4 p-2 rounded-full bg-black/40 text-white hover:bg-black/60 backdrop-blur-md">
@@ -151,24 +115,21 @@ const RideModal = ({ onClose, onSend }) => {
                 <div className="p-4 bg-[#202c33] border-t border-white/5">
                     <button
                         onClick={handleBook}
-                        disabled={isBooking}
-                        className={`w-full py-3.5 disabled:opacity-50 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors shadow-lg relative overflow-hidden ${
+                        className={`w-full py-3.5 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors shadow-lg relative overflow-hidden ${
                             selectedCar.app === 'rapido'
                                 ? 'bg-yellow-500 hover:bg-yellow-400 text-black shadow-yellow-900/20'
                                 : 'bg-blue-600 hover:bg-blue-700 shadow-blue-900/20'
                         }`}
                     >
-                        {isBooking ? (
-                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        ) : selectedCar.app === 'rapido' ? (
-                            <>🏍️ Open Rapido App</>
+                        {selectedCar.app === 'rapido' ? (
+                            <>🏍️ Open Rapido & share plan</>
                         ) : (
-                            <>Confirm {selectedCar.name}</>
+                            <>Open Uber & share plan</>
                         )}
                     </button>
+                    <p className="mt-2 text-center text-[10px] leading-4 text-gray-400">Prices and arrival times shown above are examples. Booking and payment happen in the partner service and are not verified by CHEETCHAT.</p>
                 </div>
             </div>
-            )}
         </div>
     );
 };

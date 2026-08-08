@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import axios from 'axios';
 import {
     ArrowLeftIcon, ArrowRightOnRectangleIcon, BellIcon, ChartBarIcon,
@@ -9,6 +9,9 @@ import {
     HeartIcon, ChatBubbleOvalLeftIcon, FilmIcon, PhotoIcon, SparklesIcon
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartSolid } from '@heroicons/react/24/solid';
+import { generateRecoveryCode, protectPrivateKeyWithPassword } from '../utils/encryption';
+import { disablePushNotifications, enablePushNotifications } from '../utils/pushNotifications';
+import { deleteDevicePrivateKey, loadDevicePrivateKey } from '../utils/secureKeyStore';
 
 const TITLES = {
     settings: 'Settings', profile: 'Profile', account: 'Account', privacy: 'Privacy',
@@ -47,6 +50,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     const [sessionsList, setSessionsList] = useState([]);
     const [twoFactorSetupData, setTwoFactorSetupData] = useState(null);
     const [twoFactorCode, setTwoFactorCode] = useState('');
+    const [twoFactorPassword, setTwoFactorPassword] = useState('');
     const [twoFactorDisablePassword, setTwoFactorDisablePassword] = useState('');
 
     // Activity state
@@ -77,18 +81,54 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     const [bubbleColor, setBubbleColor] = useState(() => localStorage.getItem('chat_bubble_color') || '#00a884');
     const [customFont, setCustomFont] = useState(() => localStorage.getItem('chat_custom_font') || 'system');
     const [notificationSoundName, setNotificationSoundName] = useState(() => localStorage.getItem('custom_notification_name') || '');
+    const [businessData, setBusinessData] = useState({
+        profile: { businessName: user?.username || '', category: 'Other', description: '', address: '', supportEmail: '', supportPhone: '', websiteUrl: '', openingHours: '', catalogVisible: true },
+        products: [], automation: { enabled: false, welcomeMessage: '', awayMessage: '', keywordRules: {} }
+    });
+    const [businessAnalytics, setBusinessAnalytics] = useState(null);
+    const [newProduct, setNewProduct] = useState({ name: '', description: '', price: '', imageUrl: '', inStock: true });
+    const [keywordRulesText, setKeywordRulesText] = useState('');
 
     const go = (next) => {
         setMessage(null);
         setScreen(next);
     };
 
-    const togglePref = (name, storageKey) => {
+    const togglePref = async (name, storageKey) => {
+        if (name === 'desktopAlerts') {
+            try {
+                if (!prefs.desktopAlerts) await enablePushNotifications(token);
+                else await disablePushNotifications(token);
+            } catch (error) {
+                setMessage({ type: 'error', text: error.message || 'Could not update notifications.' });
+                return;
+            }
+        }
         setPrefs(current => {
             const next = !current[name];
             localStorage.setItem(storageKey, next ? '1' : '0');
             return { ...current, [name]: next };
         });
+    };
+
+    const toggleAppLock = async () => {
+        if (prefs.appLock) {
+            const pin = window.prompt('Current device PIN enter karein to disable app lock:');
+            if (!pin) return;
+            const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pin)))).map(byte => byte.toString(16).padStart(2, '0')).join('');
+            if (hash !== localStorage.getItem('app_lock_pin_hash')) return setMessage({ type: 'error', text: 'Incorrect device PIN.' });
+            localStorage.removeItem('app_lock_pin_hash');
+            localStorage.setItem('app_lock_enabled', '0');
+            setPrefs(current => ({ ...current, appLock: false }));
+            return;
+        }
+        const pin = window.prompt('Create a 4–6 digit PIN for this browser:');
+        if (!/^\d{4,6}$/.test(pin || '')) return setMessage({ type: 'error', text: 'PIN must contain 4–6 digits.' });
+        const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pin)))).map(byte => byte.toString(16).padStart(2, '0')).join('');
+        localStorage.setItem('app_lock_pin_hash', hash);
+        localStorage.setItem('app_lock_enabled', '1');
+        setPrefs(current => ({ ...current, appLock: true }));
+        setMessage({ type: 'success', text: 'App lock enabled for this browser.' });
     };
 
     const handleTogglePrivacy = async (field, value) => {
@@ -130,14 +170,15 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
         }
     };
 
-    const handleSetup2FA = async () => {
+    const handleSetup2FA = async (event) => {
+        event?.preventDefault();
         setBusy(true);
         setMessage(null);
         try {
-            const res = await axios.post('/api/auth/2fa/setup', {}, { headers: { Authorization: `Bearer ${token}` } });
+            const res = await axios.post('/api/auth/2fa/setup', { password: twoFactorPassword }, { headers: { Authorization: `Bearer ${token}` } });
             setTwoFactorSetupData(res.data);
             setTwoFactorCode('');
-            go('twofactor_setup');
+            setMessage({ type: 'success', text: `Verification code sent to ${res.data.maskedEmail}.` });
         } catch (err) {
             setMessage({ type: 'error', text: err.response?.data?.error || 'Failed to start 2FA setup' });
         } finally {
@@ -152,7 +193,6 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
         setMessage(null);
         try {
             const res = await axios.post('/api/auth/2fa/enable', {
-                secret: twoFactorSetupData.secret,
                 token: twoFactorCode
             }, { headers: { Authorization: `Bearer ${token}` } });
             onUserUpdate?.(res.data.user);
@@ -184,9 +224,68 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
         }
     };
 
+    const fetchBusiness = async (title) => {
+        setBusy(true);
+        try {
+            const requests = [axios.get('/api/business/me', { headers: { Authorization: `Bearer ${token}` } })];
+            if (title === 'Analytics dashboard') requests.push(axios.get('/api/business/analytics', { headers: { Authorization: `Bearer ${token}` } }));
+            const [businessRes, analyticsRes] = await Promise.all(requests);
+            setBusinessData(businessRes.data);
+            setKeywordRulesText(Object.entries(businessRes.data.automation.keywordRules || {}).map(([key, value]) => `${key} => ${value}`).join('\n'));
+            if (analyticsRes) setBusinessAnalytics(analyticsRes.data);
+        } catch (err) {
+            setMessage({ type: 'error', text: err.response?.data?.error || 'Could not load business tools.' });
+        } finally { setBusy(false); }
+    };
+
     const openBusiness = (title) => {
         setBusinessTitle(title);
         go('business');
+        fetchBusiness(title);
+    };
+
+    const saveBusinessProfile = async (event) => {
+        event.preventDefault(); setBusy(true); setMessage(null);
+        try {
+            const res = await axios.put('/api/business/profile', businessData.profile, { headers: { Authorization: `Bearer ${token}` } });
+            setBusinessData(current => ({ ...current, profile: res.data }));
+            setMessage({ type: 'success', text: 'Business profile saved.' });
+        } catch (err) { setMessage({ type: 'error', text: err.response?.data?.error || 'Could not save business profile.' }); }
+        finally { setBusy(false); }
+    };
+
+    const addCatalogProduct = async (event) => {
+        event.preventDefault(); setBusy(true); setMessage(null);
+        try {
+            const res = await axios.post('/api/business/products', newProduct, { headers: { Authorization: `Bearer ${token}` } });
+            setBusinessData(current => ({ ...current, products: [res.data, ...current.products] }));
+            setNewProduct({ name: '', description: '', price: '', imageUrl: '', inStock: true });
+            setMessage({ type: 'success', text: 'Product added to catalog.' });
+        } catch (err) { setMessage({ type: 'error', text: err.response?.data?.error || 'Could not add product.' }); }
+        finally { setBusy(false); }
+    };
+
+    const deleteCatalogProduct = async (productId) => {
+        try {
+            await axios.delete(`/api/business/products/${productId}`, { headers: { Authorization: `Bearer ${token}` } });
+            setBusinessData(current => ({ ...current, products: current.products.filter(product => product.id !== productId) }));
+        } catch (err) { setMessage({ type: 'error', text: err.response?.data?.error || 'Could not delete product.' }); }
+    };
+
+    const saveBusinessAutomation = async (event) => {
+        event.preventDefault(); setBusy(true); setMessage(null);
+        const keywordRules = {};
+        keywordRulesText.split('\n').forEach(line => {
+            const splitAt = line.indexOf('=>');
+            if (splitAt > 0) keywordRules[line.slice(0, splitAt).trim()] = line.slice(splitAt + 2).trim();
+        });
+        try {
+            const res = await axios.put('/api/business/automation', { ...businessData.automation, keywordRules }, { headers: { Authorization: `Bearer ${token}` } });
+            setBusinessData(current => ({ ...current, automation: res.data }));
+            window.dispatchEvent(new Event('cheetchat-business-automation-updated'));
+            setMessage({ type: 'success', text: 'Auto reply settings saved.' });
+        } catch (err) { setMessage({ type: 'error', text: err.response?.data?.error || 'Could not save automation.' }); }
+        finally { setBusy(false); }
     };
 
     const fetchActivity = async () => {
@@ -233,15 +332,39 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
         setBusy(true);
         setMessage(null);
         try {
+            const privateKey = await loadDevicePrivateKey(user.id);
+            if (!privateKey) {
+                throw new Error('Chat recovery key is missing on this device. Password change is blocked to protect old messages.');
+            }
+            const encryptedPrivateKey = await protectPrivateKeyWithPassword(privateKey, passwords.newPassword);
             const res = await axios.post('/api/account/change-password', {
                 currentPassword: passwords.currentPassword,
                 newPassword: passwords.newPassword,
+                encryptedPrivateKey,
             }, { headers: { Authorization: `Bearer ${token}` } });
             setPasswords({ currentPassword: '', newPassword: '', confirmPassword: '' });
             setMessage({ type: 'success', text: res.data.message });
         } catch (error) {
-            setMessage({ type: 'error', text: error.response?.data?.error || 'Unable to change password.' });
+            setMessage({ type: 'error', text: error.response?.data?.error || error.message || 'Unable to change password.' });
         } finally {
+            setBusy(false);
+        }
+    };
+
+    const createRecoveryCode = async () => {
+        if (user?.recoveryKeyEnabled && !window.confirm('Replace your existing recovery code? The old code will stop working.')) return;
+        setBusy(true);
+        setMessage(null);
+        try {
+            const privateKey = await loadDevicePrivateKey(user.id);
+            if (!privateKey) throw new Error('This device does not have your chat key. Sign in on a trusted device first.');
+            const recoveryCode = generateRecoveryCode();
+            const encryptedRecoveryKey = await protectPrivateKeyWithPassword(privateKey, recoveryCode);
+            await axios.post('/api/user/recovery-key', { encryptedRecoveryKey }, { headers: { Authorization: `Bearer ${token}` } });
+            sessionStorage.setItem('recovery_code_once', recoveryCode);
+            window.location.assign('/recovery-code');
+        } catch (error) {
+            setMessage({ type: 'error', text: error.response?.data?.error || error.message || 'Unable to create recovery code.' });
             setBusy(false);
         }
     };
@@ -255,6 +378,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                 headers: { Authorization: `Bearer ${token}` },
                 data: deletion,
             });
+            await deleteDevicePrivateKey(user.id);
             onLogout();
             onClose();
         } catch (error) {
@@ -393,14 +517,20 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 <SettingsRow 
                                     icon={<KeyIcon />} 
                                     title="Two-factor authentication (2FA)" 
-                                    subtitle={user?.twoFactorEnabled ? "Enabled (Secure)" : "Disabled (Set up now)"} 
-                                    onClick={user?.twoFactorEnabled ? () => go('twofactor_disable') : handleSetup2FA} 
+                                    subtitle={user?.twoFactorEnabled ? "Enabled via email OTP" : "Password + email OTP, no QR or captcha"}
+                                    onClick={user?.twoFactorEnabled ? () => go('twofactor_disable') : () => { setTwoFactorSetupData(null); setTwoFactorPassword(''); go('twofactor_setup'); }}
                                 />
                                 <SettingsRow 
                                     icon={<ComputerDesktopIcon />} 
                                     title="Active device sessions" 
                                     subtitle="View and manage other logged-in devices" 
                                     onClick={() => { fetchSessions(); go('sessions'); }} 
+                                />
+                                <SettingsRow
+                                    icon={<ShieldCheckIcon />}
+                                    title={user?.recoveryKeyEnabled ? 'Replace chat recovery code' : 'Create chat recovery code'}
+                                    subtitle="Required to recover encrypted chats after password reset"
+                                    onClick={createRecoveryCode}
                                 />
                                 <InfoRow title="Email verified" text="Your registered email is verified and can be used for account recovery." />
                             </SettingsGroup>
@@ -453,8 +583,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                             
                             <SectionLabel>Security</SectionLabel>
                             <SettingsGroup>
-                                <SettingsToggle icon={<LockClosedIcon />} title="App lock" subtitle="Use this device's PIN, fingerprint or Face ID support" value={prefs.appLock} onClick={() => togglePref('appLock', 'app_lock_enabled')} />
-                                <SettingsToggle icon={<ShieldCheckIcon />} title="Screenshot alerts" subtitle="Alerts on browsers that expose screen capture events" value={prefs.screenshotAlerts} onClick={() => togglePref('screenshotAlerts', 'screenshot_alerts')} />
+                                <SettingsToggle icon={<LockClosedIcon />} title="App lock" subtitle="Require a 4–6 digit PIN when this browser opens" value={prefs.appLock} onClick={toggleAppLock} />
                                 <SettingsToggle icon={<ShieldCheckIcon />} title="Spam detection" subtitle="Warn about suspicious links and repeated unknown messages" value={prefs.spamDetection} onClick={() => togglePref('spamDetection', 'spam_detection')} />
                                 <InfoRow title="End-to-end encryption" text="Messages and calls are secured between participants using RSA-256 and AES-GCM envelopes." />
                                 <InfoRow title="Blocked contacts" text="Block or unblock a user from that contact's chat info." />
@@ -496,26 +625,19 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                     )}
 
                     {screen === 'twofactor_setup' && (
-                        <SettingsForm onSubmit={handleEnable2FA}>
-                            <Hero icon={<ShieldCheckIcon />} title="Scan QR Code" text="Use your Google Authenticator or any TOTP application to scan the QR code below, or manually type the secret key." />
-                            {twoFactorSetupData && (
-                                <div className="flex flex-col items-center gap-4 bg-[#202c33] rounded-xl p-5 border border-gray-800">
-                                    <img src={twoFactorSetupData.qrCodeUrl} alt="2FA QR Code" className="w-44 h-44 rounded-lg bg-white p-2 border border-gray-700" />
-                                    <div className="text-center">
-                                        <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Secret Key</p>
-                                        <p className="text-sm font-mono text-violet-400 mt-1 select-all">{twoFactorSetupData.secret}</p>
+                        <SettingsForm onSubmit={twoFactorSetupData ? handleEnable2FA : handleSetup2FA}>
+                            <Hero icon={<ShieldCheckIcon />} title="Email OTP two-factor security" text="No QR code or captcha. Confirm your password, then verify the code sent to your registered email. New devices can open the same chats after verification." />
+                            {!twoFactorSetupData ? (
+                                <Field label="Confirm Password" type="password" placeholder="Enter your account password" value={twoFactorPassword} onChange={setTwoFactorPassword} required />
+                            ) : (
+                                <>
+                                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-200">
+                                        Code sent to {twoFactorSetupData.maskedEmail}. It expires according to your email security provider's policy.
                                     </div>
-                                </div>
+                                    <Field label="6-Digit Email Verification Code" placeholder="000000" maxLength={6} value={twoFactorCode} onChange={value => setTwoFactorCode(value.replace(/\D/g, '').slice(0, 6))} required />
+                                </>
                             )}
-                            <Field 
-                                label="6-Digit Verification Code" 
-                                placeholder="000000" 
-                                maxLength={6} 
-                                value={twoFactorCode} 
-                                onChange={setTwoFactorCode} 
-                                required 
-                            />
-                            <PrimaryButton busy={busy}>Verify and Enable 2FA</PrimaryButton>
+                            <PrimaryButton busy={busy}>{twoFactorSetupData ? 'Verify and Enable 2FA' : 'Send email code'}</PrimaryButton>
                         </SettingsForm>
                     )}
 
@@ -585,6 +707,14 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                     if (!file) return;
                                     setNotificationSoundName(file.name);
                                     localStorage.setItem('custom_notification_name', file.name);
+                                    if (file.size <= 1024 * 1024) {
+                                        const reader = new FileReader();
+                                        reader.onload = () => localStorage.setItem('custom_notification_audio', String(reader.result));
+                                        reader.readAsDataURL(file);
+                                    } else {
+                                        localStorage.removeItem('custom_notification_audio');
+                                        setMessage({ type: 'error', text: 'Custom sound must be 1 MB or smaller to persist on this device.' });
+                                    }
                                 }} />
                             </label>
                         </>
@@ -603,27 +733,72 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
 
                     {screen === 'business' && (
                         <>
-                            <Hero icon={<ChartBarIcon />} title={businessTitle} text="Business tools are saved on this device and can be changed anytime." />
-                            {businessTitle === 'Analytics dashboard' ? (
-                                <div className="grid grid-cols-2 gap-3 p-5"><Stat label="Profile status" value="Active" /><Stat label="Account type" value="Business" /><Stat label="Catalog" value={prefs.showCatalog ? 'Visible' : 'Hidden'} /><Stat label="Auto reply" value={prefs.autoReply ? 'On' : 'Off'} /></div>
-                            ) : (
-                                <SettingsGroup>
-                                    <SettingsToggle icon={<ShoppingBagIcon />} title="Show product catalog" subtitle="Display your catalog on your business profile" value={prefs.showCatalog} onClick={() => togglePref('showCatalog', 'business_catalog')} />
-                                    <SettingsToggle icon={<ChatBubbleBottomCenterTextIcon />} title="Instant welcome reply" subtitle="Send a welcome message to new contacts" value={prefs.autoReply} onClick={() => togglePref('autoReply', 'business_auto_reply')} />
-                                    <SettingsRow icon={<UserCircleIcon />} title="Edit business details" subtitle="Update name, bio and website" onClick={() => go('profile')} />
-                                </SettingsGroup>
+                            <Hero icon={<ChartBarIcon />} title={businessTitle} text="Server-backed business tools sync across all your logged-in devices." />
+                            {businessTitle === 'Business profile' && (
+                                <SettingsForm onSubmit={saveBusinessProfile}>
+                                    <Field label="Business name" value={businessData.profile.businessName} onChange={value => setBusinessData(current => ({ ...current, profile: { ...current.profile, businessName: value } }))} required />
+                                    <Field label="Category" value={businessData.profile.category} onChange={value => setBusinessData(current => ({ ...current, profile: { ...current.profile, category: value } }))} placeholder="Retail, Services, Restaurant…" />
+                                    <Field label="Description" value={businessData.profile.description} onChange={value => setBusinessData(current => ({ ...current, profile: { ...current.profile, description: value } }))} />
+                                    <Field label="Business address" value={businessData.profile.address} onChange={value => setBusinessData(current => ({ ...current, profile: { ...current.profile, address: value } }))} />
+                                    <Field label="Support email" type="email" value={businessData.profile.supportEmail} onChange={value => setBusinessData(current => ({ ...current, profile: { ...current.profile, supportEmail: value } }))} />
+                                    <Field label="Support phone" value={businessData.profile.supportPhone} onChange={value => setBusinessData(current => ({ ...current, profile: { ...current.profile, supportPhone: value } }))} />
+                                    <Field label="Website" value={businessData.profile.websiteUrl} onChange={value => setBusinessData(current => ({ ...current, profile: { ...current.profile, websiteUrl: value } }))} />
+                                    <Field label="Opening hours" value={businessData.profile.openingHours} onChange={value => setBusinessData(current => ({ ...current, profile: { ...current.profile, openingHours: value } }))} placeholder="Mon–Sat, 9:00 AM–7:00 PM" />
+                                    <SettingsToggle icon={<ShoppingBagIcon />} title="Show catalog to contacts" subtitle="Products appear on your business profile" value={businessData.profile.catalogVisible} onClick={() => setBusinessData(current => ({ ...current, profile: { ...current.profile, catalogVisible: !current.profile.catalogVisible } }))} />
+                                    <PrimaryButton busy={busy}>Save business profile</PrimaryButton>
+                                </SettingsForm>
+                            )}
+                            {businessTitle === 'Catalog / Products' && (
+                                <div className="space-y-5 p-5">
+                                    <form onSubmit={addCatalogProduct} className="space-y-3 rounded-xl border border-gray-800 bg-[#182329] p-4">
+                                        <h3 className="font-semibold text-white">Add catalog product</h3>
+                                        <Field label="Product name" value={newProduct.name} onChange={value => setNewProduct({ ...newProduct, name: value })} required />
+                                        <Field label="Description" value={newProduct.description} onChange={value => setNewProduct({ ...newProduct, description: value })} />
+                                        <Field label="Price (₹)" type="number" value={newProduct.price} onChange={value => setNewProduct({ ...newProduct, price: value })} required />
+                                        <Field label="Product image URL" value={newProduct.imageUrl} onChange={value => setNewProduct({ ...newProduct, imageUrl: value })} placeholder="https://…" />
+                                        <SettingsToggle icon={<ShoppingBagIcon />} title="In stock" subtitle="Customers can see availability" value={newProduct.inStock} onClick={() => setNewProduct({ ...newProduct, inStock: !newProduct.inStock })} />
+                                        <PrimaryButton busy={busy}>Add product</PrimaryButton>
+                                    </form>
+                                    <div className="space-y-3">
+                                        {businessData.products.map(product => (
+                                            <div key={product.id} className="flex items-center gap-3 rounded-xl border border-gray-800 bg-[#182329] p-3">
+                                                {product.imageUrl ? <img src={product.imageUrl} alt="" className="h-14 w-14 rounded-lg object-cover" /> : <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-emerald-500/10"><ShoppingBagIcon className="h-6 w-6 text-emerald-400" /></div>}
+                                                <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-white">{product.name}</p><p className="text-xs text-emerald-400">₹{Number(product.price).toFixed(2)} · {product.inStock ? 'In stock' : 'Out of stock'}</p><p className="truncate text-xs text-gray-500">{product.description}</p></div>
+                                                <button onClick={() => deleteCatalogProduct(product.id)} type="button" className="rounded-lg p-2 text-red-400 hover:bg-red-500/10"><TrashIcon className="h-5 w-5" /></button>
+                                            </div>
+                                        ))}
+                                        {!businessData.products.length && <p className="py-8 text-center text-sm text-gray-500">No products yet.</p>}
+                                    </div>
+                                </div>
+                            )}
+                            {businessTitle === 'Auto reply / Chatbot' && (
+                                <SettingsForm onSubmit={saveBusinessAutomation}>
+                                    <SettingsToggle icon={<ChatBubbleBottomCenterTextIcon />} title="Enable business auto reply" subtitle="Respond automatically when a customer messages" value={businessData.automation.enabled} onClick={() => setBusinessData(current => ({ ...current, automation: { ...current.automation, enabled: !current.automation.enabled } }))} />
+                                    <Field label="Welcome reply" value={businessData.automation.welcomeMessage} onChange={value => setBusinessData(current => ({ ...current, automation: { ...current.automation, welcomeMessage: value } }))} />
+                                    <Field label="Away message" value={businessData.automation.awayMessage} onChange={value => setBusinessData(current => ({ ...current, automation: { ...current.automation, awayMessage: value } }))} />
+                                    <label className="block"><span className="mb-2 block text-sm font-medium text-gray-200">Keyword chatbot rules</span><textarea rows={6} value={keywordRulesText} onChange={e => setKeywordRulesText(e.target.value)} placeholder={'price => Our price list is in the catalog.\nhours => We are open Mon–Sat, 9 AM–7 PM.'} className="w-full rounded-lg border border-gray-700 bg-[#202c33] px-4 py-3 text-sm text-white outline-none focus:border-violet-500" /><p className="mt-1 text-xs text-gray-500">One rule per line: keyword =&gt; reply</p></label>
+                                    <PrimaryButton busy={busy}>Save chatbot</PrimaryButton>
+                                </SettingsForm>
+                            )}
+                            {businessTitle === 'Analytics dashboard' && (
+                                <div className="grid grid-cols-2 gap-3 p-5">
+                                    <Stat label="Messages sent" value={businessAnalytics?.messagesSent ?? '—'} />
+                                    <Stat label="Messages received" value={businessAnalytics?.messagesReceived ?? '—'} />
+                                    <Stat label="Conversations" value={businessAnalytics?.conversations ?? '—'} />
+                                    <Stat label="Catalog products" value={businessAnalytics?.products ?? '—'} />
+                                    <Stat label="Profile views" value={businessAnalytics?.profileViews ?? '—'} />
+                                    <Stat label="Auto replies" value={businessAnalytics?.autoRepliesSent ?? '—'} />
+                                </div>
                             )}
                         </>
                     )}
 
                     {screen === 'activity' && (
                         <ActivityScreen
-                            token={token}
                             activityTab={activityTab}
                             setActivityTab={setActivityTab}
                             activityLoading={activityLoading}
                             blockedUsers={blockedUsers}
-                            setBlockedUsers={setBlockedUsers}
                             activityData={activityData}
                             onUnblock={handleUnblockFromActivity}
                         />
@@ -687,7 +862,7 @@ const ChoiceRow = ({ title, value, onChange, options }) => <div className="borde
 const InfoRow = ({ title, text }) => <div className="border-b border-gray-800/70 px-5 py-4 last:border-b-0"><p className="text-sm font-medium text-white">{title}</p><p className="mt-1 text-xs leading-5 text-gray-500">{text}</p></div>;
 const Stat = ({ label, value }) => <div className="rounded-xl border border-gray-800 bg-[#202c33] p-4"><p className="text-xs text-gray-500">{label}</p><p className="mt-2 text-lg font-semibold text-white">{value}</p></div>;
 
-const ActivityScreen = ({ token, activityTab, setActivityTab, activityLoading, blockedUsers, setBlockedUsers, activityData, onUnblock }) => {
+const ActivityScreen = ({ activityTab, setActivityTab, activityLoading, blockedUsers, activityData, onUnblock }) => {
     const tabs = [
         { id: 'blocked', label: 'Blocked', icon: <NoSymbolIcon className="h-4 w-4" />, count: blockedUsers.length },
         { id: 'likes', label: 'Likes', icon: <HeartSolid className="h-4 w-4" />, count: (activityData.likedReels?.length || 0) + (activityData.likedPosts?.length || 0) },

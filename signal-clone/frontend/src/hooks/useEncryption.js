@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { generateKeys, importPrivateKey } from '../utils/encryption';
 import axios from 'axios';
+import { loadDevicePrivateKey, saveDevicePrivateKey } from '../utils/secureKeyStore';
 
 export const useEncryption = (user, token) => {
     const [privateKey, setPrivateKey] = useState(null);
@@ -10,10 +11,9 @@ export const useEncryption = (user, token) => {
         const initKeys = async () => {
             if (!user) return;
 
-            const storageKeyPriv = `privKey_${user.id}`;
             const storageKeyPub = `pubKey_${user.id}`;
 
-            const storedPriv = localStorage.getItem(storageKeyPriv);
+            const storedPriv = await loadDevicePrivateKey(user.id);
             const storedPub = localStorage.getItem(storageKeyPub);
 
             if (storedPriv && storedPub) {
@@ -27,10 +27,18 @@ export const useEncryption = (user, token) => {
                 }
             }
 
-            // Generate new keys if missing (e.g. new device/browser)
+            // Never silently replace an existing account key. Doing so would make
+            // historical encrypted messages unreadable on every other device.
+            if (user.publicKey) {
+                console.error('Private chat key is unavailable on this device; recovery is required.');
+                setPublicKey(user.publicKey);
+                return;
+            }
+
+            // First-device setup for legacy accounts that do not have a key yet.
             const keys = await generateKeys();
 
-            localStorage.setItem(storageKeyPriv, keys.privateKeyString);
+            await saveDevicePrivateKey(user.id, keys.privateKeyString);
             localStorage.setItem(storageKeyPub, keys.publicKeyString);
 
             setPrivateKey(keys.privateKey);

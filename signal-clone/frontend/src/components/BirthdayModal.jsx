@@ -12,10 +12,10 @@ const THEMES = [
 ];
 
 const FONTS = [
-    { id: 'inter', name: 'Modern', style: "'Inter', sans-serif" },
-    { id: 'dancing', name: 'Elegant', style: "'Dancing Script', cursive" },
-    { id: 'bangers', name: 'Bold Poster', style: "'Bangers', cursive" },
-    { id: 'pacifico', name: 'Playful', style: "'Pacifico', cursive" },
+    { id: 'inter', name: 'Modern', style: "Inter, ui-sans-serif, system-ui, sans-serif" },
+    { id: 'dancing', name: 'Elegant', style: "'Apple Chancery', 'Segoe Script', cursive" },
+    { id: 'bangers', name: 'Bold Poster', style: "Impact, Haettenschweiler, sans-serif" },
+    { id: 'pacifico', name: 'Playful', style: "'Comic Sans MS', 'Bradley Hand', cursive" },
 ];
 
 const EFFECTS = [
@@ -74,8 +74,16 @@ const BirthdayModal = ({ onClose, onSend }) => {
                     <div className="relative">
                         <div className={`w-full aspect-[4/3] rounded-2xl bg-gradient-to-br ${selectedTheme.color} p-6 flex flex-col items-center justify-center text-center shadow-lg transition-colors duration-500 relative overflow-hidden group border border-white/20`}>
                             {/* Effects overlay preview */}
-                            {selectedEffect.id === 'confetti' && <div className="absolute inset-0 bg-[url('https://cdn-icons-png.flaticon.com/512/1769/1769062.png')] bg-repeat opacity-20 animate-float mix-blend-overlay"></div>}
-                            {selectedEffect.id === 'stars' && <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-30 mix-blend-overlay animate-pulse"></div>}
+                            {selectedEffect.id !== 'none' && ['🎊', '✨', '🎉', '⭐', '💫', '🎈'].map((item, index) => (
+                                <span
+                                    key={`${item}-${index}`}
+                                    aria-hidden="true"
+                                    className="absolute animate-pulse text-xl opacity-60"
+                                    style={{ left: `${8 + index * 16}%`, top: `${8 + (index % 3) * 28}%`, animationDelay: `${index * 120}ms` }}
+                                >
+                                    {selectedEffect.id === 'balloons' ? '🎈' : selectedEffect.id === 'stars' ? '⭐' : item}
+                                </span>
+                            ))}
 
                             <div className="text-6xl drop-shadow-xl transform group-hover:scale-110 group-hover:rotate-6 transition-transform duration-500 z-10">
                                 {selectedTheme.icon}
@@ -168,7 +176,7 @@ const BirthdayModal = ({ onClose, onSend }) => {
                                 </div>
                                 <div>
                                     <h4 className={`text-sm font-bold ${playMusic ? 'text-fuchsia-400' : 'text-gray-300'}`}>Attach Birthday Tune</h4>
-                                    <p className="text-gray-500 text-[10px]">Plays automatically on open</p>
+                                    <p className="text-gray-500 text-[10px]">Plays when the recipient opens the card</p>
                                 </div>
                             </div>
                             <div className={`w-10 h-5 rounded-full transition-colors relative ${playMusic ? 'bg-fuchsia-500' : 'bg-gray-600'}`}>

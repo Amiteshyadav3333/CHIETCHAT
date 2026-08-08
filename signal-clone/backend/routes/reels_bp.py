@@ -1,11 +1,22 @@
 from flask import Blueprint, jsonify, request
-from models import db, Reel, ReelLike, ReelComment, Follow, User
+from models import db, Reel, ReelLike, ReelView, ReelShare, ReelComment, Follow, User
 from utils import (
     get_current_user_id, iso_utc, serialize_user, upload_to_cloudinary,
-    get_json_data, create_notification
+    get_json_data, create_notification, queue_media_deletion, process_media_deletion_task
 )
 
 reels_bp = Blueprint('reels_bp', __name__)
+
+FEED_DEFAULT_LIMIT = 30
+FEED_MAX_LIMIT = 50
+COMMENT_DEFAULT_LIMIT = 50
+COMMENT_MAX_LIMIT = 100
+MAX_REEL_CAPTION_LENGTH = 500
+MAX_COMMENT_LENGTH = 1000
+
+
+def bounded_limit(default, maximum):
+    return min(max(request.args.get('limit', default, type=int), 1), maximum)
 
 @reels_bp.route('/api/reels', methods=['GET'])
 def get_reels():
@@ -20,7 +31,9 @@ def get_reels():
         followed_ids = [f.followed_id for f in Follow.query.filter_by(follower_id=user_id).all()]
         query = query.filter(Reel.user_id.in_(followed_ids))
     
-    reels = query.order_by(Reel.created_at.desc()).all()
+    reels = query.order_by(Reel.created_at.desc()).limit(
+        bounded_limit(FEED_DEFAULT_LIMIT, FEED_MAX_LIMIT)
+    ).all()
     result = []
     for r in reels:
         is_liked = ReelLike.query.filter_by(reel_id=r.id, user_id=user_id).first() is not None
@@ -56,8 +69,10 @@ def get_user_reels(uid):
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
     
-    user = User.query.get_or_404(uid)
-    reels = Reel.query.filter_by(user_id=uid).order_by(Reel.created_at.desc()).all()
+    user = db.get_or_404(User, uid)
+    reels = Reel.query.filter_by(user_id=uid).order_by(Reel.created_at.desc()).limit(
+        bounded_limit(FEED_DEFAULT_LIMIT, FEED_MAX_LIMIT)
+    ).all()
     
     follower_count = Follow.query.filter_by(followed_id=uid).count()
     following_count = Follow.query.filter_by(follower_id=uid).count()
@@ -107,7 +122,9 @@ def create_reel():
         return jsonify({"error": "No video file"}), 400
     
     file = request.files['video']
-    caption = request.form.get('caption', '')
+    caption = request.form.get('caption', '').strip()
+    if len(caption) > MAX_REEL_CAPTION_LENGTH:
+        return jsonify({"error": f"Caption must be {MAX_REEL_CAPTION_LENGTH} characters or less"}), 400
     music_url = request.form.get('musicUrl', '')
     music_name = request.form.get('musicName', '')
     try:
@@ -141,19 +158,17 @@ def create_reel():
         db.session.add(new_reel)
         db.session.commit()
         return jsonify({"message": "Reel posted", "id": new_reel.id}), 201
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @reels_bp.route('/api/reels/<int:reel_id>/public', methods=['GET'])
 def get_public_reel(reel_id):
     """Public endpoint — no auth required. Returns a single reel for shared links."""
-    reel = Reel.query.get(reel_id)
+    reel = db.session.get(Reel, reel_id)
     if not reel:
         return jsonify({"error": "Reel not found"}), 404
-
-    # Increment view count
-    reel.views_count = (reel.views_count or 0) + 1
-    db.session.commit()
 
     user_data = serialize_user(reel.user)
     reactions_count = Reel.query.filter_by(parent_reel_id=reel.id).count()
@@ -183,6 +198,7 @@ def like_reel(reel_id):
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
     
+    reel = db.get_or_404(Reel, reel_id)
     existing = ReelLike.query.filter_by(reel_id=reel_id, user_id=user_id).first()
     if existing:
         db.session.delete(existing)
@@ -192,8 +208,7 @@ def like_reel(reel_id):
     db.session.add(ReelLike(reel_id=reel_id, user_id=user_id))
     db.session.commit()
     
-    reel = Reel.query.get(reel_id)
-    if reel:
+    if reel.user_id != user_id:
         create_notification(
             recipient_id=reel.user_id,
             sender_id=user_id,
@@ -218,7 +233,10 @@ def serialize_reel_comment(comment, current_user_id):
 
 @reels_bp.route('/api/reels/<int:reel_id>/comments', methods=['GET'])
 def get_reel_comments(reel_id):
-    comments = ReelComment.query.filter_by(reel_id=reel_id, parent_id=None).order_by(ReelComment.created_at.asc()).all()
+    db.get_or_404(Reel, reel_id)
+    comments = ReelComment.query.filter_by(reel_id=reel_id, parent_id=None).order_by(
+        ReelComment.created_at.asc()
+    ).limit(bounded_limit(COMMENT_DEFAULT_LIMIT, COMMENT_MAX_LIMIT)).all()
     user_id = get_current_user_id()
     return jsonify([serialize_reel_comment(c, user_id) for c in comments])
 
@@ -229,16 +247,26 @@ def comment_on_reel(reel_id):
         return jsonify({"error": "Unauthorized"}), 401
     
     data = get_json_data()
-    content = data.get('content', '').strip()
+    raw_content = data.get('content')
+    if not isinstance(raw_content, str):
+        return jsonify({"error": "Comment must be text"}), 400
+    content = raw_content.strip()
     if not content:
         return jsonify({"error": "Comment cannot be empty"}), 400
+    if len(content) > MAX_COMMENT_LENGTH:
+        return jsonify({"error": f"Comment must be {MAX_COMMENT_LENGTH} characters or less"}), 400
+    reel = db.get_or_404(Reel, reel_id)
+    parent_id = data.get('parentId')
+    if parent_id is not None:
+        parent = ReelComment.query.filter_by(id=parent_id, reel_id=reel_id, parent_id=None).first()
+        if not parent:
+            return jsonify({"error": "Invalid parent comment"}), 400
     
-    comment = ReelComment(reel_id=reel_id, user_id=user_id, content=content, parent_id=data.get('parentId'))
+    comment = ReelComment(reel_id=reel_id, user_id=user_id, content=content, parent_id=parent_id)
     db.session.add(comment)
     db.session.commit()
     
-    reel = Reel.query.get(reel_id)
-    if reel:
+    if reel.user_id != user_id:
         create_notification(
             recipient_id=reel.user_id,
             sender_id=user_id,
@@ -254,10 +282,17 @@ def reply_to_reel_comment(comment_id):
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
-    parent_comment = ReelComment.query.get_or_404(comment_id)
-    content = get_json_data().get('content', '').strip()
+    parent_comment = db.get_or_404(ReelComment, comment_id)
+    raw_content = get_json_data().get('content')
+    if not isinstance(raw_content, str):
+        return jsonify({"error": "Reply must be text"}), 400
+    content = raw_content.strip()
     if not content:
         return jsonify({"error": "Reply cannot be empty"}), 400
+    if len(content) > MAX_COMMENT_LENGTH:
+        return jsonify({"error": f"Reply must be {MAX_COMMENT_LENGTH} characters or less"}), 400
+    if parent_comment.parent_id is not None:
+        return jsonify({"error": "Replies can only be added to top-level comments"}), 400
     
     reply = ReelComment(
         reel_id=parent_comment.reel_id,
@@ -283,8 +318,8 @@ def delete_reel_comment(comment_id):
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
-    comment = ReelComment.query.get_or_404(comment_id)
-    reel = Reel.query.get(comment.reel_id)
+    comment = db.get_or_404(ReelComment, comment_id)
+    reel = db.session.get(Reel, comment.reel_id)
     if comment.user_id != user_id and (reel and reel.user_id != user_id):
         return jsonify({"error": "Forbidden"}), 403
     db.session.delete(comment)
@@ -295,26 +330,41 @@ def delete_reel_comment(comment_id):
 
 @reels_bp.route('/api/reels/<int:reel_id>/share', methods=['POST'])
 def share_reel(reel_id):
-    reel = Reel.query.get_or_404(reel_id)
-    reel.shares_count = (reel.shares_count or 0) + 1
-    db.session.commit()
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    reel = db.get_or_404(Reel, reel_id)
+    if not ReelShare.query.filter_by(reel_id=reel_id, user_id=user_id).first():
+        db.session.add(ReelShare(reel_id=reel_id, user_id=user_id))
+        reel.shares_count = (reel.shares_count or 0) + 1
+        db.session.commit()
     return jsonify({"sharesCount": reel.shares_count})
 
 @reels_bp.route('/api/reels/<int:reel_id>/view', methods=['POST'])
 def view_reel(reel_id):
-    reel = Reel.query.get_or_404(reel_id)
-    reel.views_count = (reel.views_count or 0) + 1
-    db.session.commit()
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    reel = db.get_or_404(Reel, reel_id)
+    if not ReelView.query.filter_by(reel_id=reel_id, user_id=user_id).first():
+        db.session.add(ReelView(reel_id=reel_id, user_id=user_id))
+        reel.views_count = (reel.views_count or 0) + 1
+        db.session.commit()
     return jsonify({"viewsCount": reel.views_count})
 
 @reels_bp.route('/api/reels/<int:reel_id>', methods=['DELETE'])
 def delete_reel(reel_id):
     user_id = get_current_user_id()
-    reel = Reel.query.get_or_404(reel_id)
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    reel = db.get_or_404(Reel, reel_id)
     if reel.user_id != user_id:
         return jsonify({"error": "Unauthorized"}), 403
+    deletion_task = queue_media_deletion(reel.video_url, 'video')
     db.session.delete(reel)
     db.session.commit()
+    if deletion_task:
+        process_media_deletion_task(deletion_task.id)
     return jsonify({"message": "Reel deleted"})
 
 @reels_bp.route('/api/reels/<int:reel_id>', methods=['PUT'])
@@ -322,9 +372,12 @@ def update_reel(reel_id):
     user_id = get_current_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
     data = request.json
-    reel = Reel.query.get_or_404(reel_id)
+    reel = db.get_or_404(Reel, reel_id)
     if reel.user_id != user_id:
         return jsonify({"error": "Unauthorized"}), 403
-    reel.caption = data.get('caption', reel.caption)
+    caption = str(data.get('caption', reel.caption) or '').strip()
+    if len(caption) > MAX_REEL_CAPTION_LENGTH:
+        return jsonify({"error": f"Caption must be {MAX_REEL_CAPTION_LENGTH} characters or less"}), 400
+    reel.caption = caption
     db.session.commit()
     return jsonify({"message": "Reel updated", "caption": reel.caption})

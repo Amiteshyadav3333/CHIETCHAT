@@ -1,24 +1,64 @@
 import React, { createContext, useState, useEffect } from 'react';
 import axios from 'axios';
+import { disablePushNotifications } from '../utils/pushNotifications';
+import { clearAccountEncryptedMessageCaches } from '../utils/encryptedMessageCache';
+import { clearChatMetadata } from '../utils/chatMetadataCache';
+import { clearReelCache } from '../utils/reelCache';
+import { deleteDevicePrivateKey } from '../utils/secureKeyStore';
 
 export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
-    const [token, setToken] = useState(localStorage.getItem('token'));
+    const [token, setToken] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        if (token) {
-            // In a real app, validate token with backend or decode it
-            // For now, assume it's valid or handle 401 later
-            const storedUser = localStorage.getItem('user');
-            if (storedUser) {
-                setUser(JSON.parse(storedUser));
-            }
+    const clearLocalSession = () => {
+        let storedUserId = null;
+        try { storedUserId = JSON.parse(localStorage.getItem('user') || 'null')?.id || null; } catch { /* corrupt cache */ }
+        const currentUserId = user?.id || storedUserId;
+        clearAccountEncryptedMessageCaches(currentUserId);
+        clearChatMetadata(currentUserId);
+        clearReelCache(currentUserId);
+        if (currentUserId) {
+            deleteDevicePrivateKey(currentUserId).catch(() => {});
+            localStorage.removeItem(`pubKey_${currentUserId}`);
         }
-        setLoading(false);
-    }, [token]);
+        setUser(null);
+        setToken(null);
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        sessionStorage.removeItem('cheetchat_csrf_token');
+    };
+
+    useEffect(() => {
+        let cancelled = false;
+        setLoading(true);
+        axios.get('/api/auth/me')
+            .then(async ({ data }) => {
+                if (cancelled) return;
+                setUser(data.user);
+                setToken('cookie-session');
+                localStorage.setItem('user', JSON.stringify(data.user));
+                try {
+                    const csrf = await axios.get('/api/auth/csrf');
+                    if (!cancelled) sessionStorage.setItem('cheetchat_csrf_token', csrf.data.csrfToken);
+                } catch { /* csrf endpoint may not be available */ }
+            })
+            .catch(async (error) => {
+                if (cancelled) return;
+                // 401 is expected when not logged in - don't treat as error
+                if (error.response?.status === 401) {
+                    clearLocalSession();
+                } else {
+                    // Other errors - log but don't crash
+                    console.warn('Auth check failed:', error.message);
+                    clearLocalSession();
+                }
+            })
+            .finally(() => { if (!cancelled) setLoading(false); });
+        return () => { cancelled = true; };
+    }, []);
 
     // Handle 401 (Token Expired/Invalid due to server restart)
     useEffect(() => {
@@ -27,7 +67,7 @@ export const AuthProvider = ({ children }) => {
             error => {
                 if (error.response && error.response.status === 401) {
                     console.warn("Session expired or invalid, logging out...");
-                    logout();
+                    clearLocalSession();
                     window.location.href = '/login';
                 }
                 return Promise.reject(error);
@@ -36,11 +76,12 @@ export const AuthProvider = ({ children }) => {
         return () => axios.interceptors.response.eject(interceptor);
     }, []);
 
-    const login = (userData, authToken) => {
+    const login = (userData, _authToken, csrfToken = null) => {
         setUser(userData);
-        setToken(authToken);
-        localStorage.setItem('token', authToken);
+        setToken('cookie-session');
+        localStorage.removeItem('token');
         localStorage.setItem('user', JSON.stringify(userData));
+        if (csrfToken) sessionStorage.setItem('cheetchat_csrf_token', csrfToken);
     };
 
     const updateUser = (userData) => {
@@ -48,11 +89,15 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('user', JSON.stringify(userData));
     };
 
-    const logout = () => {
-        setUser(null);
-        setToken(null);
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+    const logout = async () => {
+        const activeToken = token;
+        if (activeToken) {
+            try { await disablePushNotifications(activeToken); } catch { /* best-effort cleanup */ }
+            try {
+                await axios.post('/api/auth/logout', {}, { headers: { Authorization: `Bearer ${activeToken}` } });
+            } catch { /* session may already be revoked */ }
+        }
+        clearLocalSession();
     };
 
     return (

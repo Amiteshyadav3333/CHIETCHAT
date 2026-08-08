@@ -3,7 +3,7 @@ import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import {
     ArrowLeftIcon, PhotoIcon, HeartIcon, ChatBubbleOvalLeftIcon,
-    PaperAirplaneIcon, PlusIcon, UserPlusIcon, CheckIcon, XMarkIcon,
+    PlusIcon, UserPlusIcon, CheckIcon, XMarkIcon,
     TrashIcon, UsersIcon, ArrowPathRoundedSquareIcon, ShareIcon,
     PencilIcon, LinkIcon, CalendarIcon, ArrowUpTrayIcon, UserCircleIcon,
     EllipsisHorizontalIcon, MagnifyingGlassIcon, BookmarkIcon,
@@ -16,6 +16,7 @@ import {
 } from '@heroicons/react/24/solid';
 import FullscreenMediaModal from '../components/FullscreenMediaModal';
 import NestedComment from '../components/NestedComment';
+import { getSafeWebsiteUrl } from '../utils/safeUrl';
 
 const authHeaders = (token) => ({ Authorization: `Bearer ${token}` });
 
@@ -177,16 +178,16 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onDel
         if (!comment.trim()) return;
         setSubmitting(true);
         try {
-            await axios.post('/api/social/posts/' + post.id + '/comments', { content: comment }, { headers: authHeaders(localStorage.getItem('token')) });
+            await axios.post('/api/social/posts/' + post.id + '/comments', { content: comment }, { headers: authHeaders(token) });
             setComment(''); fetchComments();
         } catch { } finally { setSubmitting(false); }
     };
     const handleReplyToComment = async (commentId, content) => {
-        try { await axios.post('/api/social/comments/' + commentId + '/replies', { content }, { headers: authHeaders(localStorage.getItem('token') || token) }); fetchComments(); } catch { }
+        try { await axios.post('/api/social/comments/' + commentId + '/replies', { content }, { headers: authHeaders(token) }); fetchComments(); } catch { }
     };
     const handleDeleteComment = async (commentId) => {
         if (!window.confirm('Delete this comment?')) return;
-        try { await axios.delete('/api/social/comments/' + commentId, { headers: authHeaders(localStorage.getItem('token') || token) }); fetchComments(); } catch { }
+        try { await axios.delete('/api/social/comments/' + commentId, { headers: authHeaders(token) }); fetchComments(); } catch { }
     };
 
     useEffect(() => {
@@ -339,7 +340,7 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onDel
     );
 };
 
-const WhoToFollow = ({ token, currentUser, onOpenProfile, onFollow }) => {
+const WhoToFollow = ({ token, onOpenProfile, onFollow }) => {
     const [suggestions, setSuggestions] = useState([]);
     const [busyIds, setBusyIds] = useState({});
     useEffect(() => {
@@ -417,7 +418,7 @@ const ChannelsList = ({ channels, loading, onOpen, onSubscribe, onCreateNew }) =
     </div>
 );
 
-const ChannelView = ({ channel, posts, user, preview, media, caption, posting, fileRef, setCaption, setMedia, submitPost, likePost, retweetPost, sharePost, deletePost, toggleFollow, requestSubscribe, reviewRequest, openProfile, currentUser }) => (
+const ChannelView = ({ channel, posts, user, token, preview, media, caption, posting, fileRef, setCaption, setMedia, submitPost, likePost, retweetPost, sharePost, deletePost, toggleFollow, requestSubscribe, reviewRequest, openProfile, currentUser }) => (
     <div style={{ maxWidth: 600, margin: '0 auto', width: '100%' }}>
         <div style={{ borderBottom: '1px solid #2f3336' }}>
             <div style={{ height: 112, background: 'linear-gradient(135deg, #1d9bf0 0%, #764ba2 100%)', position: 'relative' }}>
@@ -456,7 +457,7 @@ const ChannelView = ({ channel, posts, user, preview, media, caption, posting, f
             </div>
         )}
         {posts.length ? posts.map(post => (
-            <TweetCard key={post.id} post={post} currentUser={currentUser || user} token={localStorage.getItem('token')}
+            <TweetCard key={post.id} post={post} currentUser={currentUser || user} token={token}
                 onLike={() => likePost(post.id)} onRetweet={() => retweetPost(post.id)}
                 onShare={() => sharePost(post.id)} onDelete={() => deletePost(post.id)}
                 onFollow={() => toggleFollow(post.user.id)} onOpenProfile={openProfile} />
@@ -464,7 +465,7 @@ const ChannelView = ({ channel, posts, user, preview, media, caption, posting, f
     </div>
 );
 
-const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpenProfile, onLike, onRetweet, onShare, onDelete, onFollow }) => {
+const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpenProfile }) => {
     const [profileData, setProfileData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [editMode, setEditMode] = useState(false);
@@ -536,6 +537,7 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
     if (loading) return <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000', color: '#e7e9ea' }}><CheetChatLoading /></div>;
 
     const u = profileData && profileData.user;
+    const safeProfileWebsite = getSafeWebsiteUrl(u?.websiteUrl);
     const filteredProfilePosts = (profileData?.posts || []).filter(post => {
         const displayPost = post.isRetweet && post.originalPost ? post.originalPost : post;
         if (profileTab === 'media') {
@@ -565,7 +567,7 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
 
                 <div className="px-4 pb-4">
                     <div className="flex items-start justify-between -mt-12 sm:-mt-16 mb-3">
-                        <div className="relative">
+                        <div className="relative" onMouseEnter={() => setAvatarHover(true)} onMouseLeave={() => setAvatarHover(false)}>
                             <div className="w-20 h-20 sm:w-28 sm:h-28 rounded-full overflow-hidden border-4" style={{ borderColor: '#000' }}>
                                 <img src={u?.avatar} alt={u?.username} className="w-full h-full object-cover" />
                             </div>
@@ -613,8 +615,8 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
                             <p style={{ fontSize: 14, color: '#71767b', marginBottom: 8 }}>@{u && (u.username || '').toLowerCase().replace(/\s+/g, '_')}</p>
                             {u && u.bio && <p style={{ fontSize: 15, lineHeight: 1.6, marginBottom: 8 }}>{u.bio}</p>}
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', marginBottom: 12 }}>
-                                {u && u.websiteUrl && (
-                                    <a href={u.websiteUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 14, color: '#1d9bf0', textDecoration: 'none' }}>
+                                {safeProfileWebsite && (
+                                    <a href={safeProfileWebsite} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 14, color: '#1d9bf0', textDecoration: 'none' }}>
                                         <LinkIcon style={{ width: 16, height: 16 }} />{u.websiteUrl.replace(/^https?:\/\//, '')}
                                     </a>
                                 )}
@@ -781,8 +783,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed }) => {
 
     if (profileView) return (
         <UserProfileView userId={profileView.userId} currentUser={user} token={token} updateUser={updateUser}
-            onBack={() => setProfileView(null)} onOpenProfile={openProfile}
-            onLike={likePost} onRetweet={retweetPost} onShare={sharePost} onDelete={deletePost} onFollow={toggleFollow} />
+            onBack={() => setProfileView(null)} onOpenProfile={openProfile} />
     );
     const currentPosts = selectedChannel ? channelPosts : posts;
     const TABS = [{ key: 'for-you', label: 'For You' }, { key: 'following', label: 'Following' }, { key: 'channels', label: 'Spaces' }];
@@ -888,7 +889,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed }) => {
                     {/* Scrollable feed */}
                     <div className="flex-1 overflow-y-auto scrollbar-hide">
                         {selectedChannel ? (
-                            <ChannelView channel={selectedChannel} posts={currentPosts} user={user} preview={preview} media={media} caption={caption} posting={posting} fileRef={fileRef} setCaption={setCaption} setMedia={setMedia}
+                            <ChannelView channel={selectedChannel} posts={currentPosts} user={user} token={token} preview={preview} media={media} caption={caption} posting={posting} fileRef={fileRef} setCaption={setCaption} setMedia={setMedia}
                                 submitPost={() => submitPost(selectedChannel.id)} likePost={id => likePost(id, true)} retweetPost={id => retweetPost(id, true)} sharePost={id => sharePost(id, true)} deletePost={id => deletePost(id, true)}
                                 toggleFollow={toggleFollow} requestSubscribe={() => requestSubscribe(selectedChannel.id)} reviewRequest={reviewRequest} openProfile={openProfile} currentUser={user} />
                         ) : activeTab === 'channels' ? (
@@ -946,7 +947,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed }) => {
                         ))}
                     </div>
 
-                    <WhoToFollow token={token} currentUser={user} onOpenProfile={openProfile} onFollow={toggleFollow} />
+                    <WhoToFollow token={token} onOpenProfile={openProfile} onFollow={toggleFollow} />
                 </aside>
             </div>
 

@@ -194,6 +194,7 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
                     });
                     formData.append('musicUrl', musicRes.data.url);
                     formData.append('musicName', musicName);
+                    formData.append('musicAssetId', musicRes.data.assetId);
                 } catch {
                     console.warn('Music upload failed; posting status without music.');
                 }

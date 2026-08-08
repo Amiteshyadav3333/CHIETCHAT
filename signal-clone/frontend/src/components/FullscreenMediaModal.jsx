@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { XMarkIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { formatDuration } from '../utils/mediaCompressor';
+import { getSafeMediaUrl, openSafeExternal } from '../utils/safeUrl';
 
 /* ═══════════════════════════════════════════════════════════════
    ROOT PORTAL — renders directly on <body> so fixed/z-index works
@@ -27,25 +28,40 @@ const FullscreenMediaModal = ({ src, type, onClose }) => {
 
     if (!src) return null;
 
-    const isVideo = type === 'video' || /\.(mp4|webm|ogg|mov)$/i.test(src);
-    const isAudio = type === 'audio' || /\.(mp3|wav|m4a|aac|oga)$/i.test(src) ||
-        (type === 'audio' && /\.webm$/i.test(src));
+    const safeSrc = getSafeMediaUrl(src, window.location.href);
+    if (!safeSrc) {
+        return (
+            <Portal>
+                <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/90 p-6">
+                    <div className="max-w-sm rounded-2xl border border-red-500/20 bg-[#111b21] p-6 text-center text-white">
+                        <p className="font-bold">Unsafe media URL blocked</p>
+                        <button type="button" onClick={onClose} className="mt-4 rounded-lg bg-white/10 px-5 py-2 text-sm">Close</button>
+                    </div>
+                </div>
+            </Portal>
+        );
+    }
+
+    const isVideo = type === 'video' || /\.(mp4|webm|ogg|mov)$/i.test(safeSrc);
+    const isAudio = type === 'audio' || /\.(mp3|wav|m4a|aac|oga)$/i.test(safeSrc) ||
+        (type === 'audio' && /\.webm$/i.test(safeSrc));
 
     const handleDownload = async (e) => {
         e?.stopPropagation();
         try {
-            const response = await fetch(src);
+            const response = await fetch(safeSrc);
+            if (!response.ok) throw new Error(`Download failed with HTTP ${response.status}`);
             const blob = await response.blob();
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = decodeURIComponent(src.split('/').pop()) || 'media';
+            a.download = decodeURIComponent(safeSrc.split('/').pop()) || 'media';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
         } catch {
-            window.open(src, '_blank');
+            openSafeExternal(safeSrc);
         }
     };
 
@@ -53,10 +69,10 @@ const FullscreenMediaModal = ({ src, type, onClose }) => {
         <Portal>
             <div style={{ position: 'fixed', inset: 0, zIndex: 99999 }}>
                 {isVideo
-                    ? <VideoViewer src={src} onClose={onClose} onDownload={handleDownload} />
+                    ? <VideoViewer src={safeSrc} onClose={onClose} onDownload={handleDownload} />
                     : isAudio
-                        ? <AudioViewer src={src} onClose={onClose} onDownload={handleDownload} />
-                        : <ImageViewer src={src} onClose={onClose} onDownload={handleDownload} />
+                        ? <AudioViewer src={safeSrc} onClose={onClose} onDownload={handleDownload} />
+                        : <ImageViewer src={safeSrc} onClose={onClose} onDownload={handleDownload} />
                 }
             </div>
         </Portal>

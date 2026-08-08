@@ -1,15 +1,5 @@
-// Basic simulation of E2EE using Web Crypto API or similar logic
-// In a real app, use the Web Crypto API for ECDH + AES-GCM
-
-// For this prototype, we'll use a simplified RSA approach or just simulate functions 
-// to ensure the app flow works first, as implementing full robust E2EE from scratch 
-// in one go is complex and error-prone without specific libraries installed via npm.
-// However, I will implement a basic version using the built-in window.crypto.subtle if possible
-// or just placeholder encryption that actually scrambles text to demonstrate the concept.
-
-// Let's use a simple XOR or Base64 rotation for "demonstration" of encryption 
-// if we want to avoid heavy libraries, BUT the prompt asked for "cryptography lib".
-// I'll assume we can use standard WebCrypto APIs available in browsers.
+// Hybrid message encryption: a fresh AES-GCM key protects each message envelope;
+// RSA-OAEP wraps that key independently for every authorized recipient.
 
 export const generateKeys = async () => {
     const keyPair = await window.crypto.subtle.generateKey(
@@ -42,6 +32,13 @@ export const generateKeys = async () => {
     };
 };
 
+export const generateRecoveryCode = () => {
+    const bytes = window.crypto.getRandomValues(new Uint8Array(24));
+    const encoded = arrayBufferToBase64(bytes)
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+    return encoded.match(/.{1,6}/g).join('-');
+};
+
 export const importPublicKey = async (pem) => {
     // pem is base64 string
     const binaryDer = base64ToArrayBuffer(pem);
@@ -70,6 +67,40 @@ export const importPrivateKey = async (pem) => {
         true,
         ["decrypt"]
     );
+};
+
+export const protectPrivateKeyWithPassword = async (privateKeyString, password) => {
+    const encoder = new TextEncoder();
+    const salt = window.crypto.getRandomValues(new Uint8Array(16));
+    const iv = window.crypto.getRandomValues(new Uint8Array(12));
+    const material = await window.crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveKey']);
+    const key = await window.crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt, iterations: 250000, hash: 'SHA-256' },
+        material, { name: 'AES-GCM', length: 256 }, false, ['encrypt']
+    );
+    const encrypted = await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoder.encode(privateKeyString));
+    return JSON.stringify({ v: 1, kdf: 'PBKDF2-SHA256', iterations: 250000, salt: arrayBufferToBase64(salt), iv: arrayBufferToBase64(iv), data: arrayBufferToBase64(encrypted) });
+};
+
+export const restorePrivateKeyWithPassword = async (backup, password) => {
+    const envelope = typeof backup === 'string' ? JSON.parse(backup) : backup;
+    const iterations = Number(envelope?.iterations);
+    if (
+        envelope?.v !== 1 || envelope?.kdf !== 'PBKDF2-SHA256' ||
+        !envelope?.salt || !envelope?.iv || !envelope?.data ||
+        !Number.isInteger(iterations) || iterations < 100000 || iterations > 1000000 ||
+        envelope.salt.length > 128 || envelope.iv.length > 64 || envelope.data.length > 20000
+    ) throw new Error('Invalid key backup');
+    const encoder = new TextEncoder();
+    const material = await window.crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveKey']);
+    const key = await window.crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt: new Uint8Array(base64ToArrayBuffer(envelope.salt)), iterations, hash: 'SHA-256' },
+        material, { name: 'AES-GCM', length: 256 }, false, ['decrypt']
+    );
+    const decrypted = await window.crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: new Uint8Array(base64ToArrayBuffer(envelope.iv)) }, key, base64ToArrayBuffer(envelope.data)
+    );
+    return new TextDecoder().decode(decrypted);
 };
 
 export const encryptMessage = async (publicKey, message) => {

@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from '../utils/clientRouter';
 import { KeyIcon, ShieldCheckIcon } from '@heroicons/react/24/outline';
+import { protectPrivateKeyWithPassword, restorePrivateKeyWithPassword } from '../utils/encryption';
 
 const getResetAccessToken = () => {
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
@@ -14,8 +15,19 @@ const ResetPassword = () => {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [message, setMessage] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const [recoveryCode, setRecoveryCode] = useState('');
+    const [keyBackup, setKeyBackup] = useState(null);
+    const [checkingLink, setCheckingLink] = useState(true);
     const navigate = useNavigate();
     const accessToken = useMemo(() => getResetAccessToken(), []);
+
+    useEffect(() => {
+        if (!accessToken) { setCheckingLink(false); return; }
+        axios.post('/api/reset-password/key-backup', { accessToken })
+            .then(response => setKeyBackup(response.data))
+            .catch(error => setMessage(error.response?.data?.error || 'Reset link is invalid or expired.'))
+            .finally(() => setCheckingLink(false));
+    }, [accessToken]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -32,14 +44,21 @@ const ResetPassword = () => {
 
         setSubmitting(true);
         try {
+            let encryptedPrivateKey = null;
+            if (keyBackup?.recoveryRequired) {
+                if (!recoveryCode.trim()) throw new Error('Recovery code is required to preserve encrypted chats.');
+                const privateKey = await restorePrivateKeyWithPassword(keyBackup.encryptedRecoveryKey, recoveryCode.trim());
+                encryptedPrivateKey = await protectPrivateKeyWithPassword(privateKey, password);
+            }
             const res = await axios.post('/api/reset-password', {
                 accessToken,
-                newPassword: password
+                newPassword: password,
+                encryptedPrivateKey,
             });
             setMessage(res.data.message || 'Password reset successfully.');
             setTimeout(() => navigate('/login'), 1200);
         } catch (err) {
-            setMessage(err.response?.data?.error || 'Unable to reset password.');
+            setMessage(err.response?.data?.error || err.message || 'Unable to reset password. Check your recovery code.');
         } finally {
             setSubmitting(false);
         }
@@ -86,12 +105,25 @@ const ResetPassword = () => {
                         minLength={6}
                         required
                     />
+                    {keyBackup?.recoveryRequired && (
+                        <div>
+                            <input
+                                type="password"
+                                placeholder="CHEETCHAT recovery code"
+                                value={recoveryCode}
+                                onChange={event => setRecoveryCode(event.target.value)}
+                                className="w-full rounded-lg border border-emerald-500/30 bg-signal-input px-4 py-3 text-white outline-none transition focus:border-emerald-400"
+                                required
+                            />
+                            <p className="mt-2 text-xs leading-5 text-gray-400">This code decrypts your chat key locally. It is never sent to CHEETCHAT.</p>
+                        </div>
+                    )}
                     <button
                         type="submit"
-                        disabled={submitting}
+                        disabled={submitting || checkingLink}
                         className="w-full rounded-lg bg-signal-accent py-3 font-bold text-white transition-colors hover:bg-signal-accentHover disabled:cursor-not-allowed disabled:opacity-70"
                     >
-                        {submitting ? 'Please wait...' : 'Update password'}
+                        {checkingLink ? 'Checking reset link...' : submitting ? 'Please wait...' : 'Update password'}
                     </button>
                 </form>
 

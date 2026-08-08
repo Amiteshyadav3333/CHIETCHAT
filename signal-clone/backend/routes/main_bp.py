@@ -1,6 +1,16 @@
 import os
+import datetime
+import json
+import re
+import urllib.parse
+import urllib.request
 from flask import Blueprint, jsonify, request, send_from_directory, current_app
-from utils import get_current_user_id, upload_to_cloudinary
+from models import db, UploadAsset
+from utils import (
+    get_current_user_id, upload_to_cloudinary, validate_upload, utc_now,
+    queue_media_deletion, process_media_deletion_task,
+)
+from observability import report_safe_exception
 
 main_bp = Blueprint('main_bp', __name__)
 
@@ -20,28 +30,36 @@ def upload_file():
     if file.filename == '':
         return jsonify({"error": "No selection"}), 400
 
-    from werkzeug.utils import secure_filename
-    filename = secure_filename(file.filename or 'upload')
-    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
-
-    image_exts = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
-    video_exts = {'mp4', 'mov', 'avi', 'mkv'}
-    audio_exts = {'mp3', 'wav', 'm4a', 'aac', 'oga', 'ogg', 'flac', 'webm'}
-
-    if ext in image_exts:
-        resource_type = 'image'
-    elif ext in video_exts:
-        resource_type = 'video'
-    elif ext in audio_exts:
-        resource_type = 'video'  # Cloudinary uses 'video' for audio too
-    else:
-        resource_type = 'raw'
-
+    url = None
+    resource_type = None
     try:
+        media_kind = validate_upload(
+            file, {'image', 'video', 'audio', 'document'}, 100 * 1024 * 1024
+        )
+        resource_type = {
+            'image': 'image', 'video': 'video', 'audio': 'video', 'document': 'raw',
+        }[media_kind]
         url = upload_to_cloudinary(file, folder='chietchat/uploads', resource_type=resource_type)
-        return jsonify({"url": url})
+        asset = UploadAsset(
+            owner_id=user_id,
+            media_url=url,
+            media_kind=media_kind,
+            resource_type=resource_type,
+            expires_at=utc_now() + datetime.timedelta(days=7),
+        )
+        db.session.add(asset)
+        db.session.commit()
+        return jsonify({"url": url, "assetId": asset.id, "expiresAt": asset.expires_at.isoformat() + 'Z'})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
-        print(f"Upload error [{ext}]: {e}")
+        db.session.rollback()
+        if url and resource_type:
+            deletion_task = queue_media_deletion(url, resource_type, trusted=True)
+            if deletion_task:
+                db.session.commit()
+                process_media_deletion_task(deletion_task.id)
+        report_safe_exception('upload_failed', e)
         return jsonify({"error": f"Upload failed: {str(e)}"}), 500
 
 @main_bp.route('/api/translate', methods=['POST'])
@@ -55,18 +73,39 @@ def translate_text():
     target_lang = data.get('target_lang')
     source_lang = data.get('source_lang', 'auto')
 
-    if not text:
+    if not isinstance(text, str) or not text.strip():
         return jsonify({"error": "Missing 'text' parameter"}), 400
-    if not target_lang:
+    if len(text) > 8000:
+        return jsonify({"error": "Text is too long"}), 400
+    language_pattern = re.compile(r'^[A-Za-z]{2,3}(?:-[A-Za-z]{2,4})?$')
+    if not isinstance(target_lang, str) or not language_pattern.fullmatch(target_lang):
         return jsonify({"error": "Missing 'target_lang' parameter"}), 400
+    if source_lang != 'auto' and (
+        not isinstance(source_lang, str) or not language_pattern.fullmatch(source_lang)
+    ):
+        return jsonify({"error": "Invalid 'source_lang' parameter"}), 400
 
     try:
-        from deep_translator import GoogleTranslator
-        translated = GoogleTranslator(source=source_lang, target=target_lang).translate(text)
+        query = urllib.parse.urlencode({
+            'client': 'gtx', 'sl': source_lang, 'tl': target_lang,
+            'dt': 't', 'q': text,
+        })
+        upstream_request = urllib.request.Request(
+            f'https://translate.googleapis.com/translate_a/single?{query}',
+            headers={'User-Agent': 'CHEETCHAT/1.0'},
+        )
+        with urllib.request.urlopen(upstream_request, timeout=10) as response:
+            payload = json.loads(response.read(256 * 1024))
+        translated = ''.join(
+            segment[0] for segment in payload[0]
+            if isinstance(segment, list) and segment and isinstance(segment[0], str)
+        )
+        if not translated:
+            raise ValueError('Translation provider returned an empty response')
         return jsonify({"translatedText": translated})
     except Exception as e:
-        print(f"Translation error: {e}")
-        return jsonify({"error": str(e)}), 500
+        report_safe_exception('translation_failed', e)
+        return jsonify({"error": "Translation is temporarily unavailable"}), 502
 
 @main_bp.route('/', defaults={'path': ''})
 

@@ -14,7 +14,18 @@ import { format } from 'date-fns';
 import { useEncryption } from '../hooks/useEncryption';
 import { decryptEnvelope, encryptForRecipients, isEncryptedPayload } from '../utils/encryption';
 import { compressImage, compressVideo, getFileCategory, formatFileSize } from '../utils/mediaCompressor';
-import { getOfflineQueue, enqueueOfflineMessage, dequeueOfflineMessage, processOfflineQueue } from '../utils/offlineQueue';
+import { enqueueOfflineMessage, processOfflineQueue } from '../utils/offlineQueue';
+import {
+    clearEncryptedMessageCache, loadEncryptedMessages, purgeLegacyMessageCaches, removeEncryptedMessage,
+    saveEncryptedMessages, updateEncryptedMessageContent, upsertEncryptedMessage,
+} from '../utils/encryptedMessageCache';
+import { loadChatMetadata, saveChatMetadata } from '../utils/chatMetadataCache';
+import { emitWithAcknowledgement } from '../utils/socketAcknowledgement';
+import ChatPreferences from '../components/ChatPreferences';
+import DeleteChatModal from '../components/DeleteChatModal';
+import UserAvatar from '../components/UserAvatar';
+import SidebarEmojiPicker from '../components/SidebarEmojiPicker';
+import { AppLockOverlay, EditMessageModal, ForwardMessageModal, OfflineBanner } from '../components/HomeOverlays';
 
 const Reels = React.lazy(() => import('./Reels'));
 const Social = React.lazy(() => import('./Social'));
@@ -25,146 +36,6 @@ const SettingsModal = React.lazy(() => import('../components/SettingsModal'));
 const NotificationPanel = React.lazy(() => import('../components/NotificationPanel'));
 
 // ─── WhatsApp-style Emoji Picker ───────────────────────────────────────────
-const EMOJI_CATEGORIES = [
-    {
-        id: 'smileys', icon: '😀', label: 'Smileys',
-        emojis: ['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','☺️','😚','😙','🥲','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','🥴','😵','💫','🤯','🤠','🥳','🥸','😎','🤓','🧐','😕','😟','🙁','☹️','😮','😯','😲','😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','🥱','😤','😡','😠','🤬','😈','👿','💀','☠️','💩','🤡','👹','👺','👻','👽','👾','🤖']
-    },
-    {
-        id: 'people', icon: '👋', label: 'People',
-        emojis: ['👋','🤚','🖐️','✋','🖖','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','☝️','👍','👎','✊','👊','🤛','🤜','👏','🙌','👐','🤲','🤝','🙏','✍️','💅','🤳','💪','🦾','🦵','🦶','👂','🦻','👃','🫀','🫁','🧠','🦷','🦴','👀','👁️','👅','👄','💋','🩸']
-    },
-    {
-        id: 'animals', icon: '🐶', label: 'Animals',
-        emojis: ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐽','🐸','🐵','🙈','🙉','🙊','🐔','🐧','🐦','🐤','🦆','🦅','🦉','🦇','🐺','🐗','🐴','🦄','🐝','🪱','🐛','🦋','🐌','🐞','🐜','🪲','🦟','🦗','🪳','🕷️','🦂','🐢','🦎','🐍','🦕','🦖','🦎','🐊','🐸','🐉','🐲','🌵','🎄','🌲','🌳','🌴','🪵','🌱','🌿','☘️','🍀','🎍','🪴','🎋','🍃','🍂','🍁']
-    },
-    {
-        id: 'food', icon: '🍕', label: 'Food',
-        emojis: ['🍏','🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🍆','🥑','🥦','🥬','🥒','🌶️','🫑','🥕','🧄','🧅','🥔','🍠','🥐','🥯','🍞','🥖','🥨','🧀','🥚','🍳','🧈','🥞','🧇','🥓','🥩','🍗','🍖','🌭','🍔','🍟','🍕','🫓','🥪','🥙','🧆','🌮','🌯','🫔','🥗','🥘','🫕','🥫','🍝','🍜','🍲','🍛','🍣','🍱','🥟','🦪','🍤','🍙','🍚','🍘','🍥','🥮','🍢','🧁','🍰','🎂','🍮','🍭','🍬','🍫','🍿','🍩','🍪','🌰','🥜','🍯','🧃','🥤','🧋','🍵','☕','🍶','🍺','🍻','🥂','🍷','🥃','🍸','🍹','🧉','🍾','🧊']
-    },
-    {
-        id: 'sports', icon: '⚽', label: 'Sports',
-        emojis: ['⚽','🏀','🏈','⚾','🥎','🎾','🏐','🏉','🥏','🎱','🪀','🏓','🏸','🏒','🥍','🏑','🥅','⛳','🪁','🏹','🎣','🤿','🥊','🥋','🎽','🛹','🛼','🛷','⛸️','🥌','🎿','⛷️','🏂','🪂','🏋️','🤼','🤸','⛹️','🤺','🏇','🧘','🏄','🏊','🤽','🚣','🧗','🚵','🚴','🏆','🥇','🥈','🥉','🏅','🎖️','🏵️','🎗️','🎫','🎟️','🎪','🤹','🎭','🩰','🎨','🎬','🎤','🎧','🎼','🎹','🥁','🪘','🎷','🎺','🎸','🪕','🎻','🎲','♟️','🎯','🎳']
-    },
-    {
-        id: 'travel', icon: '✈️', label: 'Travel',
-        emojis: ['🚗','🚕','🚙','🚌','🚎','🏎️','🚓','🚑','🚒','🚐','🛻','🚚','🚛','🚜','🛵','🦽','🦼','🛺','🚲','🛴','🛹','🛼','🚏','🛣️','🛤️','⛽','🚨','🚥','🚦','🛑','🚧','⚓','⛵','🛶','🚤','🛥️','🛳️','⛴️','🚢','✈️','🛩️','🛫','🛬','🪂','💺','🚁','🚟','🚠','🚡','🛰️','🚀','🛸','🏖️','🏝️','🏜️','🏕️','🗾','🧭','🏔️','⛰️','🌋','🗺️','🏗️','🏘️','🏚️','🏠','🏡','🏢','🏣','🏤','🏥','🏦','🏨','🏩','🏪','🏫','🏭','🏯','🏰','💒','🗼','🗽','⛪','🕌','🛕','🕍','⛩️','🕋','⛲','⛺','🌁','🌃','🏙️','🌄','🌅','🌆','🌇','🌉','♨️','🌌','🌠','🎇','🎆','🌈','🎑']
-    },
-    {
-        id: 'symbols', icon: '❤️', label: 'Symbols',
-        emojis: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟','☮️','✝️','☪️','🕉️','☸️','✡️','🔯','🪯','☯️','☦️','🛐','⛎','♈','♉','♊','♋','♌','♍','♎','♏','♐','♑','♒','♓','🆔','⚛️','🉑','☢️','☣️','📴','📳','🈶','🈚','🈸','🈺','🈷️','✴️','🆚','💮','🉐','㊙️','㊗️','🈴','🈵','🈹','🈲','🅰️','🅱️','🆎','🆑','🅾️','🆘','❌','⭕','🛑','⛔','📛','🚫','💯','💢','♨️','🚷','🚯','🚳','🚱','🔞','📵','🚭','❗','❕','❓','❔','‼️','⁉️','🔅','🔆','〽️','⚠️','🚸','🔱','⚜️','🔰','♻️','✅','🈯','💹','❎','🌐','💠','Ⓜ️','🌀','💤','🏧','🚾','♿','🅿️','🛗','🈳','🈹','🚻','🚺','🚹','🚼','⚧️']
-    },
-    {
-        id: 'flags', icon: '🏳️', label: 'Flags',
-        emojis: ['🏳️','🏴','🏁','🚩','🏳️‍🌈','🏳️‍⚧️','🏴‍☠️','🇺🇳','🇦🇫','🇦🇱','🇩🇿','🇦🇩','🇦🇴','🇦🇬','🇦🇷','🇦🇲','🇦🇺','🇦🇹','🇦🇿','🇧🇸','🇧🇭','🇧🇩','🇧🇧','🇧🇾','🇧🇪','🇧🇿','🇧🇯','🇧🇹','🇧🇴','🇧🇦','🇧🇼','🇧🇷','🇧🇳','🇧🇬','🇧🇫','🇧🇮','🇨🇻','🇰🇭','🇨🇲','🇨🇦','🇧🇶','🇨🇫','🇹🇩','🇨🇱','🇨🇳','🇨🇴','🇰🇲','🇨🇬','🇨🇩','🇨🇷','🇭🇷','🇨🇺','🇨🇼','🇨🇾','🇨🇿','🇩🇰','🇩🇯','🇩🇲','🇩🇴','🇪🇨','🇪🇬','🇸🇻','🇬🇶','🇪🇷','🇪🇪','🇸🇿','🇪🇹','🇫🇯','🇫🇮','🇫🇷','🇬🇦','🇬🇲','🇬🇪','🇩🇪','🇬🇭','🇬🇷','🇬🇩','🇬🇹','🇬🇳','🇬🇼','🇬🇾','🇭🇹','🇭🇳','🇭🇺','🇮🇸','🇮🇳','🇮🇩','🇮🇷','🇮🇶','🇮🇪','🇮🇱','🇮🇹','🇯🇲','🇯🇵','🇯🇴','🇰🇿','🇰🇪','🇰🇮','🇰🇼','🇰🇬','🇱🇦','🇱🇻','🇱🇧','🇱🇸','🇱🇷','🇱🇾','🇱🇮','🇱🇹','🇱🇺','🇲🇬','🇲🇼','🇲🇾']
-    },
-];
-
-const SidebarEmojiPicker = ({ pickerRef, onPick }) => {
-    const [query, setQuery] = React.useState('');
-    const [activeCategory, setActiveCategory] = React.useState('smileys');
-    const searchRef = React.useRef(null);
-
-    React.useEffect(() => {
-        searchRef.current?.focus();
-    }, []);
-
-    const filteredEmojis = React.useMemo(() => {
-        if (query.trim()) {
-            // Search across all categories
-            return EMOJI_CATEGORIES.flatMap(c => c.emojis).filter((_, i, arr) => {
-                // Simple filter: show all emojis when searching (user sees all)
-                return true;
-            }).slice(0, 60);
-        }
-        return EMOJI_CATEGORIES.find(c => c.id === activeCategory)?.emojis || [];
-    }, [query, activeCategory]);
-
-    // When searching, flatten all emojis and filter (since we don't have text labels, show all)
-    const displayEmojis = query.trim()
-        ? EMOJI_CATEGORIES.flatMap(c => c.emojis)
-        : filteredEmojis;
-
-    return (
-        <div
-            ref={pickerRef}
-            className="absolute top-full left-0 right-0 z-[60] mt-1 shadow-2xl"
-            style={{ borderRadius: '0 0 12px 12px' }}
-        >
-            {/* WhatsApp-style picker panel */}
-            <div className="bg-[#1f2c34] rounded-xl overflow-hidden border border-white/10">
-
-                {/* ── Search Bar ── */}
-                <div className="px-3 py-2 bg-[#1f2c34] border-b border-white/[0.08]">
-                    <div className="flex items-center gap-2 bg-[#2a3942] rounded-lg px-3 py-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-4 h-4 text-gray-400 flex-shrink-0">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.604 10.604Z" />
-                        </svg>
-                        <input
-                            ref={searchRef}
-                            type="text"
-                            value={query}
-                            onChange={e => setQuery(e.target.value)}
-                            placeholder="Search emoji"
-                            className="flex-1 bg-transparent text-sm text-white placeholder-gray-500 outline-none"
-                        />
-                        {query && (
-                            <button onClick={() => setQuery('')} className="text-gray-400 hover:text-white transition-colors">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        )}
-                    </div>
-                </div>
-
-                {/* ── Emoji Grid ── */}
-                <div className="h-[220px] overflow-y-auto px-2 py-2" style={{ scrollbarWidth: 'thin', scrollbarColor: '#374151 transparent' }}>
-                    {!query && (
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 px-1 mb-2">
-                            {EMOJI_CATEGORIES.find(c => c.id === activeCategory)?.label}
-                        </p>
-                    )}
-                    <div className="grid grid-cols-8 gap-0.5">
-                        {displayEmojis.map((emoji, i) => (
-                            <button
-                                key={i}
-                                type="button"
-                                onClick={() => onPick(emoji)}
-                                className="flex items-center justify-center w-9 h-9 rounded-lg text-xl hover:bg-white/10 active:scale-90 transition-all"
-                                title={emoji}
-                            >
-                                {emoji}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                {/* ── Category Tabs ── */}
-                {!query && (
-                    <div className="flex items-center border-t border-white/[0.08] bg-[#1a2930] px-1 py-1 gap-0.5 overflow-x-auto scrollbar-none">
-                        {EMOJI_CATEGORIES.map(cat => (
-                            <button
-                                key={cat.id}
-                                type="button"
-                                onClick={() => setActiveCategory(cat.id)}
-                                title={cat.label}
-                                className={`flex-1 min-w-[36px] flex items-center justify-center py-1.5 rounded-lg text-lg transition-all ${
-                                    activeCategory === cat.id
-                                        ? 'bg-[#00a884]/25 text-[#00a884]'
-                                        : 'text-gray-400 hover:bg-white/5 hover:text-white'
-                                }`}
-                                style={{ borderBottom: activeCategory === cat.id ? '2px solid #00a884' : '2px solid transparent' }}
-                            >
-                                {cat.icon}
-                            </button>
-                        ))}
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-};
 
 const FeatureLoader = () => (
     <div className="flex h-full w-full items-center justify-center bg-[#111b21] text-sm font-semibold text-[#00a884]">
@@ -181,23 +52,14 @@ const Home = () => {
     const [isOnline, setIsOnline] = useState(navigator.onLine);
 
     const [chats, setChats] = useState(() => {
-        try {
-            const cached = localStorage.getItem('cached_chats');
-            return cached ? JSON.parse(cached) : [];
-        } catch {
-            return [];
-        }
+        return loadChatMetadata(user?.id);
     });
     const [activeChat, setActiveChat] = useState(() => {
         try {
             const savedChatId = localStorage.getItem('activeChatId');
             if (savedChatId) {
-                const cachedChatsStr = localStorage.getItem('cached_chats');
-                if (cachedChatsStr) {
-                    const cachedChats = JSON.parse(cachedChatsStr);
-                    const found = cachedChats.find(c => c.id === parseInt(savedChatId, 10));
-                    if (found) return found;
-                }
+                const found = loadChatMetadata(user?.id).find(c => c.id === parseInt(savedChatId, 10));
+                if (found) return found;
             }
         } catch (e) {
             console.error("Failed to restore active chat synchronously", e);
@@ -205,35 +67,30 @@ const Home = () => {
         return null;
     });
     const [messages, setMessages] = useState(() => {
-        try {
-            const savedChatId = localStorage.getItem('activeChatId');
-            if (savedChatId) {
-                const cachedMsgs = localStorage.getItem(`cached_messages_${savedChatId}`);
-                return cachedMsgs ? JSON.parse(cachedMsgs) : [];
-            }
-        } catch (e) {
-            console.error("Failed to restore messages synchronously", e);
-        }
+        purgeLegacyMessageCaches();
         return [];
     });
     const [loadingChats, setLoadingChats] = useState(() => {
-        try { return !JSON.parse(localStorage.getItem('cached_chats') || '[]').length; }
-        catch { return true; }
+        return !loadChatMetadata(user?.id).length;
     });
     const [showCallModal, setShowCallModal] = useState(false);
     const [callType, setCallType] = useState('video');
     const [incomingCall, setIncomingCall] = useState(null);
     const [callRingState, setCallRingState] = useState({});
     const preparedCallStreamRef = useRef(null);
+    const businessAutomationRef = useRef(null);
     const [replyTo, setReplyTo] = useState(null);
     const [showInfoPanel, setShowInfoPanel] = useState(false);
+    const [contactBusinessInfo, setContactBusinessInfo] = useState(null);
+    const [appLocked, setAppLocked] = useState(() => localStorage.getItem('app_lock_enabled') === '1');
+    const [unlockPin, setUnlockPin] = useState('');
+    const [unlockError, setUnlockError] = useState('');
     const [blockedUsers, setBlockedUsers] = useState([]);
     const [showReels, setShowReels] = useState(() => localStorage.getItem('activeView') === 'reels');
     const [showSocial, setShowSocial] = useState(() => localStorage.getItem('activeView') === 'social');
     const [showAiChat, setShowAiChat] = useState(() => localStorage.getItem('activeView') === 'ai');
     const [showSmartSpace, setShowSmartSpace] = useState(false);
     const [smartSpaceButtonEnabled, setSmartSpaceButtonEnabled] = useState(() => localStorage.getItem('smart_space_button_enabled') === '1');
-    const [pictureCallEnabled, setPictureCallEnabled] = useState(() => localStorage.getItem('picture_call_enabled') === '1');
     const [showPodlive, setShowPodlive] = useState(() => localStorage.getItem('activeView') === 'podlive');
     const [socialDeepLink, setSocialDeepLink] = useState(null); // { type: 'post'|'profile', id }
     const [showSettings, setShowSettings] = useState(() => localStorage.getItem('activeView') === 'settings');
@@ -365,31 +222,28 @@ const Home = () => {
     // Non-Encrypted Ref
     const messagesEndRef = useRef(null);
     const avatarInputRef = useRef(null);
+    const contactDpInputRef = useRef(null);
     const activeChatRef = useRef(activeChat);
     const chatsRef = useRef(chats);
     const showCallModalRef = useRef(showCallModal);
     const messageRefsMap = useRef({});
     const sidebarEmojiPickerRef = useRef(null);
-    const sendScheduledRef = useRef(null);
 
-    const scheduleMessage = (content, sendAt) => {
-        const key = 'cheetchat_scheduled_messages';
-        const scheduled = JSON.parse(localStorage.getItem(key) || '[]');
-        scheduled.push({ id: `${Date.now()}`, chatId: visibleActiveChat.id, content, sendAt });
-        localStorage.setItem(key, JSON.stringify(scheduled));
+    const scheduleMessage = async (content, sendAt) => {
+        const chat = visibleActiveChat;
+        if (!chat || !publicKey) throw new Error('Encryption keys are not ready');
+        const recipientPublicKeys = {};
+        for (const participant of chat.participants) {
+            const participantPublicKey = participant.id === user.id ? publicKey : participant.publicKey;
+            if (!participantPublicKey) throw new Error('A participant encryption key is unavailable');
+            recipientPublicKeys[participant.id] = participantPublicKey;
+        }
+        const encryptedContent = await encryptForRecipients(recipientPublicKeys, content);
+        const clientMessageId = `scheduled_${crypto.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`}`;
+        await axios.post(`/api/chats/${chat.id}/scheduled-messages`, {
+            content: encryptedContent, scheduledFor: sendAt, clientMessageId,
+        }, { headers: { Authorization: `Bearer ${token}` } });
     };
-
-    useEffect(() => {
-        const timer = setInterval(() => {
-            if (!navigator.onLine || !activeChatRef.current) return;
-            const key = 'cheetchat_scheduled_messages';
-            const scheduled = JSON.parse(localStorage.getItem(key) || '[]');
-            const dueHere = scheduled.filter(item => item.chatId === activeChatRef.current.id && new Date(item.sendAt).getTime() <= Date.now());
-            dueHere.forEach(item => sendScheduledRef.current?.(item.content, 'text', null, 0));
-            if (dueHere.length) localStorage.setItem(key, JSON.stringify(scheduled.filter(item => !dueHere.includes(item))));
-        }, 15000);
-        return () => clearInterval(timer);
-    }, []);
 
     useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
     useEffect(() => { chatsRef.current = chats; }, [chats]);
@@ -412,33 +266,43 @@ const Home = () => {
 
     const processQueue = useCallback(async () => {
         if (!navigator.onLine || !socket || !socket.connected || !publicKey) return;
-        await processOfflineQueue(async (msg) => {
+        await processOfflineQueue(user.id, async (msg) => {
             const chat = chatsRef.current.find(c => c.id === msg.chatId);
-            if (!chat) return;
+            if (!chat) throw new Error('Queued chat is no longer available');
 
             const recipientPublicKeys = {};
             for (const participant of chat.participants) {
                 const participantPublicKey = participant.id === user.id
                     ? publicKey
                     : participant.publicKey;
-                if (!participantPublicKey) continue;
+                if (!participantPublicKey) throw new Error('A participant encryption key is unavailable');
                 recipientPublicKeys[participant.id] = participantPublicKey;
             }
 
-            const encryptedContent = await encryptForRecipients(recipientPublicKeys, msg.content);
+            // Legacy queues may contain plaintext from older builds. New writes are
+            // rejected unless already encrypted, so this branch is migration-only.
+            const encryptedContent = isEncryptedPayload(msg.content)
+                ? msg.content
+                : await encryptForRecipients(recipientPublicKeys, msg.content);
 
-            socket.emit('send_message', {
-                chatId: msg.chatId,
-                senderId: user.id,
-                content: encryptedContent,
-                type: msg.type,
-                ttl: msg.disappearingTtl,
-                replyToId: msg.replyTo?.id || null,
-                replyContent: msg.replyTo ? (msg.replyTo.type !== 'text' ? msg.replyTo.type : msg.replyTo.content) : null,
-                replySenderName: msg.replyTo?.senderName || null
+            await emitWithAcknowledgement(socket, 'send_message', {
+                    chatId: msg.chatId,
+                    clientMessageId: msg.tempId,
+                    assetId: msg.assetId || null,
+                    content: encryptedContent,
+                    type: msg.type,
+                    ttl: msg.disappearingTtl,
+                    replyToId: msg.replyTo?.id || null,
+                    replyContent: null,
+                    replySenderName: null
             });
         });
     }, [socket, publicKey, user]);
+
+    useEffect(() => {
+        const timer = window.setInterval(() => processQueue(), 15000);
+        return () => window.clearInterval(timer);
+    }, [processQueue]);
 
     useEffect(() => {
         const handleOnline = () => {
@@ -740,26 +604,14 @@ const Home = () => {
 
     // Persist chats list on changes
     useEffect(() => {
-        if (chats && chats.length > 0) {
+        if (user?.id && chats && chats.length > 0) {
             try {
-                localStorage.setItem('cached_chats', JSON.stringify(chats));
+                saveChatMetadata(user.id, chats);
             } catch (e) {
                 console.error("Failed to cache chats", e);
             }
         }
-    }, [chats]);
-
-    // Persist messages list for active chat on changes
-    useEffect(() => {
-        if (activeChat?.id && messages) {
-            try {
-                const persistentMessages = messages.filter(m => m.id && !m.id.toString().startsWith('temp_'));
-                localStorage.setItem(`cached_messages_${activeChat.id}`, JSON.stringify(persistentMessages));
-            } catch (e) {
-                console.error("Failed to cache messages", e);
-            }
-        }
-    }, [messages, activeChat?.id]);
+    }, [chats, user?.id]);
 
     useEffect(() => {
         if (activeChat) {
@@ -825,18 +677,86 @@ const Home = () => {
         });
 
         socket.on('receive_message', async (newMsg) => {
+            upsertEncryptedMessage(user.id, newMsg.chatId, newMsg);
             const readableMsg = await decryptMessageForCurrentUser(newMsg);
+
+            const automation = businessAutomationRef.current;
+            if (automation?.enabled && readableMsg.senderId !== user.id && readableMsg.type !== 'business_auto_reply') {
+                const chat = chatsRef.current.find(item => item.id === readableMsg.chatId);
+                if (chat?.participants?.length === 2) {
+                    let autoReplyClaimed = false;
+                    try {
+                        const claim = await axios.post('/api/business/automation/claim', { messageId: readableMsg.id }, { headers: { Authorization: `Bearer ${token}` } });
+                        autoReplyClaimed = Boolean(claim.data.claimed);
+                    } catch (error) {
+                        console.error('Could not claim business auto reply', error);
+                    }
+                    if (autoReplyClaimed) {
+                      let autoReply = automation.welcomeMessage || 'Thanks for contacting us. How can we help?';
+                    const incomingText = String(readableMsg.content || '').toLowerCase();
+                    for (const [keyword, reply] of Object.entries(automation.keywordRules || {})) {
+                        if (incomingText.includes(keyword.toLowerCase())) { autoReply = reply; break; }
+                    }
+                    try {
+                        const recipientPublicKeys = {};
+                        for (const participant of chat.participants) {
+                            const key = participant.id === user.id ? publicKey : participant.publicKey;
+                            if (key) recipientPublicKeys[participant.id] = key;
+                        }
+                        if (Object.keys(recipientPublicKeys).length === chat.participants.length) {
+                            const encryptedContent = await encryptForRecipients(recipientPublicKeys, autoReply);
+                            socket.emit('send_message', {
+                                chatId: chat.id, content: encryptedContent,
+                                clientMessageId: `business_auto_${crypto.randomUUID?.() || Date.now()}`,
+                                type: 'business_auto_reply', ttl: 0,
+                            });
+                        }
+                    } catch (error) { console.error('Business chatbot reply failed', error); }
+                    }
+                }
+            }
+
+            if (readableMsg.senderId !== user.id) {
+                if (localStorage.getItem('message_sounds') !== '0') {
+                    const customAudio = localStorage.getItem('custom_notification_audio');
+                    if (customAudio) {
+                        new Audio(customAudio).play().catch(() => {});
+                    } else {
+                        try {
+                            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                            const context = new AudioContextClass();
+                            const oscillator = context.createOscillator();
+                            const gain = context.createGain();
+                            oscillator.frequency.value = 740; gain.gain.value = 0.08;
+                            oscillator.connect(gain); gain.connect(context.destination);
+                            oscillator.start(); oscillator.stop(context.currentTime + 0.12);
+                            oscillator.onended = () => context.close().catch(() => {});
+                        } catch { /* browser blocked audio until user interaction */ }
+                    }
+                }
+                if (localStorage.getItem('desktop_alerts') !== '0' && 'Notification' in window && Notification.permission === 'granted' && document.hidden) {
+                    const chat = chatsRef.current.find(item => item.id === readableMsg.chatId);
+                    new Notification(chat?.name || 'CHEETCHAT', {
+                        body: readableMsg.type === 'text' || readableMsg.type === 'business_auto_reply' ? readableMsg.content : `New ${readableMsg.type || 'message'}`,
+                        icon: '/icons/icon-192.png', tag: `chat-${readableMsg.chatId}`
+                    });
+                }
+            }
 
             if (activeChatRef.current && readableMsg.chatId === activeChatRef.current.id) {
                 setMessages(prev => {
                     // Replace optimistic message from same sender, or skip if already exists
                     if (readableMsg.senderId === user.id) {
-                        const hasOptimistic = prev.some(m => m._isOptimistic && m.senderId === user.id && m.chatId === readableMsg.chatId);
+                        const hasOptimistic = prev.some(m => (
+                            m._isOptimistic && m.senderId === user.id && m.chatId === readableMsg.chatId &&
+                            (!readableMsg.clientMessageId || m.clientMessageId === readableMsg.clientMessageId)
+                        ));
                         if (hasOptimistic) {
                             // Replace the oldest optimistic msg from this user
                             let replaced = false;
                             return prev.map(m => {
-                                if (!replaced && m._isOptimistic && m.senderId === user.id && m.chatId === readableMsg.chatId) {
+                                const matchingClientId = !readableMsg.clientMessageId || m.clientMessageId === readableMsg.clientMessageId;
+                                if (!replaced && matchingClientId && m._isOptimistic && m.senderId === user.id && m.chatId === readableMsg.chatId) {
                                     replaced = true;
                                     return readableMsg;
                                 }
@@ -887,6 +807,7 @@ const Home = () => {
         });
 
         socket.on('message_edited', async ({ id, chatId, content, editedAt }) => {
+            updateEncryptedMessageContent(user.id, chatId, id, content, editedAt);
             if (activeChatRef.current?.id === chatId) {
                 const readableContent = isEncryptedPayload(content) && privateKey && user
                     ? await decryptEnvelope(privateKey, user.id, content)
@@ -896,12 +817,14 @@ const Home = () => {
         });
 
         socket.on('message_deleted', ({ id, chatId, deletedAt }) => {
+            removeEncryptedMessage(user.id, chatId, id);
             if (activeChatRef.current?.id === chatId) {
                 setMessages(prev => prev.map(m => m.id === id ? { ...m, content: '', type: 'deleted', deletedAt } : m));
             }
         });
 
         socket.on('chat_deleted', ({ chatId }) => {
+            clearEncryptedMessageCache(user.id, chatId);
             setChats(prev => prev.filter(c => c.id !== chatId));
             if (activeChatRef.current?.id === chatId) {
                 setActiveChat(null);
@@ -981,6 +904,29 @@ const Home = () => {
             } : prev);
         });
 
+        socket.on('audience_avatar_updated', ({ ownerId, avatar }) => {
+            setChats(prev => prev.map(chat => {
+                if (chat.isGroup || !chat.participants?.some(participant => participant.id === ownerId)) return chat;
+                return {
+                    ...chat,
+                    avatar,
+                    participants: chat.participants.map(participant => participant.id === ownerId
+                        ? { ...participant, avatar }
+                        : participant)
+                };
+            }));
+            setActiveChat(prev => {
+                if (!prev || prev.isGroup || !prev.participants?.some(participant => participant.id === ownerId)) return prev;
+                return {
+                    ...prev,
+                    avatar,
+                    participants: prev.participants.map(participant => participant.id === ownerId
+                        ? { ...participant, avatar }
+                        : participant)
+                };
+            });
+        });
+
 
         socket.on('new_notification', (data) => {
             // Normalize the payload into the same shape as the REST API returns
@@ -1022,6 +968,7 @@ const Home = () => {
             socket.off('peer_ringing');
             socket.off('presence_update');
             socket.off('user_profile_updated');
+            socket.off('audience_avatar_updated');
             socket.off('message_status_update');
             socket.off('message_edited');
             socket.off('message_deleted');
@@ -1030,7 +977,7 @@ const Home = () => {
             socket.off('message_pin_update');
             socket.off('typing_update');
         };
-    }, [socket, user, fetchChats, decryptMessageForCurrentUser, processQueue]);
+    }, [socket, user, publicKey, fetchChats, decryptMessageForCurrentUser, processQueue]);
 
     useEffect(() => {
         if (!activeChat) {
@@ -1038,18 +985,20 @@ const Home = () => {
             return;
         }
 
-        // Load from cache synchronously
-        try {
-            const cached = localStorage.getItem(`cached_messages_${activeChat.id}`);
-            if (cached) {
-                setMessages(JSON.parse(cached));
+        setMessages([]);
+        let cancelled = false;
+
+        const loadCachedMessages = async () => {
+            if (!privateKey || !user?.id) return;
+            const cached = loadEncryptedMessages(user.id, activeChat.id);
+            if (!cached.length) return;
+            const decrypted = await decryptMessagesForCurrentUser(cached);
+            if (!cancelled) {
+                setMessages(decrypted);
                 setTimeout(scrollToBottom, 50);
-            } else {
-                setMessages([]);
             }
-        } catch (e) {
-            console.error("Failed to load cached messages", e);
-        }
+        };
+        loadCachedMessages();
 
         const fetchMessages = async () => {
             if (!privateKey) return;
@@ -1061,9 +1010,7 @@ const Home = () => {
                 const decrypted = await decryptMessagesForCurrentUser(res.data);
                 setMessages(decrypted);
 
-                // Save to cache
-                const persistentMessages = decrypted.filter(m => m.id && !m.id.toString().startsWith('temp_'));
-                localStorage.setItem(`cached_messages_${activeChat.id}`, JSON.stringify(persistentMessages));
+                saveEncryptedMessages(user?.id, activeChat.id, res.data);
                 
                 scrollToBottom();
 
@@ -1074,7 +1021,18 @@ const Home = () => {
             }
         };
         fetchMessages();
-    }, [activeChat?.id, token, socket, privateKey]);
+        return () => { cancelled = true; };
+    }, [activeChat?.id, token, socket, privateKey, user?.id, decryptMessagesForCurrentUser]);
+
+    useEffect(() => {
+        if (!token) return;
+        const refreshAutomation = () => axios.get('/api/business/me', { headers: { Authorization: `Bearer ${token}` } })
+            .then(response => { businessAutomationRef.current = response.data.automation || null; })
+            .catch(() => { businessAutomationRef.current = null; });
+        refreshAutomation();
+        window.addEventListener('cheetchat-business-automation-updated', refreshAutomation);
+        return () => window.removeEventListener('cheetchat-business-automation-updated', refreshAutomation);
+    }, [token]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -1090,7 +1048,7 @@ const Home = () => {
         }
     }, [messages]);
 
-    const handleSendMessage = async (text, type = 'text', replyMsg = null, ttl = 0) => {
+    const handleSendMessage = async (text, type = 'text', replyMsg = null, ttl = 0, assetId = null) => {
         if (!activeChat) return;
 
         // Optimistic UI: show message instantly before encryption/server round trip
@@ -1110,6 +1068,8 @@ const Home = () => {
             reactions: {},
             isPinned: false,
             _isOptimistic: true
+            ,clientMessageId: tempId,
+            assetId
         };
         setMessages(prev => [...prev, optimisticMsg]);
         scrollToBottom();
@@ -1129,48 +1089,60 @@ const Home = () => {
             return [targetChat, ...updatedChats];
         });
 
-        // Offline check
-        if (!navigator.onLine || !socket || !socket.connected) {
-            enqueueOfflineMessage(activeChat.id, text, type, replyMsg, ttl);
-            return;
-        }
-
         if (!privateKey || !publicKey) {
+            setMessages(prev => prev.map(message => message.id === tempId
+                ? { ...message, status: 'failed' }
+                : message));
             alert("Encryption keys are still loading. Please try again in a moment.");
             return;
         }
 
         // Encrypt and send in background
+        let encryptedContent = null;
         try {
             const recipientPublicKeys = {};
             for (const participant of activeChat.participants) {
                 const participantPublicKey = participant.id === user.id
                     ? publicKey
                     : participant.publicKey;
-                if (!participantPublicKey) return;
+                if (!participantPublicKey) throw new Error('A participant encryption key is unavailable');
                 recipientPublicKeys[participant.id] = participantPublicKey;
             }
 
-            const encryptedContent = await encryptForRecipients(recipientPublicKeys, text);
+            encryptedContent = await encryptForRecipients(recipientPublicKeys, text);
 
-            socket.emit('send_message', {
-                chatId: activeChat.id,
-                senderId: user.id,
-                content: encryptedContent,
-                type,
-                ttl,
-                replyToId: replyMsg?.id || null,
-                replyContent: replyMsg ? (replyMsg.type !== 'text' ? replyMsg.type : replyMsg.content) : null,
-                replySenderName: replyMsg?.senderName || null
+            if (!navigator.onLine || !socket || !socket.connected) {
+                enqueueOfflineMessage(user.id, activeChat.id, encryptedContent, type, replyMsg, ttl, tempId, assetId);
+                setMessages(prev => prev.map(message => message.id === tempId
+                    ? { ...message, status: 'queued' }
+                    : message));
+                return;
+            }
+
+            const acknowledgement = await emitWithAcknowledgement(socket, 'send_message', {
+                    chatId: activeChat.id,
+                    clientMessageId: tempId,
+                    assetId,
+                    content: encryptedContent,
+                    type,
+                    ttl,
+                    replyToId: replyMsg?.id || null,
+                    replyContent: null,
+                    replySenderName: null
             });
+            setMessages(prev => prev.map(message => message.id === tempId
+                ? { ...message, id: acknowledgement.messageId, status: 'sent', _isOptimistic: false }
+                : message));
         } catch (err) {
-            // Mark as failed if encryption/send fails
-            setMessages(prev => prev.map(m => m.id === tempId ? { ...m, status: 'failed' } : m));
+            if (err.retryable !== false && encryptedContent) {
+                enqueueOfflineMessage(user.id, activeChat.id, encryptedContent, type, replyMsg, ttl, tempId, assetId);
+            }
+            setMessages(prev => prev.map(m => m.id === tempId ? {
+                ...m, status: err.retryable === false ? 'failed' : 'queued'
+            } : m));
             console.error('Send failed:', err);
         }
     };
-
-    sendScheduledRef.current = handleSendMessage;
 
     const handleUpload = async (file) => {
         if (!token) { logout(); return; }
@@ -1184,12 +1156,18 @@ const Home = () => {
         const category = getFileCategory(file);
         const originalSize = file.size;
         let fileToUpload = file;
+        const sendHd = localStorage.getItem('hd_media') === '1';
+        const dataSaver = localStorage.getItem('data_saver') === '1';
 
         // ── COMPRESSION STEP ──
         try {
-            if (category === 'image') {
+            if (sendHd && (category === 'image' || category === 'video')) {
+                setUploadProgress({ fileName: file.name, stage: 'HD original selected. Uploading…', percent: 5, originalSize, compressedSize: originalSize });
+            } else if (category === 'image') {
                 setUploadProgress({ fileName: file.name, stage: 'Compressing image...', percent: 10, originalSize, compressedSize: null });
-                fileToUpload = await compressImage(file);
+                fileToUpload = await compressImage(file, dataSaver
+                    ? { maxWidth: 960, maxHeight: 960, quality: 0.62 }
+                    : undefined);
                 setUploadProgress(prev => ({
                     ...prev,
                     stage: 'Image compressed! Uploading...',
@@ -1199,6 +1177,7 @@ const Home = () => {
             } else if (category === 'video') {
                 setUploadProgress({ fileName: file.name, stage: 'Compressing video...', percent: 5, originalSize, compressedSize: null });
                 fileToUpload = await compressVideo(file, {
+                    videoBitsPerSecond: dataSaver ? 650000 : 1200000,
                     onProgress: (p) => setUploadProgress(prev => ({
                         ...prev,
                         stage: `Compressing video... ${Math.round(p)}%`,
@@ -1256,7 +1235,7 @@ const Home = () => {
             else if (isVideo) type = file.name.startsWith('video-note-') ? 'video_note' : 'video';
 
             setUploadProgress(null);
-            handleSendMessage(url, type, null, disappearingTtl);
+            handleSendMessage(url, type, null, disappearingTtl, res.data.assetId);
         } catch (err) {
             setUploadProgress(null);
             console.error(err);
@@ -1472,7 +1451,9 @@ const Home = () => {
     };
 
     const handleForwardToChat = async (targetChat) => {
-        if (!forwardMessage || !socket) return;
+        if (!forwardMessage) return;
+        const clientMessageId = `forward_${Date.now()}_${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`;
+        let encryptedContent = null;
         try {
             const recipientPublicKeys = {};
             for (const participant of targetChat.participants) {
@@ -1480,10 +1461,19 @@ const Home = () => {
                 if (!participantPublicKey) return alert(`${participant.username} does not have an encryption key yet.`);
                 recipientPublicKeys[participant.id] = participantPublicKey;
             }
-            const encryptedContent = await encryptForRecipients(recipientPublicKeys, forwardMessage.content);
-            socket.emit('send_message', {
+            encryptedContent = await encryptForRecipients(recipientPublicKeys, forwardMessage.content);
+            if (!navigator.onLine || !socket?.connected) {
+                enqueueOfflineMessage(
+                    user.id, targetChat.id, encryptedContent,
+                    forwardMessage.type || 'text', null, 0, clientMessageId
+                );
+                setForwardMessage(null);
+                alert('Network unavailable. The share is queued and will send when you reconnect.');
+                return;
+            }
+            await emitWithAcknowledgement(socket, 'send_message', {
                 chatId: targetChat.id,
-                senderId: user.id,
+                clientMessageId,
                 content: encryptedContent,
                 type: forwardMessage.type || 'text',
                 ttl: 0,
@@ -1494,13 +1484,49 @@ const Home = () => {
             setForwardMessage(null);
         } catch (err) {
             console.error(err);
-            alert('Could not forward message');
+            if (err.retryable !== false && encryptedContent) {
+                enqueueOfflineMessage(
+                    user.id, targetChat.id, encryptedContent,
+                    forwardMessage.type || 'text', null, 0, clientMessageId
+                );
+                setForwardMessage(null);
+                alert('Network unavailable. The share is queued and will send when you reconnect.');
+            } else {
+                alert(err.message || 'Could not forward message');
+            }
         }
+    };
+
+    const shareReelToChat = (reel) => {
+        const reelUrl = `${window.location.origin}/reels/${reel.id}`;
+        const caption = String(reel.caption || '').trim();
+        setShowReels(false);
+        setForwardMessage({
+            content: `${caption ? `${caption}\n` : ''}${reelUrl}`,
+            type: 'text',
+            _shareSource: 'reel',
+        });
     };
 
     const handleTyping = (isTyping) => {
         if (!socket || !visibleActiveChat) return;
         socket.emit('typing', { chatId: visibleActiveChat.id, isTyping });
+    };
+
+    const openActiveChatInfo = async () => {
+        setShowInfoPanel(true);
+        setContactBusinessInfo(null);
+        if (!visibleActiveChat?.isGroup) {
+            const other = getOtherParticipant(visibleActiveChat);
+            if (other?.id) {
+                try {
+                    const res = await axios.get(`/api/business/${other.id}`, { headers: { Authorization: `Bearer ${token}` } });
+                    setContactBusinessInfo(res.data);
+                } catch (err) {
+                    if (err.response?.status !== 404) console.warn('Business profile unavailable', err);
+                }
+            }
+        }
     };
 
     const acceptCall = async () => {
@@ -1650,6 +1676,41 @@ const Home = () => {
         }
     };
 
+    const handleContactDpChange = async (event, contactId) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file || !contactId) return;
+        if (!file.type.startsWith('image/')) return alert('Please select an image file.');
+        const formData = new FormData();
+        formData.append('avatar', file);
+        try {
+            const res = await axios.post(`/api/user/contact-avatar/${contactId}`, formData, {
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
+            });
+            setChats(prev => prev.map(chat => chat.id === activeChatRef.current?.id
+                ? { ...chat, myAvatarForContact: res.data.avatar, hasCustomAvatarForContact: true }
+                : chat));
+            setActiveChat(prev => prev ? { ...prev, myAvatarForContact: res.data.avatar, hasCustomAvatarForContact: true } : prev);
+        } catch (err) {
+            alert(err.response?.data?.error || 'Could not set contact-specific DP.');
+        }
+    };
+
+    const resetContactDp = async (contactId) => {
+        if (!contactId) return;
+        try {
+            const res = await axios.delete(`/api/user/contact-avatar/${contactId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setChats(prev => prev.map(chat => chat.id === activeChatRef.current?.id
+                ? { ...chat, myAvatarForContact: res.data.avatar || user?.avatar, hasCustomAvatarForContact: false }
+                : chat));
+            setActiveChat(prev => prev ? { ...prev, myAvatarForContact: res.data.avatar || user?.avatar, hasCustomAvatarForContact: false } : prev);
+        } catch (err) {
+            alert(err.response?.data?.error || 'Could not restore default DP.');
+        }
+    };
+
     const getOtherParticipant = (chat) => {
         if (!chat || chat.isGroup) return null;
         return chat.participants.find(participant => participant.id !== user?.id) || null;
@@ -1722,7 +1783,6 @@ const Home = () => {
 
     const featureOverlayOpen = showSearchModal || showNotifications || showSettings || showCallModal || incomingCall;
     const appNavHidden = featureOverlayOpen || Boolean(activeChat);
-    const appNavVisible = !appNavHidden || navPeekOpen;
     const chatBackground = wallpaper === 'dots'
         ? 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.12) 1px, transparent 0), #0b141a'
         : wallpaper === 'emerald'
@@ -1735,50 +1795,22 @@ const Home = () => {
         if (!appNavHidden) setNavPeekOpen(false);
     }, [appNavHidden]);
 
+    const unlockApp = async (event) => {
+        event.preventDefault();
+        const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(unlockPin)))).map(byte => byte.toString(16).padStart(2, '0')).join('');
+        if (hash === localStorage.getItem('app_lock_pin_hash')) {
+            setAppLocked(false); setUnlockPin(''); setUnlockError('');
+        } else {
+            setUnlockError('Incorrect PIN');
+        }
+    };
+
     return (
         <div className="flex h-[100dvh] bg-signal-bg overflow-hidden text-gray-100 font-sans relative">
-            {!isOnline && (
-                <div className="absolute top-0 left-0 right-0 z-[100] bg-amber-600/90 text-white text-xs text-center py-1.5 px-4 font-bold flex items-center justify-center gap-2 animate-fade-in shadow-md">
-                    <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" />
-                    Offline mode. Messages will be queued and sent automatically when connection is restored.
-                </div>
-            )}
-            {editingMessage && (
-                <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4">
-                    <form onSubmit={submitEditMessage} className="w-full max-w-sm rounded-2xl border border-gray-700 bg-[#111b21] p-4 shadow-2xl">
-                        <h3 className="mb-3 text-lg font-bold text-white">Edit message</h3>
-                        <textarea
-                            value={editText}
-                            onChange={e => setEditText(e.target.value)}
-                            className="h-28 w-full resize-none rounded-xl bg-[#202c33] p-3 text-sm text-white outline-none ring-1 ring-white/10 focus:ring-signal-accent"
-                            autoFocus
-                        />
-                        <div className="mt-3 flex justify-end gap-2">
-                            <button type="button" onClick={() => setEditingMessage(null)} className="rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/10">Cancel</button>
-                            <button type="submit" className="rounded-lg bg-signal-accent px-4 py-2 text-sm font-bold text-white">Save</button>
-                        </div>
-                    </form>
-                </div>
-            )}
-
-            {forwardMessage && (
-                <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4">
-                    <div className="w-full max-w-sm rounded-2xl border border-gray-700 bg-[#111b21] p-4 shadow-2xl">
-                        <div className="mb-3 flex items-center justify-between">
-                            <h3 className="text-lg font-bold text-white">Forward to</h3>
-                            <button onClick={() => setForwardMessage(null)} className="text-gray-400 hover:text-white">Close</button>
-                        </div>
-                        <div className="max-h-80 space-y-2 overflow-y-auto">
-                            {chats.filter(c => c.id !== visibleActiveChat?.id).map(chat => (
-                                <button key={chat.id} onClick={() => handleForwardToChat(chat)} className="flex w-full items-center gap-3 rounded-xl p-3 text-left hover:bg-white/10">
-                                    <AvatarZoom src={chat.avatar || null} name={chat.name} size="w-10 h-10" />
-                                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white">{chat.name}</span>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            )}
+            {appLocked && <AppLockOverlay error={unlockError} onPinChange={setUnlockPin} onSubmit={unlockApp} pin={unlockPin} />}
+            {!isOnline && <OfflineBanner />}
+            {editingMessage && <EditMessageModal onCancel={() => setEditingMessage(null)} onChange={setEditText} onSubmit={submitEditMessage} text={editText} />}
+            {forwardMessage && <ForwardMessageModal activeChatId={visibleActiveChat?.id} chats={chats} message={forwardMessage} onClose={() => setForwardMessage(null)} onForward={handleForwardToChat} />}
 
 
             {showSearchModal && (
@@ -1980,8 +2012,8 @@ const Home = () => {
                 : `hidden md:${!appNavHidden ? 'flex' : 'hidden'} md:relative w-[68px] md:w-[78px] xl:w-[236px] flex-col border-r border-gray-800 bg-[#080808] px-2 md:px-3 py-4 md:py-5 shrink-0`
             }>
                 <div className="h-12 px-2 flex items-center">
-                    <span className="hidden xl:block text-xl font-black tracking-tight">CHEETCHAT</span>
-                    <span className="xl:hidden w-9 h-9 rounded-xl bg-signal-accent flex items-center justify-center font-black">C</span>
+                    <img src="/cheetchat-logo.png" alt="CHEETCHAT" className="h-9 w-9 rounded-xl object-cover" />
+                    <span className="ml-2 hidden xl:block text-xl font-black tracking-tight">CHEETCHAT</span>
                 </div>
                 <nav className="mt-7 flex flex-col gap-1">
                     {navItems.map(item => {
@@ -2300,7 +2332,7 @@ const Home = () => {
 
                     {/* Chat Header */}
                     <div className="h-16 bg-signal-bg border-b border-gray-800 flex items-center justify-between px-4">
-                        <div className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer" onClick={() => setShowInfoPanel(true)}>
+                        <div className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer" onClick={openActiveChatInfo}>
                             <button onClick={(e) => { e.stopPropagation(); setActiveChat(null); localStorage.removeItem('activeChatId'); }} className="md:hidden p-2 -ml-2">
                                 <ArrowLeftIcon className="w-6 h-6 text-gray-300" />
                             </button>
@@ -2333,30 +2365,6 @@ const Home = () => {
                                     const lastMessage = messages[messages.length - 1];
                                     return (
                                         <div className="absolute right-0 top-8 z-50 w-52 overflow-hidden rounded-xl bg-[#111b21] shadow-2xl border border-white/10 text-white text-xs">
-                                            {pictureCallEnabled && (
-                                                <button
-                                                    onClick={() => {
-                                                        setShowTopDropdown(false);
-                                                        startCall('picture');
-                                                    }}
-                                                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-violet-300 hover:bg-white/10"
-                                                >
-                                                    <PhotoIcon className="w-4 h-4" />
-                                                    <span>Start Picture Call</span>
-                                                </button>
-                                            )}
-                                            <button
-                                                onClick={() => {
-                                                    const next = !pictureCallEnabled;
-                                                    setPictureCallEnabled(next);
-                                                    localStorage.setItem('picture_call_enabled', next ? '1' : '0');
-                                                    setShowTopDropdown(false);
-                                                }}
-                                                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-gray-200 hover:bg-white/10"
-                                            >
-                                                <PhotoIcon className="w-4 h-4 text-violet-300" />
-                                                <span>{pictureCallEnabled ? 'Disable Picture Call' : 'Enable Picture Call'}</span>
-                                            </button>
                                             <button 
                                                 onClick={() => {
                                                     const newVal = !aiEnabled;
@@ -2540,7 +2548,6 @@ const Home = () => {
                     {showInfoPanel && (() => {
                         if (visibleActiveChat.isGroup) {
                             const isAdmin = visibleActiveChat.groupAdminId === user?.id;
-                            const avatarUrl = visibleActiveChat.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(visibleActiveChat.name)}`;
                             return (
                                 <div className="absolute inset-0 z-40 bg-black/70 flex justify-end" onClick={() => setShowInfoPanel(false)}>
                                     <div className="w-80 bg-[#111b21] h-full flex flex-col shadow-2xl animate-slide-left" onClick={e => e.stopPropagation()}>
@@ -2552,8 +2559,9 @@ const Home = () => {
                                         </div>
                                         
                                         <div className="flex flex-col items-center py-6 gap-2 border-b border-gray-800">
-                                            <img
-                                                src={avatarUrl}
+                                            <UserAvatar
+                                                src={visibleActiveChat.avatar}
+                                                name={visibleActiveChat.name}
                                                 className="w-24 h-24 rounded-full object-cover border-2 border-gray-700 bg-[#202c33]"
                                                 alt=""
                                             />
@@ -2672,8 +2680,9 @@ const Home = () => {
                                         <h2 className="text-white font-bold text-lg">Contact Info</h2>
                                     </div>
                                     <div className="flex flex-col items-center py-6 gap-2 border-b border-gray-800">
-                                        <img
-                                            src={visibleActiveChat.avatar || other?.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=x'}
+                                        <UserAvatar
+                                            src={visibleActiveChat.avatar || other?.avatar}
+                                            name={visibleActiveChat.name || other?.username}
                                             className="w-24 h-24 rounded-full object-cover border-2 border-gray-700"
                                             alt=""
                                         />
@@ -2684,6 +2693,47 @@ const Home = () => {
                                         </p>
                                     </div>
                                     <div className="flex flex-col gap-1 p-3">
+                                        {other && (
+                                            <div className="mb-2 rounded-xl border border-violet-500/20 bg-violet-500/5 p-3">
+                                                <div className="flex items-center gap-3">
+                                                    <img
+                                                        src={visibleActiveChat.myAvatarForContact || user?.avatar}
+                                                        className="h-12 w-12 rounded-full border-2 border-violet-400 object-cover"
+                                                        alt="Your DP for this contact"
+                                                    />
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="text-sm font-semibold text-white">Your DP for {other.username}</p>
+                                                        <p className="text-[11px] text-gray-400">
+                                                            {visibleActiveChat.hasCustomAvatarForContact ? 'Only this contact sees this DP' : 'Using your default profile DP'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="mt-3 flex gap-2">
+                                                    <button onClick={() => contactDpInputRef.current?.click()} className="flex-1 rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-500">
+                                                        {visibleActiveChat.hasCustomAvatarForContact ? 'Change special DP' : 'Set special DP'}
+                                                    </button>
+                                                    {visibleActiveChat.hasCustomAvatarForContact && (
+                                                        <button onClick={() => resetContactDp(other.id)} className="rounded-lg border border-gray-700 px-3 py-2 text-xs font-semibold text-gray-300 hover:bg-white/5">
+                                                            Use default
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <input ref={contactDpInputRef} type="file" accept="image/*" className="hidden" onChange={event => handleContactDpChange(event, other.id)} />
+                                            </div>
+                                        )}
+                                        {contactBusinessInfo?.business && (
+                                            <div className="mb-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+                                                <div className="flex items-center justify-between gap-2"><p className="font-semibold text-white">{contactBusinessInfo.business.businessName}</p><span className="rounded-full bg-emerald-500/15 px-2 py-1 text-[9px] font-bold uppercase text-emerald-300">Business</span></div>
+                                                <p className="mt-1 text-xs text-emerald-300">{contactBusinessInfo.business.category}</p>
+                                                <p className="mt-2 text-xs leading-5 text-gray-400">{contactBusinessInfo.business.description}</p>
+                                                {contactBusinessInfo.business.openingHours && <p className="mt-2 text-[11px] text-gray-400">🕘 {contactBusinessInfo.business.openingHours}</p>}
+                                                {contactBusinessInfo.business.address && <p className="mt-1 text-[11px] text-gray-400">📍 {contactBusinessInfo.business.address}</p>}
+                                                {!!contactBusinessInfo.products?.length && <p className="mt-3 text-[10px] font-bold uppercase tracking-wider text-emerald-400">Catalog ({contactBusinessInfo.products.length})</p>}
+                                                <div className="mt-2 space-y-2">
+                                                    {contactBusinessInfo.products?.map(product => <div key={product.id} className="flex items-center gap-2 rounded-lg bg-black/20 p-2">{product.imageUrl && <img src={product.imageUrl} alt="" className="h-10 w-10 rounded object-cover" />}<div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold text-white">{product.name}</p><p className="text-[11px] text-emerald-300">₹{Number(product.price).toFixed(2)} · {product.inStock ? 'In stock' : 'Out of stock'}</p></div></div>)}
+                                                </div>
+                                            </div>
+                                        )}
                                         <ChatPreferences
                                             wallpaper={wallpaper}
                                             onWallpaperChange={setWallpaper}
@@ -2723,7 +2773,7 @@ const Home = () => {
 
                     {/* Messages Area - WhatsApp style background */}
                     <div
-                        className="flex-1 overflow-y-auto px-4 py-3 space-y-0.5"
+                        className={`flex-1 overflow-y-auto px-4 py-3 space-y-0.5 ${localStorage.getItem('animated_theme') === '1' ? 'animated-chat-wallpaper' : ''}`}
                         style={{ background: chatBackground, backgroundSize: wallpaper === 'dots' ? '18px 18px' : undefined }}
                     >
                         {(() => {
@@ -2758,10 +2808,16 @@ const Home = () => {
                             const prevSenderId = prevMsg?.senderId;
                             const showAvatar = msg.senderId !== user.id && prevSenderId !== msg.senderId;
                             const sender = visibleActiveChat.participants.find(p => p.id === msg.senderId);
+                            const replyTarget = msg.replyToId
+                                ? shownMessages.find(candidate => candidate.id === msg.replyToId)
+                                : null;
+                            const replySender = replyTarget
+                                ? visibleActiveChat.participants.find(participant => participant.id === replyTarget.senderId)
+                                : null;
                             const replyData = (msg.replyToId || msg.replySenderName === 'Status') ? {
-                                content: msg.replyContent,
-                                type: msg.replyType || (msg.replySenderName === 'Status' ? 'status' : 'text'),
-                                senderName: msg.replySenderName
+                                content: replyTarget?.content || msg.replyContent || 'Message',
+                                type: replyTarget?.type || msg.replyType || (msg.replySenderName === 'Status' ? 'status' : 'text'),
+                                senderName: replySender?.username || msg.replySenderName || 'Message'
                             } : null;
 
                             return (
@@ -2787,6 +2843,7 @@ const Home = () => {
                                             chatTranslationLang={chatTranslationLang}
                                             isLastMessage={idx === shownMessages.length - 1}
                                             socket={socket}
+                                            token={token}
                                             currentUserId={user.id}
                                             showTranslateBtn={showTranslateEnabled}
                                         />
@@ -2826,7 +2883,10 @@ const Home = () => {
                         showAiFeature={aiEnabled}
                         showSmartReplies={smartRepliesEnabled}
                         currentUserId={user?.id}
+                        payeeId={getOtherParticipant(visibleActiveChat)?.id}
+                        payeeName={getOtherParticipant(visibleActiveChat)?.username || visibleActiveChat.name}
                         onSchedule={scheduleMessage}
+                        token={token}
                     />
                 </div>
             ) : (
@@ -2841,11 +2901,7 @@ const Home = () => {
                 <Reels
                     active={showReels && !incomingCall && !showCallModal}
                     onBack={() => setShowReels(false)} 
-                    onShareToChat={(reel) => {
-                        setShowReels(false);
-                        // Open a picker or handle direct share logic
-                        alert(`Sharing reel ${reel.id} to chat (Feature coming soon)`);
-                    }}
+                    onShareToChat={shareReelToChat}
                 />
                 </React.Suspense>
             </div>}
@@ -2965,6 +3021,7 @@ const Home = () => {
                     callType={incomingCall.callType}
                     onAccept={acceptCall}
                     onReject={rejectCall}
+                    playSound={localStorage.getItem('call_sounds') !== '0'}
                 />
             )}
 
@@ -3149,81 +3206,14 @@ const Home = () => {
                 </div>
             )}
 
-            {chatToDelete && (() => {
-                const chat = chats.find(c => c.id === chatToDelete);
-                const isAdmin = chat?.isGroup && chat?.groupAdminId === user.id;
-                const canDeleteForEveryone = !chat?.isGroup || isAdmin;
-                return (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setChatToDelete(null)}>
-                        <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#1f2c34] p-6 text-white shadow-2xl animate-scale-up" onClick={e => e.stopPropagation()}>
-                            <h3 className="text-lg font-bold mb-2">Delete chat?</h3>
-                            <p className="text-sm text-gray-400 mb-6">Are you sure you want to delete this chat conversation?</p>
-                            <div className="flex flex-col gap-2">
-                                {canDeleteForEveryone && (
-                                    <button 
-                                        onClick={() => handleDeleteChatConfirm(chatToDelete, 'everyone')}
-                                        className="w-full rounded-xl bg-red-600 hover:bg-red-500 py-3 text-sm font-semibold transition"
-                                    >
-                                        Delete for everyone
-                                    </button>
-                                )}
-                                <button 
-                                    onClick={() => handleDeleteChatConfirm(chatToDelete, 'me')}
-                                    className="w-full rounded-xl bg-white/10 hover:bg-white/15 py-3 text-sm font-semibold transition"
-                                >
-                                    Delete for me
-                                </button>
-                                <button 
-                                    onClick={() => setChatToDelete(null)}
-                                    className="w-full rounded-xl py-3 text-sm font-semibold text-gray-400 hover:text-white transition"
-                                >
-                                    Cancel
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                );
-            })()}
+            <DeleteChatModal
+                chat={chatToDelete ? { ...chats.find(chat => chat.id === chatToDelete), currentUserId: user.id } : null}
+                onClose={() => setChatToDelete(null)}
+                onConfirm={scope => handleDeleteChatConfirm(chatToDelete, scope)}
+            />
 
         </div>
     );
 };
-
-const ChatPreferences = ({ wallpaper, onWallpaperChange, disappearingTtl, onDisappearingChange }) => (
-    <div className="border-b border-gray-800 bg-[#111b21] px-4 py-4">
-        <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-[#00a884]">Chat settings</h4>
-        <label className="mb-4 block">
-            <span className="mb-2 block text-sm font-medium text-white">Disappearing messages</span>
-            <select
-                value={disappearingTtl}
-                onChange={e => onDisappearingChange(e.target.value)}
-                className="w-full rounded-lg border border-gray-700 bg-[#202c33] px-3 py-2 text-sm text-white outline-none focus:border-[#00a884]"
-            >
-                <option value={0}>Off</option>
-                <option value={60}>1 minute</option>
-                <option value={3600}>1 hour</option>
-                <option value={86400}>24 hours</option>
-                <option value={604800}>7 days</option>
-            </select>
-            <span className="mt-1 block text-[11px] leading-4 text-gray-500">New messages will disappear after the selected time.</span>
-        </label>
-        <div>
-            <span className="mb-2 block text-sm font-medium text-white">Chat wallpaper</span>
-            <div className="grid grid-cols-4 gap-2">
-                {[
-                    ['white', 'White', 'bg-white'],
-                    ['gradient', 'Dark', 'bg-[#0b141a]'],
-                    ['dots', 'Dots', 'bg-gray-700'],
-                    ['emerald', 'Green', 'bg-emerald-800'],
-                ].map(([id, label, color]) => (
-                    <button key={id} onClick={() => onWallpaperChange(id)} className={`rounded-lg border p-2 text-center ${wallpaper === id ? 'border-[#00a884]' : 'border-gray-700'}`}>
-                        <span className={`mx-auto mb-1 block h-8 w-full rounded ${color}`} />
-                        <span className="text-[10px] text-gray-300">{label}</span>
-                    </button>
-                ))}
-            </div>
-        </div>
-    </div>
-);
 
 export default Home;

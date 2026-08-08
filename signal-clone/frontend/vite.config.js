@@ -37,6 +37,18 @@ export default defineConfig({
                     ) {
                         return 'core';
                     }
+                    if (
+                        id.includes('node_modules/@heroicons/') ||
+                        id.includes('node_modules/emoji-picker-react/') ||
+                        id.includes('node_modules/framer-motion/') ||
+                        id.includes('node_modules/date-fns/') ||
+                        id.includes('node_modules/react-toastify/')
+                    ) {
+                        return 'ui-vendor';
+                    }
+                    if (id.includes('node_modules/peerjs/')) {
+                        return 'rtc-vendor';
+                    }
                 }
             }
         }

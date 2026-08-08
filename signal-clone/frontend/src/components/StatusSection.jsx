@@ -109,6 +109,7 @@ const StatusSection = ({ user, token, onStatusGroupsChange, mobileFull = false }
                     statusGroups={allGroups}
                     initialGroupIndex={viewerIndex}
                     currentUserId={user?.id}
+                    currentUserPublicKey={user?.publicKey}
                     token={token}
                     onClose={() => setViewerOpen(false)}
                     onDelete={handleDelete}

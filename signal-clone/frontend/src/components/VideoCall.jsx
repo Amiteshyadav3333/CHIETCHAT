@@ -1,92 +1,20 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
+import { AudioPlayer, AvatarPlaceholder, ControlBtn, LocalVideo, RemoteVideo } from './CallMediaPrimitives';
 import { SocketContext } from '../context/SocketContext';
 import { AuthContext } from '../context/AuthContext';
 import {
     VideoCameraIcon, VideoCameraSlashIcon, XMarkIcon,
-    MicrophoneIcon, SpeakerXMarkIcon, ArrowsPointingOutIcon, ArrowPathIcon, ComputerDesktopIcon,
+    MicrophoneIcon, SpeakerXMarkIcon, ArrowsPointingOutIcon, ArrowPathIcon,
     UserPlusIcon, EllipsisVerticalIcon
 } from '@heroicons/react/24/solid';
 import axios from 'axios';
+import UserAvatar from './UserAvatar';
 
 const MAX_PARTICIPANTS = 10;
 
-// ── E2EE: AES-GCM 256-bit via Web Crypto API + Encoded Transforms ──
-// Layer 1 (automatic):  DTLS-SRTP — WebRTC's built-in transport encryption. Keys are
-//   exchanged peer-to-peer via ICE DTLS handshake; the signaling server NEVER sees them.
-// Layer 2 (this code):  AES-GCM application-level encryption on each RTP frame via
-//   Encoded Transforms API (Chrome 86+, Safari 15.4+). Falls back gracefully.
-
-// Encoded transforms are not interoperable when one participant's browser does
-// not support them (a common Chrome ↔ Safari/mobile black-screen cause).
-// DTLS-SRTP remains mandatory and encrypts every WebRTC audio/video stream.
-const E2EE_SUPPORT = false;
-
-const _e2eeKeyCache = {};
-
-const deriveE2EEKey = async (chatId) => {
-    if (_e2eeKeyCache[chatId]) return _e2eeKeyCache[chatId];
-    try {
-        const enc = new TextEncoder();
-        const raw = await window.crypto.subtle.importKey(
-            'raw', enc.encode(`chietchat_e2ee_${chatId}`), { name: 'PBKDF2' }, false, ['deriveKey']
-        );
-        const key = await window.crypto.subtle.deriveKey(
-            { name: 'PBKDF2', salt: enc.encode('chietchat_v2_salt'), iterations: 100000, hash: 'SHA-256' },
-            raw,
-            { name: 'AES-GCM', length: 256 },
-            false,
-            ['encrypt', 'decrypt']
-        );
-        _e2eeKeyCache[chatId] = key;
-        console.log('E2EE: AES-GCM-256 session key derived ✓');
-        return key;
-    } catch (e) {
-        console.warn('E2EE: key derivation failed, DTLS-SRTP still active', e);
-        return null;
-    }
-};
-
-const setupE2EESender = async (sender, key) => {
-    if (!E2EE_SUPPORT || !key) return;
-    try {
-        const { readable, writable } = sender.createEncodedStreams();
-        readable.pipeThrough(new TransformStream({
-            async transform(frame, controller) {
-                try {
-                    const iv = window.crypto.getRandomValues(new Uint8Array(12));
-                    const enc = await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, frame.data);
-                    const out = new Uint8Array(12 + enc.byteLength);
-                    out.set(iv, 0);
-                    out.set(new Uint8Array(enc), 12);
-                    frame.data = out.buffer;
-                } catch { /* pass frame unencrypted on error */ }
-                controller.enqueue(frame);
-            }
-        })).pipeTo(writable);
-        console.log(`E2EE: ${sender.track?.kind} sender AES-GCM encrypted ✓`);
-    } catch (e) { console.warn('E2EE: sender transform failed, DTLS-SRTP active', e); }
-};
-
-const setupE2EEReceiver = async (receiver, key) => {
-    if (!E2EE_SUPPORT || !key) return;
-    try {
-        const { readable, writable } = receiver.createEncodedStreams();
-        readable.pipeThrough(new TransformStream({
-            async transform(frame, controller) {
-                try {
-                    const d = new Uint8Array(frame.data);
-                    if (d.length > 12) {
-                        frame.data = await window.crypto.subtle.decrypt(
-                            { name: 'AES-GCM', iv: d.slice(0, 12) }, key, d.slice(12).buffer
-                        );
-                    }
-                } catch { /* pass frame as-is — handles mixed encrypted/plain peers */ }
-                controller.enqueue(frame);
-            }
-        })).pipeTo(writable);
-        console.log(`E2EE: ${receiver.track?.kind} receiver AES-GCM decrypted ✓`);
-    } catch (e) { console.warn('E2EE: receiver transform failed, DTLS-SRTP active', e); }
-};
+// WebRTC requires DTLS-SRTP for every audio/video stream. CHEETCHAT does not
+// claim identity-verifying media E2EE until authenticated insertable-stream
+// key exchange is implemented across all supported browsers.
 
 // ── SDP Codec Preference Helpers (VP9 > H264 > VP8, Opus with FEC) ──
 const _preferCodec = (sdp, kind, name) => {
@@ -114,15 +42,6 @@ const _addOpusParams = (sdp) => sdp.replace(
 
 const optimizeSDP = (sdp) => _addOpusParams(_preferCodec(_preferCodec(sdp, 'video', 'VP9'), 'audio', 'opus'));
 
-// ── Safety Number (verifies DTLS key fingerprint identity) ──
-const generateSafetyNumber = (userA, userB) => {
-    const rawStr = [userA?.id, userA?.username, userB?.id, userB?.username].sort().join('-');
-    let hash = 0;
-    for (let i = 0; i < rawStr.length; i++) { hash = (hash << 5) - hash + rawStr.charCodeAt(i); hash |= 0; }
-    const absHash = Math.abs(hash).toString().padStart(10, '0');
-    return `${absHash.slice(0, 5)} ${absHash.slice(5, 10)} ${absHash.slice(2, 7)} ${absHash.slice(4, 9)} 10839 94827`;
-};
-
 const VideoCallModal = ({ 
     activeChat, onClose, callType = 'video', initialRingStatus = 'calling',
     token, onTransitionCall, preparedStream = null, onPreparedStreamConsumed
@@ -134,6 +53,27 @@ const VideoCallModal = ({
     const peersRef = useRef({});
     const pendingIceRef = useRef({});
     const streamRef = useRef(null);
+    const iceServersRef = useRef([
+        { urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }
+    ]);
+    const [relayReady, setRelayReady] = useState(false);
+    const [relayError, setRelayError] = useState('');
+
+    useEffect(() => {
+        let cancelled = false;
+        axios.get('/api/calls/ice-config', { headers: { Authorization: `Bearer ${token}` } })
+            .then(({ data }) => {
+                if (cancelled || !Array.isArray(data.iceServers) || !data.iceServers.length) return;
+                iceServersRef.current = data.iceServers;
+                setRelayReady(data.iceServers.some(server => (
+                    Array.isArray(server.urls) ? server.urls : [server.urls]
+                ).some(url => String(url).startsWith('turn'))));
+            })
+            .catch(error => {
+                if (!cancelled) setRelayError(error.response?.data?.error || 'Call relay is unavailable');
+            });
+        return () => { cancelled = true; };
+    }, [token]);
 
     const [isMuted, setIsMuted] = useState(false);
     const [isVideoOff, setIsVideoOff] = useState(callType === 'voice');
@@ -143,9 +83,7 @@ const VideoCallModal = ({
     const [mainView, setMainView] = useState('remote'); // 'remote' | socketId of peer | 'me'
     const [localStream, setLocalStream] = useState(null);
     const [facingMode, setFacingMode] = useState('user');
-    const [isScreenSharing, setIsScreenSharing] = useState(false);
     const [ringStatus, setRingStatus] = useState(initialRingStatus);
-    const [showSafetyModal, setShowSafetyModal] = useState(false);
     const [showAddModal, setShowAddModal] = useState(false);
     const [contacts, setContacts] = useState([]);
     const [loadingContacts, setLoadingContacts] = useState(false);
@@ -164,13 +102,6 @@ const VideoCallModal = ({
     const cancellationDestRef = useRef(null);
     const originalAudioTrackRef = useRef(null);
     const activeAudioTrackRef = useRef(null);
-    const e2eeKeyRef = useRef(null); // AES-GCM session key for this call
-    const pictureSessionRef = useRef(null);
-    const [pictureFaceSize, setPictureFaceSize] = useState('medium');
-    const [pictureFaceCorner, setPictureFaceCorner] = useState('bottom-right');
-    const [showPictureLauncher, setShowPictureLauncher] = useState(callType === 'picture');
-    const pictureFaceSizeRef = useRef('medium');
-    const pictureFaceCornerRef = useRef('bottom-right');
 
     const [isMinimized, setIsMinimized] = useState(false);
 
@@ -219,8 +150,6 @@ const VideoCallModal = ({
 
     useEffect(() => { peersRef.current = peers; }, [peers]);
     useEffect(() => { facingModeRef.current = facingMode; }, [facingMode]);
-    useEffect(() => { pictureFaceSizeRef.current = pictureFaceSize; }, [pictureFaceSize]);
-    useEffect(() => { pictureFaceCornerRef.current = pictureFaceCorner; }, [pictureFaceCorner]);
 
     useEffect(() => {
         if (initialRingStatus) {
@@ -355,10 +284,6 @@ const VideoCallModal = ({
                 activeAudioTrackRef.current = audioTrack;
                 setLocalStream(stream);
 
-                // Derive AES-GCM-256 E2EE session key for this call
-                const e2eeKey = await deriveE2EEKey(activeChat.id);
-                e2eeKeyRef.current = e2eeKey;
-
                 socket.on('user_joined_call', (data) => {
                     if (Object.keys(peersRef.current).length >= MAX_PARTICIPANTS - 1) return;
                     createPeer(data.socketId, data.userId, stream, true);
@@ -395,7 +320,7 @@ const VideoCallModal = ({
                     // Apply VP9 + Opus SDP preferences before setting local description
                     const optimizedAnswer = new RTCSessionDescription({ type: answer.type, sdp: optimizeSDP(answer.sdp) });
                     await pc.setLocalDescription(optimizedAnswer);
-                    socket.emit('answer', { to: data.fromSocket, answer: pc.localDescription, from: user.id, fromSocket: socket.id });
+                    socket.emit('answer', { chatId: activeChat.id, to: data.fromSocket, answer: pc.localDescription, from: user.id, fromSocket: socket.id });
                 });
 
                 socket.on('answer', async (data) => {
@@ -476,15 +401,12 @@ const VideoCallModal = ({
 
         return () => {
             socket.emit('leave_call', { chatId: activeChat?.id, userId: user?.id });
-            Object.values(peersRef.current).forEach(p => p.pc?.close());
+            Object.values(peersRef.current).forEach(p => {
+                clearTimeout(p.pc?._disconnectTimer);
+                p.pc?.close();
+            });
             streamRef.current?.getTracks().forEach(t => t.stop());
             cameraTrackRef.current?.stop();
-            if (pictureSessionRef.current) {
-                cancelAnimationFrame(pictureSessionRef.current.animationFrame);
-                pictureSessionRef.current.displayStream?.getTracks().forEach(t => t.stop());
-                pictureSessionRef.current.audioContext?.close().catch(() => {});
-                pictureSessionRef.current = null;
-            }
             streamRef.current = null;
             setLocalStream(null);
             if (cancellationDestRef.current) {
@@ -642,43 +564,15 @@ const VideoCallModal = ({
         if (peersRef.current[remoteSocketId]) return peersRef.current[remoteSocketId].pc;
 
         const pc = new RTCPeerConnection({
-            // Enable Encoded Transforms only if supported — needed for AES-GCM layer
-            ...(E2EE_SUPPORT ? { encodedInsertableStreams: true } : {}),
             iceTransportPolicy: 'all', // Try all ICE candidates for max global reach
             bundlePolicy: 'max-bundle',
             rtcpMuxPolicy: 'require',
             iceCandidatePoolSize: 10,
-            iceServers: [
-                // Google STUN — global, reliable
-                { urls: 'stun:stun.l.google.com:19302' },
-                // Cloudflare STUN — Asia/global CDN
-                { urls: 'stun:stun.cloudflare.com:3478' },
-                // Open Relay TURN — worldwide TURN server for restrictive NATs & firewalls
-                {
-                    urls: [
-                        'turn:openrelay.metered.ca:80',
-                        'turn:openrelay.metered.ca:443',
-                        'turn:openrelay.metered.ca:443?transport=tcp',
-                        'turns:openrelay.metered.ca:443'
-                    ],
-                    username: 'openrelayproject',
-                    credential: 'openrelayproject'
-                },
-                // Additional free TURN for extra coverage
-                {
-                    urls: [
-                        'turn:relay.metered.ca:80',
-                        'turn:relay.metered.ca:443',
-                        'turns:relay.metered.ca:443'
-                    ],
-                    username: 'e8dd65f422b554671be72eba',
-                    credential: 'gWJTELNy7sMIgIOf'
-                }
-            ]
+            iceServers: iceServersRef.current
         });
 
         pc.onicecandidate = (e) => {
-            if (e.candidate) socket.emit('ice_candidate', { to: remoteSocketId, candidate: e.candidate, fromSocket: socket.id });
+            if (e.candidate) socket.emit('ice_candidate', { chatId: activeChat.id, to: remoteSocketId, candidate: e.candidate, fromSocket: socket.id });
         };
 
         pc.ontrack = (e) => {
@@ -713,30 +607,45 @@ const VideoCallModal = ({
                     }
                 }));
             }
-            // Set up AES-GCM Layer 2 E2EE receiver decrypt transform
-            if (e2eeKeyRef.current) setupE2EEReceiver(e.receiver, e2eeKeyRef.current);
+        };
+
+        const negotiate = async (iceRestart = false) => {
+            if (pc._makingOffer || pc.signalingState !== 'stable' || pc.connectionState === 'closed') return;
+            pc._makingOffer = true;
+            try {
+                const offer = await pc.createOffer(iceRestart ? { iceRestart: true } : undefined);
+                const optimizedOffer = new RTCSessionDescription({ type: offer.type, sdp: optimizeSDP(offer.sdp) });
+                await pc.setLocalDescription(optimizedOffer);
+                socket.emit('offer', {
+                    chatId: activeChat.id, to: remoteSocketId, offer: pc.localDescription,
+                    from: user.id, fromSocket: socket.id, iceRestart
+                });
+            } catch (error) {
+                console.error(iceRestart ? 'ICE renegotiation failed' : 'Call negotiation failed', error);
+            } finally {
+                pc._makingOffer = false;
+            }
         };
 
         pc.onconnectionstatechange = () => {
             console.log("WebRTC Connection State changed to:", pc.connectionState);
             if (pc.connectionState === 'connected') {
+                pc._restartAttempts = 0;
+                clearTimeout(pc._disconnectTimer);
                 // Apply bitrate limits AFTER full SDP negotiation so getParameters() returns encodings
                 setTimeout(() => setMediaBitrates(pc), 1000);
             } else if (pc.connectionState === 'failed') {
-                console.log("Connection failed, attempting ICE restart...");
-                try {
-                    pc.restartIce();
-                } catch (err) {
-                    console.error("ICE restart failed:", err);
+                if ((pc._restartAttempts || 0) < 2) {
+                    pc._restartAttempts = (pc._restartAttempts || 0) + 1;
+                    negotiate(true);
                 }
             } else if (pc.connectionState === 'disconnected') {
-                console.log("Disconnected, attempting ICE restart after 3s...");
-                setTimeout(() => {
+                clearTimeout(pc._disconnectTimer);
+                pc._disconnectTimer = setTimeout(() => {
                     if (pc.connectionState === 'disconnected') {
-                        try {
-                            pc.restartIce();
-                        } catch (err) {
-                            console.error("ICE restart failed on timeout:", err);
+                        if ((pc._restartAttempts || 0) < 2) {
+                            pc._restartAttempts = (pc._restartAttempts || 0) + 1;
+                            negotiate(true);
                         }
                     }
                 }, 3000);
@@ -748,9 +657,7 @@ const VideoCallModal = ({
             if (track.kind === 'audio' && activeAudioTrackRef.current) {
                 trackToSend = activeAudioTrackRef.current;
             }
-            const sender = pc.addTrack(trackToSend, stream);
-            // Set up AES-GCM Layer 2 E2EE sender encrypt transform (on top of DTLS-SRTP)
-            if (e2eeKeyRef.current) setupE2EESender(sender, e2eeKeyRef.current);
+            pc.addTrack(trackToSend, stream);
         });
 
         const remoteParticipant = activeChat.participants.find(p => p.id === remoteUserId);
@@ -773,21 +680,14 @@ const VideoCallModal = ({
         }, 1500);
 
         if (isInitiator) {
-            pc.onnegotiationneeded = async () => {
-                try {
-                    const offer = await pc.createOffer();
-                    // Apply VP9 + Opus SDP preferences before setting local description
-                    const optimizedOffer = new RTCSessionDescription({ type: offer.type, sdp: optimizeSDP(offer.sdp) });
-                    await pc.setLocalDescription(optimizedOffer);
-                    socket.emit('offer', { to: remoteSocketId, offer: pc.localDescription, from: user.id, fromSocket: socket.id });
-                } catch (e) { console.error(e); }
-            };
+            pc.onnegotiationneeded = () => negotiate(false);
         }
 
         return pc;
     };
 
     const removePeer = (socketId) => {
+        clearTimeout(peersRef.current[socketId]?.pc?._disconnectTimer);
         peersRef.current[socketId]?.pc?.close();
         setPeers(prev => { const next = { ...prev }; delete next[socketId]; return next; });
         delete peersRef.current[socketId];
@@ -803,7 +703,7 @@ const VideoCallModal = ({
         if (currentCallType === 'video') return;
         // Notify others about the request
         Object.keys(peersRef.current).forEach(socketId => {
-            socket.emit('request_video_upgrade', { to: socketId, fromSocket: socket.id });
+            socket.emit('request_video_upgrade', { chatId: activeChat.id, to: socketId, fromSocket: socket.id });
         });
         alert('Video upgrade request sent to participants...');
     };
@@ -827,8 +727,7 @@ const VideoCallModal = ({
             streamRef.current.addTrack(videoTrack);
             setLocalStream(new MediaStream(streamRef.current.getTracks()));
             Object.values(peersRef.current).forEach(({ pc }) => {
-                const sender = pc.addTrack(videoTrack, streamRef.current);
-                if (e2eeKeyRef.current) setupE2EESender(sender, e2eeKeyRef.current);
+                pc.addTrack(videoTrack, streamRef.current);
             });
             setCurrentCallType('video');
             setIsVideoOff(false);
@@ -837,7 +736,7 @@ const VideoCallModal = ({
 
     const acceptVideoUpgrade = async () => {
         await actuallySwitchToVideo();
-        socket.emit('video_upgrade_accepted', { to: upgradeRequest.fromSocket, fromSocket: socket.id });
+        socket.emit('video_upgrade_accepted', { chatId: activeChat.id, to: upgradeRequest.fromSocket, fromSocket: socket.id });
         setUpgradeRequest(null);
     };
 
@@ -905,153 +804,6 @@ const VideoCallModal = ({
             alert('Could not switch camera. This device may not have another camera.');
         }
     };
-
-    const stopPictureSharing = () => {
-        const session = pictureSessionRef.current;
-        const cameraTrack = cameraTrackRef.current;
-        if (!session) return;
-
-        cancelAnimationFrame(session.animationFrame);
-        session.displayStream?.getTracks().forEach(track => {
-            track.onended = null;
-            track.stop();
-        });
-        session.composedTrack?.stop();
-        session.mixedAudioTrack?.stop();
-        session.audioContext?.close().catch(() => {});
-
-        Object.values(peersRef.current).forEach(({ pc }) => {
-            pc.getSenders().find(s => s.track?.kind === 'video')?.replaceTrack(cameraTrack || null);
-            pc.getSenders().find(s => s.track?.kind === 'audio')?.replaceTrack(activeAudioTrackRef.current || null);
-        });
-
-        const restoredTracks = [cameraTrack, activeAudioTrackRef.current].filter(Boolean);
-        streamRef.current = new MediaStream(restoredTracks);
-        setLocalStream(new MediaStream(restoredTracks));
-        pictureSessionRef.current = null;
-        setIsScreenSharing(false);
-        Object.keys(peersRef.current).forEach(socketId => socket.emit('screen_share_stopped', { to: socketId, fromSocket: socket.id }));
-    };
-
-    // Picture mode: shares the selected screen with its audio while keeping the
-    // presenter's live face in a configurable picture-in-picture overlay.
-    const picture = async () => {
-        if (isScreenSharing) {
-            stopPictureSharing();
-            return;
-        }
-
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-            if (!window.isSecureContext) {
-                alert("Screen sharing requires a secure connection (HTTPS). Please open the site via HTTPS to enable screen sharing.");
-            } else {
-                alert("Screen sharing is not supported by this browser/device. Please use a desktop browser (like Chrome, Firefox, or Safari) to share your screen.");
-            }
-            return;
-        }
-
-        try {
-            const displayStream = await navigator.mediaDevices.getDisplayMedia({
-                video: { frameRate: { ideal: 20, max: 24 } },
-                audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-                surfaceSwitching: 'include',
-                systemAudio: 'include'
-            });
-            const screenTrack = displayStream.getVideoTracks()[0];
-            const cameraTrack = cameraTrackRef.current;
-            if (!screenTrack) throw new Error('No screen video was selected.');
-
-            const screenVideo = document.createElement('video');
-            const faceVideo = document.createElement('video');
-            screenVideo.srcObject = new MediaStream([screenTrack]);
-            screenVideo.muted = true;
-            faceVideo.srcObject = cameraTrack ? new MediaStream([cameraTrack]) : null;
-            faceVideo.muted = true;
-            await Promise.all([screenVideo.play(), cameraTrack ? faceVideo.play() : Promise.resolve()]);
-
-            const canvas = document.createElement('canvas');
-            canvas.width = 960;
-            canvas.height = 540;
-            const ctx = canvas.getContext('2d');
-            const sizeRatio = { small: 0.18, medium: 0.25, large: 0.34 };
-
-            const drawPicture = () => {
-                const sw = screenVideo.videoWidth || 960;
-                const sh = screenVideo.videoHeight || 540;
-                const scale = Math.min(canvas.width / sw, canvas.height / sh);
-                const dw = sw * scale;
-                const dh = sh * scale;
-                ctx.fillStyle = '#000';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(screenVideo, (canvas.width - dw) / 2, (canvas.height - dh) / 2, dw, dh);
-
-                if (cameraTrack?.readyState === 'live' && faceVideo.readyState >= 2) {
-                    const pipW = canvas.width * sizeRatio[pictureFaceSizeRef.current];
-                    const pipH = pipW * 9 / 16;
-                    const gap = 22;
-                    const corner = pictureFaceCornerRef.current;
-                    const x = corner.includes('right') ? canvas.width - pipW - gap : gap;
-                    const y = corner.includes('bottom') ? canvas.height - pipH - gap : gap;
-                    ctx.save();
-                    ctx.beginPath();
-                    ctx.roundRect(x, y, pipW, pipH, 18);
-                    ctx.clip();
-                    ctx.drawImage(faceVideo, x, y, pipW, pipH);
-                    ctx.restore();
-                    ctx.strokeStyle = '#fff';
-                    ctx.lineWidth = 4;
-                    ctx.strokeRect(x, y, pipW, pipH);
-                }
-                if (pictureSessionRef.current) {
-                    pictureSessionRef.current.animationFrame = requestAnimationFrame(drawPicture);
-                }
-            };
-
-            const composedStream = canvas.captureStream(20);
-            const composedTrack = composedStream.getVideoTracks()[0];
-            let mixedAudioTrack = activeAudioTrackRef.current;
-            let mixContext = null;
-            const audioTracks = [
-                activeAudioTrackRef.current,
-                ...displayStream.getAudioTracks()
-            ].filter(Boolean);
-            if (audioTracks.length > 1) {
-                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-                mixContext = new AudioContextClass();
-                const destination = mixContext.createMediaStreamDestination();
-                audioTracks.forEach(track => {
-                    const source = mixContext.createMediaStreamSource(new MediaStream([track]));
-                    source.connect(destination);
-                });
-                mixedAudioTrack = destination.stream.getAudioTracks()[0];
-            }
-
-            pictureSessionRef.current = {
-                displayStream, composedTrack, mixedAudioTrack,
-                audioContext: mixContext, animationFrame: requestAnimationFrame(drawPicture)
-            };
-
-            Object.values(peersRef.current).forEach(({ pc }) => {
-                pc.getSenders().find(s => s.track?.kind === 'video')?.replaceTrack(composedTrack);
-                if (mixedAudioTrack) {
-                    pc.getSenders().find(s => s.track?.kind === 'audio')?.replaceTrack(mixedAudioTrack);
-                }
-            });
-            streamRef.current = new MediaStream([composedTrack, mixedAudioTrack].filter(Boolean));
-            setLocalStream(new MediaStream(streamRef.current.getTracks()));
-            setCurrentCallType('video');
-            setIsVideoOff(false);
-            setIsScreenSharing(true);
-            setShowPictureLauncher(false);
-            Object.keys(peersRef.current).forEach(socketId => socket.emit('screen_share_started', { to: socketId, fromSocket: socket.id }));
-            screenTrack.onended = stopPictureSharing;
-        } catch (err) {
-            console.error(err);
-            alert("Could not start screen sharing: " + (err.name === 'NotAllowedError' ? 'Permission denied by user or browser.' : err.message || err));
-        }
-    };
-
-    const toggleScreenShare = picture;
 
     const toggleRecording = () => {
         if (isRecording) {
@@ -1170,6 +922,11 @@ const VideoCallModal = ({
                 style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)' }}
                 onClick={() => { setShowControls(true); setShowMoreMenu(false); }}
             >
+                {(relayError || relayReady) && (
+                    <div className={`absolute right-3 top-3 z-20 rounded-full px-3 py-1 text-xs ${relayError ? 'bg-red-600 text-white' : 'bg-emerald-500/80 text-black'}`}>
+                        {relayError || 'Secure relay ready'}
+                    </div>
+                )}
                 {/* Top info */}
                 <div className="flex flex-col items-center pt-16 flex-1 justify-center gap-6">
                     <div className="relative">
@@ -1190,12 +947,9 @@ const VideoCallModal = ({
                                 {firstPeer?.[1]?.stream ? 'Connected' : ringStatus === 'ringing' ? 'Ringing...' : 'Calling...'}
                             </p>
                             <span className="text-white/40 text-sm">•</span>
-                            <button 
-                                onClick={(e) => { e.stopPropagation(); setShowSafetyModal(true); }}
-                                className="flex items-center gap-1 bg-green-500/25 border border-green-500/30 px-2.5 py-0.5 rounded-full text-[11px] text-green-400 font-bold hover:bg-green-500/35 transition"
-                            >
-                                🔒 WebRTC Encrypted
-                            </button>
+                            <span className="flex items-center gap-1 bg-green-500/25 border border-green-500/30 px-2.5 py-0.5 rounded-full text-[11px] text-green-400 font-bold">
+                                🔒 DTLS-SRTP encrypted
+                            </span>
                         </div>
                     </div>
 
@@ -1246,13 +1000,6 @@ const VideoCallModal = ({
                                 >
                                     <UserPlusIcon className="w-5 h-5 text-gray-300" />
                                     <span>Add Participant</span>
-                                </button>
-                                <button
-                                    onClick={() => { toggleScreenShare(); setShowMoreMenu(false); }}
-                                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition text-sm text-left font-medium w-full ${isScreenSharing ? 'text-blue-400 bg-blue-500/10 hover:bg-blue-500/20' : 'text-white hover:bg-white/10'}`}
-                                >
-                                    <ComputerDesktopIcon className="w-5 h-5" />
-                                    <span>{isScreenSharing ? 'Stop Screen Share' : 'Screen Share'}</span>
                                 </button>
                                 <button
                                     onClick={() => { setIsVoiceCancellationOn(prev => !prev); setShowMoreMenu(false); }}
@@ -1329,6 +1076,11 @@ const VideoCallModal = ({
             onPointerCancel={isMinimized ? handlePipPointerUp : undefined}
             onClick={!isMinimized ? () => { setShowControls(v => !v); setShowMoreMenu(false); } : undefined}
         >
+            {(relayError || relayReady) && (
+                <div className={`absolute right-3 top-3 z-20 rounded-full px-3 py-1 text-xs ${relayError ? 'bg-red-600 text-white' : 'bg-emerald-500/80 text-black'}`}>
+                    {relayError || 'Secure relay ready'}
+                </div>
+            )}
             {/* ── MAIN VIDEO (full screen) ── */}
             <div className="absolute inset-0">
                 {mainIsMe ? (
@@ -1430,13 +1182,9 @@ const VideoCallModal = ({
                                 {firstPeer?.[1]?.stream ? 'Connected · 1080p' : ringStatus === 'ringing' ? 'Ringing...' : 'Calling...'}
                             </span>
                             <span className="text-white/40 text-xs">•</span>
-                            <button 
-                                onPointerDown={(e) => e.stopPropagation()}
-                                onClick={(e) => { e.stopPropagation(); setShowSafetyModal(true); }}
-                                className="flex items-center gap-1 bg-green-500/25 border border-green-500/30 px-2 py-0.5 rounded-full text-[10px] text-green-400 font-bold hover:bg-green-500/35 transition"
-                            >
-                                🔒 WebRTC Encrypted
-                            </button>
+                            <span className="flex items-center gap-1 bg-green-500/25 border border-green-500/30 px-2 py-0.5 rounded-full text-[10px] text-green-400 font-bold">
+                                🔒 DTLS-SRTP encrypted
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -1468,72 +1216,6 @@ const VideoCallModal = ({
             </div>
 
             {/* ── BOTTOM CONTROLS ── */}
-            {showPictureLauncher && !isScreenSharing && !isMinimized && (
-                <div
-                    className="absolute inset-x-4 bottom-32 z-30 mx-auto max-w-md rounded-3xl border border-violet-400/25 bg-[#151b27]/95 p-5 text-center text-white shadow-2xl backdrop-blur-xl"
-                    onClick={e => e.stopPropagation()}
-                >
-                    <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/20 text-2xl">▣</div>
-                    <h3 className="text-lg font-black">Picture group call</h3>
-                    <p className="mt-1 text-xs leading-5 text-gray-300">
-                        Share your screen or phone video with its audio and keep your face visible. Up to 10 people can talk and choose any participant to enlarge.
-                    </p>
-                    <div className="mt-4 flex gap-2">
-                        <button
-                            type="button"
-                            onClick={() => setShowPictureLauncher(false)}
-                            className="flex-1 rounded-xl bg-white/10 px-4 py-3 text-sm font-bold hover:bg-white/15"
-                        >
-                            Camera only
-                        </button>
-                        <button
-                            type="button"
-                            onClick={picture}
-                            className="flex-1 rounded-xl bg-violet-500 px-4 py-3 text-sm font-black shadow-lg shadow-violet-500/25 hover:bg-violet-400"
-                        >
-                            Start Picture
-                        </button>
-                    </div>
-                    <p className="mt-2 text-[10px] text-gray-500">Choose “share audio” in the browser picker to send video sound.</p>
-                </div>
-            )}
-            {isScreenSharing && !isMinimized && (
-                <div
-                    className="absolute bottom-32 left-1/2 z-20 -translate-x-1/2 rounded-2xl border border-white/15 bg-[#172229]/95 px-4 py-3 text-white shadow-2xl backdrop-blur-md"
-                    onClick={e => e.stopPropagation()}
-                >
-                    <div className="mb-2 flex items-center justify-between gap-6">
-                        <span className="text-xs font-bold text-emerald-400">Picture mode live · screen + face + voice</span>
-                        <button onClick={picture} className="text-xs font-semibold text-red-300 hover:text-red-200">Stop</button>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                        <span className="text-white/60">Face size</span>
-                        {['small', 'medium', 'large'].map(size => (
-                            <button
-                                key={size}
-                                onClick={() => setPictureFaceSize(size)}
-                                className={`rounded-lg px-2 py-1 capitalize ${pictureFaceSize === size ? 'bg-emerald-500 text-black' : 'bg-white/10 hover:bg-white/20'}`}
-                            >
-                                {size}
-                            </button>
-                        ))}
-                        <span className="ml-2 text-white/60">Position</span>
-                        {[
-                            ['top-left', '↖'], ['top-right', '↗'],
-                            ['bottom-left', '↙'], ['bottom-right', '↘']
-                        ].map(([corner, label]) => (
-                            <button
-                                key={corner}
-                                title={corner}
-                                onClick={() => setPictureFaceCorner(corner)}
-                                className={`rounded-lg px-2 py-1 ${pictureFaceCorner === corner ? 'bg-blue-500' : 'bg-white/10 hover:bg-white/20'}`}
-                            >
-                                {label}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
             {!isMinimized && (
                 <div
                     className={`absolute bottom-0 left-0 right-0 z-10 flex justify-center gap-5 pb-10 pt-6 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
@@ -1575,13 +1257,6 @@ const VideoCallModal = ({
                                 <span>Add Participant</span>
                             </button>
                             <button
-                                onClick={() => { toggleScreenShare(); setShowMoreMenu(false); }}
-                                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition text-sm text-left font-medium w-full ${isScreenSharing ? 'text-blue-400 bg-blue-500/10 hover:bg-blue-500/20' : 'text-white hover:bg-white/10'}`}
-                            >
-                                <ComputerDesktopIcon className="w-5 h-5" />
-                                <span>{isScreenSharing ? 'Stop Picture' : 'Picture: screen + face'}</span>
-                            </button>
-                            <button
                                 onClick={() => { setIsVoiceCancellationOn(prev => !prev); setShowMoreMenu(false); }}
                                 className={`flex items-center gap-3 px-4 py-3 rounded-xl transition text-sm text-left font-medium w-full ${isVoiceCancellationOn ? 'text-green-400 bg-green-500/10 hover:bg-green-500/20' : 'text-white hover:bg-white/10'}`}
                             >
@@ -1621,29 +1296,6 @@ const VideoCallModal = ({
             {/* Audio players for all peers */}
             {peerList.map(([id, p]) => p.stream && <AudioPlayer key={id} stream={p.stream} />)}
 
-            {/* Safety Verification Modal */}
-            {showSafetyModal && (
-                <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-fade-in" onClick={() => setShowSafetyModal(false)}>
-                    <div className="bg-[#1c2431] border border-white/10 p-6 rounded-3xl w-full max-w-sm shadow-2xl text-center" onClick={e => e.stopPropagation()}>
-                        <div className="w-12 h-12 bg-green-500/20 border border-green-500/30 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <span className="text-xl">🔒</span>
-                        </div>
-                        <h3 className="text-white text-lg font-bold mb-2">Safety Number</h3>
-                        <p className="text-gray-400 text-xs mb-4">
-                            Verify that your call with {firstPeer?.[1]?.user?.username || activeChat.name} is end-to-end encrypted. Compare these numbers with their device:
-                        </p>
-                        <div className="bg-black/40 border border-white/5 p-4 rounded-2xl font-mono text-white text-sm tracking-wider break-words mb-6 select-all cursor-pointer" title="Click to copy" onClick={() => { navigator.clipboard.writeText(generateSafetyNumber(user, firstPeer?.[1]?.user || { id: 0, username: activeChat.name })); alert("Safety number copied!"); }}>
-                            {generateSafetyNumber(user, firstPeer?.[1]?.user || { id: 0, username: activeChat.name })}
-                        </div>
-                        <button
-                            onClick={() => setShowSafetyModal(false)}
-                            className="w-full py-3 rounded-xl bg-green-600 hover:bg-green-500 text-white font-semibold shadow-lg shadow-green-600/20 transition"
-                        >
-                            Close & Verify
-                        </button>
-                    </div>
-                </div>
-            )}
 
             {/* Add Participant Modal */}
             {showAddModal && (
@@ -1679,7 +1331,7 @@ const VideoCallModal = ({
                                     return (
                                         <div key={contact.id} className="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 transition">
                                             <div className="flex items-center gap-3">
-                                                <img src={contact.avatar || "https://avatar.iran.liara.run/public"} className="w-10 h-10 rounded-full object-cover border border-white/10" alt="" />
+                                                <UserAvatar src={contact.avatar} name={contact.username} className="w-10 h-10 rounded-full object-cover border border-white/10" alt="" />
                                                 <div className="text-left">
                                                     <p className="text-white text-sm font-semibold">{contact.username}</p>
                                                     <p className="text-gray-400 text-[10px]">{contact.phone}</p>
@@ -1715,89 +1367,5 @@ const VideoCallModal = ({
 
 // ── Helper Components ──
 
-const ControlBtn = ({ onClick, active, activeColor = 'bg-gray-700', children, label }) => (
-    <button
-        onClick={onClick}
-        title={label}
-        className={`w-14 h-14 rounded-full flex items-center justify-center text-white shadow-lg transition-all active:scale-95 ${active ? activeColor : 'bg-gray-700/80 hover:bg-gray-600'}`}
-    >
-        {children}
-    </button>
-);
-
-const AvatarPlaceholder = ({ avatar, name, small }) => (
-    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gray-900">
-        <div className={`${small ? 'w-12 h-12' : 'w-24 h-24'} rounded-full overflow-hidden border-2 border-gray-600`}>
-            {avatar
-                ? <img src={avatar} className="w-full h-full object-cover" alt="" />
-                : <div className="w-full h-full bg-gray-700 flex items-center justify-center text-3xl">👤</div>
-            }
-        </div>
-        {!small && <p className="text-white text-sm font-medium">{name}</p>}
-    </div>
-);
-
-const RemoteVideo = ({ stream, className }) => {
-    const videoRef = useRef();
-    useEffect(() => {
-        const video = videoRef.current;
-        if (!video) return;
-        if (stream) {
-            video.srcObject = stream;
-            const playVideo = () => video.play().catch(err => {
-                // NotAllowedError is expected on some browsers before user interaction
-                if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
-                    console.warn('RemoteVideo play() failed:', err);
-                }
-            });
-            video.onloadedmetadata = playVideo;
-            stream.getVideoTracks().forEach(track => { track.onunmute = playVideo; });
-            playVideo();
-        } else {
-            video.srcObject = null;
-        }
-        return () => {
-            video.onloadedmetadata = null;
-            stream?.getVideoTracks().forEach(track => { track.onunmute = null; });
-        };
-    }, [stream]);
-    return <video ref={videoRef} autoPlay playsInline className={className} />;
-};
-
-const LocalVideo = ({ stream, className, muted = true }) => {
-    const videoRef = useRef();
-    useEffect(() => {
-        const video = videoRef.current;
-        if (!video) return;
-        if (stream) {
-            video.srcObject = stream;
-            video.play().catch(err => {
-                if (err.name !== 'NotAllowedError') {
-                    console.warn('LocalVideo play() failed:', err);
-                }
-            });
-        } else {
-            video.srcObject = null;
-        }
-    }, [stream]);
-    return <video ref={videoRef} muted={muted} autoPlay playsInline className={className} />;
-};
-
-const AudioPlayer = ({ stream }) => {
-    const audioRef = useRef();
-    useEffect(() => {
-        const audio = audioRef.current;
-        if (!audio) return;
-        if (stream) {
-            audio.srcObject = stream;
-            audio.play().catch(err => {
-                if (err.name !== 'NotAllowedError') {
-                    console.warn('AudioPlayer play() failed:', err);
-                }
-            });
-        }
-    }, [stream]);
-    return <audio ref={audioRef} autoPlay />;
-};
 
 export default VideoCallModal;

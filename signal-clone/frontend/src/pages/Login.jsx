@@ -1,9 +1,11 @@
 import React, { useState, useContext } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import { generateKeys } from '../utils/encryption';
-import { EnvelopeIcon, KeyIcon, LockClosedIcon, ShieldCheckIcon, UserPlusIcon } from '@heroicons/react/24/outline';
+import { useNavigate } from '../utils/clientRouter';
+import { generateKeys, generateRecoveryCode, protectPrivateKeyWithPassword, restorePrivateKeyWithPassword } from '../utils/encryption';
+import { EnvelopeIcon, KeyIcon, LockClosedIcon, UserPlusIcon } from '@heroicons/react/24/outline';
+import { getDeviceFingerprint } from '../utils/deviceIdentity';
+import { loadDevicePrivateKey, saveDevicePrivateKey } from '../utils/secureKeyStore';
 
 const Login = () => {
     const [mode, setMode] = useState('login');
@@ -23,6 +25,7 @@ const Login = () => {
     const [attemptsRemaining, setAttemptsRemaining] = useState(null);
     const [passwordLocked, setPasswordLocked] = useState(false);
     const [pendingKeys, setPendingKeys] = useState(null);
+    const [pendingRecoveryCode, setPendingRecoveryCode] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const { login, token } = useContext(AuthContext);
     const navigate = useNavigate();
@@ -45,6 +48,7 @@ const Login = () => {
     const isOtpStep = authStep === 'otp';
 
     const cleanEmail = email.trim().toLowerCase();
+    const deviceFingerprint = getDeviceFingerprint();
 
     const resetFlow = (nextMode) => {
         setMode(nextMode);
@@ -55,20 +59,43 @@ const Login = () => {
         setAttemptsRemaining(null);
         setPasswordLocked(false);
         setPendingKeys(null);
+        setPendingRecoveryCode('');
         setIs2FaStep(false);
         setTwoFactorCode('');
         setTwoFactorUserId(null);
     };
 
-    const finishLogin = (userData, authToken, keysToStore = null, needsProfileSetup = false) => {
+    const finishLogin = async (userData, authToken, keysToStore = null, needsProfileSetup = false, keyBackup = null, recoveryCode = '', csrfToken = null) => {
+        if (csrfToken) sessionStorage.setItem('cheetchat_csrf_token', csrfToken);
         if (keysToStore) {
-            localStorage.setItem(`privKey_${userData.id}`, keysToStore.privateKeyString);
+            await saveDevicePrivateKey(userData.id, keysToStore.privateKeyString);
             localStorage.setItem(`pubKey_${userData.id}`, keysToStore.publicKeyString);
+        } else if (keyBackup && password) {
+            try {
+                const restoredPrivateKey = await restorePrivateKeyWithPassword(keyBackup, password);
+                await saveDevicePrivateKey(userData.id, restoredPrivateKey);
+                if (userData.publicKey) localStorage.setItem(`pubKey_${userData.id}`, userData.publicKey);
+            } catch (error) {
+                console.error('Could not restore encrypted chat key on this device', error);
+            }
+        } else if (password) {
+            const existingPrivateKey = await loadDevicePrivateKey(userData.id);
+            if (existingPrivateKey) {
+                try {
+                    const encryptedPrivateKey = await protectPrivateKeyWithPassword(existingPrivateKey, password);
+                    await axios.post('/api/user/key-backup', { encryptedPrivateKey }, { headers: { Authorization: `Bearer ${authToken}` } });
+                } catch (error) {
+                    console.error('Could not create encrypted multi-device key backup', error);
+                }
+            }
         }
-        if (needsProfileSetup) {
+        if (recoveryCode) {
+            sessionStorage.setItem('recovery_code_once', recoveryCode);
+            sessionStorage.setItem('pending_nav', '/recovery-code');
+        } else if (needsProfileSetup) {
             sessionStorage.setItem('pending_nav', '/setup-profile');
         }
-        login(userData, authToken);
+        login(userData, authToken, csrfToken);
     };
 
     const handlePhoneChange = (e) => {
@@ -109,48 +136,55 @@ const Login = () => {
             if (is2FaStep) {
                 const res = await axios.post('/api/auth/2fa/login-verify', {
                     userId: twoFactorUserId,
-                    token: twoFactorCode
+                    token: twoFactorCode,
+                    deviceFingerprint
                 });
-                finishLogin(res.data.user, res.data.token);
+                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken);
                 return;
             }
 
             if (isLogin && isOtpStep) {
-                const res = await axios.post('/api/login/verify-otp', { email: cleanEmail, otp });
-                finishLogin(res.data.user, res.data.token);
+                const res = await axios.post('/api/login/verify-otp', { email: cleanEmail, otp, deviceFingerprint });
+                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken);
                 return;
             }
 
             if (isLogin) {
-                const res = await axios.post('/api/login', { email: cleanEmail, password });
+                const res = await axios.post('/api/login', { email: cleanEmail, password, deviceFingerprint });
                 if (res.data.twoFactorRequired) {
                     setTwoFactorUserId(res.data.userId);
                     setIs2FaStep(true);
                     setAuthStep('2fa');
-                    setMessage('Please enter your 2-Factor Authentication Code');
+                    setMessage(res.data.message || `Enter the email code sent to ${res.data.maskedEmail || 'your registered email'}`);
                     setSubmitting(false);
                     return;
                 }
-                finishLogin(res.data.user, res.data.token);
+                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken);
                 return;
             }
 
             if (isRegister && isOtpStep) {
-                const res = await axios.post('/api/register/verify-otp', { email: cleanEmail, otp });
-                finishLogin(res.data.user, res.data.token, pendingKeys, res.data.needsProfileSetup || true);
+                const res = await axios.post('/api/register/verify-otp', { email: cleanEmail, otp, deviceFingerprint });
+                await finishLogin(res.data.user, res.data.token, pendingKeys, res.data.needsProfileSetup ?? true, res.data.keyBackup, pendingRecoveryCode, res.data.csrfToken);
                 return;
             }
 
             if (isRegister) {
                 const keys = await generateKeys();
+                const recoveryCode = generateRecoveryCode();
+                const encryptedPrivateKey = await protectPrivateKeyWithPassword(keys.privateKeyString, password);
+                const encryptedRecoveryKey = await protectPrivateKeyWithPassword(keys.privateKeyString, recoveryCode);
                 const res = await axios.post('/api/register', {
                     username: username.trim(),
                     email: cleanEmail,
                     phone: cleanPhone,
                     password,
-                    publicKey: keys.publicKeyString
+                    publicKey: keys.publicKeyString,
+                    encryptedPrivateKey,
+                    encryptedRecoveryKey
                 });
                 setPendingKeys(keys);
+                setPendingRecoveryCode(recoveryCode);
                 setAuthStep('otp');
                 setMessage(res.data.message || 'OTP sent to email');
                 return;
@@ -194,21 +228,17 @@ const Login = () => {
                 <div className="hidden min-h-[640px] border-r border-white/10 bg-[#0d1117] p-8 md:flex md:flex-col md:justify-between">
                     <div>
                         <div className="mb-10 flex items-center gap-3">
-                            <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-signal-accent">
-                                <ShieldCheckIcon className="h-6 w-6 text-white" />
-                            </div>
+                            <img src="/cheetchat-logo.png" alt="CHEETCHAT logo" className="h-11 w-11 rounded-lg object-cover" />
                             <div>
                                 <h1 className="text-2xl font-bold tracking-normal">CHEETCHAT</h1>
-                                <p className="text-sm text-gray-400">Secure Messenger</p>
+                                <p className="text-sm text-gray-400">Super All-in-One Platform</p>
                             </div>
                         </div>
                         <div className="space-y-5">
                             <h2 className="text-4xl font-semibold leading-tight tracking-normal">
                                 Private chats with verified access.
                             </h2>
-                            <p className="text-base leading-7 text-gray-400">
-                                Email OTP verification protects new accounts, and password lockout switches users to OTP after repeated failed attempts.
-                            </p>
+                            <p className="text-base leading-7 text-gray-400">Chat, calls, payments, social and business tools—your work in one app. Designed and developed in India 🇮🇳.</p>
                         </div>
                     </div>
                     <div className="grid grid-cols-2 gap-3 text-sm">
@@ -225,11 +255,9 @@ const Login = () => {
 
                 <div className="p-6 sm:p-8">
                     <div className="mb-7 md:hidden">
-                        <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-lg bg-signal-accent">
-                            <ShieldCheckIcon className="h-6 w-6 text-white" />
-                        </div>
+                        <img src="/cheetchat-logo.png" alt="CHEETCHAT logo" className="mb-3 h-11 w-11 rounded-lg object-cover" />
                         <h1 className="text-3xl font-bold tracking-normal">CHEETCHAT</h1>
-                        <p className="text-sm text-gray-400">Secure Messenger</p>
+                        <p className="text-sm text-gray-400">Super All-in-One Platform · Made in India</p>
                     </div>
 
                     <div className="mb-6 grid grid-cols-2 rounded-lg bg-[#0c0f14] p-1">
@@ -299,7 +327,18 @@ const Login = () => {
                                 required
                             />
                         )}
-                        {!isOtpStep && !isReset && (
+                        {is2FaStep ? (
+                            <input
+                                type="text"
+                                placeholder="Email security code"
+                                value={twoFactorCode}
+                                onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                inputMode="numeric"
+                                maxLength={6}
+                                className="w-full rounded-lg border border-white/10 bg-signal-input px-4 py-3 text-center text-xl font-semibold text-white outline-none transition focus:border-signal-accent focus:ring-2 focus:ring-signal-accent/30"
+                                required
+                            />
+                        ) : !isOtpStep && !isReset && (
                             <div>
                                 <input
                                     type="password"

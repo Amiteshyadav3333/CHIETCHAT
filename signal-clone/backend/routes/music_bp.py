@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 from utils import get_current_user_id, search_itunes_tracks
+from observability import report_safe_exception
 
 music_bp = Blueprint('music_bp', __name__)
 
@@ -21,7 +22,7 @@ def search_music():
     try:
         return jsonify({"tracks": search_itunes_tracks(query, limit)})
     except Exception as e:
-        print(f"Music Search Error: {e}")
+        report_safe_exception('music_search_failed', e)
         return jsonify({
             "tracks": [],
             "warning": "Song search is temporarily unavailable. You can still post your status."

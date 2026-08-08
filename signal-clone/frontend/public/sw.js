@@ -58,3 +58,33 @@ self.addEventListener('fetch', (event) => {
         );
     }
 });
+
+self.addEventListener('push', (event) => {
+    let payload = {};
+    try { payload = event.data?.json() || {}; } catch { payload = { body: event.data?.text() || 'New activity' }; }
+    event.waitUntil(self.registration.showNotification(payload.title || 'CHEETCHAT', {
+        body: payload.body || 'New activity',
+        icon: payload.icon || '/icons/icon-192.png',
+        badge: '/icons/icon-192.png',
+        data: { url: payload.url || '/' },
+        tag: payload.tag || 'cheetchat-activity',
+        renotify: true,
+    }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    const requestedPath = event.notification.data?.url || '/';
+    const safePath = typeof requestedPath === 'string' && requestedPath.startsWith('/') && !requestedPath.startsWith('//') && !requestedPath.includes('\\')
+        ? requestedPath : '/';
+    const target = new URL(safePath, self.location.origin).href;
+    event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
+        for (const client of clients) {
+            if ('focus' in client) {
+                client.navigate(target);
+                return client.focus();
+            }
+        }
+        return self.clients.openWindow ? self.clients.openWindow(target) : undefined;
+    }));
+});

@@ -2,13 +2,17 @@ import React, { useRef, useState } from 'react';
 import { 
     PaperAirplaneIcon, FaceSmileIcon, PaperClipIcon, MicrophoneIcon, 
     StopIcon, XMarkIcon, ChartBarIcon, MapPinIcon, DocumentIcon,
-    MusicalNoteIcon, PhotoIcon, CameraIcon, VideoCameraIcon, UserCircleIcon, PlayIcon
+    MusicalNoteIcon, PhotoIcon, CameraIcon, VideoCameraIcon, UserCircleIcon
 } from '@heroicons/react/24/solid';
 import { ArrowUturnLeftIcon, GiftIcon, ShoppingBagIcon } from '@heroicons/react/24/outline';
 import EmojiPicker from 'emoji-picker-react';
 import RideModal from './RideModal';
 import GiftModal from './GiftModal';
 import BirthdayModal from './BirthdayModal';
+import ShoppingSearchModal from './ShoppingSearchModal';
+import PollCreatorModal from './PollCreatorModal';
+import ScheduleMessageModal from './ScheduleMessageModal';
+import VerifiedPaymentComposer from './VerifiedPaymentComposer';
 
 const LANGUAGES = [
     { code: 'hi', name: 'Hindi (हिंदी)' },
@@ -51,34 +55,10 @@ const GlobeIcon = ({ className }) => (
 );
 
 const STICKERS = [
-    'https://api.dicebear.com/7.x/fun-emoji/svg?seed=sticker1',
-    'https://api.dicebear.com/7.x/fun-emoji/svg?seed=sticker2',
-    'https://api.dicebear.com/7.x/fun-emoji/svg?seed=sticker3',
-    'https://api.dicebear.com/7.x/fun-emoji/svg?seed=sticker4',
-    'https://api.dicebear.com/7.x/fun-emoji/svg?seed=sticker5',
-    'https://api.dicebear.com/7.x/fun-emoji/svg?seed=sticker6',
-    'https://api.dicebear.com/7.x/fun-emoji/svg?seed=sticker7',
-    'https://api.dicebear.com/7.x/fun-emoji/svg?seed=sticker8',
-    'https://api.dicebear.com/7.x/adventurer/svg?seed=sticker9',
-    'https://api.dicebear.com/7.x/adventurer/svg?seed=sticker10',
-    'https://api.dicebear.com/7.x/adventurer/svg?seed=sticker11',
-    'https://api.dicebear.com/7.x/adventurer/svg?seed=sticker12',
-    'https://api.dicebear.com/7.x/adventurer/svg?seed=sticker13',
-    'https://api.dicebear.com/7.x/adventurer/svg?seed=sticker14',
-    'https://api.dicebear.com/7.x/lorelei/svg?seed=sticker15',
-    'https://api.dicebear.com/7.x/lorelei/svg?seed=sticker16',
-    'https://api.dicebear.com/7.x/lorelei/svg?seed=sticker17',
-    'https://api.dicebear.com/7.x/lorelei/svg?seed=sticker18',
-    'https://api.dicebear.com/7.x/lorelei/svg?seed=sticker19',
-    'https://api.dicebear.com/7.x/lorelei/svg?seed=sticker20',
-    'https://api.dicebear.com/7.x/pixel-art/svg?seed=sticker21',
-    'https://api.dicebear.com/7.x/pixel-art/svg?seed=sticker22',
-    'https://api.dicebear.com/7.x/pixel-art/svg?seed=sticker23',
-    'https://api.dicebear.com/7.x/pixel-art/svg?seed=sticker24',
-    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker25',
-    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker26',
-    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker27',
-    'https://api.dicebear.com/7.x/bottts/svg?seed=sticker28'
+    '😀', '😂', '🥰', '😍', '😎', '🥳', '🤩',
+    '🤗', '🤔', '😴', '😭', '😡', '🤯', '😇',
+    '👍', '👏', '🙏', '💪', '❤️', '💯', '🔥',
+    '🎉', '🎂', '🎁', '✨', '🌟', '🫶', '🚀',
 ];
 const apiUrl = import.meta.env.VITE_API_URL || '';
 const cleanBaseUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
@@ -92,8 +72,8 @@ const MessageInput = ({
     lastMessageText = "",
     showAiFeature = false,
     showSmartReplies = false,
-    currentUserId,
-    onSchedule
+    currentUserId, payeeId, payeeName,
+    onSchedule, token
 }) => {
     const [text, setText] = useState('');
     const [showEmoji, setShowEmoji] = useState(false);
@@ -107,12 +87,10 @@ const MessageInput = ({
     const [isVideoNoteRecording, setIsVideoNoteRecording] = useState(false);
     const [videoNoteSeconds, setVideoNoteSeconds] = useState(0);
     const [showPollCreator, setShowPollCreator] = useState(false);
-    const [pollData, setPollData] = useState({ question: '', options: ['', ''] });
     const [smartReplies, setSmartReplies] = useState([]);
     const [showScheduleModal, setShowScheduleModal] = useState(false);
-    const [scheduleAt, setScheduleAt] = useState('');
     const [showShoppingModal, setShowShoppingModal] = useState(false);
-    const [shoppingQuery, setShoppingQuery] = useState('');
+    const [showPaymentComposer, setShowPaymentComposer] = useState(false);
 
     const [showCameraModal, setShowCameraModal] = useState(false);
     const [cameraFacing, setCameraFacing] = useState('user');
@@ -224,7 +202,6 @@ const MessageInput = ({
     const cameraInputRef = useRef(null);
     const documentInputRef = useRef(null);
     const audioInputRef = useRef(null);
-    const gifInputRef = useRef(null);
     const typingTimerRef = useRef(null);
 
     const attachMenuRef = useRef(null);
@@ -352,6 +329,10 @@ const MessageInput = ({
         e.preventDefault();
         const trimmed = text.trim();
         if (!trimmed) return;
+        if (localStorage.getItem('spam_detection') !== '0') {
+            const suspicious = /(bit\.ly|tinyurl\.com|t\.me\/|free\s*(gift|money)|share\s*(your\s*)?(otp|pin|password)|urgent\s*payment)/i.test(trimmed);
+            if (suspicious && !window.confirm('CHEETCHAT safety: This message may contain a risky link or request for sensitive information. Send anyway?')) return;
+        }
 
         let finalWord = trimmed;
         if (showTranslator && onTranslate) {
@@ -397,28 +378,9 @@ const MessageInput = ({
         setShowAttachMenu(false);
     };
 
-    const handleShareLocation = () => {
-        if (!navigator.geolocation) {
-            alert("Geolocation is not supported by your browser");
-            return;
-        }
-        navigator.geolocation.getCurrentPosition((position) => {
-            const { latitude, longitude } = position.coords;
-            onSend(JSON.stringify({ lat: latitude, lng: longitude }), 'location', disappearingTtl);
-            setShowAttachMenu(false);
-        }, () => {
-            alert("Unable to retrieve your location");
-        });
-    };
-
-    const handleCreatePoll = () => {
-        if (!pollData.question.trim() || pollData.options.some(opt => !opt.trim())) {
-            alert("Please fill in the question and all options");
-            return;
-        }
-        onSend(JSON.stringify(pollData), 'poll', disappearingTtl);
+    const handleCreatePoll = poll => {
+        onSend(JSON.stringify(poll), 'poll', disappearingTtl);
         setShowPollCreator(false);
-        setPollData({ question: '', options: ['', ''] });
         setShowAttachMenu(false);
     };
 
@@ -477,28 +439,6 @@ const MessageInput = ({
         }
         setShowGameCreator(false);
         setShowAttachMenu(false);
-    };
-
-    const sendUPIPayment = () => {
-        const amount = prompt("Enter amount to transfer (₹):");
-        if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
-            if (amount) alert("Please enter a valid transfer amount.");
-            return;
-        }
-        const remarks = prompt("Enter remarks (optional):") || "";
-        const payload = {
-            amount: parseFloat(amount),
-            remarks,
-            status: 'Completed',
-            transactionId: 'TXN' + Math.floor(Math.random() * 100000000000)
-        };
-        onSend(JSON.stringify(payload), 'payment', disappearingTtl);
-        setShowAttachMenu(false);
-    };
-
-    const sendSticker = (sticker) => {
-        onSend(sticker, 'sticker', disappearingTtl);
-        setShowEmoji(false);
     };
 
     const startRecording = async () => {
@@ -650,104 +590,11 @@ const MessageInput = ({
             )}
 
             {/* Poll Creator Modal */}
-            {showPollCreator && (
-                <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
-                    <div className="bg-[#2a3942] w-full max-w-sm rounded-2xl p-6 shadow-2xl border border-gray-700">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-white font-bold text-lg">Create Poll</h3>
-                            <button onClick={() => setShowPollCreator(false)}><XMarkIcon className="w-6 h-6 text-gray-400" /></button>
-                        </div>
-                        <div className="space-y-4">
-                            <input 
-                                placeholder="Question" 
-                                value={pollData.question}
-                                onChange={e => setPollData({...pollData, question: e.target.value})}
-                                className="w-full bg-[#111b21] text-white p-3 rounded-lg outline-none border border-gray-700 focus:border-signal-accent"
-                            />
-                            {pollData.options.map((opt, i) => (
-                                <input 
-                                    key={i}
-                                    placeholder={`Option ${i+1}`}
-                                    value={opt}
-                                    onChange={e => {
-                                        const newOpts = [...pollData.options];
-                                        newOpts[i] = e.target.value;
-                                        setPollData({...pollData, options: newOpts});
-                                    }}
-                                    className="w-full bg-[#111b21] text-white p-3 rounded-lg outline-none border border-gray-700"
-                                />
-                            ))}
-                            {pollData.options.length < 5 && (
-                                <button 
-                                    onClick={() => setPollData({...pollData, options: [...pollData.options, '']})}
-                                    className="text-signal-accent text-sm font-bold"
-                                >
-                                    + Add Option
-                                </button>
-                            )}
-                            <button 
-                                onClick={handleCreatePoll}
-                                className="w-full bg-signal-accent text-white py-3 rounded-xl font-bold mt-2"
-                            >
-                                Send Poll
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {showPollCreator && <PollCreatorModal onClose={() => setShowPollCreator(false)} onSubmit={handleCreatePoll} />}
 
-            {showScheduleModal && (
-                <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4">
-                    <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#202c33] p-5 text-white shadow-2xl">
-                        <div className="mb-4 flex items-center justify-between">
-                            <h3 className="font-bold">Schedule message</h3>
-                            <button onClick={() => setShowScheduleModal(false)}><XMarkIcon className="h-5 w-5" /></button>
-                        </div>
-                        <p className="mb-3 rounded-xl bg-[#111b21] p-3 text-sm text-gray-200">{text || 'Type a message first'}</p>
-                        <input type="datetime-local" value={scheduleAt} min={new Date(Date.now() + 60000).toISOString().slice(0, 16)} onChange={e => setScheduleAt(e.target.value)} className="w-full rounded-xl border border-white/10 bg-[#111b21] p-3 text-sm outline-none focus:border-[#00a884]" />
-                        <button disabled={!text.trim() || !scheduleAt} onClick={() => {
-                            onSchedule?.(text.trim(), new Date(scheduleAt).toISOString());
-                            setText(''); setScheduleAt(''); setShowScheduleModal(false);
-                        }} className="mt-4 w-full rounded-xl bg-[#00a884] py-3 text-sm font-bold disabled:opacity-40">Schedule</button>
-                    </div>
-                </div>
-            )}
+            {showScheduleModal && <ScheduleMessageModal chatId={chatId} message={text} onClose={() => setShowScheduleModal(false)} onSchedule={onSchedule} onScheduled={() => { setText(''); setShowScheduleModal(false); }} token={token} />}
 
-            {showShoppingModal && (
-                <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4">
-                    <div className="w-full max-w-sm overflow-hidden rounded-3xl border border-white/10 bg-[#131921] text-white shadow-2xl">
-                        <div className="flex items-center justify-between bg-[#232f3e] px-5 py-4">
-                            <div><h3 className="text-lg font-bold">Shopping</h3><p className="text-xs text-gray-300">Search products on Amazon India</p></div>
-                            <button onClick={() => setShowShoppingModal(false)} className="rounded-full p-2 hover:bg-white/10"><XMarkIcon className="h-5 w-5" /></button>
-                        </div>
-                        <div className="p-5">
-                            <form onSubmit={e => {
-                                e.preventDefault();
-                                if (!shoppingQuery.trim()) return;
-                                window.open(`https://www.amazon.in/s?k=${encodeURIComponent(shoppingQuery.trim())}`, '_blank', 'noopener,noreferrer');
-                            }} className="flex gap-2">
-                                <input autoFocus value={shoppingQuery} onChange={e => setShoppingQuery(e.target.value)} placeholder="Search mobiles, fashion, books…" className="min-w-0 flex-1 rounded-xl bg-white px-4 py-3 text-sm text-black outline-none" />
-                                <button className="rounded-xl bg-[#ff9900] px-4 text-sm font-bold text-black">Search</button>
-                            </form>
-                            <p className="mb-3 mt-5 text-xs font-bold uppercase tracking-wider text-gray-400">Popular categories</p>
-                            <div className="grid grid-cols-2 gap-2">
-                                {[
-                                    ['📱', 'Mobiles'], ['👕', 'Fashion'], ['💻', 'Electronics'],
-                                    ['🏠', 'Home'], ['📚', 'Books'], ['🎮', 'Gaming']
-                                ].map(([icon, label]) => (
-                                    <button key={label} onClick={() => window.open(`https://www.amazon.in/s?k=${encodeURIComponent(label)}`, '_blank', 'noopener,noreferrer')} className="flex items-center gap-2 rounded-xl bg-white/5 p-3 text-left text-sm font-semibold hover:bg-white/10">
-                                        <span className="text-xl">{icon}</span>{label}
-                                    </button>
-                                ))}
-                            </div>
-                            <button onClick={() => window.open('https://www.amazon.in/', '_blank', 'noopener,noreferrer')} className="mt-4 w-full rounded-xl border border-[#ff9900]/50 py-3 text-sm font-bold text-[#ffb84d] hover:bg-[#ff9900]/10">
-                                Open Amazon India ↗
-                            </button>
-                            <p className="mt-3 text-center text-[10px] text-gray-500">Amazon opens in a new tab. CHEETCHAT does not process purchases.</p>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {showShoppingModal && <ShoppingSearchModal onClose={() => setShowShoppingModal(false)} />}
 
             {/* Reply Preview Bar */}
             {replyTo && (
@@ -897,19 +744,19 @@ const MessageInput = ({
 
                         {pickerTab === 'sticker' && (
                             <div className="flex flex-col h-full gap-2 font-sans text-xs overflow-y-auto pt-1">
-                                <p className="px-1 text-[11px] font-bold uppercase tracking-wider text-gray-400">Dicebear Stickers</p>
+                                <p className="px-1 text-[11px] font-bold uppercase tracking-wider text-gray-400">Offline Stickers</p>
                                 <div className="grid grid-cols-4 gap-2 scrollbar-thin">
-                                    {STICKERS.map((url, i) => (
+                                    {STICKERS.map((sticker, i) => (
                                         <button
                                             key={i}
                                             type="button"
                                             onClick={() => {
-                                                onSend(url, 'sticker', disappearingTtl);
+                                                onSend(sticker, 'sticker', disappearingTtl);
                                                 setShowEmoji(false);
                                             }}
                                             className="rounded-xl bg-white/5 p-2 hover:bg-white/10 transition-colors flex items-center justify-center"
                                         >
-                                            <img src={url} alt={`sticker-${i}`} className="w-12 h-12 object-contain" />
+                                            <span role="img" aria-label={`sticker-${i + 1}`} className="text-4xl leading-none">{sticker}</span>
                                         </button>
                                     ))}
                                 </div>
@@ -989,7 +836,7 @@ const MessageInput = ({
                             label="UPI Pay"
                             color="bg-emerald-600"
                             icon={<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-white"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5h16.5m-18 0A1.5 1.5 0 0 1 3.5 3h17a1.5 1.5 0 0 1 1.5 1.5m-18.5 0v11.25A2.25 2.25 0 0 0 3.75 18h15A2.25 2.25 0 0 0 21 15.75V4.5m-18.5 0v11.25" /></svg>}
-                            onClick={sendUPIPayment}
+                            onClick={() => { setShowAttachMenu(false); setShowPaymentComposer(true); }}
                         />
                         <AttachOption
                             label="Ride 🚕"
@@ -1326,6 +1173,15 @@ const MessageInput = ({
                     </div>
                 </div>
             )}
+
+            <VerifiedPaymentComposer
+                open={showPaymentComposer}
+                onClose={() => setShowPaymentComposer(false)}
+                chatId={chatId}
+                payeeId={payeeId}
+                payeeName={payeeName}
+                onVerified={payment => onSend(JSON.stringify(payment), 'payment', disappearingTtl)}
+            />
 
             {/* Modals for new premium features */}
             {showRideModal && (

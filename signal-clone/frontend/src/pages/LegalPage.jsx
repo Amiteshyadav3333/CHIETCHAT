@@ -4,7 +4,7 @@ import { ArrowLeftIcon, LockClosedIcon, ShieldCheckIcon } from '@heroicons/react
 const LEGAL_CONTENT = {
     terms: {
         title: 'Terms and Conditions',
-        updated: 'Effective June 6, 2026',
+        updated: 'Effective August 2, 2026',
         intro: 'These terms explain the basic rules for using CHEETCHAT. By creating an account or using the app, you agree to use it responsibly and lawfully.',
         sections: [
             ['Using CHEETCHAT', 'You must use CHEETCHAT lawfully, respect other users, and keep your account credentials secure. You are responsible for activity performed through your account.'],
@@ -17,7 +17,8 @@ const LEGAL_CONTENT = {
     },
     privacy: {
         title: 'Privacy Policy',
-        updated: 'Effective June 6, 2026',
+        updated: 'Effective August 2, 2026',
+        officialUrl: 'https://doc-hosting.flycricket.io/cheetchat-privacy-policy/53f40057-113d-4651-abb0-effd50ea1a20/privacy',
         intro: 'CHEETCHAT is a chat, calling, status, reels, and social sharing app. This policy explains what data the app collects, why it is used, how it is protected, and how you can control or delete it.',
         sections: [
             ['Information we collect', 'We collect account information such as username, email address, phone number, password hash, public encryption key, profile photo, bio, website, verification status, and account settings. We also collect contacts or users you add inside CHEETCHAT, blocked users, group and channel membership, and support or safety reports you submit.'],
@@ -31,6 +32,7 @@ const LEGAL_CONTENT = {
             ['Your controls and deletion', 'You can edit your profile, block or report users, hide last seen, manage chat preferences, control device permissions, delete chats or content where supported, and permanently delete your account from Settings > Account > Delete account. Account deletion removes your profile, messages, contacts, posts, reels, statuses, account relationships, and related app data from active systems, except limited information retained for legal, safety, fraud-prevention, or backup purposes.'],
             ['Children', 'CHEETCHAT is not directed to children under 13. If you believe a child has provided personal information, contact us so we can review and delete it where required.'],
             ['International processing', 'Your information may be processed and stored in countries where our servers or service providers operate. We take steps designed to protect your information according to this policy.'],
+            ['India and data residency', 'CHEETCHAT is designed and developed in India. We use India-region infrastructure for primary application data when enabled by the deployed database and storage provider. Some essential providers, backups, media delivery, email, or security services may process data outside India; their processing remains subject to contractual and security safeguards.'],
             ['Changes to this policy', 'We may update this policy when the app, legal requirements, or our practices change. The effective date above shows when this policy was last updated.'],
             ['Contact us', 'For privacy questions or data deletion help, contact the CHEETCHAT support team using the developer contact email shown on the Google Play Store listing.'],
         ],
@@ -58,6 +60,11 @@ const LegalPage = ({ type }) => {
                         <LockClosedIcon className="h-5 w-5 shrink-0 text-[#008069]" />
                         <p>{content.intro}</p>
                     </div>
+                    {content.officialUrl && (
+                        <a href={content.officialUrl} target="_blank" rel="noopener noreferrer" className="block rounded-lg border border-[#008069]/20 bg-[#f1fbf8] px-4 py-3 text-sm font-semibold text-[#008069] hover:bg-[#e4f7f1]">
+                            Open published CHEETCHAT Privacy Policy ↗
+                        </a>
+                    )}
                     {content.sections.map(([title, text]) => (
                         <section key={title}>
                             <h2 className="mb-2 text-base font-semibold text-[#008069]">{title}</h2>

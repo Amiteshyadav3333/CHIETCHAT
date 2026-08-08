@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { XMarkIcon, ChevronLeftIcon, ChevronRightIcon, MusicalNoteIcon, EyeIcon, TrashIcon, PaperAirplaneIcon } from '@heroicons/react/24/solid';
 import { EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
+import { encryptForRecipients } from '../utils/encryption';
 
-const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, token, onClose, onDelete }) => {
+const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, currentUserPublicKey, token, onClose, onDelete }) => {
     const [groupIndex, setGroupIndex] = useState(initialGroupIndex);
     const [statusIndex, setStatusIndex] = useState(0);
     const [progress, setProgress] = useState(0);
@@ -161,7 +162,16 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, toke
         setReplySending(true);
         setReplyNotice('');
         try {
-            await axios.post(`/api/status/${currentStatus.id}/reply`, { message }, {
+            const recipientPublicKey = currentGroup.user?.publicKey;
+            if (!currentUserPublicKey || !recipientPublicKey) throw new Error('Encryption keys are not ready');
+            const encryptedContent = await encryptForRecipients({
+                [currentUserId]: currentUserPublicKey,
+                [currentGroup.user.id]: recipientPublicKey,
+            }, `Replied to status:\n${message}`);
+            await axios.post(`/api/status/${currentStatus.id}/reply`, {
+                content: encryptedContent,
+                clientMessageId: `status_reply_${crypto.randomUUID?.() || Date.now()}`,
+            }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setReplyText('');
@@ -169,7 +179,7 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, toke
             setViewerPaused(false);
             setTimeout(() => setReplyNotice(''), 1800);
         } catch (err) {
-            setReplyNotice(err.response?.data?.error || 'Could not send reply');
+            setReplyNotice(err.response?.data?.error || err.message || 'Could not send reply');
         } finally {
             setReplySending(false);
         }

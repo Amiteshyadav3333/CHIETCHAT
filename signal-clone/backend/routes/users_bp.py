@@ -1,13 +1,74 @@
 from flask import Blueprint, jsonify, request
 from werkzeug.utils import secure_filename
-from models import db, User, Block, Follow
+from models import db, User, Block, Follow, ProfileAudienceAvatar
+from extensions import socketio
 from utils import (
     get_current_user_id, get_contact_user_ids, serialize_user, get_json_data,
     normalize_phone, is_valid_phone, add_contact, upload_to_cloudinary,
-    emit_to_user_chat_contacts, has_contact, create_notification, iso_utc, utc_now
+    emit_to_user_chat_contacts, has_contact, create_notification, iso_utc, utc_now,
+    queue_media_deletion, process_media_deletion_task
 )
 
 users_bp = Blueprint('users_bp', __name__)
+
+ALLOWED_AVATAR_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
+
+@users_bp.route('/api/user/contact-avatar/<int:viewer_id>', methods=['POST'])
+def set_contact_specific_avatar(viewer_id):
+    """Set the current user's DP that only viewer_id will receive."""
+    owner_id = get_current_user_id()
+    if not owner_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    if viewer_id == owner_id or not has_contact(owner_id, viewer_id):
+        return jsonify({"error": "Choose one of your contacts"}), 403
+    file = request.files.get('avatar')
+    if not file or not file.filename:
+        return jsonify({"error": "No avatar selected"}), 400
+    filename = secure_filename(file.filename)
+    extension = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    if extension not in ALLOWED_AVATAR_EXTENSIONS:
+        return jsonify({"error": "Please upload a JPG, PNG, GIF, or WebP image"}), 400
+    try:
+        url = upload_to_cloudinary(file, folder='chietchat/contact-avatars', resource_type='image')
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": f"Upload failed: {str(exc)}"}), 500
+    override = ProfileAudienceAvatar.query.filter_by(owner_id=owner_id, viewer_id=viewer_id).first()
+    deletion_task = queue_media_deletion(override.avatar_url, 'image') if override else None
+    if override:
+        override.avatar_url = url
+        override.updated_at = utc_now()
+    else:
+        db.session.add(ProfileAudienceAvatar(owner_id=owner_id, viewer_id=viewer_id, avatar_url=url))
+    db.session.commit()
+    if deletion_task:
+        process_media_deletion_task(deletion_task.id)
+    socketio.emit('audience_avatar_updated', {
+        "ownerId": owner_id,
+        "avatar": url
+    }, room=f"user_{viewer_id}")
+    return jsonify({"avatar": url, "viewerId": viewer_id})
+
+@users_bp.route('/api/user/contact-avatar/<int:viewer_id>', methods=['DELETE'])
+def delete_contact_specific_avatar(viewer_id):
+    owner_id = get_current_user_id()
+    if not owner_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    override = ProfileAudienceAvatar.query.filter_by(owner_id=owner_id, viewer_id=viewer_id).first()
+    deletion_task = queue_media_deletion(override.avatar_url, 'image') if override else None
+    if override:
+        db.session.delete(override)
+    db.session.commit()
+    if deletion_task:
+        process_media_deletion_task(deletion_task.id)
+    owner = db.session.get(User, owner_id)
+    fallback = serialize_user(owner, viewer_id=viewer_id)['avatar'] if owner else None
+    socketio.emit('audience_avatar_updated', {
+        "ownerId": owner_id,
+        "avatar": fallback
+    }, room=f"user_{viewer_id}")
+    return jsonify({"ok": True, "avatar": fallback})
 
 @users_bp.route('/api/users', methods=['GET'])
 def get_users():
@@ -26,7 +87,7 @@ def search_user():
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
     data = get_json_data()
-    query = (data.get('query') or data.get('phone') or '').strip()
+    query = str(data.get('query') or data.get('phone') or '').strip()
     phone = normalize_phone(query)
     if not query:
         return jsonify({"error": "Enter a phone number or @userid"}), 400
@@ -71,7 +132,7 @@ def setup_profile():
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
 
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
 
@@ -95,17 +156,22 @@ def setup_profile():
         user.platform_id = platform_id
 
     # Optional avatar upload
+    deletion_task = None
     if 'avatar' in request.files:
         file = request.files['avatar']
         if file and file.filename:
             filename = file.filename
             extension = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
-            if extension in {'jpg', 'jpeg', 'png', 'gif', 'webp'}:
-                try:
-                    url = upload_to_cloudinary(file, folder='chietchat/avatars', resource_type='image')
-                    user.avatar = url
-                except Exception as e:
-                    return jsonify({"error": f"Avatar upload failed: {str(e)}"}), 500
+            if extension not in ALLOWED_AVATAR_EXTENSIONS:
+                return jsonify({"error": "Please upload a JPG, PNG, GIF, or WebP image"}), 400
+            try:
+                url = upload_to_cloudinary(file, folder='chietchat/avatars', resource_type='image')
+                deletion_task = queue_media_deletion(user.avatar, 'image')
+                user.avatar = url
+            except ValueError as e:
+                return jsonify({"error": str(e)}), 400
+            except Exception as e:
+                return jsonify({"error": f"Avatar upload failed: {str(e)}"}), 500
 
     if display_name:
         user.username = display_name
@@ -119,6 +185,8 @@ def setup_profile():
     user.website_url = website_url or user.website_url
     user.profile_setup_done = True
     db.session.commit()
+    if deletion_task:
+        process_media_deletion_task(deletion_task.id)
 
     payload = serialize_user(user)
     emit_to_user_chat_contacts(user_id, 'user_profile_updated', {"user": payload})
@@ -144,15 +212,20 @@ def update_avatar():
 
     try:
         url = upload_to_cloudinary(file, folder='chietchat/avatars', resource_type='image')
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": f"Upload failed: {str(e)}"}), 500
 
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
 
+    deletion_task = queue_media_deletion(user.avatar, 'image')
     user.avatar = url
     db.session.commit()
+    if deletion_task:
+        process_media_deletion_task(deletion_task.id)
 
     payload = {"user": serialize_user(user)}
     emit_to_user_chat_contacts(user_id, 'user_profile_updated', payload)
@@ -163,11 +236,14 @@ def delete_avatar():
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
-    user.avatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix"
+    deletion_task = queue_media_deletion(user.avatar, 'image')
+    user.avatar = None
     db.session.commit()
+    if deletion_task:
+        process_media_deletion_task(deletion_task.id)
     payload = {"user": serialize_user(user)}
     emit_to_user_chat_contacts(user_id, 'user_profile_updated', payload)
     return jsonify(payload)
@@ -179,7 +255,7 @@ def get_user_public_key(req_user_id):
         return jsonify({"error": "Unauthorized"}), 401
     if req_user_id != current_user_id and not has_contact(current_user_id, req_user_id):
         return jsonify({"error": "Forbidden"}), 403
-    user = User.query.get(req_user_id)
+    user = db.session.get(User, req_user_id)
     if user:
         return jsonify({"publicKey": user.public_key})
     return jsonify({"error": "User not found"}), 404
@@ -195,7 +271,7 @@ def update_public_key():
     if not public_key:
         return jsonify({"error": "Public key is required"}), 400
 
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
 
@@ -246,7 +322,7 @@ def get_blocked_details():
     blocks = Block.query.filter_by(blocker_id=user_id).order_by(Block.created_at.desc()).all()
     result = []
     for b in blocks:
-        blocked_user = User.query.get(b.blocked_id)
+        blocked_user = db.session.get(User, b.blocked_id)
         if blocked_user:
             result.append({
                 "id": b.id,
@@ -267,7 +343,7 @@ def get_user_activity():
     reel_likes = ReelLike.query.filter_by(user_id=user_id).order_by(ReelLike.created_at.desc()).limit(50).all()
     liked_reels = []
     for rl in reel_likes:
-        reel = Reel.query.get(rl.reel_id)
+        reel = db.session.get(Reel, rl.reel_id)
         if reel:
             liked_reels.append({
                 "id": rl.id,
@@ -282,7 +358,7 @@ def get_user_activity():
     post_likes = SocialPostLike.query.filter_by(user_id=user_id).order_by(SocialPostLike.created_at.desc()).limit(50).all()
     liked_posts = []
     for pl in post_likes:
-        post = SocialPost.query.get(pl.post_id)
+        post = db.session.get(SocialPost, pl.post_id)
         if post:
             liked_posts.append({
                 "id": pl.id,
@@ -298,7 +374,7 @@ def get_user_activity():
     reel_comments = ReelComment.query.filter_by(user_id=user_id).order_by(ReelComment.created_at.desc()).limit(50).all()
     my_reel_comments = []
     for rc in reel_comments:
-        reel = Reel.query.get(rc.reel_id)
+        reel = db.session.get(Reel, rc.reel_id)
         if reel:
             my_reel_comments.append({
                 "id": rc.id,
@@ -314,7 +390,7 @@ def get_user_activity():
     post_comments = SocialPostComment.query.filter_by(user_id=user_id).order_by(SocialPostComment.created_at.desc()).limit(50).all()
     my_post_comments = []
     for pc in post_comments:
-        post = SocialPost.query.get(pc.post_id)
+        post = db.session.get(SocialPost, pc.post_id)
         if post:
             my_post_comments.append({
                 "id": pc.id,
@@ -339,7 +415,7 @@ def update_profile():
     user_id = get_current_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
     data = request.json
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if data.get('username'):
         user.username = data['username'].strip()
     if 'bio' in data:
@@ -352,7 +428,7 @@ def update_profile():
             user.bio_expires_at = None
     user.website_url = data.get('websiteUrl', user.website_url)
     # Update platform handle if provided
-    new_platform_id = (data.get('platformId') or '').strip().lstrip('@').lower()
+    new_platform_id = str(data.get('platformId') or '').strip().lstrip('@').lower()
     if new_platform_id and new_platform_id != (user.platform_id or ''):
         if not re.match(r'^[a-z0-9_]{3,30}$', new_platform_id):
             return jsonify({"error": "Handle must be 3-30 chars: letters, numbers, underscores only"}), 400
@@ -432,7 +508,7 @@ def update_privacy_settings():
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
         
@@ -463,12 +539,12 @@ def report_user():
         
     data = request.get_json(silent=True) or {}
     reported_id = data.get('userId')
-    reason = (data.get('reason') or '').strip()
+    reason = str(data.get('reason') or '').strip()
     
     if not reported_id or not reason:
         return jsonify({"error": "User ID and reason are required"}), 400
         
-    reported_user = User.query.get(reported_id)
+    reported_user = db.session.get(User, reported_id)
     if not reported_user:
         return jsonify({"error": "User not found"}), 404
         

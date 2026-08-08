@@ -98,7 +98,7 @@ const GiftModal = ({ onClose, onSend }) => {
 
                         {/* Preview card */}
                         <div className={`relative rounded-2xl bg-gradient-to-br ${selectedTemplate.bg} p-6 flex flex-col items-center gap-3 overflow-hidden min-h-[180px]`}>
-                            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20" />
+                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,.2),transparent_20%),radial-gradient(circle_at_80%_70%,rgba(255,255,255,.12),transparent_24%)] opacity-70" />
                             {uploadedPhoto ? (
                                 <img src={uploadedPhoto} alt="gift" className="w-24 h-24 rounded-full object-cover border-4 border-white/40 shadow-xl relative z-10" />
                             ) : (
@@ -136,21 +136,13 @@ const GiftModal = ({ onClose, onSend }) => {
                         </div>
                     </div>
                 ) : (
-                    <div className="flex-1 flex flex-col">
+                    <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6 text-center">
                         <div className="px-4 py-3 bg-[#111b21] border-b border-white/5 flex items-center justify-between shrink-0">
-                            <span className="text-xs text-gray-400">Browse Myntra & send gift to chat</span>
-                            <button
-                                onClick={handleMyntraSelect}
-                                className="text-xs bg-pink-500 hover:bg-pink-400 text-white font-bold px-3 py-1.5 rounded-lg"
-                            >
-                                Send to Chat
-                            </button>
+                            <span className="text-xs text-gray-400">Myntra opens as a separate service. CHEETCHAT cannot verify purchases made there.</span>
                         </div>
-                        <iframe
-                            src="https://www.myntra.com"
-                            className="flex-1 w-full border-none"
-                            title="Myntra"
-                        />
+                        <div className="text-6xl">🛍️</div>
+                        <a href="https://www.myntra.com" target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" className="w-full rounded-xl bg-pink-500 px-4 py-3 text-sm font-bold text-white hover:bg-pink-400">Open Myntra safely</a>
+                        <button type="button" onClick={handleMyntraSelect} className="w-full rounded-xl border border-pink-500/40 px-4 py-3 text-sm font-bold text-pink-300 hover:bg-pink-500/10">Share Myntra gift link</button>
                     </div>
                 )}
 

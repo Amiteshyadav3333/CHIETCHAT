@@ -2,10 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { createPortal } from 'react-dom';
 import { format, isToday, isYesterday } from 'date-fns';
-import { TrashIcon, DocumentIcon, ArrowUturnLeftIcon, ArrowDownTrayIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon, MapPinIcon, InformationCircleIcon, XMarkIcon, ArrowLeftIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
+import { ArrowUturnLeftIcon, ArrowDownTrayIcon, MapPinIcon, InformationCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { CheckIcon } from '@heroicons/react/24/solid';
 import FullscreenMediaModal from './FullscreenMediaModal';
-import { formatDuration, formatFileSize } from '../utils/mediaCompressor';
+import BirthdayCard from './BirthdayCard';
+import { MiniGameCard } from './ChatGames';
+import { buildMapUrl, normalizeCoordinates } from '../utils/locationPrivacy';
+import { getSafeHttpUrl, getSafeMediaUrl, openSafeExternal } from '../utils/safeUrl';
 
 const getPlatformLabel = (url) => {
     const lowercase = url.toLowerCase();
@@ -21,7 +24,7 @@ const getPlatformLabel = (url) => {
 
 const renderClickableText = (text) => {
     if (!text) return '';
-    const regex = /(https?:\/\/[^\s]+)|(www\.[a-zA-Z0-9-]+\.[^\s]+)|([a-zA-Z0-9-]+\.(?:com|net|org|in|co|io|xyz|info|us|app|dev|me|ai)\b[^\s]*)|(\+?\d{1,3}[-.\ s]?\(?\d{3}\)?[-.\ s]?\d{3}[-.\ s]?\d{4})|(\b\d{10}\b)/gi;
+    const regex = /(https?:\/\/[^\s]+)|(www\.[a-zA-Z0-9-]+\.[^\s]+)|([a-zA-Z0-9-]+\.(?:com|net|org|in|co|io|xyz|info|us|app|dev|me|ai)\b[^\s]*)|(\+?\d{1,3}[-. s]?\(?\d{3}\)?[-. s]?\d{3}[-. s]?\d{4})|(\b\d{10}\b)/gi;
     const elements = [];
     let lastIndex = 0;
     let match;
@@ -56,7 +59,7 @@ const renderClickableText = (text) => {
             elements.push(
                 <a
                     key={`phone-${matchIndex}`}
-                    href={`tel:${matchText.replace(/[-.\ s()]/g, '')}`}
+                    href={`tel:${matchText.replace(/[-. s()]/g, '')}`}
                     className="text-[#53bdeb] hover:underline break-all inline font-semibold"
                     onClick={(e) => e.stopPropagation()}
                 >
@@ -92,12 +95,6 @@ const LANGUAGES = [
     { code: 'kn', name: 'Kannada (ಕನ್ನಡ)' },
     { code: 'ml', name: 'Malayalam (മലയാളം)' }
 ];
-
-const GlobeIcon = ({ className }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-.778.099-1.533.284-2.253" />
-    </svg>
-);
 
 const ClockIcon = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
@@ -545,86 +542,62 @@ const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, 
 };
 
 
-const BirthdayCard = ({ data, isOwn }) => {
-    const [isRevealed, setIsRevealed] = useState(false);
-    const [audio] = useState(() => data.playMusic ? new Audio('https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3') : null);
-
-    const handleReveal = (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        setIsRevealed(true);
-        if (audio) {
-            audio.volume = 0.5;
-            audio.play().catch(err => console.log('Audio play blocked:', err));
-        }
-    };
-
-    const themeColor = data.theme?.color || 'from-fuchsia-500 to-pink-500';
-    const fontStyle = data.font?.style || "'Inter', sans-serif";
-    const effect = data.effect?.id || 'none';
-
-    if (!isRevealed && data.interactive) {
-        return (
-            <div 
-                onClick={handleReveal}
-                className="flex flex-col items-center justify-center w-[260px] h-[320px] bg-gradient-to-b from-[#1c2431] to-[#111b21] rounded-2xl border-2 border-dashed border-fuchsia-500/40 cursor-pointer hover:border-fuchsia-400 group overflow-hidden relative shadow-[0_0_30px_rgba(217,70,239,0.15)] transition-all"
-            >
-                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20 mix-blend-overlay animate-pulse"></div>
-                <div className="text-7xl drop-shadow-[0_0_20px_rgba(255,255,255,0.5)] animate-bounce group-hover:scale-125 transition-transform duration-500 relative z-10">
-                    🎁
-                </div>
-                <div className="mt-8 bg-fuchsia-500/20 text-fuchsia-300 px-6 py-2 rounded-full font-extrabold text-sm border border-fuchsia-500/50 backdrop-blur-md relative z-10 uppercase tracking-widest shadow-xl group-hover:bg-fuchsia-500/40 transition-colors">
-                    Tap to Open
-                </div>
-                <div className="mt-3 text-gray-500 text-[10px] uppercase tracking-wider relative z-10 font-semibold">Special Gift Enclosed</div>
-            </div>
-        );
-    }
-
-    return (
-        <div className="flex flex-col gap-2 w-[280px] sm:w-[320px] animate-open-envelope origin-center">
-            <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${themeColor} p-8 flex flex-col items-center justify-center text-center shadow-[0_10px_40px_rgba(0,0,0,0.5)] border-2 border-white/30`}>
-                
-                {/* Background Textures & Effects */}
-                <div className="absolute inset-0 opacity-40 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] mix-blend-overlay"></div>
-                {effect === 'confetti' && <div className="absolute inset-0 opacity-60 bg-[url('https://cdn-icons-png.flaticon.com/512/1769/1769062.png')] bg-repeat animate-confetti pointer-events-none z-10 mix-blend-screen"></div>}
-                {effect === 'balloons' && <div className="absolute inset-0 opacity-50 bg-[url('https://cdn-icons-png.flaticon.com/512/439/439294.png')] bg-repeat animate-float pointer-events-none z-10 mix-blend-overlay"></div>}
-                {effect === 'stars' && <div className="absolute inset-0 opacity-60 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-30 mix-blend-overlay animate-pulse pointer-events-none z-10"></div>}
-                
-                {/* Shiny overlay for premium feel */}
-                <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/10 to-white/0 pointer-events-none"></div>
-
-                <div className="text-7xl drop-shadow-[0_10px_20px_rgba(0,0,0,0.4)] animate-bounce mt-2 relative z-20">
-                    {data.theme?.icon || '🎂'}
-                </div>
-                
-                <h3 
-                    className="text-white font-extrabold text-2xl mt-8 drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)] leading-snug px-2 relative z-20 break-words w-full"
-                    style={{ fontFamily: fontStyle, textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}
-                >
-                    {data.message || 'Happy Birthday! 🎉'}
-                </h3>
-                
-                {data.playMusic && (
-                    <div className="mt-8 flex items-center justify-center gap-2 bg-black/20 px-3 py-1.5 rounded-full border border-white/20 text-white/90 text-[10px] uppercase tracking-widest relative z-20 shadow-inner backdrop-blur-md">
-                        <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.8)]"></span> Music Playing
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-};
-
 const ChatBubble = ({
     message, isOwn, senderName, onDelete, senderAvatar, showAvatar,
     onReply, replyTo, onTranslate, chatId, chatTranslationLang,
     onEdit, onCopy, onForward, onReact, onPin, isLastMessage,
-    socket, showTranslateBtn = true
+    socket, token, showTranslateBtn = true
 }) => {
     const [showActionMenu, setShowActionMenu] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
     const [showTranslatorMenu, setShowTranslatorMenu] = useState(false);
     const [showPdfModal, setShowPdfModal] = useState(false);
+    const [paymentUpdate, setPaymentUpdate] = useState(null);
+    const [paymentBusy, setPaymentBusy] = useState(false);
+
+    const requestRefund = async (paymentId) => {
+        setPaymentBusy(true);
+        try {
+            const { data } = await axios.post(
+                `/api/payments/orders/${paymentId}/refund-request`, {},
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            setPaymentUpdate(data);
+        } catch (error) {
+            alert(error.response?.data?.error || 'Refund request could not be submitted.');
+        } finally {
+            setPaymentBusy(false);
+        }
+    };
+
+    const refreshPayment = async (paymentId) => {
+        setPaymentBusy(true);
+        try {
+            const { data } = await axios.get(`/api/payments/orders/${paymentId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setPaymentUpdate(data);
+        } catch (error) {
+            alert(error.response?.data?.error || 'Payment status could not be loaded.');
+        } finally {
+            setPaymentBusy(false);
+        }
+    };
+
+    const approveRefund = async (paymentId) => {
+        if (!window.confirm('Approve a full refund for this payment?')) return;
+        setPaymentBusy(true);
+        try {
+            const { data } = await axios.post(`/api/payments/orders/${paymentId}/refund`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setPaymentUpdate(data);
+        } catch (error) {
+            alert(error.response?.data?.error || 'Refund could not be processed.');
+        } finally {
+            setPaymentBusy(false);
+        }
+    };
 
     const getReactions = () => {
         let reactions = message.reactions;
@@ -661,9 +634,8 @@ const ChatBubble = ({
 
     const handleVote = async (optionIdx) => {
         try {
-            const token = localStorage.getItem('token');
             await axios.post(`/api/messages/${message.id}/poll-vote`, { option_idx: optionIdx }, {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: 'Bearer cookie-session' }
             });
         } catch (err) {
             console.error("Error casting poll vote", err);
@@ -716,13 +688,16 @@ const ChatBubble = ({
     }, [content, isOwn, isTextMessage, onTranslate, chatId, chatTranslationLang, localTargetLang]);
 
     const handleDownload = async (url) => {
+        const safeUrl = getSafeHttpUrl(url, window.location.href);
+        if (!safeUrl) return;
         try {
-            const response = await fetch(url);
+            const response = await fetch(safeUrl);
+            if (!response.ok) throw new Error(`Download failed with HTTP ${response.status}`);
             const blob = await response.blob();
             const blobUrl = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = blobUrl;
-            const fileName = url.split('/').pop() || 'download';
+            const fileName = new URL(safeUrl).pathname.split('/').pop() || 'download';
             link.download = fileName;
             document.body.appendChild(link);
             link.click();
@@ -730,7 +705,7 @@ const ChatBubble = ({
             window.URL.revokeObjectURL(blobUrl);
         } catch (error) {
             console.error('Download failed:', error);
-            window.open(url, '_blank');
+            openSafeExternal(safeUrl);
         }
     };
 
@@ -906,7 +881,7 @@ const ChatBubble = ({
                         src={cnt}
                         className="w-full object-cover block"
                         style={{ maxHeight: 320, minHeight: 100 }}
-                        preload="metadata"
+                        preload={localStorage.getItem('media_auto_download') === '0' ? 'none' : 'metadata'}
                         muted
                     />
                     {/* Play overlay */}
@@ -938,6 +913,7 @@ const ChatBubble = ({
         // ── DOCUMENT / FILE ──
         if (type === 'file') {
             const fileName = decodeURIComponent(cnt.split('/').pop() || 'File');
+            const safeDocumentUrl = getSafeHttpUrl(cnt, window.location.href);
             const docInfo = getDocIcon(fileName);
             return (
                 <div className="min-w-[220px] max-w-[260px]">
@@ -957,7 +933,7 @@ const ChatBubble = ({
                     </div>
                     {/* Action buttons */}
                     <div className="flex gap-1.5 mt-2">
-                        {fileName.toLowerCase().endsWith('.pdf') ? (
+                        {safeDocumentUrl && fileName.toLowerCase().endsWith('.pdf') ? (
                             <button
                                 onClick={(e) => { e.stopPropagation(); setShowPdfModal(true); }}
                                 className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
@@ -969,11 +945,12 @@ const ChatBubble = ({
                                 </svg>
                                 Preview
                             </button>
-                        ) : (
+                        ) : safeDocumentUrl ? (
                             <a
-                                href={cnt}
+                                href={safeDocumentUrl}
                                 target="_blank"
-                                rel="noreferrer"
+                                rel="noopener noreferrer"
+                                referrerPolicy="no-referrer"
                                 onClick={(e) => e.stopPropagation()}
                                 className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
                                     isOwn ? 'bg-white/15 hover:bg-white/25 text-white' : 'bg-white/10 hover:bg-white/20 text-white'
@@ -984,9 +961,12 @@ const ChatBubble = ({
                                 </svg>
                                 Open
                             </a>
+                        ) : (
+                            <span className="flex-1 rounded-lg bg-red-500/10 py-2 text-center text-xs font-semibold text-red-300">Unsafe URL blocked</span>
                         )}
                         <button
-                            onClick={(e) => { e.stopPropagation(); handleDownload(cnt); }}
+                            onClick={(e) => { e.stopPropagation(); handleDownload(safeDocumentUrl); }}
+                            disabled={!safeDocumentUrl}
                             className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
                                 isOwn ? 'bg-white/15 hover:bg-white/25 text-white' : 'bg-white/10 hover:bg-white/20 text-white'
                             }`}
@@ -1003,7 +983,7 @@ const ChatBubble = ({
                                 <h3 className="font-bold text-sm truncate flex-1 pr-4">{fileName}</h3>
                                 <div className="flex gap-2">
                                     <button 
-                                        onClick={() => handleDownload(cnt)} 
+                                        onClick={() => handleDownload(safeDocumentUrl)}
                                         className="bg-[#00a884] hover:bg-[#008f72] px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 text-white shadow-md"
                                     >
                                         <ArrowDownTrayIcon className="w-3.5 h-3.5" /> Download
@@ -1017,7 +997,7 @@ const ChatBubble = ({
                                 </div>
                             </div>
                             <div className="flex-1 w-full rounded-xl overflow-hidden bg-white" onClick={e => e.stopPropagation()}>
-                                <iframe src={`${cnt}#toolbar=0`} className="w-full h-full border-none" title="PDF Preview" />
+                                <iframe src={`${safeDocumentUrl}#toolbar=0`} className="w-full h-full border-none" title="PDF Preview" sandbox="allow-same-origin" referrerPolicy="no-referrer" />
                             </div>
                         </div>,
                         document.body
@@ -1078,19 +1058,12 @@ const ChatBubble = ({
         if (type === 'location' || type === 'live_location') {
             try {
                 const loc = JSON.parse(cnt);
-                const mapUrl = `https://www.google.com/maps?q=${loc.lat},${loc.lng}`;
-                const staticMapUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${loc.lat},${loc.lng}&zoom=15&size=260x140&markers=color:red%7C${loc.lat},${loc.lng}&key=AIzaSyD-9tSrke72PouQMnMX-a7eZSW0jkFMBWY`;
-                const osmUrl = `https://www.openstreetmap.org/?mlat=${loc.lat}&mlon=${loc.lng}&zoom=15`;
+                const { lat, lng } = normalizeCoordinates(loc.lat, loc.lng);
+                const mapUrl = buildMapUrl(lat, lng);
                 return (
-                    <a href={mapUrl} target="_blank" rel="noreferrer" className="flex flex-col gap-0 min-w-[220px] group/loc rounded-xl overflow-hidden border border-white/10">
-                        {/* Map thumbnail via OSM tile */}
-                        <div className="relative h-28 bg-[#1a2634] overflow-hidden">
-                            <img
-                                src={`https://staticmap.openstreetmap.de/staticmap.php?center=${loc.lat},${loc.lng}&zoom=15&size=260x112&markers=${loc.lat},${loc.lng},red`}
-                                alt="map"
-                                className="w-full h-full object-cover group-hover/loc:scale-105 transition-transform duration-300"
-                                onError={e => { e.target.style.display='none'; }}
-                            />
+                    <a href={mapUrl} target="_blank" rel="noopener noreferrer nofollow external" referrerPolicy="no-referrer" className="flex flex-col gap-0 min-w-[220px] group/loc rounded-xl overflow-hidden border border-white/10">
+                        <div className="relative h-28 overflow-hidden bg-[#1a2634] bg-[linear-gradient(rgba(255,255,255,.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.05)_1px,transparent_1px)] bg-[size:24px_24px]">
+                            <div className="absolute inset-0 bg-gradient-to-br from-[#00a884]/10 to-blue-500/10" />
                             <div className="absolute inset-0 flex items-center justify-center">
                                 <div className={`p-2 rounded-full shadow-xl ${type === 'live_location' ? 'bg-red-500 animate-pulse' : 'bg-[#00a884]'}`}>
                                     <MapPinIcon className="w-5 h-5 text-white" />
@@ -1107,7 +1080,7 @@ const ChatBubble = ({
                             <MapPinIcon className={`w-4 h-4 flex-shrink-0 ${type === 'live_location' ? 'text-red-400' : 'text-[#00a884]'}`} />
                             <div className="min-w-0">
                                 <p className="text-white text-xs font-bold">{type === 'live_location' ? 'Live Location' : 'Location'}</p>
-                                <p className="text-gray-400 text-[10px] truncate">{loc.lat?.toFixed(4)}, {loc.lng?.toFixed(4)} · Tap to open</p>
+                                <p className="text-gray-400 text-[10px] truncate">{lat.toFixed(4)}, {lng.toFixed(4)} · Tap to open</p>
                             </div>
                         </div>
                     </a>
@@ -1145,36 +1118,59 @@ const ChatBubble = ({
         if (type === 'payment') {
             try {
                 const pay = JSON.parse(cnt);
+                const payment = paymentUpdate?.id === pay.id ? { ...pay, ...paymentUpdate } : pay;
                 return (
                     <div className="min-w-[220px] p-3 rounded-2xl border bg-[#11221a] border-emerald-500/30 text-white space-y-3 shadow-lg font-sans">
                         <div className="flex items-center justify-between border-b border-emerald-500/10 pb-2">
-                            <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">UPI Transfer</span>
-                            <span className="text-[10px] text-white/50">{pay.transactionId ? pay.transactionId.substring(0, 12) : ''}</span>
+                            <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                                {payment.verified ? 'Provider verified payment' : 'Payment verification pending'}
+                            </span>
+                            <span className="text-[10px] text-white/50">{payment.providerPaymentId ? payment.providerPaymentId.substring(0, 16) : ''}</span>
                         </div>
                         <div className="text-center py-2">
                             <p className="text-3xl font-black text-emerald-400">₹{parseFloat(pay.amount).toFixed(2)}</p>
-                            <p className="text-[10px] text-emerald-500 font-bold flex items-center justify-center gap-1 mt-1">
-                                <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping" />
-                                Completed Successfully
+                            <p className="text-[10px] text-amber-300 font-bold flex items-center justify-center gap-1 mt-1">
+                                <span className="w-1.5 h-1.5 bg-amber-300 rounded-full" />
+                                {payment.status === 'refunded' ? 'Refunded' : payment.status === 'refund_requested' ? 'Refund requested' : payment.verified ? 'Provider verified' : 'Verification pending'}
                             </p>
                         </div>
-                        {pay.remarks && (
+                        {pay.payeeName && <p className="text-center text-[11px] text-white/60">To: {pay.payeeName}</p>}
+                        {pay.description && (
                             <div className="bg-white/5 p-2 rounded-lg text-[11px] text-white/80 italic border border-white/5">
-                                Remarks: {pay.remarks}
+                                Note: {pay.description}
                             </div>
                         )}
-                        <div className="flex gap-2">
+                        <div>
                             <button
-                                onClick={() => alert("Simulated UPI transaction details loaded securely.")}
-                                className="flex-1 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold transition"
+                                onClick={() => alert(`CHEETCHAT payment ID: ${payment.id}\nProvider payment ID: ${payment.providerPaymentId || 'Pending'}\nStatus: ${payment.status || (payment.verified ? 'verified' : 'pending')}\nCHEETCHAT does not store your UPI PIN or card details.`)}
+                                className="w-full py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold transition"
                             >
-                                Receipt
+                                Details
                             </button>
+                            {isOwn && payment.verified && !['refund_requested', 'refunding', 'refunded'].includes(payment.status) && (
+                                <button
+                                    disabled={paymentBusy || !token}
+                                    onClick={() => requestRefund(payment.id)}
+                                    className="mt-2 w-full rounded-lg border border-amber-400/40 py-1 text-[10px] font-bold text-amber-300 disabled:opacity-50"
+                                >
+                                    {paymentBusy ? 'Requesting…' : 'Request refund'}
+                                </button>
+                            )}
+                            {!isOwn && payment.status === 'refund_requested' && (
+                                <button
+                                    disabled={paymentBusy || !token}
+                                    onClick={() => approveRefund(payment.id)}
+                                    className="mt-2 w-full rounded-lg bg-amber-500 py-1 text-[10px] font-bold text-black disabled:opacity-50"
+                                >
+                                    {paymentBusy ? 'Processing…' : 'Approve full refund'}
+                                </button>
+                            )}
                             <button
-                                onClick={() => alert("Re-initiating simulated UPI payment transfer.")}
-                                className="flex-1 py-1 bg-white/10 hover:bg-white/25 text-white rounded-lg text-[10px] font-bold transition"
+                                disabled={paymentBusy || !token}
+                                onClick={() => refreshPayment(payment.id)}
+                                className="mt-2 w-full py-1 text-[10px] font-semibold text-white/60 disabled:opacity-50"
                             >
-                                Pay Again
+                                Refresh payment status
                             </button>
                         </div>
                     </div>
@@ -1197,10 +1193,10 @@ const ChatBubble = ({
             try { data = JSON.parse(cnt); } catch(e){}
             return (
                 <div className="flex flex-col gap-2 min-w-[240px]">
-                    <div className="relative h-24 bg-gray-800 rounded-lg overflow-hidden shrink-0">
-                        <img src="https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=800&auto=format&fit=crop" alt="Map" className="w-full h-full object-cover opacity-60" />
+                    <div className="relative h-24 shrink-0 overflow-hidden rounded-lg bg-gray-800 bg-[linear-gradient(rgba(255,255,255,.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.05)_1px,transparent_1px)] bg-[size:20px_20px]">
+                        <div className="absolute inset-0 flex items-center justify-center text-4xl opacity-40" aria-hidden="true">🚕</div>
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end p-2">
-                            <span className="text-white font-bold text-sm drop-shadow-md">{data?.car?.name || 'Ride'} Booked</span>
+                            <span className="text-white font-bold text-sm drop-shadow-md">{data?.car?.name || 'Ride'} plan</span>
                         </div>
                     </div>
                     <div className="flex flex-col gap-1.5 px-1 pb-1">
@@ -1216,18 +1212,24 @@ const ChatBubble = ({
                             <div className="flex items-center gap-2">
                                 <span className="text-2xl drop-shadow-md">{data?.car?.icon || '🚗'}</span>
                                 <div className="flex flex-col">
-                                    <span className="text-white text-xs font-bold">{data?.driver?.vehicle || 'MH02 XX 1234'}</span>
-                                    <span className="text-gray-400 text-[10px]">{data?.driver?.name || 'Driver'} • ★ {data?.driver?.rating || '4.8'}</span>
+                                    <span className="text-white text-xs font-bold">Booking unverified</span>
+                                    <span className="text-gray-400 text-[10px]">Complete and confirm in the partner app</span>
                                 </div>
                             </div>
                             <div className="text-right flex flex-col">
                                 <span className="text-white font-bold text-xs">{data?.eta || '3 mins'}</span>
-                                <span className="text-gray-400 text-[10px]">ETA</span>
+                                <span className="text-gray-400 text-[10px]">Estimate</span>
                             </div>
                         </div>
-                        <button className="mt-1 w-full py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-xs font-bold rounded-lg transition-colors border border-blue-500/20">
-                            Track Ride
-                        </button>
+                        <a
+                            href={data?.car?.app === 'rapido' ? 'https://www.rapido.bike' : 'https://www.uber.com/in/en/ride/'}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            referrerPolicy="no-referrer"
+                            className="mt-1 w-full rounded-lg border border-blue-500/20 bg-blue-600/20 py-1.5 text-center text-xs font-bold text-blue-400 transition-colors hover:bg-blue-600/30"
+                        >
+                            Open partner service
+                        </a>
                     </div>
                 </div>
             );
@@ -1237,12 +1239,13 @@ const ChatBubble = ({
             let data = {};
             try { data = JSON.parse(cnt); } catch(e){}
             const tpl = data.template || {};
+            const safeGiftPhoto = getSafeMediaUrl(data.photo, window.location.href);
             return (
                 <div className="flex flex-col gap-0 min-w-[220px] group cursor-pointer">
                     <div className={`relative overflow-hidden rounded-xl bg-gradient-to-br ${tpl.bg || 'from-pink-500/20 to-rose-500/20'} border border-pink-500/30 p-4 flex flex-col items-center justify-center gap-3 transition-colors hover:opacity-90`}>
-                        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20" />
-                        {data.photo ? (
-                            <img src={data.photo} alt="gift" className="w-20 h-20 rounded-full object-cover border-4 border-white/40 shadow-xl relative z-10" />
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,.2),transparent_20%),radial-gradient(circle_at_80%_70%,rgba(255,255,255,.12),transparent_24%)] opacity-70" />
+                        {safeGiftPhoto ? (
+                            <img src={safeGiftPhoto} alt="gift" referrerPolicy="no-referrer" className="w-20 h-20 rounded-full object-cover border-4 border-white/40 shadow-xl relative z-10" />
                         ) : (
                             <div className="text-5xl drop-shadow-xl transform transition-transform group-hover:scale-110 relative z-10">
                                 {tpl.icon || '🎁'}
@@ -1252,9 +1255,10 @@ const ChatBubble = ({
                             <h4 className="text-white font-bold text-sm">{data.message || "Here's a gift for you!"}</h4>
                             {data.myntraLink && (
                                 <a
-                                    href={data.myntraLink}
+                                    href="https://www.myntra.com"
                                     target="_blank"
-                                    rel="noreferrer"
+                                    rel="noopener noreferrer"
+                                    referrerPolicy="no-referrer"
                                     onClick={e => e.stopPropagation()}
                                     className="mt-2 inline-flex items-center gap-1 text-xs bg-pink-500/30 text-pink-300 px-3 py-1 rounded-full font-bold hover:bg-pink-500/50 transition-colors"
                                 >
@@ -1270,7 +1274,7 @@ const ChatBubble = ({
         if (type === 'birthday') {
             let data = {};
             try { data = JSON.parse(cnt); } catch(e){}
-            return <BirthdayCard data={data} isOwn={isOwn} />;
+            return <BirthdayCard data={data} />;
         }
 
         if (type === 'sticker') {
@@ -1614,542 +1618,6 @@ const ChatBubble = ({
     );
 };
 
-const TicTacToeGame = ({ gameCode, gameMode: initialGameMode, targetWins, creatorId, currentUserId, socket, chatId }) => {
-    const [board, setBoard] = useState(Array(9).fill(null));
-    const [isXNext, setIsXNext] = useState(true);
-    const [gameMode, setGameMode] = useState(initialGameMode || 'vs-computer'); // 'vs-computer', 'pass-play', or 'vs-friend'
-    const [difficulty, setDifficulty] = useState('smart'); // 'easy' or 'smart'
-    const [scores, setScores] = useState({ x: 0, o: 0, draws: 0 });
-    const [winnerInfo, setWinnerInfo] = useState(null); // { winner: 'X'|'O'|'Draw', line: [...] }
-    const [isThinking, setIsThinking] = useState(false);
-
-    const winPatterns = [
-        [0, 1, 2], [3, 4, 5], [6, 7, 8],
-        [0, 3, 6], [1, 4, 7], [2, 5, 8],
-        [0, 4, 8], [2, 4, 6]
-    ];
-
-    const mySymbol = gameMode === 'vs-friend' ? (creatorId === currentUserId ? 'X' : 'O') : null;
-    const isMyTurn = gameMode !== 'vs-friend' || (isXNext && mySymbol === 'X') || (!isXNext && mySymbol === 'O');
-    const matchWinner = gameMode === 'vs-friend' && targetWins && (scores.x >= targetWins ? 'X' : scores.o >= targetWins ? 'O' : null);
-
-    const checkWinner = (currentBoard) => {
-        for (let pattern of winPatterns) {
-            const [a, b, c] = pattern;
-            if (currentBoard[a] && currentBoard[a] === currentBoard[b] && currentBoard[a] === currentBoard[c]) {
-                return { winner: currentBoard[a], line: pattern };
-            }
-        }
-        if (currentBoard.every(cell => cell !== null)) {
-            return { winner: 'Draw', line: null };
-        }
-        return null;
-    };
-
-    const updateScores = (winner) => {
-        setScores(prev => {
-            if (winner === 'X') return { ...prev, x: prev.x + 1 };
-            if (winner === 'O') return { ...prev, o: prev.o + 1 };
-            if (winner === 'Draw') return { ...prev, draws: prev.draws + 1 };
-            return prev;
-        });
-    };
-
-    useEffect(() => {
-        if (gameMode === 'vs-friend' && socket) {
-            const handleMoveRecv = (data) => {
-                if (data.gameCode === gameCode) {
-                    setBoard(data.board);
-                    setIsXNext(data.isXNext);
-                    const result = checkWinner(data.board);
-                    if (result) {
-                        setWinnerInfo(result);
-                        updateScores(result.winner);
-                    } else {
-                        setWinnerInfo(null);
-                    }
-                }
-            };
-            socket.on('game_move_received', handleMoveRecv);
-            return () => {
-                socket.off('game_move_received', handleMoveRecv);
-            };
-        }
-    }, [gameMode, socket, gameCode]);
-
-    const makeMove = (index) => {
-        if (board[index] || winnerInfo || isThinking || matchWinner) return;
-        if (!isMyTurn) return;
-
-        const newBoard = [...board];
-        const currentPlayer = isXNext ? 'X' : 'O';
-        newBoard[index] = currentPlayer;
-        setBoard(newBoard);
-
-        const result = checkWinner(newBoard);
-        if (result) {
-            setWinnerInfo(result);
-            updateScores(result.winner);
-        }
-
-        const nextPlayerIsX = !isXNext;
-        setIsXNext(nextPlayerIsX);
-
-        if (gameMode === 'vs-friend' && socket) {
-            socket.emit('game_move', {
-                chatId,
-                gameCode,
-                board: newBoard,
-                isXNext: nextPlayerIsX
-            });
-        }
-
-        if (gameMode === 'vs-computer' && nextPlayerIsX === false && !result) {
-            setIsThinking(true);
-            setTimeout(() => {
-                triggerBotMove(newBoard);
-            }, 600);
-        }
-    };
-
-    const triggerBotMove = (currentBoard) => {
-        const botPlayer = 'O';
-        const humanPlayer = 'X';
-        const getAvailableMoves = (b) => b.map((val, idx) => val === null ? idx : null).filter(val => val !== null);
-        const availableMoves = getAvailableMoves(currentBoard);
-
-        if (availableMoves.length === 0) return;
-
-        let selectedMove = null;
-
-        if (difficulty === 'easy') {
-            selectedMove = availableMoves[Math.floor(Math.random() * availableMoves.length)];
-        } else {
-            for (let move of availableMoves) {
-                const tempBoard = [...currentBoard];
-                tempBoard[move] = botPlayer;
-                const res = checkWinner(tempBoard);
-                if (res && res.winner === botPlayer) {
-                    selectedMove = move;
-                    break;
-                }
-            }
-
-            if (selectedMove === null) {
-                for (let move of availableMoves) {
-                    const tempBoard = [...currentBoard];
-                    tempBoard[move] = humanPlayer;
-                    const res = checkWinner(tempBoard);
-                    if (res && res.winner === humanPlayer) {
-                        selectedMove = move;
-                        break;
-                    }
-                }
-            }
-
-            if (selectedMove === null && currentBoard[4] === null) {
-                selectedMove = 4;
-            }
-
-            if (selectedMove === null) {
-                const corners = [0, 2, 6, 8];
-                const opposites = { 0: 8, 2: 6, 6: 2, 8: 0 };
-                for (let c of corners) {
-                    if (currentBoard[c] === humanPlayer && currentBoard[opposites[c]] === null) {
-                        selectedMove = opposites[c];
-                        break;
-                    }
-                }
-            }
-
-            if (selectedMove === null) {
-                const corners = [0, 2, 6, 8];
-                const availableCorners = corners.filter(c => currentBoard[c] === null);
-                if (availableCorners.length > 0) {
-                    selectedMove = availableCorners[Math.floor(Math.random() * availableCorners.length)];
-                }
-            }
-
-            if (selectedMove === null) {
-                const sides = [1, 3, 5, 7];
-                const availableSides = sides.filter(s => currentBoard[s] === null);
-                if (availableSides.length > 0) {
-                    selectedMove = availableSides[Math.floor(Math.random() * availableSides.length)];
-                }
-            }
-        }
-
-        const newBoard = [...currentBoard];
-        newBoard[selectedMove] = botPlayer;
-        setBoard(newBoard);
-        setIsThinking(false);
-
-        const result = checkWinner(newBoard);
-        if (result) {
-            setWinnerInfo(result);
-            updateScores(result.winner);
-            return;
-        }
-
-        setIsXNext(true);
-    };
-
-    const resetRound = () => {
-        const emptyBoard = Array(9).fill(null);
-        setBoard(emptyBoard);
-        setIsXNext(true);
-        setWinnerInfo(null);
-        setIsThinking(false);
-        if (gameMode === 'vs-friend' && socket) {
-            socket.emit('game_move', {
-                chatId,
-                gameCode,
-                board: emptyBoard,
-                isXNext: true
-            });
-        }
-    };
-
-    const resetAll = () => {
-        resetRound();
-        setScores({ x: 0, o: 0, draws: 0 });
-    };
-
-    const changeMode = (mode) => {
-        setGameMode(mode);
-        setBoard(Array(9).fill(null));
-        setIsXNext(true);
-        setWinnerInfo(null);
-        setIsThinking(false);
-    };
-
-    return (
-        <div className="flex flex-col items-center gap-4 w-full text-white font-sans">
-            {/* Game Mode Selector */}
-            {gameMode === 'vs-friend' ? (
-                <div className="w-full text-center py-2 px-3 bg-violet-650/20 border border-violet-500/30 rounded-xl text-xs font-bold text-violet-300">
-                    👥 Multiplayer Game (Code: {gameCode}) <br />
-                    <span className="text-[10px] opacity-75 font-medium">You play as: {mySymbol} · First to {targetWins} wins</span>
-                </div>
-            ) : (
-                <div className="flex gap-2 w-full p-1 bg-white/5 rounded-xl border border-white/5">
-                    <button
-                        onClick={() => changeMode('vs-computer')}
-                        className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                            gameMode === 'vs-computer'
-                                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
-                                : 'text-white/60 hover:text-white hover:bg-white/5'
-                        }`}
-                    >
-                        🤖 VS Computer
-                    </button>
-                    <button
-                        onClick={() => changeMode('pass-play')}
-                        className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                            gameMode === 'pass-play'
-                                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
-                                : 'text-white/60 hover:text-white hover:bg-white/5'
-                        }`}
-                    >
-                        👥 Pass & Play
-                    </button>
-                </div>
-            )}
-
-            {/* Difficulty selector for VS Computer */}
-            {gameMode === 'vs-computer' && (
-                <div className="flex gap-2 w-full justify-between items-center text-xs px-1">
-                    <span className="text-white/50">Difficulty:</span>
-                    <div className="flex bg-white/5 rounded-lg p-0.5 border border-white/5">
-                        <button
-                            onClick={() => setDifficulty('easy')}
-                            className={`px-2.5 py-0.5 font-medium rounded-md transition-all ${
-                                difficulty === 'easy' ? 'bg-purple-600/30 text-purple-300' : 'text-white/40 hover:text-white/70'
-                            }`}
-                        >
-                            Easy
-                        </button>
-                        <button
-                            onClick={() => setDifficulty('smart')}
-                            className={`px-2.5 py-0.5 font-medium rounded-md transition-all ${
-                                difficulty === 'smart' ? 'bg-indigo-600/30 text-indigo-300' : 'text-white/40 hover:text-white/70'
-                            }`}
-                        >
-                            Smart
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* Scoreboard */}
-            <div className="grid grid-cols-3 gap-2 w-full bg-white/5 rounded-2xl border border-white/10 p-3 text-center">
-                <div>
-                    <p className="text-[10px] uppercase tracking-wider text-rose-400 font-semibold">Player X</p>
-                    <p className="text-lg font-extrabold text-white mt-0.5">{scores.x}</p>
-                </div>
-                <div className="border-x border-white/10">
-                    <p className="text-[10px] uppercase tracking-wider text-white/40">Ties</p>
-                    <p className="text-lg font-extrabold text-white mt-0.5">{scores.draws}</p>
-                </div>
-                <div>
-                    <p className="text-[10px] uppercase tracking-wider text-cyan-400 font-semibold">
-                        {gameMode === 'vs-computer' ? 'Computer (O)' : gameMode === 'vs-friend' ? 'Friend (O)' : 'Player O'}
-                    </p>
-                    <p className="text-lg font-extrabold text-white mt-0.5">{scores.o}</p>
-                </div>
-            </div>
-
-            {/* Turn/Winner Status */}
-            <div className="h-6 flex items-center justify-center text-sm font-semibold">
-                {matchWinner ? (
-                    <span className="text-yellow-400 font-extrabold animate-bounce flex items-center gap-1.5">
-                        🏆 Match Winner: Player {matchWinner}!
-                    </span>
-                ) : winnerInfo ? (
-                    winnerInfo.winner === 'Draw' ? (
-                        <span className="text-amber-400 animate-pulse">🤝 It's a Tie!</span>
-                    ) : (
-                        <span className={`${winnerInfo.winner === 'X' ? 'text-rose-400' : 'text-cyan-400'} animate-bounce`}>
-                            🎉 Player {winnerInfo.winner} Wins!
-                        </span>
-                    )
-                ) : isThinking ? (
-                    <span className="text-cyan-400/80 animate-pulse flex items-center gap-1.5">
-                        <span className="inline-block w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-                        Computer is thinking...
-                    </span>
-                ) : (
-                    <span className="text-white/80">
-                        {gameMode === 'vs-friend' ? (
-                            isMyTurn ? (
-                                <span className="text-green-400 animate-pulse">👉 Your Turn ({mySymbol})</span>
-                            ) : (
-                                <span className="text-white/40">Waiting for opponent... ({isXNext ? 'X' : 'O'})</span>
-                            )
-                        ) : (
-                            <span>Turn: <span className={isXNext ? 'text-rose-400' : 'text-cyan-400'}>{isXNext ? 'X' : 'O'}</span></span>
-                        )}
-                    </span>
-                )}
-            </div>
-
-            {/* 3x3 Grid Board */}
-            <div className="grid grid-cols-3 gap-2 w-fit aspect-square mx-auto">
-                {board.map((cell, idx) => {
-                    const isWinningCell = winnerInfo?.line?.includes(idx);
-                    return (
-                        <button
-                            key={idx}
-                            onClick={() => makeMove(idx)}
-                            disabled={cell !== null || winnerInfo !== null || isThinking || matchWinner || !isMyTurn}
-                            className={`w-16 h-16 sm:w-20 sm:h-20 rounded-xl flex items-center justify-center transition-all duration-200 select-none border text-3xl sm:text-4xl font-black ${
-                                isWinningCell
-                                    ? 'bg-emerald-500/20 border-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.4)] animate-pulse'
-                                    : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20 active:scale-95'
-                            }`}
-                        >
-                            {cell === 'X' && <span className="text-rose-500 drop-shadow-[0_0_6px_rgba(244,63,94,0.6)]">X</span>}
-                            {cell === 'O' && <span className="text-cyan-400 drop-shadow-[0_0_6px_rgba(34,211,238,0.6)]">O</span>}
-                        </button>
-                    );
-                })}
-            </div>
-
-            {/* Reset Actions */}
-            <div className="flex gap-2 w-full mt-1">
-                <button
-                    onClick={resetRound}
-                    disabled={!!matchWinner}
-                    className={`flex-1 py-2 text-xs font-bold rounded-xl border border-white/10 hover:bg-white/5 active:scale-95 transition-all text-white/80 flex items-center justify-center gap-1 ${matchWinner ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                    🔄 Play Again
-                </button>
-                <button
-                    onClick={resetAll}
-                    className="py-2 px-3 text-xs font-bold rounded-xl bg-rose-500/10 hover:bg-rose-500/20 active:scale-95 transition-all text-rose-400 border border-rose-500/20"
-                >
-                    Reset Match
-                </button>
-            </div>
-        </div>
-    );
-};
-
-const MiniGameCard = ({ game, isOwn, socket, chatId, currentUserId }) => {
-    const [showModal, setShowModal] = useState(false);
-    let iframeUrl = 'https://game.indiasearch.site';
-
-    let gameName = game;
-    let gameMode = 'vs-computer';
-    let targetWins = 3;
-    let gameCode = '';
-    let creatorId = '';
-
-    try {
-        if (game.startsWith('{')) {
-            const data = JSON.parse(game);
-            gameName = data.game || 'Tic-Tac-Toe';
-            gameMode = data.mode || 'vs-computer';
-            targetWins = data.target || 3;
-            gameCode = data.gameCode || '';
-            if (gameName === 'Indiasearch Games' && gameCode) {
-                iframeUrl = `https://game.indiasearch.site?room=${gameCode}`;
-            }
-            creatorId = data.creatorId || '';
-        }
-    } catch (e) {
-        // Fallback for raw text
-    }
-
-    // Prevent background scrolling when game modal is open
-    useEffect(() => {
-        if (showModal) {
-            document.body.style.overflow = 'hidden';
-        } else {
-            document.body.style.overflow = '';
-        }
-        return () => {
-            document.body.style.overflow = '';
-        };
-    }, [showModal]);
-
-    return (
-        <div className="min-w-[220px] max-w-[280px] space-y-2">
-            <p className="text-xs uppercase tracking-wider text-white/50 flex items-center gap-1.5 font-sans font-bold">
-                🎮 {gameMode === 'vs-friend' ? 'Multiplayer Game' : 'Mini Game'}
-            </p>
-            <div className={`rounded-2xl p-4 border border-white/8 relative overflow-hidden bg-gradient-to-br ${isOwn ? 'from-purple-600/30 to-indigo-600/20' : 'from-blue-600/30 to-teal-600/20'}`}>
-                {/* Decorative retro grid design background */}
-                <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px]" />
-                
-                <div className="relative z-10 space-y-3 font-sans">
-                    <div>
-                        <h4 className="text-sm font-bold text-white tracking-wide">{gameName}</h4>
-                        {gameMode === 'vs-friend' ? (
-                            <p className="text-[10px] text-violet-300 font-semibold mt-0.5">
-                                Mode: vs Friend (Target: {targetWins} wins)
-                            </p>
-                        ) : (
-                            <p className="text-[10px] text-white/60 mt-0.5">Ready to play in Chat</p>
-                        )}
-                    </div>
-
-                    {gameMode === 'vs-friend' && gameCode && (
-                        <div className="flex items-center justify-between gap-2 mt-2 bg-black/40 rounded-xl px-3 py-1.5 border border-white/5">
-                            <span className="text-[10px] font-mono font-bold text-white/70 select-all">{gameCode}</span>
-                            <button 
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    navigator.clipboard.writeText(gameCode);
-                                    alert("Game Code copied to clipboard!");
-                                }}
-                                className="p-1 rounded bg-white/5 hover:bg-white/10 text-white/70 transition-colors"
-                                title="Copy game code"
-                            >
-                                <ClipboardDocumentIcon className="w-3.5 h-3.5" />
-                            </button>
-                        </div>
-                    )}
-                    
-                    <button 
-                        onClick={() => setShowModal(true)} 
-                        className="w-full rounded-xl bg-white/15 px-3 py-2.5 text-xs font-bold hover:bg-white/25 active:scale-[0.98] transition-all text-white flex items-center justify-center gap-1.5 shadow-lg border border-white/10"
-                    >
-                        🎮 Play Now
-                    </button>
-                </div>
-            </div>
-
-            {/* Fullscreen Game Modal using ReactDOM Portal */}
-            {showModal && createPortal(
-                <div className="fixed inset-0 z-[100] flex flex-col bg-[#080b11]/95 backdrop-blur-md font-sans">
-                    {/* Header */}
-                    <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-800 bg-[#0d121c]">
-                        <div className="flex items-center gap-3">
-                            <button
-                                onClick={() => setShowModal(false)}
-                                className="p-2 rounded-xl bg-gray-850 hover:bg-gray-800 text-gray-300 transition-colors"
-                            >
-                                <ArrowLeftIcon className="w-5 h-5" />
-                            </button>
-                            <div>
-                                <h3 className="text-md font-bold text-white flex items-center gap-2">
-                                    🎮 {gameName}
-                                </h3>
-                                <p className="text-[10px] text-gray-400">
-                                    {gameMode === 'vs-friend' ? 'Real-Time Multiplayer Room' : 'Mini Game Panel'}
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                            {gameName !== 'Tic-Tac-Toe' && (
-                                <>
-                                    <button
-                                        onClick={() => {
-                                            const iframe = document.getElementById('game-iframe');
-                                            if (iframe) iframe.src = iframe.src;
-                                        }}
-                                        className="p-2 rounded-xl bg-gray-800/50 hover:bg-gray-800 text-gray-300 transition-colors"
-                                        title="Restart Game"
-                                    >
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-4 h-4" strokeWidth="2">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-                                        </svg>
-                                    </button>
-                                    <a
-                                        href={iframeUrl}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="p-2 rounded-xl bg-gray-850 hover:bg-gray-850 text-gray-300 transition-colors flex items-center justify-center"
-                                        title="Open in New Tab"
-                                    >
-                                        <ArrowTopRightOnSquareIcon className="w-4 h-4" />
-                                    </a>
-                                </>
-                            )}
-                            <button
-                                onClick={() => setShowModal(false)}
-                                className="p-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/35 text-rose-400 transition-colors"
-                                title="Close"
-                            >
-                                <XMarkIcon className="w-5 h-5" />
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Game Content Container */}
-                    <div className="flex-1 p-2 sm:p-6 flex justify-center items-center overflow-y-auto">
-                        {gameName === 'Tic-Tac-Toe' ? (
-                            <div className="w-full max-w-sm rounded-2xl border border-white/10 shadow-2xl bg-[#0b0f19] p-4 sm:p-6 relative">
-                                <TicTacToeGame 
-                                    gameCode={gameCode} 
-                                    gameMode={gameMode} 
-                                    targetWins={targetWins} 
-                                    creatorId={creatorId} 
-                                    currentUserId={currentUserId}
-                                    socket={socket}
-                                    chatId={chatId}
-                                />
-                            </div>
-                        ) : (
-                            <div className="w-full h-full max-w-4xl max-h-[80vh] sm:max-h-[85vh] rounded-2xl sm:rounded-3xl overflow-hidden border border-gray-800 shadow-2xl bg-black relative">
-                                <iframe
-                                    id="game-iframe"
-                                    src={iframeUrl}
-                                    className="w-full h-full border-none"
-                                    title="Mini Game"
-                                    allow="autoplay; fullscreen; keyboard"
-                                />
-                            </div>
-                        )}
-                    </div>
-                </div>,
-                document.body
-            )}
-        </div>
-    );
-};
 
 export const DateSeparator = ({ date }) => {
     const label = isToday(new Date(date))

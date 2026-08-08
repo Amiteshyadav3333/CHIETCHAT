@@ -1,10 +1,13 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { HeartIcon, ChatBubbleOvalLeftIcon, ShareIcon, MusicalNoteIcon, FaceSmileIcon, EyeIcon, TrashIcon, NoSymbolIcon, ArrowDownTrayIcon } from '@heroicons/react/24/solid';
+import React, { useState, useRef, useEffect, useContext } from 'react';
+import { HeartIcon, ChatBubbleOvalLeftIcon, ShareIcon, MusicalNoteIcon, EyeIcon, TrashIcon, NoSymbolIcon, ArrowDownTrayIcon } from '@heroicons/react/24/solid';
 import { HeartIcon as HeartOutline, EllipsisVerticalIcon, PencilIcon, PlayIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import NestedComment from './NestedComment';
+import { getSafeMediaUrl, openSafeExternal } from '../utils/safeUrl';
+import { AuthContext } from '../context/AuthContext';
 
 const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelete, active }) => {
+    const { token } = useContext(AuthContext);
     const [liked, setLiked] = useState(reel.isLiked);
     const [isIntersecting, setIsIntersecting] = useState(false);
     const [likesCount, setLikesCount] = useState(reel.likesCount);
@@ -19,12 +22,14 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
     const [isUpdating, setIsUpdating] = useState(false);
     const [comments, setComments] = useState([]);
     const [newComment, setNewComment] = useState('');
-    const [showReactions, setShowReactions] = useState(false);
     const [floatingEmojis, setFloatingEmojis] = useState([]);
     const [videoError, setVideoError] = useState(false);
     const videoRef = useRef(null);
     const audioRef = useRef(null);
     const viewedRef = useRef(false);
+    const mediaBaseUrl = typeof window === 'undefined' ? 'https://cheetchat.invalid' : window.location.href;
+    const safeVideoUrl = getSafeMediaUrl(reel.videoUrl, mediaBaseUrl);
+    const safeMusicUrl = getSafeMediaUrl(reel.musicUrl, mediaBaseUrl);
     
     const filters = {
         'none': '',
@@ -41,14 +46,12 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
         'night': 'brightness(50%) hue-rotate(200deg)'
     };
 
-    const reactions = ['❤️', '😂', '🔥', '😮', '😢', '👏'];
-
     const toggleFollow = async (e) => {
         e.stopPropagation();
         if (reel.user.id === currentUser.id) return;
         try {
             const res = await axios.post(`/api/users/${reel.user.id}/follow`, {}, {
-                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                headers: { Authorization: `Bearer ${token}` }
             });
             setIsFollowing(res.data.isFollowing);
         } catch (err) { console.error(err); }
@@ -67,7 +70,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
         if (!window.confirm("Delete this Reel?")) return;
         try {
             await axios.delete(`/api/reels/${reel.id}`, {
-                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                headers: { Authorization: `Bearer ${token}` }
             });
             onDelete(reel.id);
         } catch (err) { alert("Delete failed"); }
@@ -77,7 +80,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
         if (!window.confirm(`Block @${reel.user.username}?`)) return;
         try {
             await axios.post(`/api/users/${reel.user.id}/block`, {}, {
-                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                headers: { Authorization: `Bearer ${token}` }
             });
             alert("User blocked");
         } catch (err) { console.error(err); }
@@ -120,7 +123,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
         setIsUpdating(true);
         try {
             const res = await axios.put(`/api/reels/${reel.id}`, { caption: newCaption }, {
-                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                headers: { Authorization: `Bearer ${token}` }
             });
             setCaption(res.data.caption);
             setShowEditCaption(false);
@@ -131,7 +134,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
     const toggleLike = async () => {
         try {
             const res = await axios.post(`/api/reels/${reel.id}/like`, {}, {
-                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                headers: { Authorization: `Bearer ${token}` }
             });
             setLiked(res.data.isLiked);
             setLikesCount(prev => res.data.isLiked ? prev + 1 : prev - 1);
@@ -158,16 +161,17 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
             text: reel.caption,
             url: window.location.origin + '/reels/' + reel.id
         };
-        if (navigator.share) {
-            navigator.share(shareData).catch(() => {});
-        } else {
+        if (onShare) {
             onShare(reel);
+        } else if (navigator.share) {
+            navigator.share(shareData).catch(() => {});
         }
     };
 
     const handleDownload = () => {
+        if (!safeVideoUrl) return;
         try {
-            let downloadUrl = reel.videoUrl;
+            let downloadUrl = safeVideoUrl;
             if (downloadUrl.includes('cloudinary.com')) {
                 // Cloudinary trick to force download
                 downloadUrl = downloadUrl.replace('/upload/', '/upload/fl_attachment/');
@@ -179,7 +183,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
             a.click();
             document.body.removeChild(a);
         } catch (error) {
-            window.open(reel.videoUrl, '_blank');
+            openSafeExternal(safeVideoUrl);
         }
     };
 
@@ -195,7 +199,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
         if (!newComment.trim()) return;
         try {
             await axios.post(`/api/reels/${reel.id}/comments`, { content: newComment }, {
-                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                headers: { Authorization: `Bearer ${token}` }
             });
             setNewComment('');
             fetchComments();
@@ -205,7 +209,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
     const handleReplyToComment = async (commentId, content) => {
         try {
             await axios.post(`/api/reels/comments/${commentId}/replies`, { content }, {
-                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                headers: { Authorization: `Bearer ${token}` }
             });
             fetchComments();
         } catch (err) {
@@ -217,7 +221,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
         if (!window.confirm("Delete this comment?")) return;
         try {
             await axios.delete(`/api/reels/comments/${commentId}`, {
-                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                headers: { Authorization: `Bearer ${token}` }
             });
             fetchComments();
         } catch (err) {
@@ -235,14 +239,14 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
                     <p className="text-xs text-gray-500 max-w-[200px] leading-relaxed">The video link is broken or has been removed from the server.</p>
                 </div>
             ) : (
-                <video
+                safeVideoUrl ? <video
                     ref={videoRef}
-                    src={reel.videoUrl}
+                    src={safeVideoUrl}
                     className="h-full w-full object-contain cursor-pointer"
                     loop
                     playsInline
                     preload="auto"
-                    muted={!!reel.musicUrl}
+                    muted={!!safeMusicUrl}
                     style={{ filter: filters[reel.filterName] || '' }}
                     onError={() => setVideoError(true)}
                     onClick={() => {
@@ -254,11 +258,12 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
                             audioRef.current?.pause();
                         }
                     }}
-                />
+                    referrerPolicy="no-referrer"
+                /> : <div className="flex h-full w-full items-center justify-center bg-[#111b21] px-6 text-center text-sm font-semibold text-red-300">Unsafe or unavailable reel media</div>
             )}
 
-            {reel.musicUrl && (
-                <audio ref={audioRef} src={reel.musicUrl} loop />
+            {safeMusicUrl && (
+                <audio ref={audioRef} src={safeMusicUrl} loop />
             )}
 
             {/* Floating Emojis */}

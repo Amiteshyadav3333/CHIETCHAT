@@ -2,6 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import { ArrowLeftIcon, PlayIcon, UserCircleIcon, PencilIcon, GlobeAltIcon, EllipsisVerticalIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { getSafeWebsiteUrl } from '../utils/safeUrl';
 
 const ReelProfile = ({ userId, onBack, onSelectReel }) => {
     const { token, user: currentUser } = useContext(AuthContext);
@@ -93,6 +94,7 @@ const ReelProfile = ({ userId, onBack, onSelectReel }) => {
     if (!profileData) return null;
 
     const { user, reels } = profileData;
+    const safeWebsiteUrl = getSafeWebsiteUrl(user.websiteUrl);
 
     return (
         <div className="h-full w-full bg-[#0f0f0f] flex flex-col animate-slide-up overflow-y-auto relative">
@@ -143,11 +145,12 @@ const ReelProfile = ({ userId, onBack, onSelectReel }) => {
                 
                 <div className="text-center px-6">
                     <p className="text-gray-300 text-sm">{user.bio || 'No bio yet.'}</p>
-                    {user.websiteUrl && (
+                    {safeWebsiteUrl && (
                         <a 
-                            href={user.websiteUrl.startsWith('http') ? user.websiteUrl : `https://${user.websiteUrl}`} 
+                            href={safeWebsiteUrl}
                             target="_blank" 
                             rel="noopener noreferrer"
+                            referrerPolicy="no-referrer"
                             className="text-blue-400 text-xs font-bold mt-2 flex items-center justify-center gap-1 hover:underline"
                         >
                             <GlobeAltIcon className="w-3 h-3" /> {user.websiteUrl.replace(/^https?:\/\//, '')}

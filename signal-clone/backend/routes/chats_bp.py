@@ -1,14 +1,124 @@
 import requests
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_app
 import json
-from models import db, Chat, ChatParticipant, Message, User, MessageDeletion
+import hashlib
+import hmac
+import datetime
+from models import db, Chat, ChatParticipant, Message, User, MessageDeletion, PaymentOrder, ScheduledMessage, CallRecord
 from extensions import socketio
 from utils import (
     get_current_user_id, user_can_access_chat, serialize_user, 
-    iso_utc, get_json_data, has_contact, is_blocked, utc_now
+    iso_utc, get_json_data, has_contact, is_blocked, utc_now,
+    queue_claimed_upload_assets, process_media_deletion_task
 )
+from scheduled_messages import valid_encrypted_envelope
+from observability import report_safe_exception
 
 chats_bp = Blueprint('chats_bp', __name__)
+
+def parse_scheduled_time(value):
+    try:
+        parsed = datetime.datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+        if parsed.tzinfo is None:
+            return None
+        return parsed.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+    except (TypeError, ValueError):
+        return None
+
+@chats_bp.route('/api/chats/<int:chat_id>/scheduled-messages', methods=['POST'])
+def create_scheduled_message(chat_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    if not user_can_access_chat(user_id, chat_id):
+        return jsonify({'error': 'Forbidden'}), 403
+    data = get_json_data()
+    encrypted_content = data.get('content')
+    scheduled_for = parse_scheduled_time(data.get('scheduledFor'))
+    client_message_id = str(data.get('clientMessageId') or '').strip()[:100]
+    now = utc_now()
+    if not valid_encrypted_envelope(encrypted_content):
+        return jsonify({'error': 'A valid encrypted message envelope is required'}), 400
+    if not client_message_id:
+        return jsonify({'error': 'clientMessageId is required'}), 400
+    if not scheduled_for or scheduled_for < now + datetime.timedelta(minutes=1):
+        return jsonify({'error': 'Schedule time must be at least one minute in the future'}), 400
+    if scheduled_for > now + datetime.timedelta(days=365):
+        return jsonify({'error': 'Schedule time cannot be more than one year away'}), 400
+    participant_ids = {str(row.user_id) for row in ChatParticipant.query.filter_by(chat_id=chat_id).all()}
+    envelope_recipients = set(json.loads(encrypted_content)['recipients'])
+    if not participant_ids.issubset(envelope_recipients):
+        return jsonify({'error': 'Encrypted envelope is missing a chat participant'}), 400
+    existing = ScheduledMessage.query.filter_by(sender_id=user_id, client_message_id=client_message_id).first()
+    if existing:
+        return jsonify({'id': existing.id, 'scheduledFor': iso_utc(existing.scheduled_for), 'duplicate': True}), 200
+    pending_for_chat = ScheduledMessage.query.filter_by(
+        sender_id=user_id, chat_id=chat_id, status='pending',
+    ).count()
+    if pending_for_chat >= 50:
+        return jsonify({'error': 'This chat already has the maximum 50 pending scheduled messages'}), 409
+    pending_for_account = ScheduledMessage.query.filter_by(sender_id=user_id, status='pending').count()
+    if pending_for_account >= 250:
+        return jsonify({'error': 'Your account already has the maximum 250 pending scheduled messages'}), 409
+    item = ScheduledMessage(
+        sender_id=user_id, chat_id=chat_id, client_message_id=client_message_id,
+        encrypted_content=encrypted_content, type='text', ttl=0,
+        scheduled_for=scheduled_for,
+    )
+    db.session.add(item)
+    db.session.commit()
+    return jsonify({'id': item.id, 'scheduledFor': iso_utc(item.scheduled_for)}), 201
+
+@chats_bp.route('/api/chats/<int:chat_id>/scheduled-messages', methods=['GET'])
+def list_scheduled_messages(chat_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    if not user_can_access_chat(user_id, chat_id):
+        return jsonify({'error': 'Forbidden'}), 403
+    items = ScheduledMessage.query.filter_by(
+        sender_id=user_id, chat_id=chat_id, status='pending',
+    ).order_by(ScheduledMessage.scheduled_for.asc()).limit(100).all()
+    return jsonify({'items': [{
+        'id': item.id, 'scheduledFor': iso_utc(item.scheduled_for), 'status': item.status,
+        'createdAt': iso_utc(item.created_at),
+    } for item in items]})
+
+@chats_bp.route('/api/scheduled-messages/<int:item_id>', methods=['DELETE'])
+def cancel_scheduled_message(item_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    item = db.session.get(ScheduledMessage, item_id)
+    if not item or item.sender_id != user_id:
+        return jsonify({'error': 'Scheduled message not found'}), 404
+    if item.status != 'pending':
+        return jsonify({'error': 'Scheduled message can no longer be cancelled'}), 409
+    item.status = 'cancelled'
+    item.encrypted_content = ''
+    db.session.commit()
+    return jsonify({'ok': True})
+
+def prepare_chat_hard_delete(chat_id):
+    participant_ids = [row.user_id for row in ChatParticipant.query.filter_by(chat_id=chat_id).all()]
+    task_ids = []
+    for message in Message.query.filter_by(chat_id=chat_id).all():
+        task_ids.extend(queue_claimed_upload_assets('message', message.id))
+
+    retention_pepper = current_app.config.get('DATA_RETENTION_PEPPER') or current_app.config['SECRET_KEY']
+    chat_ref = hmac.new(
+        retention_pepper.encode(), f'payment-chat:{chat_id}'.encode(), hashlib.sha256
+    ).hexdigest()
+    for payment in PaymentOrder.query.filter_by(chat_id=chat_id).all():
+        payment.chat_ref = payment.chat_ref or chat_ref
+        payment.chat_id = None
+
+    ScheduledMessage.query.filter_by(chat_id=chat_id).delete(synchronize_session=False)
+    CallRecord.query.filter_by(chat_id=chat_id).delete(synchronize_session=False)
+    Message.query.filter_by(chat_id=chat_id).delete(synchronize_session=False)
+    ChatParticipant.query.filter_by(chat_id=chat_id).delete(synchronize_session=False)
+    Chat.query.filter_by(id=chat_id).delete(synchronize_session=False)
+    return participant_ids, list(dict.fromkeys(task_ids))
 
 def emit_message_update(chat_id, event, payload):
     for participant in ChatParticipant.query.filter_by(chat_id=chat_id).all():
@@ -25,18 +135,19 @@ def delete_chat(chat_id):
     option = request.args.get('option', 'me')
 
     if option == 'everyone':
-        chat = Chat.query.get(chat_id)
+        chat = db.session.get(Chat, chat_id)
+        if not chat:
+            return jsonify({"error": "Chat not found"}), 404
         if chat.is_group and chat.group_admin_id != user_id:
             return jsonify({"error": "Only group admin can delete chat for everyone"}), 403
 
-        # Delete messages, participants, and chat
-        Message.query.filter_by(chat_id=chat_id).delete()
-        ChatParticipant.query.filter_by(chat_id=chat_id).delete()
-        Chat.query.filter_by(id=chat_id).delete()
+        participant_ids, task_ids = prepare_chat_hard_delete(chat_id)
         db.session.commit()
+        for task_id in task_ids:
+            process_media_deletion_task(task_id)
 
-        # Emit socket update to notify other participants
-        emit_message_update(chat_id, 'chat_deleted', {"chatId": chat_id})
+        for participant_id in participant_ids:
+            socketio.emit('chat_deleted', {"chatId": chat_id}, room=f"user_{participant_id}")
         return jsonify({"ok": True})
 
     else: # option == 'me'
@@ -55,11 +166,13 @@ def delete_chat(chat_id):
             total_participants = ChatParticipant.query.filter_by(chat_id=chat_id).all()
             all_deleted = all(p.deleted_at is not None for p in total_participants)
             if all_deleted:
-                Message.query.filter_by(chat_id=chat_id).delete()
-                ChatParticipant.query.filter_by(chat_id=chat_id).delete()
-                Chat.query.filter_by(id=chat_id).delete()
+                _, task_ids = prepare_chat_hard_delete(chat_id)
+            else:
+                task_ids = []
 
             db.session.commit()
+            for task_id in task_ids:
+                process_media_deletion_task(task_id)
         return jsonify({"ok": True})
 
 @chats_bp.route('/api/chats', methods=['GET'])
@@ -116,12 +229,17 @@ def get_chats():
                     chat_name = other_user['username']
                     chat_avatar = other_user['avatar']
 
+            other_id = next((p['id'] for p in part_data if p['id'] != user_id), None) if not chat.is_group else None
+            my_audience_profile = serialize_user(db.session.get(User, user_id), viewer_id=other_id) if other_id else None
+
             result.append({
                 "id": chat.id,
                 "isGroup": chat.is_group,
                 "isArchived": archive_map.get(chat.id, False),
                 "name": chat_name,
                 "avatar": chat_avatar,
+                "myAvatarForContact": my_audience_profile['avatar'] if my_audience_profile else None,
+                "hasCustomAvatarForContact": my_audience_profile['hasCustomAudienceAvatar'] if my_audience_profile else False,
                 "participants": part_data,
                 "groupAdminId": chat.group_admin_id,
                 "isPublic": getattr(chat, 'is_public', False),
@@ -138,7 +256,7 @@ def get_chats():
         result.sort(key=lambda x: x['lastMessage']['timestamp'] or '', reverse=True)
         return jsonify(result)
     except Exception as e:
-        print(e)
+        report_safe_exception('chat_list_failed', e)
         return jsonify({"error": "Invalid token"}), 401
 
 @chats_bp.route('/api/chats/create', methods=['POST'])
@@ -183,7 +301,7 @@ def create_chat():
     if not is_group and len(participant_ids) == 2:
         first_user_chats = ChatParticipant.query.filter_by(user_id=participant_ids[0]).all()
         for participation in first_user_chats:
-            chat = Chat.query.get(participation.chat_id)
+            chat = db.session.get(Chat, participation.chat_id)
             if not chat or chat.is_group:
                 continue
             existing_ids = {p.user_id for p in ChatParticipant.query.filter_by(chat_id=chat.id).all()}
@@ -267,7 +385,7 @@ def delete_message(message_id):
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
 
-    message = Message.query.get(message_id)
+    message = db.session.get(Message, message_id)
     if not message:
         return jsonify({"error": "Message not found"}), 404
 
@@ -280,7 +398,10 @@ def delete_message(message_id):
         message.content = ''
         message.type = 'deleted'
         message.deleted_at = utc_now()
+        task_ids = queue_claimed_upload_assets('message', message.id)
         db.session.commit()
+        for task_id in task_ids:
+            process_media_deletion_task(task_id)
         payload = {
             "message": "Deleted",
             "id": message.id,
@@ -313,16 +434,22 @@ def edit_message(message_id):
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
 
-    message = Message.query.get(message_id)
+    message = db.session.get(Message, message_id)
     if not message:
         return jsonify({"error": "Message not found"}), 404
     if message.sender_id != user_id or message.deleted_at:
         return jsonify({"error": "Forbidden"}), 403
+    if message.type not in ('text', 'business_auto_reply') or not valid_encrypted_envelope(message.content):
+        return jsonify({"error": "This message type cannot be edited"}), 409
 
     data = get_json_data()
     content = data.get('content')
-    if content is None:
-        return jsonify({"error": "Content is required"}), 400
+    if not valid_encrypted_envelope(content):
+        return jsonify({"error": "A valid encrypted message envelope is required"}), 400
+    participant_ids = {str(row.user_id) for row in ChatParticipant.query.filter_by(chat_id=message.chat_id).all()}
+    envelope_recipients = set(json.loads(content)['recipients'])
+    if not participant_ids.issubset(envelope_recipients):
+        return jsonify({"error": "Encrypted envelope is missing a chat participant"}), 400
 
     message.content = content
     message.edited_at = utc_now()
@@ -341,11 +468,14 @@ def react_message(message_id):
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
-    message = Message.query.get(message_id)
+    message = db.session.get(Message, message_id)
     if not message or not user_can_access_chat(user_id, message.chat_id):
         return jsonify({"error": "Message not found"}), 404
     data = get_json_data()
-    emoji = (data.get('emoji') or '').strip()
+    raw_emoji = data.get('emoji')
+    if not isinstance(raw_emoji, str):
+        return jsonify({"error": "Reaction must be text"}), 400
+    emoji = raw_emoji.strip()
     reactions = message.reactions_dict()
     key = str(user_id)
     if not emoji or reactions.get(key) == emoji:
@@ -363,7 +493,7 @@ def pin_message(message_id):
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
-    message = Message.query.get(message_id)
+    message = db.session.get(Message, message_id)
     if not message or not user_can_access_chat(user_id, message.chat_id):
         return jsonify({"error": "Message not found"}), 404
     message.is_pinned = not bool(message.is_pinned)
@@ -411,7 +541,7 @@ def create_group():
             "groupAdminId": new_group.group_admin_id
         }), 201
     except Exception as e:
-        print(f"Error creating group: {e}")
+        report_safe_exception('group_creation_failed', e)
         return jsonify({"error": "Failed to create group"}), 500
 
 # Add Participant to Group
@@ -421,11 +551,11 @@ def add_group_participant(chat_id):
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
 
-    chat = Chat.query.get(chat_id)
+    chat = db.session.get(Chat, chat_id)
     if not chat or not chat.is_group:
         return jsonify({"error": "Group not found"}), 404
 
-    if not user_can_access_chat(user_id, chat_id):
+    if chat.group_admin_id != user_id:
         return jsonify({"error": "Forbidden"}), 403
 
     data = get_json_data()
@@ -433,7 +563,7 @@ def add_group_participant(chat_id):
     if not target_uid:
         return jsonify({"error": "User ID is required"}), 400
 
-    target_user = User.query.get(target_uid)
+    target_user = db.session.get(User, target_uid)
     if not target_user:
         return jsonify({"error": "User not found"}), 404
 
@@ -443,28 +573,10 @@ def add_group_participant(chat_id):
         db.session.add(participant)
         db.session.commit()
 
-        # Send a system message to the chat
-        system_msg = Message(
-            chat_id=chat_id,
-            sender_id=user_id,
-            content=f"Added {target_user.username} to the group",
-            type='text',
-            status='sent'
-        )
-        db.session.add(system_msg)
-        db.session.commit()
-
-        msg_payload = {
-            "id": system_msg.id,
-            "senderId": user_id,
-            "content": system_msg.content,
-            "status": 'sent',
-            "type": 'text',
-            "timestamp": iso_utc(system_msg.timestamp),
-            "chatId": chat_id,
-            "deliveredAt": None
-        }
-        emit_message_update(chat_id, 'receive_message', msg_payload)
+        emit_message_update(chat_id, 'group_participant_added', {
+            'chatId': chat_id, 'userId': target_user.id,
+            'username': target_user.username, 'addedBy': user_id,
+        })
 
     return jsonify({"ok": True})
 
@@ -490,7 +602,7 @@ def get_public_groups():
             "membersCount": ChatParticipant.query.filter_by(chat_id=g.id).count()
         } for g in public_groups])
     except Exception as e:
-        print(f"Error fetching public groups: {e}")
+        report_safe_exception('public_group_fetch_failed', e)
         return jsonify({"error": str(e)}), 500
 
 # Search Groups (Public & Private)
@@ -501,7 +613,7 @@ def search_groups():
         return jsonify({"error": "Unauthorized"}), 401
 
     data = get_json_data()
-    query = data.get('query', '').strip()
+    query = str(data.get('query') or '').strip()
 
     if not query:
         return jsonify([])
@@ -510,6 +622,7 @@ def search_groups():
         subquery = db.session.query(ChatParticipant.chat_id).filter_by(user_id=user_id).subquery()
         groups = Chat.query.filter(
             Chat.is_group == True,
+            Chat.is_public == True,
             Chat.name.ilike(f"%{query}%")
         ).filter(~Chat.id.in_(subquery)).all()
 
@@ -527,7 +640,7 @@ def search_groups():
             })
         return jsonify(results)
     except Exception as e:
-        print(f"Error searching groups: {e}")
+        report_safe_exception('group_search_failed', e)
         return jsonify({"error": str(e)}), 500
 
 # Join a Group
@@ -537,7 +650,7 @@ def join_group(chat_id):
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
 
-    group = Chat.query.get(chat_id)
+    group = db.session.get(Chat, chat_id)
     if not group or not group.is_group:
         return jsonify({"error": "Group not found"}), 404
 
@@ -546,7 +659,7 @@ def join_group(chat_id):
     if existing:
         return jsonify({"error": "Already a participant"}), 400
 
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
 
     if getattr(group, 'is_public', False):
         # Directly join
@@ -593,7 +706,7 @@ def get_group_requests(chat_id):
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
 
-    group = Chat.query.get(chat_id)
+    group = db.session.get(Chat, chat_id)
     if not group or not group.is_group:
         return jsonify({"error": "Group not found"}), 404
 
@@ -601,7 +714,10 @@ def get_group_requests(chat_id):
         return jsonify({"error": "Only group admin can view requests"}), 403
 
     from models import GroupJoinRequest
-    requests = GroupJoinRequest.query.filter_by(chat_id=chat_id, status='pending').all()
+    limit = min(max(request.args.get('limit', 50, type=int), 1), 100)
+    requests = GroupJoinRequest.query.filter_by(
+        chat_id=chat_id, status='pending'
+    ).order_by(GroupJoinRequest.created_at.asc()).limit(limit).all()
 
     return jsonify([{
         "id": r.id,
@@ -620,11 +736,11 @@ def respond_group_request(request_id):
         return jsonify({"error": "Unauthorized"}), 401
 
     from models import GroupJoinRequest
-    join_req = GroupJoinRequest.query.get(request_id)
+    join_req = db.session.get(GroupJoinRequest, request_id)
     if not join_req:
         return jsonify({"error": "Request not found"}), 404
 
-    group = Chat.query.get(join_req.chat_id)
+    group = db.session.get(Chat, join_req.chat_id)
     if not group or group.group_admin_id != user_id:
         return jsonify({"error": "Only group admin can respond to requests"}), 403
 
@@ -654,7 +770,7 @@ def respond_group_request(request_id):
 
         return jsonify({"ok": True})
     except Exception as e:
-        print(f"Error responding to group request: {e}")
+        report_safe_exception('group_request_response_failed', e)
         return jsonify({"error": str(e)}), 500
 
 # Toggle Mute Group (Admin Only)
@@ -664,7 +780,7 @@ def toggle_group_chat(chat_id):
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
 
-    group = Chat.query.get(chat_id)
+    group = db.session.get(Chat, chat_id)
     if not group or not group.is_group:
         return jsonify({"error": "Group not found"}), 404
 
@@ -679,7 +795,7 @@ def toggle_group_chat(chat_id):
             "isChatDisabled": group.is_chat_disabled
         })
     except Exception as e:
-        print(f"Error toggling group chat: {e}")
+        report_safe_exception('group_chat_toggle_failed', e)
         return jsonify({"error": str(e)}), 500
 
 FALLBACK_GIFS_DATA = [
@@ -775,7 +891,7 @@ def get_gifs_proxy():
             if urls:
                 return jsonify({"gifs": urls})
     except Exception as e:
-        print("Error fetching Tenor GIFs:", e)
+        report_safe_exception('tenor_fetch_failed', e)
     
     try:
         # Fallback to Giphy
@@ -786,7 +902,7 @@ def get_gifs_proxy():
             if urls:
                 return jsonify({"gifs": urls})
     except Exception as e:
-        print("Error fetching GIPHY GIFs:", e)
+        report_safe_exception('giphy_fetch_failed', e)
     
     # Filter fallback GIFs based on user's query matching our tag keywords
     if query == 'trending':
@@ -810,7 +926,7 @@ def star_message(message_id):
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
     
-    msg = Message.query.get(message_id)
+    msg = db.session.get(Message, message_id)
     if not msg:
         return jsonify({"error": "Message not found"}), 404
         
@@ -911,7 +1027,7 @@ def vote_poll(message_id):
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
         
-    msg = Message.query.get(message_id)
+    msg = db.session.get(Message, message_id)
     if not msg or msg.type != 'poll':
         return jsonify({"error": "Poll message not found"}), 404
         

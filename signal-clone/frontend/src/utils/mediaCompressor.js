@@ -22,7 +22,7 @@ export const compressImage = (file, options = {}) => {
         quality = 0.78
     } = options;
 
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
         // Don't compress GIFs or SVGs
         if (file.type === 'image/gif' || file.type === 'image/svg+xml') {
             resolve(file);

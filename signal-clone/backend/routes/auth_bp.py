@@ -1,19 +1,31 @@
-from flask import Blueprint, jsonify, current_app
+from flask import Blueprint, jsonify, current_app, request
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 import datetime
+import hashlib
+import hmac
 import json
 import urllib.error
 import urllib.parse
 import urllib.request
+import secrets
+from observability import report_safe_exception
 from models import (
     db, User, PendingRegistration, Chat, ChatParticipant, GroupJoinRequest,
     Contact, Message, Status, StatusView, StatusReaction, Block, Reel,
     ReelLike, ReelComment, Follow, Notification, SocialPost, SocialPostLike,
     SocialPostComment, CommentReply, Channel, ChannelMembership, ActiveSession,
-    UserReport, StarredMessage, PollVote
+    UserReport, StarredMessage, PollVote, ProfileAudienceAvatar, BusinessProfile,
+    CatalogProduct, BusinessAutomation, BusinessProfileView, BusinessAutoReplyLog,
+    PaymentOrder, PushSubscription, UploadAsset, ScheduledMessage, CallRecord,
+    AiConversation
 )
-from utils import get_json_data, get_current_user_id, normalize_phone, is_valid_phone, utc_now, serialize_user
+from utils import (
+    get_json_data, get_current_user_id, normalize_phone, is_valid_phone, utc_now,
+    serialize_user, queue_media_deletion, process_media_deletion_task,
+    queue_claimed_upload_assets,
+    get_request_auth_token,
+)
 
 auth_bp = Blueprint('auth_bp', __name__)
 MAX_PASSWORD_ATTEMPTS = 3
@@ -26,6 +38,15 @@ def create_token(user, session_id=None):
     if session_id:
         payload['session_id'] = session_id
     return jwt.encode(payload, current_app.config['JWT_SECRET_KEY'], algorithm='HS256')
+
+def current_token_payload():
+    token = get_request_auth_token()
+    if not token:
+        return None
+    try:
+        return jwt.decode(token, current_app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+    except jwt.InvalidTokenError:
+        return None
 
 def supabase_auth_request(path, payload, method='POST', bearer_token=None):
     supabase_url = current_app.config.get('SUPABASE_URL')
@@ -79,21 +100,30 @@ def get_supabase_user(access_token):
 
 def complete_login(user):
     if user.two_factor_enabled:
+        try:
+            send_email_otp(user.email, create_user=True)
+        except Exception as exc:
+            return jsonify({"error": f"Could not send security code: {str(exc)}"}), 503
         return jsonify({
             "twoFactorRequired": True,
             "userId": user.id,
-            "message": "Two-factor authentication code required"
+            "method": "email",
+            "maskedEmail": mask_email(user.email),
+            "message": "A security code was sent to your registered email"
         }), 200
     return finalize_login(user)
+
+def mask_email(email):
+    local, _, domain = (email or '').partition('@')
+    if not domain:
+        return 'your registered email'
+    return f"{local[:2]}{'*' * max(2, len(local) - 2)}@{domain}"
 
 def finalize_login(user):
     user.last_seen = utc_now()
     user.failed_login_attempts = 0
     user.password_login_locked = False
     
-    from flask import request
-    import secrets
-
     device_fingerprint = None
     try:
         data = request.get_json(silent=True) or {}
@@ -111,17 +141,82 @@ def finalize_login(user):
     db.session.add(session)
     db.session.commit()
 
+    token = create_token(user, session_id=session.id)
+    csrf_token = secrets.token_urlsafe(32)
+    response = jsonify({
+        "csrfToken": csrf_token,
+        "user": serialize_user(user, viewer_id=user.id),
+        "keyBackup": user.encrypted_private_key
+    })
+    response.set_cookie(
+        current_app.config['AUTH_COOKIE_NAME'], token, httponly=True,
+        secure=current_app.config['AUTH_COOKIE_SECURE'],
+        samesite=current_app.config['AUTH_COOKIE_SAMESITE'], max_age=7 * 24 * 60 * 60,
+        path='/',
+    )
+    response.set_cookie(
+        'cheetchat_csrf', csrf_token, httponly=False,
+        secure=current_app.config['AUTH_COOKIE_SECURE'],
+        samesite=current_app.config['AUTH_COOKIE_SAMESITE'], max_age=7 * 24 * 60 * 60,
+        path='/',
+    )
+    return response, 200
+
+@auth_bp.route('/api/auth/me', methods=['GET'])
+def validate_current_session():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({'error': 'Unauthorized'}), 401
+    payload = current_token_payload() or {}
+    session = db.session.get(ActiveSession, payload.get('session_id')) if payload.get('session_id') else None
     return jsonify({
-        "token": create_token(user, session_id=session.id),
-        "user": serialize_user(user, viewer_id=user.id)
-    }), 200
+        'user': serialize_user(user, viewer_id=user.id),
+        'session': {
+            'id': session.id if session else None,
+            'deviceName': session.user_agent if session else None,
+            'lastActiveAt': session.created_at.isoformat() + 'Z' if session and session.created_at else None,
+        },
+    })
+
+@auth_bp.route('/api/auth/csrf', methods=['GET'])
+def get_csrf_token():
+    if not get_current_user_id():
+        return jsonify({'error': 'Unauthorized'}), 401
+    csrf_token = request.cookies.get('cheetchat_csrf') or secrets.token_urlsafe(32)
+    response = jsonify({'csrfToken': csrf_token})
+    if not request.cookies.get('cheetchat_csrf'):
+        response.set_cookie(
+            'cheetchat_csrf', csrf_token, httponly=False,
+            secure=current_app.config['AUTH_COOKIE_SECURE'],
+            samesite=current_app.config['AUTH_COOKIE_SAMESITE'], max_age=7 * 24 * 60 * 60,
+            path='/',
+        )
+    return response
+
+@auth_bp.route('/api/auth/logout', methods=['POST'])
+def logout_current_session():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    session_id = (current_token_payload() or {}).get('session_id')
+    if session_id:
+        PushSubscription.query.filter_by(user_id=user_id, session_id=session_id).delete(synchronize_session=False)
+        ActiveSession.query.filter_by(id=session_id, user_id=user_id).delete(synchronize_session=False)
+        db.session.commit()
+    response = jsonify({'ok': True})
+    response.delete_cookie(current_app.config['AUTH_COOKIE_NAME'], path='/')
+    response.delete_cookie('cheetchat_csrf', path='/')
+    return response
 
 @auth_bp.route('/api/register', methods=['POST'])
 def register():
     try:
         data = get_json_data()
-        username = (data.get('username') or '').strip()
-        email = (data.get('email') or '').strip().lower()
+        username = str(data.get('username') or '').strip()
+        email = str(data.get('email') or '').strip().lower()
         phone = normalize_phone(data.get('phone'))
         password = data.get('password') or ''
 
@@ -148,6 +243,8 @@ def register():
             pending.phone = phone
             pending.password_hash = hashed_pw
             pending.public_key = data.get('publicKey')
+            pending.encrypted_private_key = data.get('encryptedPrivateKey')
+            pending.encrypted_recovery_key = data.get('encryptedRecoveryKey')
             pending.created_at = utc_now()
         else:
             pending = PendingRegistration(
@@ -155,22 +252,24 @@ def register():
                 email=email,
                 phone=phone,
                 password_hash=hashed_pw,
-                public_key=data.get('publicKey')
+                public_key=data.get('publicKey'),
+                encrypted_private_key=data.get('encryptedPrivateKey')
+                , encrypted_recovery_key=data.get('encryptedRecoveryKey')
             )
             db.session.add(pending)
         db.session.commit()
         send_email_otp(email, create_user=True)
         return jsonify({"message": "OTP sent to email. Verify it to finish registration.", "email": email}), 200
     except Exception as e:
-        print(f"Register Error: {e}")
-        return jsonify({"error": str(e)}), 500
+        report_safe_exception('registration_failed', e)
+        return jsonify({"error": "Registration could not be completed"}), 500
 
 @auth_bp.route('/api/register/verify-otp', methods=['POST'])
 def verify_registration_otp():
     try:
         data = get_json_data()
-        email = (data.get('email') or '').strip().lower()
-        otp = (data.get('otp') or '').strip()
+        email = str(data.get('email') or '').strip().lower()
+        otp = str(data.get('otp') or '').strip()
 
         if not email or not otp:
             return jsonify({"error": "Email and OTP are required"}), 400
@@ -190,6 +289,8 @@ def verify_registration_otp():
             phone=pending.phone,
             password_hash=pending.password_hash,
             public_key=pending.public_key,
+            encrypted_private_key=pending.encrypted_private_key,
+            encrypted_recovery_key=pending.encrypted_recovery_key,
             email_verified=True,
             failed_login_attempts=0,
             password_login_locked=False,
@@ -205,15 +306,39 @@ def verify_registration_otp():
         if not name_slug:
             name_slug = 'user'
         user.platform_id = f"{name_slug}_{user.id}"
+        session = ActiveSession(
+            user_id=user.id,
+            token_hash=secrets.token_hex(32),
+            device_fingerprint=(data.get('deviceFingerprint') or '')[:255] or None,
+            ip_address=request.remote_addr,
+            user_agent=request.headers.get('User-Agent')
+        )
+        db.session.add(session)
         db.session.commit()
-        return jsonify({
+        token = create_token(user, session_id=session.id)
+        csrf_token = secrets.token_urlsafe(32)
+        response = jsonify({
             "message": "Email verified",
-            "token": create_token(user),
-            "user": serialize_user(user),
+            "csrfToken": csrf_token,
+            "user": serialize_user(user, viewer_id=user.id),
+            "keyBackup": user.encrypted_private_key,
             "needsProfileSetup": True
-        }), 201
+        })
+        response.set_cookie(
+            current_app.config['AUTH_COOKIE_NAME'], token, httponly=True,
+            secure=current_app.config['AUTH_COOKIE_SECURE'],
+            samesite=current_app.config['AUTH_COOKIE_SAMESITE'], max_age=7 * 24 * 60 * 60,
+            path='/',
+        )
+        response.set_cookie(
+            'cheetchat_csrf', csrf_token, httponly=False,
+            secure=current_app.config['AUTH_COOKIE_SECURE'],
+            samesite=current_app.config['AUTH_COOKIE_SAMESITE'], max_age=7 * 24 * 60 * 60,
+            path='/',
+        )
+        return response, 201
     except Exception as e:
-        print(f"Register OTP Error: {e}")
+        report_safe_exception('registration_otp_failed', e)
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
@@ -221,7 +346,7 @@ def verify_registration_otp():
 def login():
     try:
         data = get_json_data()
-        email = (data.get('email') or '').strip().lower()
+        email = str(data.get('email') or '').strip().lower()
         password = data.get('password') or ''
 
         if not email or not password:
@@ -265,14 +390,14 @@ def login():
             "attemptsRemaining": attempts_remaining
         }), 401
     except Exception as e:
-        print(f"Login Error: {e}")
+        report_safe_exception('login_failed', e)
         return jsonify({"error": str(e)}), 500
 
 @auth_bp.route('/api/login/request-otp', methods=['POST'])
 def request_login_otp():
     try:
         data = get_json_data()
-        email = (data.get('email') or '').strip().lower()
+        email = str(data.get('email') or '').strip().lower()
         if not email:
             return jsonify({"error": "Email is required"}), 400
         user = User.query.filter_by(email=email).first()
@@ -281,15 +406,15 @@ def request_login_otp():
         send_email_otp(email, create_user=True)
         return jsonify({"message": "OTP sent to email"}), 200
     except Exception as e:
-        print(f"Request Login OTP Error: {e}")
+        report_safe_exception('login_otp_request_failed', e)
         return jsonify({"error": str(e)}), 500
 
 @auth_bp.route('/api/login/verify-otp', methods=['POST'])
 def verify_login_otp():
     try:
         data = get_json_data()
-        email = (data.get('email') or '').strip().lower()
-        otp = (data.get('otp') or '').strip()
+        email = str(data.get('email') or '').strip().lower()
+        otp = str(data.get('otp') or '').strip()
         if not email or not otp:
             return jsonify({"error": "Email and OTP are required"}), 400
         user = User.query.filter_by(email=email).first()
@@ -300,7 +425,7 @@ def verify_login_otp():
         user.email_verified = True
         return complete_login(user)
     except Exception as e:
-        print(f"Verify Login OTP Error: {e}")
+        report_safe_exception('login_otp_verify_failed', e)
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
@@ -308,7 +433,7 @@ def verify_login_otp():
 def forgot_password():
     try:
         data = get_json_data()
-        email = (data.get('email') or '').strip().lower()
+        email = str(data.get('email') or '').strip().lower()
 
         if not email:
             return jsonify({"error": "Email is required"}), 400
@@ -320,7 +445,7 @@ def forgot_password():
         send_password_recovery(email)
         return jsonify({"message": "Password reset link sent to your email."}), 200
     except Exception as e:
-        print(f"Forgot Password Error: {e}")
+        report_safe_exception('password_recovery_request_failed', e)
         return jsonify({"error": str(e)}), 500
 
 @auth_bp.route('/api/reset-password', methods=['POST'])
@@ -329,6 +454,7 @@ def reset_password():
         data = get_json_data()
         access_token = data.get('accessToken') or ''
         new_password = data.get('newPassword') or ''
+        encrypted_private_key = data.get('encryptedPrivateKey')
 
         if not access_token or not new_password:
             return jsonify({"error": "Reset token and new password are required"}), 400
@@ -344,17 +470,55 @@ def reset_password():
         if not user:
             return jsonify({"error": "No account matched this reset link"}), 404
 
+        if user.encrypted_recovery_key:
+            if not isinstance(encrypted_private_key, str) or not 50 <= len(encrypted_private_key) <= 20000:
+                return jsonify({"error": "Your recovery code is required to preserve encrypted chats"}), 409
+            user.encrypted_private_key = encrypted_private_key
         user.password_hash = generate_password_hash(new_password)
         user.email_verified = True
         user.failed_login_attempts = 0
         user.password_login_locked = False
         user.last_seen = utc_now()
+        ActiveSession.query.filter_by(user_id=user.id).delete(synchronize_session=False)
         db.session.commit()
         return jsonify({"message": "Password reset successfully. Please login with your new password."}), 200
     except Exception as e:
-        print(f"Reset Password Error: {e}")
+        report_safe_exception('password_reset_failed', e)
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+@auth_bp.route('/api/reset-password/key-backup', methods=['POST'])
+def get_password_reset_key_backup():
+    data = get_json_data()
+    access_token = data.get('accessToken') or ''
+    if not access_token:
+        return jsonify({'error': 'Reset token is required'}), 400
+    try:
+        supabase_user = get_supabase_user(access_token)
+        email = (supabase_user.get('email') or '').strip().lower()
+        user = User.query.filter_by(email=email).first() if email else None
+        if not user:
+            return jsonify({'error': 'Invalid or expired reset link'}), 401
+        return jsonify({
+            'recoveryRequired': bool(user.encrypted_recovery_key),
+            'encryptedRecoveryKey': user.encrypted_recovery_key,
+            'publicKey': user.public_key,
+        })
+    except Exception:
+        return jsonify({'error': 'Invalid or expired reset link'}), 401
+
+@auth_bp.route('/api/user/recovery-key', methods=['POST'])
+def save_recovery_key_backup():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    backup = get_json_data().get('encryptedRecoveryKey')
+    if not isinstance(backup, str) or not 50 <= len(backup) <= 20000:
+        return jsonify({'error': 'Invalid encrypted recovery backup'}), 400
+    user = db.session.get(User, user_id)
+    user.encrypted_recovery_key = backup
+    db.session.commit()
+    return jsonify({'ok': True})
 
 @auth_bp.route('/api/account/change-password', methods=['POST'])
 def change_password():
@@ -366,6 +530,7 @@ def change_password():
         data = get_json_data()
         current_password = data.get('currentPassword') or ''
         new_password = data.get('newPassword') or ''
+        encrypted_private_key = data.get('encryptedPrivateKey')
 
         if not current_password or not new_password:
             return jsonify({"error": "Current password and new password are required"}), 400
@@ -374,34 +539,66 @@ def change_password():
         if current_password == new_password:
             return jsonify({"error": "New password must be different from your current password"}), 400
 
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user:
             return jsonify({"error": "User not found"}), 404
         if not check_password_hash(user.password_hash, current_password):
             return jsonify({"error": "Current password is incorrect"}), 403
 
+        if user.encrypted_private_key:
+            if not isinstance(encrypted_private_key, str) or not 50 <= len(encrypted_private_key) <= 20000:
+                return jsonify({"error": "Encrypted chat key must be protected with the new password"}), 409
+            user.encrypted_private_key = encrypted_private_key
         user.password_hash = generate_password_hash(new_password)
         user.failed_login_attempts = 0
         user.password_login_locked = False
+        auth_header = request.headers.get('Authorization', '')
+        current_session_id = None
+        if auth_header.startswith('Bearer '):
+            try:
+                current_session_id = jwt.decode(
+                    auth_header.split(' ', 1)[1], current_app.config['JWT_SECRET_KEY'], algorithms=['HS256']
+                ).get('session_id')
+            except Exception:
+                pass
+        sessions = ActiveSession.query.filter_by(user_id=user_id)
+        if current_session_id:
+            sessions = sessions.filter(ActiveSession.id != current_session_id)
+        sessions.delete(synchronize_session=False)
         db.session.commit()
         return jsonify({"message": "Password changed successfully"}), 200
     except Exception as e:
-        print(f"Change Password Error: {e}")
+        report_safe_exception('password_change_failed', e)
         db.session.rollback()
         return jsonify({"error": "Unable to change password right now"}), 500
 
 def delete_user_account_data(user):
     user_id = user.id
+    media_task_ids = []
+    retention_pepper = current_app.config.get('DATA_RETENTION_PEPPER') or current_app.config['SECRET_KEY']
 
-    owned_status_ids = [row.id for row in Status.query.filter_by(user_id=user_id).all()]
+    def retain_media_deletion(media_url, resource_type, trusted=False):
+        task = queue_media_deletion(media_url, resource_type, trusted=trusted)
+        if task:
+            db.session.flush()
+            media_task_ids.append(task.id)
+
+    retain_media_deletion(user.avatar, 'image')
+
+    owned_statuses = Status.query.filter_by(user_id=user_id).all()
+    owned_status_ids = [row.id for row in owned_statuses]
     if owned_status_ids:
         StatusReaction.query.filter(StatusReaction.status_id.in_(owned_status_ids)).delete(synchronize_session=False)
     StatusView.query.filter_by(viewer_id=user_id).delete(synchronize_session=False)
     StatusReaction.query.filter_by(user_id=user_id).delete(synchronize_session=False)
-    for row in Status.query.filter_by(user_id=user_id).all():
+    for row in owned_statuses:
+        retain_media_deletion(row.media_url, row.media_type)
+        retain_media_deletion(row.music_url, 'video')
         db.session.delete(row)
 
     for row in Reel.query.filter_by(user_id=user_id).all():
+        retain_media_deletion(row.video_url, 'video')
+        retain_media_deletion(row.music_url, 'video')
         db.session.delete(row)
     ReelLike.query.filter_by(user_id=user_id).delete(synchronize_session=False)
     ReelComment.query.filter_by(user_id=user_id).delete(synchronize_session=False)
@@ -420,16 +617,39 @@ def delete_user_account_data(user):
     SocialPostComment.query.filter_by(user_id=user_id).delete(synchronize_session=False)
 
     for row in SocialPost.query.filter_by(user_id=user_id).all():
+        retain_media_deletion(row.media_url, row.media_type or 'image')
         db.session.delete(row)
 
     for row in Channel.query.filter_by(owner_id=user_id).all():
+        retain_media_deletion(row.cover_url, 'image')
         db.session.delete(row)
     ChannelMembership.query.filter_by(user_id=user_id).delete(synchronize_session=False)
 
+    ScheduledMessage.query.filter_by(sender_id=user_id).delete(synchronize_session=False)
+    CallRecord.query.filter_by(caller_id=user_id).delete(synchronize_session=False)
+    owned_message_ids = [row.id for row in Message.query.filter_by(sender_id=user_id).all()]
+    if owned_message_ids:
+        BusinessAutoReplyLog.query.filter(BusinessAutoReplyLog.incoming_message_id.in_(owned_message_ids)).delete(synchronize_session=False)
     Message.query.filter_by(sender_id=user_id).delete(synchronize_session=False)
     GroupJoinRequest.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+    affected_chat_ids = [row.chat_id for row in ChatParticipant.query.filter_by(user_id=user_id).all()]
     ChatParticipant.query.filter_by(user_id=user_id).delete(synchronize_session=False)
     Chat.query.filter_by(group_admin_id=user_id).update({Chat.group_admin_id: None}, synchronize_session=False)
+    db.session.flush()
+    for chat_id in affected_chat_ids:
+        if ChatParticipant.query.filter_by(chat_id=chat_id).count() == 0:
+            for message in Message.query.filter_by(chat_id=chat_id).all():
+                media_task_ids.extend(queue_claimed_upload_assets('message', message.id))
+            chat_ref = hmac.new(
+                retention_pepper.encode(), f'payment-chat:{chat_id}'.encode(), hashlib.sha256
+            ).hexdigest()
+            for payment in PaymentOrder.query.filter_by(chat_id=chat_id).all():
+                payment.chat_ref = payment.chat_ref or chat_ref
+                payment.chat_id = None
+            ScheduledMessage.query.filter_by(chat_id=chat_id).delete(synchronize_session=False)
+            CallRecord.query.filter_by(chat_id=chat_id).delete(synchronize_session=False)
+            Message.query.filter_by(chat_id=chat_id).delete(synchronize_session=False)
+            Chat.query.filter_by(id=chat_id).delete(synchronize_session=False)
 
     Contact.query.filter(
         (Contact.owner_id == user_id) | (Contact.contact_user_id == user_id)
@@ -449,8 +669,47 @@ def delete_user_account_data(user):
     UserReport.query.filter((UserReport.reporter_id == user_id) | (UserReport.reported_id == user_id)).delete(synchronize_session=False)
     StarredMessage.query.filter_by(user_id=user_id).delete(synchronize_session=False)
     PollVote.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+    audience_avatars = ProfileAudienceAvatar.query.filter(
+        (ProfileAudienceAvatar.owner_id == user_id) | (ProfileAudienceAvatar.viewer_id == user_id)
+    ).all()
+    for row in audience_avatars:
+        if row.owner_id == user_id:
+            retain_media_deletion(row.avatar_url, 'image')
+        db.session.delete(row)
+    catalog_products = CatalogProduct.query.filter_by(owner_id=user_id).all()
+    for row in catalog_products:
+        retain_media_deletion(row.image_url, 'image')
+        db.session.delete(row)
+    BusinessAutomation.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+    BusinessProfile.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+    BusinessProfileView.query.filter(
+        (BusinessProfileView.business_user_id == user_id) | (BusinessProfileView.viewer_id == user_id)
+    ).delete(synchronize_session=False)
+    BusinessAutoReplyLog.query.filter_by(owner_id=user_id).delete(synchronize_session=False)
+    retained_party_ref = hmac.new(
+        retention_pepper.encode(), f'payment-party:{user_id}'.encode(), hashlib.sha256
+    ).hexdigest()
+    retention_days = current_app.config.get('PAYMENT_RETENTION_DAYS', 2555)
+    for payment in PaymentOrder.query.filter(
+        (PaymentOrder.payer_id == user_id) | (PaymentOrder.payee_id == user_id)
+    ).all():
+        if payment.payer_id == user_id:
+            payment.payer_ref = retained_party_ref
+            payment.payer_id = None
+        if payment.payee_id == user_id:
+            payment.payee_ref = retained_party_ref
+            payment.payee_id = None
+        minimum_retention = (payment.created_at or utc_now()) + datetime.timedelta(days=retention_days)
+        if not payment.retention_until or payment.retention_until < minimum_retention:
+            payment.retention_until = minimum_retention
+    PushSubscription.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+    AiConversation.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+    for asset in UploadAsset.query.filter_by(owner_id=user_id).all():
+        retain_media_deletion(asset.media_url, asset.resource_type, trusted=True)
+        db.session.delete(asset)
 
     db.session.delete(user)
+    return list(dict.fromkeys(media_task_ids))
 
 @auth_bp.route('/api/account', methods=['DELETE'])
 def delete_account():
@@ -461,8 +720,8 @@ def delete_account():
     try:
         data = get_json_data()
         password = data.get('password') or ''
-        confirmation = (data.get('confirmation') or '').strip()
-        user = User.query.get(user_id)
+        confirmation = str(data.get('confirmation') or '').strip()
+        user = db.session.get(User, user_id)
 
         if not user:
             return jsonify({"error": "User not found"}), 404
@@ -473,11 +732,16 @@ def delete_account():
         if not check_password_hash(user.password_hash, password):
             return jsonify({"error": "Password is incorrect"}), 403
 
-        delete_user_account_data(user)
+        media_task_ids = delete_user_account_data(user)
         db.session.commit()
-        return jsonify({"message": "Your account and associated data were permanently deleted"}), 200
+        for task_id in media_task_ids:
+            process_media_deletion_task(task_id)
+        return jsonify({
+            "message": "Your account and personal content were deleted",
+            "paymentRetention": "Provider transaction records were de-identified and retained for the configured legal period",
+        }), 200
     except Exception as e:
-        print(f"Delete Account Error: {e}")
+        report_safe_exception('account_deletion_failed', e)
         db.session.rollback()
         return jsonify({"error": "Unable to delete account right now"}), 500
 
@@ -486,52 +750,48 @@ def setup_2fa():
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
         
-    from utils import generate_totp_secret
-    secret = generate_totp_secret()
-    
-    qr_data = f"otpauth://totp/Cheetchat:{user.email}?secret={secret}&issuer=Cheetchat"
-    qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={urllib.parse.quote(qr_data)}"
-    
-    return jsonify({
-        "secret": secret,
-        "qrCodeUrl": qr_url
-    }), 200
+    data = get_json_data()
+    password = data.get('password')
+    if not password or not check_password_hash(user.password_hash, password):
+        return jsonify({"error": "Password is incorrect"}), 403
+    try:
+        send_email_otp(user.email, create_user=True)
+    except Exception as exc:
+        return jsonify({"error": f"Could not send email code: {str(exc)}"}), 503
+    return jsonify({"method": "email", "maskedEmail": mask_email(user.email)}), 200
 
 @auth_bp.route('/api/auth/2fa/enable', methods=['POST'])
 def enable_2fa():
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
         
     data = get_json_data()
-    secret = data.get('secret')
     token = data.get('token')
-    
-    if not secret or not token:
-        return jsonify({"error": "Secret and verification code are required"}), 400
-        
-    from utils import verify_totp
-    if verify_totp(secret, token):
-        user.two_factor_secret = secret
+    if not token:
+        return jsonify({"error": "Email verification code is required"}), 400
+    try:
+        verify_email_otp(user.email, token)
+        user.two_factor_secret = 'email_otp'
         user.two_factor_enabled = True
         db.session.commit()
         return jsonify({"message": "Two-factor authentication enabled successfully", "user": serialize_user(user, viewer_id=user.id)}), 200
-    else:
-        return jsonify({"error": "Invalid verification code. Please try again."}), 400
+    except Exception:
+        return jsonify({"error": "Invalid or expired email verification code"}), 400
 
 @auth_bp.route('/api/auth/2fa/disable', methods=['POST'])
 def disable_2fa():
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
         
@@ -559,21 +819,34 @@ def login_verify_2fa():
         if not user_id or not token:
             return jsonify({"error": "User ID and code are required"}), 400
             
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user:
             return jsonify({"error": "User not found"}), 404
             
-        if not user.two_factor_enabled or not user.two_factor_secret:
+        if not user.two_factor_enabled:
             return jsonify({"error": "Two-factor authentication is not enabled"}), 400
-            
-        from utils import verify_totp
-        if verify_totp(user.two_factor_secret, token):
+        try:
+            verify_email_otp(user.email, token)
             return finalize_login(user)
-        else:
-            return jsonify({"error": "Invalid verification code"}), 400
+        except Exception:
+            return jsonify({"error": "Invalid or expired email verification code"}), 400
     except Exception as e:
-        print(f"2FA login verification error: {e}")
+        report_safe_exception('two_factor_login_failed', e)
         return jsonify({"error": "Verification failed"}), 500
+
+@auth_bp.route('/api/user/key-backup', methods=['POST'])
+def save_encrypted_key_backup():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    data = get_json_data()
+    backup = data.get('encryptedPrivateKey')
+    if not isinstance(backup, str) or len(backup) < 50 or len(backup) > 20000:
+        return jsonify({"error": "Invalid encrypted key backup"}), 400
+    user = db.session.get(User, user_id)
+    user.encrypted_private_key = backup
+    db.session.commit()
+    return jsonify({"ok": True})
 
 @auth_bp.route('/api/auth/sessions', methods=['GET'])
 def get_active_sessions():
@@ -620,6 +893,7 @@ def revoke_session(session_id):
     if not session:
         return jsonify({"error": "Session not found"}), 404
         
+    PushSubscription.query.filter_by(user_id=user_id, session_id=session_id).delete(synchronize_session=False)
     db.session.delete(session)
     db.session.commit()
     return jsonify({"message": "Session revoked successfully"}), 200

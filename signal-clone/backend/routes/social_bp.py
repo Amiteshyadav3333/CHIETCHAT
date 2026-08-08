@@ -3,18 +3,29 @@ from sqlalchemy import or_
 from werkzeug.utils import secure_filename
 
 from models import (
-    db, User, Follow, SocialPost, SocialPostLike, SocialPostComment,
+    db, User, Follow, SocialPost, SocialPostLike, SocialPostShare, SocialPostComment,
     Channel, ChannelMembership, CommentReply
 )
 from utils import (
     get_current_user_id, get_json_data, iso_utc, serialize_user,
-    upload_to_cloudinary, create_notification
+    upload_to_cloudinary, create_notification, queue_media_deletion, process_media_deletion_task
 )
 
 social_bp = Blueprint('social_bp', __name__)
 
 ALLOWED_MEDIA = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'webm', 'mov', 'm4v'}
 IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
+FEED_DEFAULT_LIMIT = 30
+FEED_MAX_LIMIT = 50
+COMMENT_DEFAULT_LIMIT = 50
+COMMENT_MAX_LIMIT = 100
+MAX_POST_CAPTION_LENGTH = 1000
+MAX_COMMENT_LENGTH = 1000
+MAX_CHANNEL_QUERY_LENGTH = 100
+
+
+def bounded_limit(default, maximum):
+    return min(max(request.args.get('limit', default, type=int), 1), maximum)
 
 def media_type_for(filename):
     extension = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
@@ -116,7 +127,9 @@ def serialize_channel(channel, current_user_id, include_pending=False):
         "canPost": channel.owner_id == current_user_id or get_channel_role(channel, current_user_id) == 'approved'
     }
     if include_pending and channel.owner_id == current_user_id:
-        pending = ChannelMembership.query.filter_by(channel_id=channel.id, status='pending').order_by(ChannelMembership.created_at.asc()).all()
+        pending = ChannelMembership.query.filter_by(channel_id=channel.id, status='pending').order_by(
+            ChannelMembership.created_at.asc()
+        ).limit(100).all()
         payload["pendingRequests"] = [{
             "id": item.id,
             "createdAt": iso_utc(item.created_at),
@@ -140,7 +153,9 @@ def get_social_posts():
             return jsonify([])
         query = query.filter(SocialPost.user_id.in_(followed_ids))
 
-    posts = query.order_by(SocialPost.created_at.desc()).all()
+    posts = query.order_by(SocialPost.created_at.desc()).limit(
+        bounded_limit(FEED_DEFAULT_LIMIT, FEED_MAX_LIMIT)
+    ).all()
     return jsonify([serialize_post(post, user_id) for post in posts])
 
 @social_bp.route('/api/social/posts', methods=['POST'])
@@ -150,10 +165,12 @@ def create_social_post():
         return jsonify({"error": "Unauthorized"}), 401
 
     caption = request.form.get('caption', '').strip()
+    if len(caption) > MAX_POST_CAPTION_LENGTH:
+        return jsonify({"error": f"Caption must be {MAX_POST_CAPTION_LENGTH} characters or less"}), 400
     channel_id = request.form.get('channelId')
     channel = None
     if channel_id:
-        channel = Channel.query.get_or_404(int(channel_id))
+        channel = db.get_or_404(Channel, int(channel_id))
         role = get_channel_role(channel, user_id)
         if role not in {'owner', 'approved'}:
             return jsonify({"error": "Channel approval required before posting"}), 403
@@ -168,7 +185,10 @@ def create_social_post():
             if not media_type:
                 return jsonify({"error": "Upload image or video only"}), 400
             resource_type = 'image' if media_type == 'image' else 'video'
-            media_url = upload_to_cloudinary(file, folder='chietchat/social', resource_type=resource_type)
+            try:
+                media_url = upload_to_cloudinary(file, folder='chietchat/social', resource_type=resource_type)
+            except ValueError as error:
+                return jsonify({'error': str(error)}), 400
 
     if not caption and not media_url:
         return jsonify({"error": "Write something or choose a photo/video"}), 400
@@ -192,11 +212,11 @@ def retweet_post(post_id):
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
 
-    original = SocialPost.query.get_or_404(post_id)
+    original = db.get_or_404(SocialPost, post_id)
     # Prevent retweeting a retweet (retweet the original instead)
     if original.retweet_of_id:
         post_id = original.retweet_of_id
-        original = SocialPost.query.get_or_404(post_id)
+        original = db.get_or_404(SocialPost, post_id)
 
     # Toggle retweet
     existing = SocialPost.query.filter_by(retweet_of_id=post_id, user_id=user_id).first()
@@ -226,9 +246,11 @@ def share_post(post_id):
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
-    post = SocialPost.query.get_or_404(post_id)
-    post.share_count = (post.share_count or 0) + 1
-    db.session.commit()
+    post = db.get_or_404(SocialPost, post_id)
+    if not SocialPostShare.query.filter_by(post_id=post_id, user_id=user_id).first():
+        db.session.add(SocialPostShare(post_id=post_id, user_id=user_id))
+        post.share_count = (post.share_count or 0) + 1
+        db.session.commit()
     return jsonify({"shareCount": post.share_count})
 
 # ─── LIKE ─────────────────────────────────────────────────────────────────────
@@ -238,7 +260,7 @@ def toggle_social_post_like(post_id):
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
-    post = SocialPost.query.get_or_404(post_id)
+    post = db.get_or_404(SocialPost, post_id)
     existing = SocialPostLike.query.filter_by(post_id=post_id, user_id=user_id).first()
     if existing:
         db.session.delete(existing)
@@ -254,9 +276,13 @@ def toggle_social_post_like(post_id):
 
 @social_bp.route('/api/social/posts/<int:post_id>/comments', methods=['GET'])
 def get_social_post_comments(post_id):
-    SocialPost.query.get_or_404(post_id)
-    comments = SocialPostComment.query.filter_by(post_id=post_id, parent_id=None).order_by(SocialPostComment.created_at.asc()).all()
     user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    db.get_or_404(SocialPost, post_id)
+    comments = SocialPostComment.query.filter_by(post_id=post_id, parent_id=None).order_by(
+        SocialPostComment.created_at.asc()
+    ).limit(bounded_limit(COMMENT_DEFAULT_LIMIT, COMMENT_MAX_LIMIT)).all()
     return jsonify([serialize_comment(c, user_id) for c in comments])
 
 @social_bp.route('/api/social/posts/<int:post_id>/comments', methods=['POST'])
@@ -264,12 +290,22 @@ def create_social_post_comment(post_id):
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
-    post = SocialPost.query.get_or_404(post_id)
+    post = db.get_or_404(SocialPost, post_id)
     data = get_json_data()
-    content = data.get('content', '').strip()
+    raw_content = data.get('content')
+    if not isinstance(raw_content, str):
+        return jsonify({"error": "Comment must be text"}), 400
+    content = raw_content.strip()
     if not content:
         return jsonify({"error": "Comment cannot be empty"}), 400
-    comment = SocialPostComment(post_id=post_id, user_id=user_id, content=content, parent_id=data.get('parentId'))
+    if len(content) > MAX_COMMENT_LENGTH:
+        return jsonify({"error": f"Comment must be {MAX_COMMENT_LENGTH} characters or less"}), 400
+    parent_id = data.get('parentId')
+    if parent_id is not None:
+        parent = SocialPostComment.query.filter_by(id=parent_id, post_id=post_id, parent_id=None).first()
+        if not parent:
+            return jsonify({"error": "Invalid parent comment"}), 400
+    comment = SocialPostComment(post_id=post_id, user_id=user_id, content=content, parent_id=parent_id)
     db.session.add(comment)
     db.session.commit()
     create_notification(post.user_id, user_id, 'comment', f"commented: {content[:50]}", post_id)
@@ -282,10 +318,17 @@ def reply_to_comment(comment_id):
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
-    comment = SocialPostComment.query.get_or_404(comment_id)
-    content = get_json_data().get('content', '').strip()
+    comment = db.get_or_404(SocialPostComment, comment_id)
+    raw_content = get_json_data().get('content')
+    if not isinstance(raw_content, str):
+        return jsonify({"error": "Reply must be text"}), 400
+    content = raw_content.strip()
     if not content:
         return jsonify({"error": "Reply cannot be empty"}), 400
+    if len(content) > MAX_COMMENT_LENGTH:
+        return jsonify({"error": f"Reply must be {MAX_COMMENT_LENGTH} characters or less"}), 400
+    if comment.parent_id is not None:
+        return jsonify({"error": "Replies can only be added to top-level comments"}), 400
     reply = SocialPostComment(
         post_id=comment.post_id,
         user_id=user_id,
@@ -302,8 +345,8 @@ def delete_social_comment(comment_id):
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
-    comment = SocialPostComment.query.get_or_404(comment_id)
-    post = SocialPost.query.get(comment.post_id)
+    comment = db.get_or_404(SocialPostComment, comment_id)
+    post = db.session.get(SocialPost, comment.post_id)
     if comment.user_id != user_id and (post and post.user_id != user_id):
         return jsonify({"error": "Forbidden"}), 403
     db.session.delete(comment)
@@ -319,11 +362,14 @@ def delete_social_post(post_id):
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
-    post = SocialPost.query.get_or_404(post_id)
+    post = db.get_or_404(SocialPost, post_id)
     if post.user_id != user_id and not (post.channel and post.channel.owner_id == user_id):
         return jsonify({"error": "Forbidden"}), 403
+    deletion_task = queue_media_deletion(post.media_url, post.media_type or 'image')
     db.session.delete(post)
     db.session.commit()
+    if deletion_task:
+        process_media_deletion_task(deletion_task.id)
     return jsonify({"message": "Post deleted"})
 
 # ─── USER PROFILE ─────────────────────────────────────────────────────────────
@@ -334,7 +380,7 @@ def get_user_profile(profile_user_id):
     if not current_user_id:
         return jsonify({"error": "Unauthorized"}), 401
 
-    profile_user = User.query.get_or_404(profile_user_id)
+    profile_user = db.get_or_404(User, profile_user_id)
     followers_count = Follow.query.filter_by(followed_id=profile_user_id).count()
     following_count = Follow.query.filter_by(follower_id=profile_user_id).count()
     posts_count = SocialPost.query.filter_by(user_id=profile_user_id, channel_id=None, retweet_of_id=None).count()
@@ -363,10 +409,14 @@ def get_channels():
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
     query = request.args.get('q', '').strip()
+    if len(query) > MAX_CHANNEL_QUERY_LENGTH:
+        return jsonify({"error": f"Search must be {MAX_CHANNEL_QUERY_LENGTH} characters or less"}), 400
     channels_query = Channel.query
     if query:
         channels_query = channels_query.filter(or_(Channel.name.ilike(f"%{query}%"), Channel.description.ilike(f"%{query}%")))
-    channels = channels_query.order_by(Channel.created_at.desc()).all()
+    channels = channels_query.order_by(Channel.created_at.desc()).limit(
+        bounded_limit(FEED_DEFAULT_LIMIT, FEED_MAX_LIMIT)
+    ).all()
     return jsonify([serialize_channel(channel, user_id) for channel in channels])
 
 @social_bp.route('/api/social/channels', methods=['POST'])
@@ -378,12 +428,19 @@ def create_channel():
     description = request.form.get('description', '').strip()
     if not name:
         return jsonify({"error": "Channel name is required"}), 400
+    if len(name) > 120:
+        return jsonify({"error": "Channel name must be 120 characters or less"}), 400
+    if len(description) > 500:
+        return jsonify({"error": "Channel description must be 500 characters or less"}), 400
     cover_url = None
     if 'cover' in request.files and request.files['cover'].filename:
         filename = secure_filename(request.files['cover'].filename)
         if media_type_for(filename) != 'image':
             return jsonify({"error": "Cover must be an image"}), 400
-        cover_url = upload_to_cloudinary(request.files['cover'], folder='chietchat/channels', resource_type='image')
+        try:
+            cover_url = upload_to_cloudinary(request.files['cover'], folder='chietchat/channels', resource_type='image')
+        except ValueError as error:
+            return jsonify({'error': str(error)}), 400
     channel = Channel(owner_id=user_id, name=name, description=description, cover_url=cover_url)
     db.session.add(channel)
     db.session.commit()
@@ -394,8 +451,10 @@ def get_channel(channel_id):
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
-    channel = Channel.query.get_or_404(channel_id)
-    posts = SocialPost.query.filter_by(channel_id=channel.id).order_by(SocialPost.created_at.desc()).all()
+    channel = db.get_or_404(Channel, channel_id)
+    posts = SocialPost.query.filter_by(channel_id=channel.id).order_by(SocialPost.created_at.desc()).limit(
+        bounded_limit(FEED_DEFAULT_LIMIT, FEED_MAX_LIMIT)
+    ).all()
     return jsonify({
         "channel": serialize_channel(channel, user_id, include_pending=True),
         "posts": [serialize_post(post, user_id) for post in posts]
@@ -406,7 +465,7 @@ def request_channel_subscription(channel_id):
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
-    channel = Channel.query.get_or_404(channel_id)
+    channel = db.get_or_404(Channel, channel_id)
     if channel.owner_id == user_id:
         return jsonify({"role": "owner"})
     membership = ChannelMembership.query.filter_by(channel_id=channel_id, user_id=user_id).first()
@@ -426,7 +485,7 @@ def review_channel_subscription(channel_id, membership_id):
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
-    channel = Channel.query.get_or_404(channel_id)
+    channel = db.get_or_404(Channel, channel_id)
     if channel.owner_id != user_id:
         return jsonify({"error": "Only channel owner can approve requests"}), 403
     action = get_json_data().get('action')

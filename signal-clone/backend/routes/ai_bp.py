@@ -4,9 +4,11 @@ import urllib.request
 import urllib.parse
 import urllib.error
 import re
-from flask import Blueprint, request, jsonify, Response, stream_with_context
+import datetime
+from flask import Blueprint, request, jsonify, Response, stream_with_context, current_app
 from models import db, AiConversation, User
 from utils import get_current_user_id, utc_now
+from observability import report_safe_exception
 
 ai_bp = Blueprint('ai_bp', __name__)
 
@@ -179,7 +181,7 @@ def _call_grok(messages, stream=False):
     try:
         return urllib.request.urlopen(req, timeout=30)
     except Exception as e:
-        print(f"Grok error: {e}")
+        report_safe_exception('grok_request_failed', e)
         return None
 
 
@@ -207,11 +209,11 @@ def _call_groq(messages, stream=False):
     try:
         return urllib.request.urlopen(req, timeout=30)
     except urllib.error.HTTPError as e:
-        err_body = e.read().decode('utf-8', errors='ignore')
-        print(f"Groq HTTPError {e.code}: {e.reason}\nResponse Body: {err_body}")
+        e.read()
+        report_safe_exception('groq_http_failed', e)
         return None
     except Exception as e:
-        print(f"Groq error: {e}")
+        report_safe_exception('groq_request_failed', e)
         return None
 
 
@@ -265,7 +267,7 @@ def _call_openai(messages, stream=False, image_data=None):
     try:
         return urllib.request.urlopen(req, timeout=30)
     except Exception as e:
-        print(f"OpenAI error: {e}")
+        report_safe_exception('openai_request_failed', e)
         return None
 
 
@@ -325,7 +327,7 @@ def _call_gemini(messages, stream=False, image_data=None):
     try:
         return urllib.request.urlopen(req, timeout=30)
     except Exception as e:
-        print(f"Gemini error: {e}")
+        report_safe_exception('gemini_request_failed', e)
         return None
 
 
@@ -401,14 +403,14 @@ def _web_search(query):
         summary = "\n".join([f"- {r.get('title','')}: {r.get('snippet','')}" for r in results])
         return summary
     except Exception as e:
-        print(f"Web search error: {e}")
+        report_safe_exception('web_search_failed', e)
         return None
 
 
 def _get_user_info(user_id):
     """Fetch user name and gender from DB"""
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if user:
             name = user.username or 'User'
             # Try to detect gender from user profile if 'gender' column exists
@@ -451,8 +453,21 @@ def _build_messages(user_id, new_user_msg, user_gender=None, user_name=None):
 
 
 def _save_turn(user_id, user_msg, ai_reply):
+    retention_days = int(current_app.config.get('AI_MEMORY_RETENTION_DAYS', 30))
+    max_rows = int(current_app.config.get('AI_MEMORY_MAX_ROWS', 100))
+    cutoff = utc_now() - datetime.timedelta(days=retention_days)
+    AiConversation.query.filter(
+        AiConversation.user_id == user_id,
+        AiConversation.created_at < cutoff,
+    ).delete(synchronize_session=False)
     db.session.add(AiConversation(user_id=user_id, role='user', content=user_msg))
     db.session.add(AiConversation(user_id=user_id, role='assistant', content=ai_reply))
+    db.session.flush()
+    overflow_ids = [row.id for row in AiConversation.query.filter_by(user_id=user_id)
+        .order_by(AiConversation.created_at.desc(), AiConversation.id.desc())
+        .offset(max_rows).all()]
+    if overflow_ids:
+        AiConversation.query.filter(AiConversation.id.in_(overflow_ids)).delete(synchronize_session=False)
     db.session.commit()
 
 
@@ -465,17 +480,28 @@ def ai_chat():
         return jsonify({"error": "Unauthorized"}), 401
 
     data = request.get_json(silent=True) or {}
-    user_msg = (data.get('message') or '').strip()
+    raw_message = data.get('message')
+    if not isinstance(raw_message, str):
+        return jsonify({"error": "Message must be text"}), 400
+    user_msg = raw_message.strip()
     if not user_msg:
         return jsonify({"error": "Message is required"}), 400
+    if len(user_msg) > 8000:
+        return jsonify({"error": "Message is too long"}), 400
 
     user_name, user_gender = _get_user_info(user_id)
 
     # Allow frontend to pass gender override
-    if data.get('user_gender'):
-        user_gender = data['user_gender']
+    requested_gender = str(data.get('user_gender') or '').lower()
+    if requested_gender in ('male', 'female', 'unknown'):
+        user_gender = requested_gender
 
     image_data = data.get('image')
+    if image_data and (
+        not isinstance(image_data, str) or len(image_data) > 8_000_000
+        or not re.fullmatch(r'data:image/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+', image_data)
+    ):
+        return jsonify({"error": "Camera image is invalid or too large"}), 400
 
     # Web search trigger
     search_keywords = ['search', 'latest', 'news', 'today', 'current', 'price', 'weather',
@@ -518,13 +544,19 @@ def ai_chat_stream():
         return jsonify({"error": "Unauthorized"}), 401
 
     data = request.get_json(silent=True) or {}
-    user_msg = (data.get('message') or '').strip()
+    raw_message = data.get('message')
+    if not isinstance(raw_message, str):
+        return jsonify({"error": "Message must be text"}), 400
+    user_msg = raw_message.strip()
     if not user_msg:
         return jsonify({"error": "Message is required"}), 400
+    if len(user_msg) > 8000:
+        return jsonify({"error": "Message is too long"}), 400
 
     user_name, user_gender = _get_user_info(user_id)
-    if data.get('user_gender'):
-        user_gender = data['user_gender']
+    requested_gender = str(data.get('user_gender') or '').lower()
+    if requested_gender in ('male', 'female', 'unknown'):
+        user_gender = requested_gender
 
     messages = _build_messages(user_id, user_msg, user_gender, user_name)
 
@@ -554,7 +586,7 @@ def ai_chat_stream():
                     yield "data: [DONE]\n\n"
                     return
             except Exception as e:
-                print(f"Groq stream error: {e}")
+                report_safe_exception('groq_stream_failed', e)
 
         # Try Gemini streaming fallback
         resp = _call_gemini(messages, stream=True)
@@ -577,7 +609,7 @@ def ai_chat_stream():
                     yield "data: [DONE]\n\n"
                     return
             except Exception as e:
-                print(f"Gemini stream error: {e}")
+                report_safe_exception('gemini_stream_failed', e)
 
         # Try Grok streaming fallback
         resp = _call_grok(messages, stream=True)
@@ -602,7 +634,7 @@ def ai_chat_stream():
                     yield "data: [DONE]\n\n"
                     return
             except Exception as e:
-                print(f"Grok stream error: {e}")
+                report_safe_exception('grok_stream_failed', e)
 
         # Fallback: non-streaming with fake word-by-word effect
         reply = _get_ai_reply(messages)
@@ -617,7 +649,6 @@ def ai_chat_stream():
         headers={
             'Cache-Control': 'no-cache',
             'X-Accel-Buffering': 'no',
-            'Access-Control-Allow-Origin': '*',
         }
     )
 
@@ -657,9 +688,14 @@ def generate_image():
         return jsonify({"error": "Unauthorized"}), 401
 
     data = request.get_json(silent=True) or {}
-    prompt = (data.get('prompt') or '').strip()
+    raw_prompt = data.get('prompt')
+    if not isinstance(raw_prompt, str):
+        return jsonify({"error": "Prompt must be text"}), 400
+    prompt = raw_prompt.strip()
     if not prompt:
         return jsonify({"error": "Prompt is required"}), 400
+    if len(prompt) > 2000:
+        return jsonify({"error": "Prompt is too long"}), 400
 
     encoded = urllib.parse.quote(prompt)
     image_url = f"https://image.pollinations.ai/prompt/{encoded}?width=512&height=512&nologo=true"
@@ -670,9 +706,9 @@ def generate_image():
 def ai_info():
     """Returns AI bot profile info — gender-aware based on logged-in user"""
     user_id = get_current_user_id()
-    user_name, user_gender = ('User', 'unknown')
-    if user_id:
-        user_name, user_gender = _get_user_info(user_id)
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    user_name, user_gender = _get_user_info(user_id)
 
     # If user is female → male AI (Arjun), else → female AI (Aria)
     if (user_gender or 'unknown').lower() == 'female':
@@ -702,6 +738,8 @@ def ai_info():
 
 @ai_bp.route('/api/ai/tts', methods=['GET'])
 def ai_tts():
+    if not get_current_user_id():
+        return jsonify({'error': 'Unauthorized'}), 401
     text = request.args.get('text', '').strip()
     gender = request.args.get('gender', 'female').lower()
     
@@ -731,7 +769,7 @@ def ai_tts():
             with urllib.request.urlopen(req, timeout=15) as response:
                 return Response(response.read(), mimetype="audio/mpeg")
         except Exception as e:
-            print(f"OpenAI TTS error: {e}")
+            report_safe_exception('openai_tts_failed', e)
             
     # Option 2: Fallback to Google Translate TTS (free, natural voice, no key needed)
     try:
@@ -750,5 +788,5 @@ def ai_tts():
         with urllib.request.urlopen(req, timeout=10) as response:
             return Response(response.read(), mimetype="audio/mpeg")
     except Exception as e:
-        print(f"Google TTS fallback error: {e}")
+        report_safe_exception('google_tts_failed', e)
         return jsonify({"error": "TTS failed"}), 500

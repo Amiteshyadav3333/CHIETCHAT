@@ -2,6 +2,7 @@ module.exports = {
     root: true,
     env: {
         browser: true,
+        node: true,
         es2020: true,
     },
     extends: [
@@ -28,5 +29,8 @@ module.exports = {
         'react/prop-types': 'off',
         'react-hooks/exhaustive-deps': 'off',
         'react-refresh/only-export-components': 'off',
+        'no-empty': ['error', { allowEmptyCatch: true }],
+        'no-constant-condition': ['error', { checkLoops: false }],
+        'react/no-unescaped-entities': 'off',
     },
 };

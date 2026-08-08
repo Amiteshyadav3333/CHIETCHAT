@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-    XMarkIcon, BellIcon, CheckIcon, TrashIcon,
+    XMarkIcon, BellIcon, CheckIcon,
     ArrowPathRoundedSquareIcon
 } from '@heroicons/react/24/outline';
 import {
@@ -8,6 +8,7 @@ import {
     UsersIcon, StarIcon, ArrowUpTrayIcon
 } from '@heroicons/react/24/solid';
 import { formatDistanceToNow } from 'date-fns';
+import UserAvatar from './UserAvatar';
 
 // Activity type → icon + color + label
 const ACTIVITY_META = {
@@ -212,8 +213,9 @@ const NotificationItem = ({ notification: n, onClick }) => {
 
             {/* Avatar + icon */}
             <div className="relative shrink-0">
-                <img
-                    src={n.sender?.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'}
+                <UserAvatar
+                    src={n.sender?.avatar}
+                    name={n.sender?.username}
                     alt={n.sender?.username}
                     className="w-11 h-11 rounded-full object-cover border border-white/10"
                 />

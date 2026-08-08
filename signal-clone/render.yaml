@@ -54,7 +54,7 @@ services:
       - key: FRONTEND_URL
         value: https://chat.indiasearch.site
       - key: BACKEND_URL
-        value: https://chietchat.onrender.com
+        value: https://chietchat-backend.onrender.com
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET

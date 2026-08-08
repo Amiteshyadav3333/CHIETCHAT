@@ -1,5 +1,5 @@
-const PRODUCTION_API_URL = 'https://chietchat.onrender.com';
-const LEGACY_API_HOSTS = new Set(['chietchat-backend.onrender.com']);
+const PRODUCTION_API_URL = 'https://chietchat-backend.onrender.com';
+const LEGACY_API_HOSTS = new Set(['chietchat.onrender.com']);
 
 export const resolveApiBaseUrl = (configuredUrl, isProduction = false) => {
     const candidate = String(configuredUrl || '').trim().replace(/\/$/, '');

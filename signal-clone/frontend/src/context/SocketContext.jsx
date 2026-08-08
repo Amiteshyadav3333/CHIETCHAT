@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import io from 'socket.io-client';
 import { AuthContext } from './AuthContext';
+import { API_BASE_URL } from '../utils/apiBaseUrl';
 
 export const SocketContext = createContext();
 
@@ -11,7 +12,7 @@ export const SocketProvider = ({ children }) => {
     useEffect(() => {
         if (token) {
             // We can pass token in auth object
-            const url = import.meta.env.VITE_API_URL || '/';
+            const url = API_BASE_URL || '/';
             const newSocket = io(url, {
                 auth: token === 'cookie-session' ? {} : { token },
                 withCredentials: true,

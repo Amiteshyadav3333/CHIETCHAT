@@ -12,6 +12,7 @@ import PublicReel from './pages/PublicReel';
 import RecoveryCode from './pages/RecoveryCode';
 import './index.css';
 import axios from 'axios';
+import { API_BASE_URL } from './utils/apiBaseUrl';
 
 axios.defaults.withCredentials = true;
 axios.interceptors.request.use(config => {
@@ -37,8 +38,8 @@ console.warn = function(...args) {
 };
 
 // Set base URL for production; Vite proxy handles local dev if this is empty/undefined
-if (import.meta.env.VITE_API_URL) {
-    axios.defaults.baseURL = import.meta.env.VITE_API_URL;
+if (API_BASE_URL) {
+    axios.defaults.baseURL = API_BASE_URL;
 }
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {

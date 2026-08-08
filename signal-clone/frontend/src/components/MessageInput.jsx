@@ -13,6 +13,7 @@ import ShoppingSearchModal from './ShoppingSearchModal';
 import PollCreatorModal from './PollCreatorModal';
 import ScheduleMessageModal from './ScheduleMessageModal';
 import VerifiedPaymentComposer from './VerifiedPaymentComposer';
+import { API_BASE_URL } from '../utils/apiBaseUrl';
 
 const LANGUAGES = [
     { code: 'hi', name: 'Hindi (हिंदी)' },
@@ -60,7 +61,7 @@ const STICKERS = [
     '👍', '👏', '🙏', '💪', '❤️', '💯', '🔥',
     '🎉', '🎂', '🎁', '✨', '🌟', '🫶', '🚀',
 ];
-const apiUrl = import.meta.env.VITE_API_URL || '';
+const apiUrl = API_BASE_URL;
 const cleanBaseUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
 
 const MessageInput = ({ 

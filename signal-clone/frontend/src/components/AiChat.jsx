@@ -9,6 +9,7 @@ import {
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import UserAvatar from './UserAvatar';
 import { EMOJIS, MessageBubble, TypingDots, WaveformVisualizer, renderMarkdown } from './AiChatPresentation';
+import { API_BASE_URL } from '../utils/apiBaseUrl';
 
 
 /* ─── Main AiChat component ─── */
@@ -671,7 +672,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
             return;
         }
 
-        const baseUrl = import.meta.env.VITE_API_URL || '';
+        const baseUrl = API_BASE_URL;
         const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
         const streamUrl = `${cleanBaseUrl}/api/ai/chat/stream`;
 

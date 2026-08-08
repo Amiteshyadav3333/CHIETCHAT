@@ -76,6 +76,21 @@ class ProductionConfigTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('BACKEND_URL', result.stderr)
 
+    def test_production_normalizes_dashboard_assignment_and_quotes(self):
+        env = self.production_environment()
+        env['FRONTEND_URL'] = ' FRONTEND_URL="https://chat.example.com/" '
+        result = self.import_config(env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_render_uses_known_public_url_defaults(self):
+        env = self.production_environment()
+        env['RENDER'] = 'true'
+        env.pop('APP_ENV', None)
+        env.pop('FRONTEND_URL')
+        env.pop('BACKEND_URL')
+        result = self.import_config(env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,7 +1,17 @@
 import os
 from datetime import timedelta
+from urllib.parse import urlparse
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+def public_url_from_env(name, default):
+    """Normalize values pasted into hosting dashboards without weakening URL checks."""
+    value = (os.environ.get(name) or default).strip()
+    assignment_prefix = f'{name}='
+    if value.startswith(assignment_prefix):
+        value = value[len(assignment_prefix):].strip()
+    value = value.strip('"\'').strip().rstrip('/')
+    return value
 
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'super-secret-signal-key-change-this'
@@ -41,7 +51,8 @@ class Config:
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=7)
     SUPABASE_URL = (os.environ.get('SUPABASE_URL') or '').rstrip('/')
     SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY') or ''
-    FRONTEND_URL = (os.environ.get('FRONTEND_URL') or 'http://127.0.0.1:3000').rstrip('/')
+    FRONTEND_URL = public_url_from_env('FRONTEND_URL', 'https://chat.indiasearch.site' if os.environ.get('RENDER') == 'true' else 'http://127.0.0.1:3000')
+    BACKEND_URL = public_url_from_env('BACKEND_URL', 'https://chietchat-backend.onrender.com' if os.environ.get('RENDER') == 'true' else 'http://127.0.0.1:5000')
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
     MAX_UPLOAD_BYTES = int(os.environ.get('MAX_UPLOAD_BYTES', 100 * 1024 * 1024))
     MAX_CONTENT_LENGTH = MAX_UPLOAD_BYTES
@@ -71,9 +82,9 @@ class Config:
             raise RuntimeError('DATABASE_URL must use PostgreSQL in production')
         if not os.environ.get('REDIS_URL'):
             raise RuntimeError('REDIS_URL must be configured in production for distributed abuse protection')
-        for _url_name in ('FRONTEND_URL', 'BACKEND_URL'):
-            _public_url = (os.environ.get(_url_name) or '').rstrip('/')
-            if not _public_url.startswith('https://'):
+        for _url_name, _public_url in (('FRONTEND_URL', FRONTEND_URL), ('BACKEND_URL', BACKEND_URL)):
+            _parsed_url = urlparse(_public_url)
+            if _parsed_url.scheme != 'https' or not _parsed_url.netloc:
                 raise RuntimeError(f'{_url_name} must be an HTTPS URL in production')
         _cloudinary_keys = (
             'CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET',

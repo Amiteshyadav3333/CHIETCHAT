@@ -2,10 +2,11 @@ import os
 import threading
 from flask_socketio import SocketIO
 from flask_cors import CORS
+from config import Config
 
 # Allowed origins for CORS to support credentials
 ALLOWED_ORIGINS = list(dict.fromkeys([
-    os.environ.get('FRONTEND_URL', 'https://chat.indiasearch.site').rstrip('/'),
+    Config.FRONTEND_URL,
     "http://localhost:5173",
     "http://localhost:3000",
 ]))

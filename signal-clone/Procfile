@@ -1,1 +1,1 @@
-web: gunicorn -w 1 --threads 100 --timeout 120 --chdir backend wsgi:app
+web: gunicorn -w 1 --threads 100 --timeout 120 --chdir backend wsgi:app --bind 0.0.0.0:$PORT

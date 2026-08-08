@@ -501,6 +501,21 @@ class SecurityTests(unittest.TestCase):
         ).digest()).decode()
         self.assertEqual(turn['credential'], expected)
 
+    @patch.dict(os.environ, {
+        'TURN_URLS': 'turn:global.relay.metered.ca:80,turns:global.relay.metered.ca:443?transport=tcp',
+        'TURN_USERNAME': 'metered-user',
+        'TURN_CREDENTIAL': 'metered-password',
+        'TURN_SECRET': '',
+    })
+    def test_call_ice_config_supports_managed_turn_credentials(self):
+        response = self.client.get('/api/calls/ice-config', headers=self.auth_headers())
+        self.assertEqual(response.status_code, 200)
+        turn = response.json['iceServers'][1]
+        self.assertEqual(turn['username'], 'metered-user')
+        self.assertEqual(turn['credential'], 'metered-password')
+        self.assertEqual(turn['urls'][0], 'turn:global.relay.metered.ca:80')
+        self.assertIsNone(response.json['ttlSeconds'])
+
     def test_health_and_security_headers(self):
         response = self.client.get('/health/live', headers={'X-Request-ID': 'audit-request-id'})
         self.assertEqual(response.status_code, 200)

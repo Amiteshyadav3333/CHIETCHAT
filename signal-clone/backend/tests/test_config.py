@@ -53,6 +53,22 @@ class ProductionConfigTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('TURN_SECRET', result.stderr)
 
+    def test_production_accepts_managed_turn_credentials(self):
+        env = self.production_environment()
+        env.pop('TURN_SECRET')
+        env['TURN_USERNAME'] = 'metered-user'
+        env['TURN_CREDENTIAL'] = 'metered-password'
+        result = self.import_config(env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_production_rejects_partial_managed_turn_credentials(self):
+        env = self.production_environment()
+        env.pop('TURN_SECRET')
+        env['TURN_USERNAME'] = 'metered-user'
+        result = self.import_config(env)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('TURN_USERNAME and TURN_CREDENTIAL', result.stderr)
+
     def test_production_rejects_non_https_public_url(self):
         env = self.production_environment()
         env['BACKEND_URL'] = 'http://api.example.com'

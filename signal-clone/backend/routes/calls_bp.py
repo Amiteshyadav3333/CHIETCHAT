@@ -25,7 +25,15 @@ def ice_config():
     ice_servers = [{'urls': stun_urls}]
     turn_urls = [value.strip() for value in os.environ.get('TURN_URLS', '').split(',') if value.strip()]
     turn_secret = os.environ.get('TURN_SECRET', '')
-    if turn_urls and turn_secret:
+    turn_username = os.environ.get('TURN_USERNAME', '').strip()
+    turn_credential = os.environ.get('TURN_CREDENTIAL', '').strip()
+    ttl_seconds = 3600
+    if turn_urls and turn_username and turn_credential:
+        ice_servers.append({
+            'urls': turn_urls, 'username': turn_username, 'credential': turn_credential,
+        })
+        ttl_seconds = None
+    elif turn_urls and turn_secret:
         expires_at = int(time.time()) + 3600
         username = f'{expires_at}:{user_id}'
         credential = base64.b64encode(
@@ -35,7 +43,7 @@ def ice_config():
     elif os.environ.get('APP_ENV') == 'production':
         return jsonify({'error': 'Call relay is not configured'}), 503
 
-    return jsonify({'iceServers': ice_servers, 'ttlSeconds': 3600})
+    return jsonify({'iceServers': ice_servers, 'ttlSeconds': ttl_seconds})
 
 
 @calls_bp.get('/api/calls/history')

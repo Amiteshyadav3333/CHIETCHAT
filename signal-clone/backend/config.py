@@ -90,8 +90,15 @@ class Config:
         ]
         if not _turn_urls or any(not value.startswith(('turn:', 'turns:')) for value in _turn_urls):
             raise RuntimeError('TURN_URLS must contain valid turn: or turns: URLs in production')
-        if len(os.environ.get('TURN_SECRET', '')) < 32:
-            raise RuntimeError('TURN_SECRET must contain at least 32 characters in production')
+        _turn_username = os.environ.get('TURN_USERNAME', '').strip()
+        _turn_credential = os.environ.get('TURN_CREDENTIAL', '').strip()
+        _has_static_turn = bool(_turn_username and _turn_credential)
+        if bool(_turn_username) != bool(_turn_credential):
+            raise RuntimeError('TURN_USERNAME and TURN_CREDENTIAL must be configured together')
+        if not _has_static_turn and len(os.environ.get('TURN_SECRET', '')) < 32:
+            raise RuntimeError(
+                'Configure either TURN_USERNAME with TURN_CREDENTIAL or a 32-character TURN_SECRET'
+            )
         if len(DATA_RETENTION_PEPPER) < 32:
             raise RuntimeError('DATA_RETENTION_PEPPER must contain at least 32 characters in production')
         if PAYMENT_RETENTION_DAYS < 365 or PAYMENT_RETENTION_DAYS > 3650:

@@ -1049,7 +1049,17 @@ const Home = () => {
     }, [messages]);
 
     const handleSendMessage = async (text, type = 'text', replyMsg = null, ttl = 0, assetId = null) => {
-        if (!activeChat) return;
+        if (!activeChat?.id || !user?.id) {
+            console.warn('Message send skipped because the chat session is not ready.');
+            return;
+        }
+        const participants = Array.isArray(activeChat.participants)
+            ? activeChat.participants.filter(participant => participant?.id)
+            : [];
+        if (participants.length === 0) {
+            alert('Chat information is still loading. Please try again in a moment.');
+            return;
+        }
 
         // Optimistic UI: show message instantly before encryption/server round trip
         const tempId = `temp_${Date.now()}_${Math.random()}`;
@@ -1057,7 +1067,7 @@ const Home = () => {
             id: tempId,
             chatId: activeChat.id,
             senderId: user.id,
-            senderName: user.username,
+            senderName: user.username || 'CHEETCHAT user',
             content: type === 'text' ? text : type,
             type,
             status: 'sending',
@@ -1101,7 +1111,7 @@ const Home = () => {
         let encryptedContent = null;
         try {
             const recipientPublicKeys = {};
-            for (const participant of activeChat.participants) {
+            for (const participant of participants) {
                 const participantPublicKey = participant.id === user.id
                     ? publicKey
                     : participant.publicKey;
@@ -1311,7 +1321,17 @@ const Home = () => {
     };
 
     const startCallForChat = async (chat, type = 'video') => {
-        if (!chat || !socket) return;
+        if (!chat?.id || !user?.id || !socket) {
+            alert('Call information is still loading. Please try again in a moment.');
+            return;
+        }
+        const participants = Array.isArray(chat.participants)
+            ? chat.participants.filter(participant => participant?.id)
+            : [];
+        if (participants.length === 0) {
+            alert('This chat has no available call participants.');
+            return;
+        }
         const preparedStream = await requestCallPermissions(type);
         if (!preparedStream) return;
         preparedCallStreamRef.current?.getTracks().forEach(track => track.stop());
@@ -1320,9 +1340,9 @@ const Home = () => {
         setCallType(type);
         socket.emit('notify_ring', {
             chatId: chat.id,
-            callerName: user.username,
+            callerName: user.username || 'CHEETCHAT user',
             callerId: user.id,
-            participants: chat.participants.map(p => p.id),
+            participants: participants.map(participant => participant.id),
             callType: type
         });
         setShowCallModal(true);
@@ -1713,7 +1733,8 @@ const Home = () => {
 
     const getOtherParticipant = (chat) => {
         if (!chat || chat.isGroup) return null;
-        return chat.participants.find(participant => participant.id !== user?.id) || null;
+        if (!Array.isArray(chat.participants)) return null;
+        return chat.participants.find(participant => participant?.id && participant.id !== user?.id) || null;
     };
 
     const formatLastSeen = (lastSeen) => {
@@ -2721,7 +2742,7 @@ const Home = () => {
                                                 <input ref={contactDpInputRef} type="file" accept="image/*" className="hidden" onChange={event => handleContactDpChange(event, other.id)} />
                                             </div>
                                         )}
-                                        {contactBusinessInfo?.business && (
+                                        {contactBusinessInfo?.business?.businessName && (
                                             <div className="mb-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
                                                 <div className="flex items-center justify-between gap-2"><p className="font-semibold text-white">{contactBusinessInfo.business.businessName}</p><span className="rounded-full bg-emerald-500/15 px-2 py-1 text-[9px] font-bold uppercase text-emerald-300">Business</span></div>
                                                 <p className="mt-1 text-xs text-emerald-300">{contactBusinessInfo.business.category}</p>

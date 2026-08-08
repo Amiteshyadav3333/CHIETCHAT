@@ -38,6 +38,21 @@ const timeAgo = (dateStr) => {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
+const businessDefaults = (user) => ({
+    profile: { businessName: user?.username || '', category: 'Other', description: '', address: '', supportEmail: user?.email || '', supportPhone: user?.phone || '', websiteUrl: '', openingHours: '', catalogVisible: true },
+    products: [],
+    automation: { enabled: false, welcomeMessage: '', awayMessage: '', keywordRules: {} }
+});
+
+const normalizeBusinessData = (data, user) => {
+    const defaults = businessDefaults(user);
+    return {
+        profile: { ...defaults.profile, ...(data?.profile || {}) },
+        products: Array.isArray(data?.products) ? data.products.filter(Boolean) : [],
+        automation: { ...defaults.automation, ...(data?.automation || {}), keywordRules: data?.automation?.keywordRules || {} }
+    };
+};
+
 const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wallpaper, onThemeChange, onWallpaperChange, onOpenSmartSpace, smartSpaceButtonEnabled, onSmartSpaceButtonChange }) => {
     const [screen, setScreen] = useState('settings');
     const [message, setMessage] = useState(null);
@@ -81,10 +96,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     const [bubbleColor, setBubbleColor] = useState(() => localStorage.getItem('chat_bubble_color') || '#00a884');
     const [customFont, setCustomFont] = useState(() => localStorage.getItem('chat_custom_font') || 'system');
     const [notificationSoundName, setNotificationSoundName] = useState(() => localStorage.getItem('custom_notification_name') || '');
-    const [businessData, setBusinessData] = useState({
-        profile: { businessName: user?.username || '', category: 'Other', description: '', address: '', supportEmail: '', supportPhone: '', websiteUrl: '', openingHours: '', catalogVisible: true },
-        products: [], automation: { enabled: false, welcomeMessage: '', awayMessage: '', keywordRules: {} }
-    });
+    const [businessData, setBusinessData] = useState(() => businessDefaults(user));
     const [businessAnalytics, setBusinessAnalytics] = useState(null);
     const [newProduct, setNewProduct] = useState({ name: '', description: '', price: '', imageUrl: '', inStock: true });
     const [keywordRulesText, setKeywordRulesText] = useState('');
@@ -230,8 +242,9 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
             const requests = [axios.get('/api/business/me', { headers: { Authorization: `Bearer ${token}` } })];
             if (title === 'Analytics dashboard') requests.push(axios.get('/api/business/analytics', { headers: { Authorization: `Bearer ${token}` } }));
             const [businessRes, analyticsRes] = await Promise.all(requests);
-            setBusinessData(businessRes.data);
-            setKeywordRulesText(Object.entries(businessRes.data.automation.keywordRules || {}).map(([key, value]) => `${key} => ${value}`).join('\n'));
+            const normalizedBusiness = normalizeBusinessData(businessRes.data, user);
+            setBusinessData(normalizedBusiness);
+            setKeywordRulesText(Object.entries(normalizedBusiness.automation.keywordRules).map(([key, value]) => `${key} => ${value}`).join('\n'));
             if (analyticsRes) setBusinessAnalytics(analyticsRes.data);
         } catch (err) {
             setMessage({ type: 'error', text: err.response?.data?.error || 'Could not load business tools.' });

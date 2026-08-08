@@ -13,9 +13,14 @@ import RecoveryCode from './pages/RecoveryCode';
 import './index.css';
 import axios from 'axios';
 import { API_BASE_URL } from './utils/apiBaseUrl';
+import { usableBearerToken } from './utils/authSession';
 
 axios.defaults.withCredentials = true;
 axios.interceptors.request.use(config => {
+    const legacyToken = usableBearerToken(sessionStorage.getItem('cheetchat_legacy_token'));
+    if (legacyToken && !config.headers.get('Authorization')) {
+        config.headers.set('Authorization', `Bearer ${legacyToken}`);
+    }
     const csrfToken = sessionStorage.getItem('cheetchat_csrf_token');
     if (csrfToken && !['get', 'head', 'options'].includes(String(config.method || 'get').toLowerCase())) {
         config.headers.set('X-CSRF-Token', csrfToken);

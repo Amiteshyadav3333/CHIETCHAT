@@ -32,10 +32,11 @@ const Reels = ({ active, onBack, onShareToChat }) => {
             const res = await axios.get(`/api/reels?filter=${f}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setReels(res.data);
+            const nextReels = Array.isArray(res.data) ? res.data.filter(item => item?.id) : [];
+            setReels(nextReels);
             // Cache for instant load next time
             if (f === 'foryou') {
-                try { saveReelCache(user?.id, res.data); } catch {}
+                try { saveReelCache(user?.id, nextReels); } catch {}
             }
         } catch (err) { console.error(err); }
         finally { setLoading(false); }
@@ -56,7 +57,7 @@ const Reels = ({ active, onBack, onShareToChat }) => {
     useEffect(() => {
         if (!token) return;
         axios.get('/api/users/suggestions?limit=8', { headers: { Authorization: `Bearer ${token}` } })
-            .then(res => setSuggestions(res.data))
+            .then(res => setSuggestions(Array.isArray(res.data) ? res.data.filter(item => item?.id) : []))
             .catch(() => setSuggestions([]));
     }, [token]);
 
@@ -78,7 +79,9 @@ const Reels = ({ active, onBack, onShareToChat }) => {
         }
     }, [filter]);
 
-    if (loading && reels.length === 0) {
+    const visibleReels = Array.isArray(reels) ? reels.filter(item => item?.id) : [];
+
+    if (loading && visibleReels.length === 0) {
         return (
             <div className="h-full w-full bg-black flex flex-col items-center justify-center text-white relative overflow-hidden">
                 {/* Skeleton shimmer instead of boring spinner */}
@@ -212,8 +215,8 @@ const Reels = ({ active, onBack, onShareToChat }) => {
 
             {/* Scroll Container */}
             <div className={`flex-1 overflow-y-auto snap-y snap-mandatory hide-scrollbar ${showUploader ? 'hidden' : ''}`}>
-                {reels.length > 0 ? (
-                    reels.map(reel => (
+                {visibleReels.length > 0 ? (
+                    visibleReels.map(reel => (
                         <ReelCard 
                             key={reel.id} 
                             reel={reel} 

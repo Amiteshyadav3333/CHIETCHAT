@@ -1,2 +1,1 @@
-web: env EVENTLET_NO_GREENDNS=yes gunicorn --worker-class eventlet -w 1 --chdir signal-clone/backend wsgi:app
-
+web: gunicorn -w 1 --threads 100 --timeout 120 --chdir signal-clone/backend wsgi:app

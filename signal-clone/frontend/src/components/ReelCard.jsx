@@ -8,17 +8,20 @@ import { AuthContext } from '../context/AuthContext';
 
 const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelete, active }) => {
     const { token } = useContext(AuthContext);
-    const [liked, setLiked] = useState(reel.isLiked);
+    const reelOwner = reel?.user || {};
+    const currentUserId = currentUser?.id;
+    const ownerId = reelOwner.id;
+    const [liked, setLiked] = useState(Boolean(reel?.isLiked));
     const [isIntersecting, setIsIntersecting] = useState(false);
-    const [likesCount, setLikesCount] = useState(reel.likesCount);
-    const [sharesCount, setSharesCount] = useState(reel.sharesCount || 0);
-    const [viewsCount, setViewsCount] = useState(reel.viewsCount || 0);
-    const [isFollowing, setIsFollowing] = useState(reel.user.isFollowing);
-    const [caption, setCaption] = useState(reel.caption);
+    const [likesCount, setLikesCount] = useState(reel?.likesCount || 0);
+    const [sharesCount, setSharesCount] = useState(reel?.sharesCount || 0);
+    const [viewsCount, setViewsCount] = useState(reel?.viewsCount || 0);
+    const [isFollowing, setIsFollowing] = useState(Boolean(reelOwner.isFollowing));
+    const [caption, setCaption] = useState(reel?.caption || '');
     const [showComments, setShowComments] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
     const [showEditCaption, setShowEditCaption] = useState(false);
-    const [newCaption, setNewCaption] = useState(reel.caption);
+    const [newCaption, setNewCaption] = useState(reel?.caption || '');
     const [isUpdating, setIsUpdating] = useState(false);
     const [comments, setComments] = useState([]);
     const [newComment, setNewComment] = useState('');
@@ -28,8 +31,8 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
     const audioRef = useRef(null);
     const viewedRef = useRef(false);
     const mediaBaseUrl = typeof window === 'undefined' ? 'https://cheetchat.invalid' : window.location.href;
-    const safeVideoUrl = getSafeMediaUrl(reel.videoUrl, mediaBaseUrl);
-    const safeMusicUrl = getSafeMediaUrl(reel.musicUrl, mediaBaseUrl);
+    const safeVideoUrl = getSafeMediaUrl(reel?.videoUrl, mediaBaseUrl);
+    const safeMusicUrl = getSafeMediaUrl(reel?.musicUrl, mediaBaseUrl);
     
     const filters = {
         'none': '',
@@ -48,9 +51,9 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
 
     const toggleFollow = async (e) => {
         e.stopPropagation();
-        if (reel.user.id === currentUser.id) return;
+        if (!ownerId || ownerId === currentUserId) return;
         try {
-            const res = await axios.post(`/api/users/${reel.user.id}/follow`, {}, {
+            const res = await axios.post(`/api/users/${ownerId}/follow`, {}, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setIsFollowing(res.data.isFollowing);
@@ -77,9 +80,9 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
     };
 
     const handleBlock = async () => {
-        if (!window.confirm(`Block @${reel.user.username}?`)) return;
+        if (!ownerId || !window.confirm(`Block @${reelOwner.username || 'this user'}?`)) return;
         try {
-            await axios.post(`/api/users/${reel.user.id}/block`, {}, {
+            await axios.post(`/api/users/${ownerId}/block`, {}, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             alert("User blocked");
@@ -284,7 +287,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
                 </button>
                 {showMenu && (
                     <div className="absolute right-0 top-12 bg-black/80 backdrop-blur-md rounded-xl p-2 min-w-[150px] border border-white/10 animate-slide-left">
-                        {currentUser.id === reel.user.id ? (
+                        {currentUserId && currentUserId === ownerId ? (
                             <>
                                 <button onClick={() => { setShowEditCaption(true); setShowMenu(false); }} className="w-full flex items-center gap-3 p-3 text-white hover:bg-white/10 rounded-lg text-sm font-bold border-b border-white/5">
                                     <PencilIcon className="w-5 h-5 text-blue-400" /> Edit Caption
@@ -341,7 +344,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
                     <span className="text-white text-[10px] font-bold mt-1">Save</span>
                 </div>
 
-                {currentUser.id === reel.user.id && (
+                {currentUserId && currentUserId === ownerId && (
                     <div className="flex flex-col items-center">
                         <button onClick={handleDelete} className="p-2">
                             <TrashIcon className="w-8 h-8 text-red-500" />
@@ -356,12 +359,12 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
                 <div className="flex items-center gap-3 mb-2">
                     <div 
                         className="flex items-center gap-3 cursor-pointer group"
-                        onClick={(e) => { e.stopPropagation(); onProfileClick(reel.user.id); }}
+                        onClick={(e) => { e.stopPropagation(); if (ownerId) onProfileClick(ownerId); }}
                     >
-                        <img src={reel.user.avatar} className="w-10 h-10 rounded-full border-2 border-white shadow-lg group-hover:scale-110 transition-transform object-cover" alt="" />
-                        <span className="text-white font-bold text-sm drop-shadow-md group-hover:underline">@{reel.user.username}</span>
+                        <img src={reelOwner.avatar || '/icons/icon-192.png'} className="w-10 h-10 rounded-full border-2 border-white shadow-lg group-hover:scale-110 transition-transform object-cover" alt="" />
+                        <span className="text-white font-bold text-sm drop-shadow-md group-hover:underline">@{reelOwner.username || 'unknown'}</span>
                     </div>
-                    {currentUser.id !== reel.user.id && (
+                    {ownerId && currentUserId !== ownerId && (
                         <button 
                             onClick={toggleFollow}
                             className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${isFollowing ? 'bg-transparent border border-white text-white' : 'bg-white text-black hover:bg-gray-200'}`}

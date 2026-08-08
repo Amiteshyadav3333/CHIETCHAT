@@ -29,10 +29,10 @@ jobs:
       run:
         working-directory: signal-clone/backend
     env:
-      DATABASE_URL: sqlite:///:memory:
-      SECRET_KEY: ci-secret-key-at-least-32-characters
-      JWT_SECRET_KEY: ci-jwt-secret-key-at-least-32-characters
-      LOG_LEVEL: WARNING
+      DATABASE_URL: "sqlite:///:memory:"
+      SECRET_KEY: "ci-secret-key-at-least-32-characters"
+      JWT_SECRET_KEY: "ci-jwt-secret-key-at-least-32-characters"
+      LOG_LEVEL: "WARNING"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

@@ -23,7 +23,8 @@ const ReelProfile = ({ userId, onBack, onSelectReel }) => {
             const res = await axios.get(`/api/users/${userId}/reels`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setProfileData(res.data);
+            if (!res.data?.user) throw new Error('Reel profile is unavailable');
+            setProfileData({ ...res.data, reels: Array.isArray(res.data.reels) ? res.data.reels : [] });
             setEditBio(res.data.user.bio || '');
             setEditWebsite(res.data.user.websiteUrl || '');
         } catch (err) { console.error(err); }
@@ -91,7 +92,14 @@ const ReelProfile = ({ userId, onBack, onSelectReel }) => {
         );
     }
 
-    if (!profileData) return null;
+    if (!profileData?.user) {
+        return (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-black text-white">
+                <p className="text-sm text-gray-400">This reel profile is unavailable.</p>
+                <button onClick={onBack} className="rounded-lg bg-white px-4 py-2 text-sm font-bold text-black">Go back</button>
+            </div>
+        );
+    }
 
     const { user, reels } = profileData;
     const safeWebsiteUrl = getSafeWebsiteUrl(user.websiteUrl);
@@ -125,7 +133,7 @@ const ReelProfile = ({ userId, onBack, onSelectReel }) => {
                 </div>
 
                 <div className="flex gap-2 w-full max-w-xs mt-4">
-                    {currentUser.id !== user.id ? (
+                    {currentUser?.id !== user.id ? (
                         <button 
                             onClick={toggleFollow}
                             className={`flex-1 py-2.5 rounded-lg font-bold text-sm transition-all ${user.isFollowing ? 'bg-gray-800 text-white' : 'bg-red-600 text-white shadow-lg shadow-red-600/20'}`}
@@ -174,7 +182,7 @@ const ReelProfile = ({ userId, onBack, onSelectReel }) => {
                             <span className="text-white text-[10px] font-bold">{reel.likesCount}</span>
                         </div>
                         
-                        {currentUser.id === user.id && (
+                        {currentUser?.id === user.id && (
                             <>
                                 <button 
                                     onClick={(e) => {

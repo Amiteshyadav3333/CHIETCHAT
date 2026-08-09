@@ -192,6 +192,29 @@ class SecurityTests(unittest.TestCase):
         self.assertTrue(socket_client.is_connected())
         socket_client.disconnect()
 
+    def test_short_lived_socket_ticket_authenticates_realtime_connection(self):
+        response = self.client.get('/api/auth/socket-ticket', headers=self.auth_headers())
+        self.assertEqual(response.status_code, 200)
+        socket_client = socketio.test_client(app, auth={'token': response.json['ticket']})
+        self.assertTrue(socket_client.is_connected())
+        socket_client.disconnect()
+
+    def test_existing_encryption_key_reset_requires_recovery_backup(self):
+        rejected = self.client.post('/api/user/key', json={
+            'publicKey': 'replacement-public-key',
+        }, headers=self.auth_headers())
+        self.assertEqual(rejected.status_code, 409)
+
+        accepted = self.client.post('/api/user/key', json={
+            'publicKey': 'replacement-public-key',
+            'encryptedRecoveryKey': 'r' * 100,
+            'resetExisting': True,
+        }, headers=self.auth_headers())
+        self.assertEqual(accepted.status_code, 200)
+        recovery = self.client.get('/api/user/key-recovery', headers=self.auth_headers())
+        self.assertEqual(recovery.status_code, 200)
+        self.assertEqual(recovery.json['recoveryKeyBackup'], 'r' * 100)
+
     def test_upload_validation_checks_content_not_just_extension(self):
         disguised = FileStorage(stream=io.BytesIO(b'<script>alert(1)</script>'), filename='avatar.jpg')
         with self.assertRaisesRegex(ValueError, 'contents do not match'):

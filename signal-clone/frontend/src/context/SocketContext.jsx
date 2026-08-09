@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import io from 'socket.io-client';
+import axios from 'axios';
 import { AuthContext } from './AuthContext';
 import { API_BASE_URL } from '../utils/apiBaseUrl';
 
@@ -14,7 +15,18 @@ export const SocketProvider = ({ children }) => {
             // We can pass token in auth object
             const url = API_BASE_URL || '/';
             const newSocket = io(url, {
-                auth: token === 'cookie-session' ? {} : { token },
+                auth: async (callback) => {
+                    if (token !== 'cookie-session') {
+                        callback({ token });
+                        return;
+                    }
+                    try {
+                        const response = await axios.get('/api/auth/socket-ticket');
+                        callback({ token: response.data.ticket });
+                    } catch {
+                        callback({});
+                    }
+                },
                 withCredentials: true,
                 transports: ['websocket', 'polling'],
                 upgrade: true,

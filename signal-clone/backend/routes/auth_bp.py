@@ -39,6 +39,14 @@ def create_token(user, session_id=None):
         payload['session_id'] = session_id
     return jwt.encode(payload, current_app.config['JWT_SECRET_KEY'], algorithm='HS256')
 
+def create_socket_ticket(user_id, session_id):
+    return jwt.encode({
+        'user_id': user_id,
+        'session_id': session_id,
+        'purpose': 'socket',
+        'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=5),
+    }, current_app.config['JWT_SECRET_KEY'], algorithm='HS256')
+
 def current_token_payload():
     token = get_request_auth_token()
     if not token:
@@ -199,6 +207,14 @@ def get_csrf_token():
             path='/',
         )
     return response
+
+@auth_bp.route('/api/auth/socket-ticket', methods=['GET'])
+def get_socket_ticket():
+    user_id = get_current_user_id()
+    session_id = (current_token_payload() or {}).get('session_id')
+    if not user_id or not session_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    return jsonify({'ticket': create_socket_ticket(user_id, session_id)}), 200
 
 @auth_bp.route('/api/auth/logout', methods=['POST'])
 def logout_current_session():
@@ -854,6 +870,16 @@ def save_encrypted_key_backup():
     user.encrypted_private_key = backup
     db.session.commit()
     return jsonify({"ok": True})
+
+@auth_bp.route('/api/user/key-recovery', methods=['GET'])
+def get_encrypted_key_recovery():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    return jsonify({'recoveryKeyBackup': user.encrypted_recovery_key}), 200
 
 @auth_bp.route('/api/auth/sessions', methods=['GET'])
 def get_active_sessions():

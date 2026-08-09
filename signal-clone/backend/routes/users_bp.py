@@ -275,8 +275,18 @@ def update_public_key():
     if not user:
         return jsonify({"error": "User not found"}), 404
 
+    replacing_existing_key = bool(user.public_key and user.public_key != public_key)
+    if replacing_existing_key:
+        recovery_backup = data.get('encryptedRecoveryKey')
+        if data.get('resetExisting') is not True or not isinstance(recovery_backup, str) or not 50 <= len(recovery_backup) <= 20000:
+            return jsonify({'error': 'A confirmed key reset with a recovery backup is required'}), 409
+        user.encrypted_private_key = None
+        user.encrypted_recovery_key = recovery_backup
     user.public_key = public_key
     db.session.commit()
+    emit_to_user_chat_contacts(user_id, 'user_profile_updated', {
+        'user': serialize_user(user, viewer_id=user_id)
+    })
     return jsonify({"message": "Key updated"})
 
 @users_bp.route('/api/user/block', methods=['POST'])

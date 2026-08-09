@@ -530,7 +530,7 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(ready.status_code, 200)
         self.assertEqual(ready.json['database'], 'ok')
 
-    def test_redis_outage_fails_closed_on_sensitive_routes_in_production(self):
+    def test_redis_outage_uses_local_rate_limit_fallback_in_production(self):
         class BrokenRedis:
             def eval(self, *_args):
                 raise ConnectionError('redis unavailable')
@@ -542,7 +542,8 @@ class SecurityTests(unittest.TestCase):
             response = self.client.post('/api/login', json={
                 'email': 'audit@example.com', 'password': 'old-password',
             })
-            self.assertEqual(response.status_code, 503)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json['user']['username'], 'audit-user')
         finally:
             app_module._redis_client = original_client
             app.config['IS_PRODUCTION'] = original_production

@@ -177,8 +177,9 @@ def protect_sensitive_routes():
             return None
         except Exception:
             runtime_logger.exception('Redis rate limiter unavailable')
-            if app.config.get('IS_PRODUCTION'):
-                return jsonify({'error': 'Authentication protection temporarily unavailable'}), 503
+            # This deployment intentionally runs one Gunicorn worker. Keep the
+            # endpoint available with the locked process-local limiter when the
+            # managed Redis service is briefly unavailable.
     with _rate_windows_lock:
         attempts = _rate_windows[key]
         while attempts and attempts[0] <= now - window_seconds:

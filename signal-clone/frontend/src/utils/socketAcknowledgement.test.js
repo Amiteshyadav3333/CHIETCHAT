@@ -27,6 +27,15 @@ describe('emitWithAcknowledgement', () => {
         expect(error.retryable).not.toBe(false);
     });
 
+    it('preserves an explicit retryable server rejection', async () => {
+        const socket = createSocket(ack => ack(null, {
+            ok: false, error: 'Message rate limit exceeded', retryable: true, retryAfter: 30,
+        }));
+        const error = await emitWithAcknowledgement(socket, 'send_message', {}).catch(value => value);
+        expect(error.retryable).toBe(true);
+        expect(error.retryAfter).toBe(30);
+    });
+
     it('rejects immediately while disconnected', async () => {
         await expect(emitWithAcknowledgement({ connected: false }, 'send_message', {}))
             .rejects.toThrow('Socket is not connected');

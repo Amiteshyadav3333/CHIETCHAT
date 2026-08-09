@@ -873,9 +873,9 @@ class SecurityTests(unittest.TestCase):
 
         payer.emit('notify_ring', payload)
         second_incoming = [event for event in merchant.get_received() if event['name'] == 'incoming_call']
-        errors = [event for event in payer.get_received() if event['name'] == 'call_error']
+        duplicate_status = [event for event in payer.get_received() if event['name'] == 'ring_status']
         self.assertEqual(second_incoming, [])
-        self.assertTrue(any(event['args'][0].get('code') == 'CALL_RATE_LIMITED' for event in errors))
+        self.assertTrue(any(event['args'][0].get('duplicate') is True for event in duplicate_status))
         with app.app_context():
             self.assertEqual(Message.query.filter_by(chat_id=self.chat_id).count(), 0)
             record = CallRecord.query.filter_by(chat_id=self.chat_id, caller_id=self.user_id).one()

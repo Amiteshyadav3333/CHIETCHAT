@@ -226,6 +226,7 @@ const Home = () => {
     const activeChatRef = useRef(activeChat);
     const chatsRef = useRef(chats);
     const showCallModalRef = useRef(showCallModal);
+    const callStartInFlightRef = useRef(false);
     const messageRefsMap = useRef({});
     const sidebarEmojiPickerRef = useRef(null);
 
@@ -1321,6 +1322,7 @@ const Home = () => {
     };
 
     const startCallForChat = async (chat, type = 'video') => {
+        if (callStartInFlightRef.current || showCallModalRef.current) return;
         if (!chat?.id || !user?.id || !socket) {
             alert('Call information is still loading. Please try again in a moment.');
             return;
@@ -1332,20 +1334,25 @@ const Home = () => {
             alert('This chat has no available call participants.');
             return;
         }
-        const preparedStream = await requestCallPermissions(type);
-        if (!preparedStream) return;
-        preparedCallStreamRef.current?.getTracks().forEach(track => track.stop());
-        preparedCallStreamRef.current = preparedStream;
-        setActiveChat(chat);
-        setCallType(type);
-        socket.emit('notify_ring', {
-            chatId: chat.id,
-            callerName: user.username || 'CHEETCHAT user',
-            callerId: user.id,
-            participants: participants.map(participant => participant.id),
-            callType: type
-        });
-        setShowCallModal(true);
+        callStartInFlightRef.current = true;
+        try {
+            const preparedStream = await requestCallPermissions(type);
+            if (!preparedStream) return;
+            preparedCallStreamRef.current?.getTracks().forEach(track => track.stop());
+            preparedCallStreamRef.current = preparedStream;
+            setActiveChat(chat);
+            setCallType(type);
+            socket.emit('notify_ring', {
+                chatId: chat.id,
+                callerName: user.username || 'CHEETCHAT user',
+                callerId: user.id,
+                participants: participants.map(participant => participant.id),
+                callType: type
+            });
+            setShowCallModal(true);
+        } finally {
+            callStartInFlightRef.current = false;
+        }
     };
 
     const startCall = async (type = 'video') => {

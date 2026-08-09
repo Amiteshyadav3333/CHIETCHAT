@@ -61,6 +61,16 @@ describe('offline message queue', () => {
         expect(getOfflineQueue(1)[0].replyTo).toEqual({ id: 77 });
     });
 
+    it('drains queued messages in bounded batches', async () => {
+        for (let index = 0; index < 20; index += 1) {
+            enqueueOfflineMessage(1, 10, encrypted(`batch-${index}`), 'text', null, 0, `batch-${index}`);
+        }
+        const send = vi.fn().mockResolvedValue({ ok: true });
+        await processOfflineQueue(1, send);
+        expect(send).toHaveBeenCalledTimes(15);
+        expect(getOfflineQueue(1)).toHaveLength(5);
+    });
+
     it('holds future scheduled envelopes while delivering due messages', async () => {
         enqueueOfflineMessage(1, 10, encrypted('future'), 'text', null, 0, 'future', null, '2999-01-01T00:00:00.000Z');
         enqueueOfflineMessage(1, 10, encrypted('due'), 'text', null, 0, 'due', null, '2000-01-01T00:00:00.000Z');

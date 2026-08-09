@@ -12,7 +12,8 @@ export const emitWithAcknowledgement = (socket, event, payload, timeoutMs = 1000
             }
             if (!acknowledgement?.ok) {
                 const rejected = new Error(acknowledgement?.error || 'Request was rejected');
-                rejected.retryable = false;
+                rejected.retryable = acknowledgement?.retryable === true;
+                rejected.retryAfter = Number(acknowledgement?.retryAfter || 0);
                 reject(rejected);
                 return;
             }

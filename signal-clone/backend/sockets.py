@@ -74,7 +74,7 @@ def register_socket_events(socketio):
         redis_client = current_app.extensions.get('cheetchat_redis')
         if redis_client is not None:
             try:
-                key = f'cheetchat:socket-message-rate:{user_id}'
+                key = f'cheetchat:socket-message-rate:v2:{user_id}'
                 count = redis_client.eval(
                     "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('EXPIRE',KEYS[1],60) end; return n",
                     1, key,
@@ -617,9 +617,10 @@ def register_socket_events(socketio):
             return
 
         if not acquire_call_ring_cooldown(caller_id, chat_id):
-            emit('call_error', {
-                "error": "Please wait before starting another call.",
-                "code": "CALL_RATE_LIMITED",
+            emit('ring_status', {
+                "chatId": chat_id,
+                "status": "ringing",
+                "duplicate": True,
             })
             return
 

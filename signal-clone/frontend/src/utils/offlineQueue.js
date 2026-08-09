@@ -41,10 +41,11 @@ export const dequeueOfflineMessage = (userId, tempId) => {
 
 export const clearOfflineQueue = userId => window.localStorage.removeItem(queueKey(userId));
 
-export const processOfflineQueue = async (userId, sendFunction) => {
-    const queue = getOfflineQueue(userId);
+export const processOfflineQueue = async (userId, sendFunction, batchSize = 15) => {
+    const queue = getOfflineQueue(userId)
+        .filter(message => !message.scheduledFor || new Date(message.scheduledFor).getTime() <= Date.now())
+        .slice(0, Math.max(1, batchSize));
     for (const message of queue) {
-        if (message.scheduledFor && new Date(message.scheduledFor).getTime() > Date.now()) continue;
         try {
             await sendFunction(message);
             dequeueOfflineMessage(userId, message.tempId);

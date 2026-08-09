@@ -272,7 +272,7 @@ def add_missing_columns(inspector, table_name, columns):
             db.session.rollback()
             raise RuntimeError(f"Could not add {table_name}.{column_name}: {e}") from e
 
-SCHEMA_VERSION = '20260802_13_ai_memory_retention'
+SCHEMA_VERSION = '20260809_14_login_and_session_schema'
 
 
 def ensure_database_schema(force=False):

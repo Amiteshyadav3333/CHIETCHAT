@@ -91,6 +91,18 @@ class ProductionConfigTests(unittest.TestCase):
         result = self.import_config(env)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_production_normalizes_plain_vapid_contact_email(self):
+        env = self.production_environment()
+        env['VAPID_SUBJECT'] = ' security@example.com '
+        result = self.import_config(env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_production_normalizes_pasted_vapid_assignment(self):
+        env = self.production_environment()
+        env['VAPID_SUBJECT'] = 'VAPID_SUBJECT="mailto:security@example.com"'
+        result = self.import_config(env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
 
 if __name__ == '__main__':
     unittest.main()

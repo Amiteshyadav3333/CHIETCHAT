@@ -13,6 +13,13 @@ def public_url_from_env(name, default):
     value = value.strip('"\'').strip().rstrip('/')
     return value
 
+def normalized_env_value(name):
+    value = (os.environ.get(name) or '').strip()
+    assignment_prefix = f'{name}='
+    if value.startswith(assignment_prefix):
+        value = value[len(assignment_prefix):].strip()
+    return value.strip('"\'').strip()
+
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'super-secret-signal-key-change-this'
     # Production DB (PostgreSQL) or Local DB (SQLite)
@@ -62,6 +69,12 @@ class Config:
     AI_MEMORY_RETENTION_DAYS = int(os.environ.get('AI_MEMORY_RETENTION_DAYS', '30'))
     AI_MEMORY_MAX_ROWS = int(os.environ.get('AI_MEMORY_MAX_ROWS', '100'))
     AUTH_COOKIE_NAME = os.environ.get('AUTH_COOKIE_NAME', 'cheetchat_session')
+    VAPID_SUBJECT = normalized_env_value('VAPID_SUBJECT')
+    if VAPID_SUBJECT and '@' in VAPID_SUBJECT and ':' not in VAPID_SUBJECT:
+        VAPID_SUBJECT = f'mailto:{VAPID_SUBJECT}'
+    if VAPID_SUBJECT:
+        # Push delivery helpers read this variable directly, so keep one canonical value.
+        os.environ['VAPID_SUBJECT'] = VAPID_SUBJECT
 
     # Never allow deployment with development signing keys or without the OTP
     # provider. Render exposes RENDER=true automatically; APP_ENV covers other hosts.
@@ -94,7 +107,7 @@ class Config:
         _vapid_keys = ('VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT')
         if any(not os.environ.get(key) for key in _vapid_keys):
             raise RuntimeError('VAPID push credentials must be configured in production')
-        if not os.environ['VAPID_SUBJECT'].startswith('mailto:'):
+        if not VAPID_SUBJECT.startswith('mailto:') or '@' not in VAPID_SUBJECT[7:]:
             raise RuntimeError('VAPID_SUBJECT must use a mailto: contact in production')
         _turn_urls = [
             value.strip() for value in os.environ.get('TURN_URLS', '').split(',') if value.strip()

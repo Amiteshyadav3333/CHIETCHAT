@@ -146,18 +146,21 @@ def finalize_login(user):
     response = jsonify({
         "csrfToken": csrf_token,
         "user": serialize_user(user, viewer_id=user.id),
-        "keyBackup": user.encrypted_private_key
+        "keyBackup": user.encrypted_private_key,
+        "recoveryKeyBackup": user.encrypted_recovery_key,
     })
     response.set_cookie(
         current_app.config['AUTH_COOKIE_NAME'], token, httponly=True,
         secure=current_app.config['AUTH_COOKIE_SECURE'],
         samesite=current_app.config['AUTH_COOKIE_SAMESITE'], max_age=7 * 24 * 60 * 60,
+        partitioned=current_app.config['IS_PRODUCTION'],
         path='/',
     )
     response.set_cookie(
         'cheetchat_csrf', csrf_token, httponly=False,
         secure=current_app.config['AUTH_COOKIE_SECURE'],
         samesite=current_app.config['AUTH_COOKIE_SAMESITE'], max_age=7 * 24 * 60 * 60,
+        partitioned=current_app.config['IS_PRODUCTION'],
         path='/',
     )
     return response, 200
@@ -192,6 +195,7 @@ def get_csrf_token():
             'cheetchat_csrf', csrf_token, httponly=False,
             secure=current_app.config['AUTH_COOKIE_SECURE'],
             samesite=current_app.config['AUTH_COOKIE_SAMESITE'], max_age=7 * 24 * 60 * 60,
+            partitioned=current_app.config['IS_PRODUCTION'],
             path='/',
         )
     return response
@@ -207,8 +211,8 @@ def logout_current_session():
         ActiveSession.query.filter_by(id=session_id, user_id=user_id).delete(synchronize_session=False)
         db.session.commit()
     response = jsonify({'ok': True})
-    response.delete_cookie(current_app.config['AUTH_COOKIE_NAME'], path='/')
-    response.delete_cookie('cheetchat_csrf', path='/')
+    response.delete_cookie(current_app.config['AUTH_COOKIE_NAME'], path='/', partitioned=current_app.config['IS_PRODUCTION'])
+    response.delete_cookie('cheetchat_csrf', path='/', partitioned=current_app.config['IS_PRODUCTION'])
     return response
 
 @auth_bp.route('/api/register', methods=['POST'])
@@ -322,18 +326,21 @@ def verify_registration_otp():
             "csrfToken": csrf_token,
             "user": serialize_user(user, viewer_id=user.id),
             "keyBackup": user.encrypted_private_key,
+            "recoveryKeyBackup": user.encrypted_recovery_key,
             "needsProfileSetup": True
         })
         response.set_cookie(
             current_app.config['AUTH_COOKIE_NAME'], token, httponly=True,
             secure=current_app.config['AUTH_COOKIE_SECURE'],
             samesite=current_app.config['AUTH_COOKIE_SAMESITE'], max_age=7 * 24 * 60 * 60,
+            partitioned=current_app.config['IS_PRODUCTION'],
             path='/',
         )
         response.set_cookie(
             'cheetchat_csrf', csrf_token, httponly=False,
             secure=current_app.config['AUTH_COOKIE_SECURE'],
             samesite=current_app.config['AUTH_COOKIE_SAMESITE'], max_age=7 * 24 * 60 * 60,
+            partitioned=current_app.config['IS_PRODUCTION'],
             path='/',
         )
         return response, 201

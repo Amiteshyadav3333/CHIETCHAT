@@ -233,7 +233,11 @@ cors.init_app(app, resources={r"/*": {"origins": ALLOWED_ORIGINS}}, supports_cre
 db.init_app(app)
 socketio.init_app(
     app,
-    message_queue=os.environ.get('REDIS_URL') or None,
+    # A Redis pub/sub manager is only needed when multiple web workers publish
+    # socket events to each other. The production command intentionally uses one
+    # worker; avoiding a broken external pub/sub connection keeps chat realtime.
+    message_queue=(os.environ.get('REDIS_URL') or None)
+        if int(os.environ.get('WEB_CONCURRENCY', '1')) > 1 else None,
     channel='cheetchat',
 )
 

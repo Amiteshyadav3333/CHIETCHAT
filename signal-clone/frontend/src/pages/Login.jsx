@@ -65,28 +65,39 @@ const Login = () => {
         setTwoFactorUserId(null);
     };
 
-    const finishLogin = async (userData, authToken, keysToStore = null, needsProfileSetup = false, keyBackup = null, recoveryCode = '', csrfToken = null) => {
+    const finishLogin = async (userData, authToken, keysToStore = null, needsProfileSetup = false, keyBackup = null, recoveryCode = '', csrfToken = null, recoveryKeyBackup = null) => {
         if (csrfToken) sessionStorage.setItem('cheetchat_csrf_token', csrfToken);
         if (keysToStore) {
             await saveDevicePrivateKey(userData.id, keysToStore.privateKeyString);
             localStorage.setItem(`pubKey_${userData.id}`, keysToStore.publicKeyString);
-        } else if (keyBackup && password) {
-            try {
-                const restoredPrivateKey = await restorePrivateKeyWithPassword(keyBackup, password);
-                await saveDevicePrivateKey(userData.id, restoredPrivateKey);
-                if (userData.publicKey) localStorage.setItem(`pubKey_${userData.id}`, userData.publicKey);
-            } catch (error) {
-                console.error('Could not restore encrypted chat key on this device', error);
-            }
-        } else if (password) {
-            const existingPrivateKey = await loadDevicePrivateKey(userData.id);
-            if (existingPrivateKey) {
+        } else {
+            let devicePrivateKey = await loadDevicePrivateKey(userData.id);
+            if (!devicePrivateKey && keyBackup && password) {
                 try {
-                    const encryptedPrivateKey = await protectPrivateKeyWithPassword(existingPrivateKey, password);
-                    await axios.post('/api/user/key-backup', { encryptedPrivateKey }, { headers: { Authorization: `Bearer ${authToken}` } });
+                    devicePrivateKey = await restorePrivateKeyWithPassword(keyBackup, password);
                 } catch (error) {
-                    console.error('Could not create encrypted multi-device key backup', error);
+                    console.warn('Password key restore failed; recovery code is required.', error);
                 }
+            }
+            if (!devicePrivateKey && recoveryKeyBackup) {
+                const enteredRecoveryCode = window.prompt('Enter your CHEETCHAT recovery code to restore encrypted chats on this device:');
+                if (enteredRecoveryCode?.trim()) {
+                    try {
+                        devicePrivateKey = await restorePrivateKeyWithPassword(recoveryKeyBackup, enteredRecoveryCode.trim());
+                    } catch {
+                        throw new Error('The recovery code is incorrect. Your account was not opened without its chat key.');
+                    }
+                }
+            }
+            if (devicePrivateKey) {
+                await saveDevicePrivateKey(userData.id, devicePrivateKey);
+                if (userData.publicKey) localStorage.setItem(`pubKey_${userData.id}`, userData.publicKey);
+                if (!keyBackup && password && authToken) {
+                    const encryptedPrivateKey = await protectPrivateKeyWithPassword(devicePrivateKey, password);
+                    await axios.post('/api/user/key-backup', { encryptedPrivateKey }, { headers: { Authorization: `Bearer ${authToken}` } });
+                }
+            } else if (userData.publicKey) {
+                throw new Error('This device needs your CHEETCHAT recovery code before encrypted chats can be opened.');
             }
         }
         if (recoveryCode) {
@@ -139,13 +150,13 @@ const Login = () => {
                     token: twoFactorCode,
                     deviceFingerprint
                 });
-                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken);
+                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken, res.data.recoveryKeyBackup);
                 return;
             }
 
             if (isLogin && isOtpStep) {
                 const res = await axios.post('/api/login/verify-otp', { email: cleanEmail, otp, deviceFingerprint });
-                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken);
+                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken, res.data.recoveryKeyBackup);
                 return;
             }
 
@@ -159,13 +170,13 @@ const Login = () => {
                     setSubmitting(false);
                     return;
                 }
-                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken);
+                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken, res.data.recoveryKeyBackup);
                 return;
             }
 
             if (isRegister && isOtpStep) {
                 const res = await axios.post('/api/register/verify-otp', { email: cleanEmail, otp, deviceFingerprint });
-                await finishLogin(res.data.user, res.data.token, pendingKeys, res.data.needsProfileSetup ?? true, res.data.keyBackup, pendingRecoveryCode, res.data.csrfToken);
+                await finishLogin(res.data.user, res.data.token, pendingKeys, res.data.needsProfileSetup ?? true, res.data.keyBackup, pendingRecoveryCode, res.data.csrfToken, res.data.recoveryKeyBackup);
                 return;
             }
 
@@ -206,7 +217,7 @@ const Login = () => {
             if (typeof data.attemptsRemaining === 'number') {
                 setAttemptsRemaining(data.attemptsRemaining);
             }
-            alert(data.error || 'An error occurred');
+            alert(data.error || err.message || 'An error occurred');
         } finally {
             setSubmitting(false);
         }

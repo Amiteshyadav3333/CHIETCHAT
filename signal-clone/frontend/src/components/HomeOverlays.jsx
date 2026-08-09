@@ -37,11 +37,11 @@ export const ForwardMessageModal = ({ activeChatId, chats, message, onClose, onF
     <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4">
         <div className="w-full max-w-sm rounded-2xl border border-gray-700 bg-[#111b21] p-4 shadow-2xl">
             <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-lg font-bold text-white">{message._shareSource === 'reel' ? 'Share reel to' : 'Forward to'}</h3>
+                <h3 className="text-lg font-bold text-white">{message._shareSource === 'reel' ? 'Share reel to' : message._shareSource === 'social' ? 'Share post to' : 'Forward to'}</h3>
                 <button onClick={onClose} className="text-gray-400 hover:text-white">Close</button>
             </div>
             <div className="max-h-80 space-y-2 overflow-y-auto">
-                {chats.filter(chat => message._shareSource === 'reel' || chat.id !== activeChatId).map(chat => (
+                {chats.filter(chat => ['reel', 'social'].includes(message._shareSource) || chat.id !== activeChatId).map(chat => (
                     <button key={chat.id} onClick={() => onForward(chat)} className="flex w-full items-center gap-3 rounded-xl p-3 text-left hover:bg-white/10">
                         <AvatarZoom src={chat.avatar || null} name={chat.name} size="w-10 h-10" />
                         <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white">{chat.name}</span>

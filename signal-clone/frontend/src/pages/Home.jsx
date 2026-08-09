@@ -1535,6 +1535,18 @@ const Home = () => {
         });
     };
 
+    const shareSocialPostToChat = (post) => {
+        const displayPost = post.isRetweet && post.originalPost ? post.originalPost : post;
+        const postUrl = `${window.location.origin}/?post=${post.id}`;
+        const caption = String(displayPost.caption || '').trim();
+        setShowSocial(false);
+        setForwardMessage({
+            content: `${caption ? `${caption}\n` : ''}${postUrl}`,
+            type: 'text',
+            _shareSource: 'social',
+        });
+    };
+
     const handleTyping = (isTyping) => {
         if (!socket || !visibleActiveChat) return;
         socket.emit('typing', { chatId: visibleActiveChat.id, isTyping });
@@ -2942,6 +2954,7 @@ const Home = () => {
                     onBack={() => { setShowSocial(false); setSocialDeepLink(null); }}
                     deepLink={socialDeepLink}
                     onDeepLinkConsumed={() => setSocialDeepLink(null)}
+                    onShareToChat={shareSocialPostToChat}
                 />
                 </React.Suspense>
             </div>}

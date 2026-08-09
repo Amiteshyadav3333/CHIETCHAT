@@ -7,7 +7,7 @@ import {
     TrashIcon, UsersIcon, ArrowPathRoundedSquareIcon, ShareIcon,
     PencilIcon, LinkIcon, CalendarIcon, ArrowUpTrayIcon, UserCircleIcon,
     EllipsisHorizontalIcon, MagnifyingGlassIcon, BookmarkIcon,
-    BellIcon, HomeIcon, HashtagIcon, SparklesIcon
+    HomeIcon, SparklesIcon
 } from '@heroicons/react/24/outline';
 import {
     HeartIcon as HeartSolidIcon,
@@ -17,6 +17,7 @@ import {
 import FullscreenMediaModal from '../components/FullscreenMediaModal';
 import NestedComment from '../components/NestedComment';
 import { getSafeWebsiteUrl } from '../utils/safeUrl';
+import SocialShareSheet from '../components/SocialShareSheet';
 
 const authHeaders = (token) => ({ Authorization: `Bearer ${token}` });
 
@@ -156,7 +157,7 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
     );
 };
 
-const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onDelete, onFollow, onOpenProfile }) => {
+const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onShareToChat, onDelete, onFollow, onOpenProfile }) => {
     const [commentsOpen, setCommentsOpen] = useState(false);
     const [comments, setComments] = useState([]);
     const [comment, setComment] = useState('');
@@ -166,6 +167,7 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onDel
     const [zoomedMedia, setZoomedMedia] = useState(null);
     const [bookmarked, setBookmarked] = useState(false);
     const [hovered, setHovered] = useState(false);
+    const [showShare, setShowShare] = useState(false);
     const menuRef = useRef(null);
     const rtMenuRef = useRef(null);
     const displayPost = post.isRetweet && post.originalPost ? post.originalPost : post;
@@ -314,7 +316,7 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onDel
                     <TweetAction
                         icon={bookmarked ? <BookmarkSolidIcon style={{ width: 20, height: 20, color: '#1d9bf0' }} /> : <BookmarkIcon style={{ width: 20, height: 20 }} />}
                         active={bookmarked} activeColor="#1d9bf0" onClick={() => setBookmarked(b => !b)} hoverColor="#1d9bf0" hoverBg="rgba(29,155,240,0.1)" />
-                    <TweetAction icon={<ShareIcon style={{ width: 20, height: 20 }} />} onClick={onShare} hoverColor="#1d9bf0" hoverBg="rgba(29,155,240,0.1)" />
+                    <TweetAction icon={<ShareIcon style={{ width: 20, height: 20 }} />} count={post.shareCount} onClick={() => setShowShare(true)} hoverColor="#1d9bf0" hoverBg="rgba(29,155,240,0.1)" />
                 </div>
 
                 {commentsOpen && (
@@ -336,6 +338,7 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onDel
                 )}
             </div>
             {zoomedMedia && <FullscreenMediaModal src={zoomedMedia.src} type={zoomedMedia.type} onClose={() => setZoomedMedia(null)} />}
+            {showShare && <SocialShareSheet post={post} token={token} onClose={() => setShowShare(false)} onShareToChat={onShareToChat} onShared={onShare} />}
         </article>
     );
 };
@@ -418,7 +421,7 @@ const ChannelsList = ({ channels, loading, onOpen, onSubscribe, onCreateNew }) =
     </div>
 );
 
-const ChannelView = ({ channel, posts, user, token, preview, media, caption, posting, fileRef, setCaption, setMedia, submitPost, likePost, retweetPost, sharePost, deletePost, toggleFollow, requestSubscribe, reviewRequest, openProfile, currentUser }) => (
+const ChannelView = ({ channel, posts, user, token, preview, media, caption, posting, fileRef, setCaption, setMedia, submitPost, likePost, retweetPost, sharePost, onShareToChat, deletePost, toggleFollow, requestSubscribe, reviewRequest, openProfile, currentUser }) => (
     <div style={{ maxWidth: 600, margin: '0 auto', width: '100%' }}>
         <div style={{ borderBottom: '1px solid #2f3336' }}>
             <div style={{ height: 112, background: 'linear-gradient(135deg, #1d9bf0 0%, #764ba2 100%)', position: 'relative' }}>
@@ -459,13 +462,13 @@ const ChannelView = ({ channel, posts, user, token, preview, media, caption, pos
         {posts.length ? posts.map(post => (
             <TweetCard key={post.id} post={post} currentUser={currentUser || user} token={token}
                 onLike={() => likePost(post.id)} onRetweet={() => retweetPost(post.id)}
-                onShare={() => sharePost(post.id)} onDelete={() => deletePost(post.id)}
+                onShare={count => sharePost(post.id, count)} onShareToChat={onShareToChat} onDelete={() => deletePost(post.id)}
                 onFollow={() => toggleFollow(post.user.id)} onOpenProfile={openProfile} />
         )) : <CheetChatEmptyState text={channel.canPost ? 'No posts yet.' : 'Join this space to see content.'} />}
     </div>
 );
 
-const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpenProfile }) => {
+const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpenProfile, onShareToChat }) => {
     const [profileData, setProfileData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [editMode, setEditMode] = useState(false);
@@ -524,11 +527,9 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
     const handleRetweet = async (postId) => {
         try { const res = await axios.post('/api/social/posts/' + postId + '/retweet', {}, { headers: authHeaders(token) }); setProfileData(prev => ({ ...prev, posts: prev.posts.map(p => p.id === postId ? { ...p, isRetweeted: res.data.isRetweeted, retweetCount: res.data.retweetCount } : p) })); } catch { }
     };
-    const handleShare = async (postId) => {
-        const url = window.location.origin + '/?post=' + postId;
-        try { await axios.post('/api/social/posts/' + postId + '/share', {}, { headers: authHeaders(token) }); } catch { }
-        if (navigator.share) { try { await navigator.share({ url }); } catch { } } else { navigator.clipboard && navigator.clipboard.writeText(url); }
-    };
+    const handleShare = (postId, shareCount) => setProfileData(prev => ({
+        ...prev, posts: prev.posts.map(post => post.id === postId ? { ...post, shareCount } : post),
+    }));
     const handleDelete = async (postId) => {
         if (!window.confirm('Delete this post?')) return;
         try { await axios.delete('/api/social/posts/' + postId, { headers: authHeaders(token) }); setProfileData(prev => ({ ...prev, posts: prev.posts.filter(p => p.id !== postId) })); } catch { alert('Delete failed'); }
@@ -648,7 +649,7 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
                 {filteredProfilePosts.length ? filteredProfilePosts.map(post => (
                     <TweetCard key={post.id} post={post} currentUser={currentUser} token={token}
                         onLike={() => handleLike(post.id)} onRetweet={() => handleRetweet(post.id)}
-                        onShare={() => handleShare(post.id)} onDelete={() => handleDelete(post.id)}
+                        onShare={count => handleShare(post.id, count)} onShareToChat={onShareToChat} onDelete={() => handleDelete(post.id)}
                         onFollow={() => {}} onOpenProfile={onOpenProfile} />
                 )) : <CheetChatEmptyState text={isOwnProfile ? "You haven't posted yet." : "No posts yet."} />}
             </div>
@@ -656,7 +657,7 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
     );
 };
 
-const Social = ({ onBack, deepLink, onDeepLinkConsumed }) => {
+const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat }) => {
     const { user, token, updateUser } = useContext(AuthContext);
     const [activeTab, setActiveTab] = useState('for-you');
     const [posts, setPosts] = useState([]);
@@ -767,12 +768,9 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed }) => {
     const retweetPost = async (postId, isChannelPost) => {
         try { const res = await axios.post('/api/social/posts/' + postId + '/retweet', {}, { headers: authHeaders(token) }); const patch = p => p.id === postId ? { ...p, isRetweeted: res.data.isRetweeted, retweetCount: res.data.retweetCount } : p; isChannelPost ? setChannelPosts(p => p.map(patch)) : setPosts(p => p.map(patch)); if (!isChannelPost) fetchPosts(activeTab); } catch { }
     };
-    const sharePost = async (postId, isChannelPost) => {
-        const postUrl = window.location.origin + '/?post=' + postId;
-        try { await axios.post('/api/social/posts/' + postId + '/share', {}, { headers: authHeaders(token) }); } catch { }
-        const patch = p => p.id === postId ? { ...p, shareCount: (p.shareCount || 0) + 1 } : p;
+    const sharePost = (postId, isChannelPost, shareCount) => {
+        const patch = p => p.id === postId ? { ...p, shareCount } : p;
         isChannelPost ? setChannelPosts(p => p.map(patch)) : setPosts(p => p.map(patch));
-        if (navigator.share) { try { await navigator.share({ url: postUrl }); } catch { } } else { navigator.clipboard && navigator.clipboard.writeText(postUrl); }
     };
     const deletePost = async (postId, isChannelPost) => {
         if (!window.confirm('Delete this post?')) return;
@@ -783,7 +781,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed }) => {
 
     if (profileView) return (
         <UserProfileView userId={profileView.userId} currentUser={user} token={token} updateUser={updateUser}
-            onBack={() => setProfileView(null)} onOpenProfile={openProfile} />
+            onBack={() => setProfileView(null)} onOpenProfile={openProfile} onShareToChat={onShareToChat} />
     );
     const currentPosts = selectedChannel ? channelPosts : posts;
     const TABS = [{ key: 'for-you', label: 'For You' }, { key: 'following', label: 'Following' }, { key: 'channels', label: 'Spaces' }];
@@ -824,8 +822,6 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed }) => {
                         </div>
                         {[
                             { icon: <HomeIcon className="w-7 h-7" />, label: 'Home', action: () => { setSelectedChannel(null); setActiveTab('for-you'); } },
-                            { icon: <HashtagIcon className="w-7 h-7" />, label: 'Explore', action: () => {} },
-                            { icon: <BellIcon className="w-7 h-7" />, label: 'Notifications', action: () => {} },
                             { icon: <UsersIcon className="w-7 h-7" />, label: 'Spaces', action: () => { setSelectedChannel(null); setActiveTab('channels'); } },
                             { icon: <UserCircleIcon className="w-7 h-7" />, label: 'Profile', action: () => setProfileView({ userId: user.id }) },
                             { icon: <ArrowLeftIcon className="w-7 h-7" />, label: 'Back', action: onBack },
@@ -890,7 +886,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed }) => {
                     <div className="flex-1 overflow-y-auto scrollbar-hide">
                         {selectedChannel ? (
                             <ChannelView channel={selectedChannel} posts={currentPosts} user={user} token={token} preview={preview} media={media} caption={caption} posting={posting} fileRef={fileRef} setCaption={setCaption} setMedia={setMedia}
-                                submitPost={() => submitPost(selectedChannel.id)} likePost={id => likePost(id, true)} retweetPost={id => retweetPost(id, true)} sharePost={id => sharePost(id, true)} deletePost={id => deletePost(id, true)}
+                                submitPost={() => submitPost(selectedChannel.id)} likePost={id => likePost(id, true)} retweetPost={id => retweetPost(id, true)} sharePost={(id, count) => sharePost(id, true, count)} onShareToChat={onShareToChat} deletePost={id => deletePost(id, true)}
                                 toggleFollow={toggleFollow} requestSubscribe={() => requestSubscribe(selectedChannel.id)} reviewRequest={reviewRequest} openProfile={openProfile} currentUser={user} />
                         ) : activeTab === 'channels' ? (
                             <ChannelsList channels={displayedChannels} loading={loading} onOpen={fetchChannel} onSubscribe={requestSubscribe} onCreateNew={() => setShowChannelForm(true)} />
@@ -903,7 +899,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed }) => {
                                     <div key={post.id} ref={post.id === highlightedPostId ? highlightedRef : null} style={post.id === highlightedPostId ? { outline: '2px solid #1d9bf0' } : {}}>
                                         <TweetCard post={post} currentUser={user} token={token}
                                             onLike={() => likePost(post.id)} onRetweet={() => retweetPost(post.id)}
-                                            onShare={() => sharePost(post.id)} onDelete={() => deletePost(post.id)}
+                                            onShare={count => sharePost(post.id, false, count)} onShareToChat={onShareToChat} onDelete={() => deletePost(post.id)}
                                             onFollow={() => toggleFollow(post.user.id)} onOpenProfile={openProfile} />
                                     </div>
                                 )) : <CheetChatEmptyState text={activeTab === 'following' ? 'Follow people to build your feed.' : 'No posts matches search criteria.'} />}
@@ -915,7 +911,6 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed }) => {
                     <nav className="flex md:hidden items-center border-t border-[#2f3336] flex-shrink-0 bg-black py-1">
                         {[
                             { icon: <HomeIcon className="w-6 h-6" />, action: () => { setSelectedChannel(null); setActiveTab('for-you'); } },
-                            { icon: <MagnifyingGlassIcon className="w-6 h-6" />, action: () => {} },
                             { icon: <UsersIcon className="w-6 h-6" />, action: () => { setSelectedChannel(null); setActiveTab('channels'); } },
                             { icon: user && user.avatar ? <img src={user.avatar} alt="" className="w-6 h-6 rounded-full object-cover" /> : <UserCircleIcon className="w-6 h-6" />, action: () => setProfileView({ userId: user.id }) },
                         ].map((btn, i) => (

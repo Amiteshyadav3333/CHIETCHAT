@@ -1438,6 +1438,12 @@ class SecurityTests(unittest.TestCase):
         repeated_share = self.client.post(f'/api/social/posts/{post_id}/share', headers=self.auth_headers())
         self.assertEqual(first_share.json['shareCount'], 1)
         self.assertEqual(repeated_share.json['shareCount'], 1)
+        story = self.client.post(f'/api/social/posts/{post_id}/story', headers=self.auth_headers())
+        self.assertEqual(story.status_code, 201)
+        with app.app_context():
+            shared_status = db.session.get(Status, story.json['id'])
+            self.assertEqual(shared_status.caption, 'Launch test post')
+            self.assertEqual(shared_status.media_type, 'image')
         feed = self.client.get('/api/social/posts', headers=self.auth_headers())
         self.assertTrue(any(post['id'] == post_id for post in feed.json))
         deleted = self.client.delete(f'/api/social/posts/{post_id}', headers=self.auth_headers())

@@ -1,14 +1,15 @@
-from flask import Blueprint, jsonify, request
+import datetime
+from flask import Blueprint, current_app, jsonify, request
 from sqlalchemy import or_
 from werkzeug.utils import secure_filename
 
 from models import (
     db, User, Follow, SocialPost, SocialPostLike, SocialPostShare, SocialPostComment,
-    Channel, ChannelMembership, CommentReply
+    Channel, ChannelMembership, CommentReply, Status
 )
 from utils import (
     get_current_user_id, get_json_data, iso_utc, serialize_user,
-    upload_to_cloudinary, create_notification, queue_media_deletion, process_media_deletion_task
+    upload_to_cloudinary, create_notification, queue_media_deletion, process_media_deletion_task, utc_now
 )
 
 social_bp = Blueprint('social_bp', __name__)
@@ -252,6 +253,28 @@ def share_post(post_id):
         post.share_count = (post.share_count or 0) + 1
         db.session.commit()
     return jsonify({"shareCount": post.share_count})
+
+@social_bp.route('/api/social/posts/<int:post_id>/story', methods=['POST'])
+def share_post_to_story(post_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    post = db.get_or_404(SocialPost, post_id)
+    source = post.retweet_of if post.retweet_of_id and post.retweet_of else post
+    media_url = source.media_url or f"{current_app.config['FRONTEND_URL'].rstrip('/')}/cheetchat-logo.png"
+    media_type = source.media_type if source.media_url else 'image'
+    caption = (source.caption or f"Post by @{source.user.username}").strip()[:300]
+    status = Status(
+        user_id=user_id,
+        media_url=media_url,
+        media_type=media_type,
+        caption=caption,
+        duration=15,
+        expires_at=utc_now() + datetime.timedelta(hours=24),
+    )
+    db.session.add(status)
+    db.session.commit()
+    return jsonify({"message": "Post added to your story", "id": status.id}), 201
 
 # ─── LIKE ─────────────────────────────────────────────────────────────────────
 

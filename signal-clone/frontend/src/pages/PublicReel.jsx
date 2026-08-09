@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useRef, useContext } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from '../utils/clientRouter';
-import { AuthContext } from '../context/AuthContext';
 import axios from 'axios';
 import {
     HeartIcon,
@@ -15,8 +14,6 @@ import { HeartIcon as HeartSolid } from '@heroicons/react/24/solid';
 const PublicReel = () => {
     const { reelId } = useParams();
     const navigate = useNavigate();
-    const { token, user } = useContext(AuthContext);
-
     const [reel, setReel] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -43,13 +40,6 @@ const PublicReel = () => {
         'dramatic': 'contrast(150%) saturate(50%)',
         'night': 'brightness(50%) hue-rotate(200deg)'
     };
-
-    // If user is logged in, redirect to the app
-    useEffect(() => {
-        if (token && user) {
-            navigate('/', { replace: true });
-        }
-    }, [token, user, navigate]);
 
     // Fetch the reel from public endpoint
     useEffect(() => {

@@ -84,7 +84,10 @@ _app_started_at = time.monotonic()
 # Move this state to Redis before enabling multiple workers or instances.
 _rate_windows = defaultdict(deque)
 _rate_windows_lock = threading.Lock()
-_redis_client = redis.Redis.from_url(os.environ['REDIS_URL'], decode_responses=True) if redis and os.environ.get('REDIS_URL') else None
+_redis_client = redis.Redis.from_url(
+    os.environ['REDIS_URL'], decode_responses=True,
+    socket_connect_timeout=2, socket_timeout=2, health_check_interval=30,
+) if redis and os.environ.get('REDIS_URL') else None
 app.extensions['cheetchat_redis'] = _redis_client
 _sensitive_limits = {
     '/api/register': (5, 15 * 60),
@@ -247,19 +250,21 @@ def health_live():
 
 @app.get('/health/ready')
 def health_ready():
+    from sqlalchemy import text
     try:
-        from sqlalchemy import text
         db.session.execute(text('SELECT 1'))
-        dependencies = {'database': 'ok'}
-        if _redis_client is not None:
-            _redis_client.ping()
-            dependencies['redis'] = 'ok'
-        elif app.config.get('IS_PRODUCTION'):
-            return jsonify({'status': 'not_ready', 'database': 'ok', 'redis': 'missing'}), 503
-        return jsonify({'status': 'ready', **dependencies})
     except Exception:
         db.session.rollback()
-        return jsonify({'status': 'not_ready', 'database': 'unavailable'}), 503
+        return jsonify({'status': 'not_ready', 'database': 'unavailable', 'redis': 'unknown'}), 503
+
+    if _redis_client is not None:
+        try:
+            _redis_client.ping()
+        except Exception:
+            return jsonify({'status': 'not_ready', 'database': 'ok', 'redis': 'unavailable'}), 503
+    elif app.config.get('IS_PRODUCTION'):
+        return jsonify({'status': 'not_ready', 'database': 'ok', 'redis': 'missing'}), 503
+    return jsonify({'status': 'ready', 'database': 'ok', 'redis': 'ok' if _redis_client else 'disabled'})
 
 @app.get('/health/operations')
 def health_operations():

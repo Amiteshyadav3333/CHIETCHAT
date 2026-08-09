@@ -549,9 +549,28 @@ class SecurityTests(unittest.TestCase):
         self.assertIn('camera=(self)', response.headers['Permissions-Policy'])
         private = self.client.get('/api/chats', headers=self.auth_headers())
         self.assertIn('no-store', private.headers['Cache-Control'])
-        ready = self.client.get('/health/ready')
-        self.assertEqual(ready.status_code, 200)
-        self.assertEqual(ready.json['database'], 'ok')
+        original_client = app_module._redis_client
+        app_module._redis_client = None
+        try:
+            ready = self.client.get('/health/ready')
+            self.assertEqual(ready.status_code, 200)
+            self.assertEqual(ready.json['database'], 'ok')
+        finally:
+            app_module._redis_client = original_client
+
+    def test_ready_health_distinguishes_redis_outage_from_database_outage(self):
+        class BrokenRedis:
+            def ping(self):
+                raise ConnectionError('redis unavailable')
+        original_client = app_module._redis_client
+        app_module._redis_client = BrokenRedis()
+        try:
+            response = self.client.get('/health/ready')
+            self.assertEqual(response.status_code, 503)
+            self.assertEqual(response.json['database'], 'ok')
+            self.assertEqual(response.json['redis'], 'unavailable')
+        finally:
+            app_module._redis_client = original_client
 
     def test_redis_outage_uses_local_rate_limit_fallback_in_production(self):
         class BrokenRedis:

@@ -21,6 +21,20 @@ SERPER_API_KEY  = os.environ.get('SERPER_API_KEY', '')
 
 MEMORY_LIMIT = 40   # enough recent turns to learn the user's language and texting style
 
+SUPPORTED_LANGUAGES = {
+    'hi-IN': 'Hindi (Devanagari; use simple natural Hindi)',
+    'en-IN': 'English (natural Indian English)',
+    'bn-IN': 'Bengali (Bengali script)',
+    'ta-IN': 'Tamil (Tamil script)',
+    'te-IN': 'Telugu (Telugu script)',
+    'mr-IN': 'Marathi (Devanagari script)',
+    'gu-IN': 'Gujarati (Gujarati script)',
+    'pa-IN': 'Punjabi (Gurmukhi script)',
+    'es-ES': 'Spanish',
+    'fr-FR': 'French',
+    'ar-SA': 'Arabic',
+}
+
 
 def _detect_language(text: str) -> str:
     """Detect the language of the current turn so old memory cannot override it."""
@@ -421,20 +435,27 @@ def _get_user_info(user_id):
     return 'User', 'unknown'
 
 
-def _build_messages(user_id, new_user_msg, user_gender=None, user_name=None):
+def _build_messages(user_id, new_user_msg, user_gender=None, user_name=None, language_code=None):
     """Build message list with gender-aware system prompt + memory + new message"""
     history = AiConversation.query.filter_by(user_id=user_id)\
         .order_by(AiConversation.created_at.desc())\
         .limit(MEMORY_LIMIT).all()
     history = list(reversed(history))
 
-    current_language = _detect_language(new_user_msg)
+    current_language = SUPPORTED_LANGUAGES.get(language_code) or _detect_language(new_user_msg)
     mode = _detect_mode(new_user_msg, history)
     system_prompt = _build_system_prompt(user_gender or 'unknown', user_name or 'User')
     system_prompt += f"\n\n🎯 LIVE STYLE MEMORY:\n{_conversation_style_hint(history)}"
     system_prompt += (
         f"\n\nCURRENT TURN:\n- Language: {current_language}. Reply only in this language/script."
         f"\n- Conversation mode: {mode}."
+    )
+    system_prompt += (
+        "\n\nEMOTIONAL INTELLIGENCE:\n"
+        "- Message ke words, pace aur context se emotion samjho: sadness, anxiety, anger, loneliness, excitement ya confusion.\n"
+        "- Pehle feeling ko naturally acknowledge karo, phir context ke hisaab se saath, practical help ya halka humour do.\n"
+        "- Fake diagnosis, manipulative dependency, judgement aur har reply mein generic sympathy se bacho.\n"
+        "- User ko openly baat karne do, lekin dangerous ya illegal request mein safe, useful alternative do."
     )
     if mode == 'interview':
         system_prompt += (
@@ -495,6 +516,9 @@ def ai_chat():
     requested_gender = str(data.get('user_gender') or '').lower()
     if requested_gender in ('male', 'female', 'unknown'):
         user_gender = requested_gender
+    language_code = str(data.get('language') or 'hi-IN')
+    if language_code not in SUPPORTED_LANGUAGES:
+        return jsonify({"error": "Unsupported AI language"}), 400
 
     image_data = data.get('image')
     if image_data and (
@@ -514,7 +538,7 @@ def ai_chat():
         if search_result:
             context_msg = f"{user_msg}\n\n[Web search results for context:\n{search_result}]"
 
-    messages = _build_messages(user_id, context_msg, user_gender, user_name)
+    messages = _build_messages(user_id, context_msg, user_gender, user_name, language_code)
     if image_data:
         messages[0]["content"] += (
             "\n\n👁️ LIVE CAMERA VISION:\n"
@@ -557,8 +581,11 @@ def ai_chat_stream():
     requested_gender = str(data.get('user_gender') or '').lower()
     if requested_gender in ('male', 'female', 'unknown'):
         user_gender = requested_gender
+    language_code = str(data.get('language') or 'hi-IN')
+    if language_code not in SUPPORTED_LANGUAGES:
+        return jsonify({"error": "Unsupported AI language"}), 400
 
-    messages = _build_messages(user_id, user_msg, user_gender, user_name)
+    messages = _build_messages(user_id, user_msg, user_gender, user_name, language_code)
 
     def generate():
         full_reply = []
@@ -775,7 +802,7 @@ def ai_tts():
     try:
         import urllib.request
         lang = request.args.get('lang', 'hi').split('-')[0]
-        if lang not in {'hi', 'en', 'bn', 'pa', 'mr', 'gu', 'ta', 'te', 'kn', 'ml', 'ur'}:
+        if lang not in {'hi', 'en', 'bn', 'pa', 'mr', 'gu', 'ta', 'te', 'kn', 'ml', 'ur', 'es', 'fr', 'ar'}:
             lang = 'hi'
         encoded_text = urllib.parse.quote(text)
         url = f"https://translate.google.com/translate_tts?ie=UTF-8&tl={lang}&client=tw-ob&q={encoded_text}"

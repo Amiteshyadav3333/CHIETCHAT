@@ -11,6 +11,15 @@ import UserAvatar from './UserAvatar';
 import { EMOJIS, MessageBubble, TypingDots, WaveformVisualizer, renderMarkdown } from './AiChatPresentation';
 import { API_BASE_URL } from '../utils/apiBaseUrl';
 
+const AI_LANGUAGES = [
+    { code: 'hi-IN', label: 'हिंदी' }, { code: 'en-IN', label: 'English' },
+    { code: 'bn-IN', label: 'বাংলা' }, { code: 'ta-IN', label: 'தமிழ்' },
+    { code: 'te-IN', label: 'తెలుగు' }, { code: 'mr-IN', label: 'मराठी' },
+    { code: 'gu-IN', label: 'ગુજરાતી' }, { code: 'pa-IN', label: 'ਪੰਜਾਬੀ' },
+    { code: 'es-ES', label: 'Español' }, { code: 'fr-FR', label: 'Français' },
+    { code: 'ar-SA', label: 'العربية' },
+];
+
 
 /* ─── Main AiChat component ─── */
 const AiChat = ({ onClose, onBack, onActionCall }) => {
@@ -23,6 +32,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     const [isRecording, setIsRecording] = useState(false);
     const [showEmoji, setShowEmoji] = useState(false);
     const [userGender, setUserGender] = useState('unknown');
+    const [language, setLanguage] = useState(() => localStorage.getItem('ai_language') || 'hi-IN');
 
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
@@ -54,7 +64,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
 
     // AI Voice & Video refs
     const shouldListenRef = useRef(false);
-    const recognitionLangRef = useRef(localStorage.getItem('ai_call_language') || 'hi-IN');
+    const recognitionLangRef = useRef(localStorage.getItem('ai_language') || 'hi-IN');
     const ttsAudioRef = useRef(null);
     const videoStreamRef = useRef(null);
     const videoRef = useRef(null);
@@ -64,6 +74,11 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     useEffect(() => { callStateRef.current = callState; }, [callState]);
     useEffect(() => { isCallMutedRef.current = isCallMuted; }, [isCallMuted]);
     useEffect(() => { aiSpeakingRef.current = aiSpeaking; }, [aiSpeaking]);
+    useEffect(() => {
+        recognitionLangRef.current = language;
+        localStorage.setItem('ai_language', language);
+        recognitionRef.current = null;
+    }, [language]);
 
     // Timer interval for call duration
     useEffect(() => {
@@ -154,6 +169,10 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
 
     // Start Voice Call Flow
     const startCall = () => {
+        if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) {
+            alert('Voice call के लिए Chrome या Edge में microphone speech recognition चाहिए। Text chat अभी भी काम करेगा।');
+            return;
+        }
         setIsCallVideo(false);
         setIsCallActive(true);
         setCallState('ringing');
@@ -177,9 +196,9 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
             setCallState('connected');
 
             // Play AI greeting
-            const greeting = botInfo?.name === 'Arjun'
-                ? "Haan, bolo yaar. Kya chal raha hai?"
-                : "Heyy, bolo na! Kya baat karni hai aaj?";
+            const greeting = language === 'hi-IN'
+                ? (botInfo?.name === 'Arjun' ? "हाँ, बोलो यार। क्या चल रहा है?" : "हेलो, बोलो ना। आज क्या बात करनी है?")
+                : `Hello, I'm ${botInfo?.name || 'your AI companion'}. I'm listening.`;
             
             speakAiResponse(greeting);
         }, 2500);
@@ -187,6 +206,10 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
 
     // Start Video Call Flow
     const startVideoCall = async () => {
+        if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) {
+            alert('Video AI conversation के लिए Chrome या Edge speech recognition चाहिए।');
+            return;
+        }
         setIsCallVideo(true);
         setIsCallActive(true);
         setCallState('ringing');
@@ -217,9 +240,9 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
             setCallState('connected');
 
             // Play AI greeting
-            const greeting = botInfo?.name === 'Arjun'
-                ? "Haan, bolo yaar. Main vc par aa gaya hoon. Kya chal raha hai?"
-                : "Heyy, bolo na! Main vc par aa gayi hoon. Kya chal raha hai aaj? 😊";
+            const greeting = language === 'hi-IN'
+                ? "हाँ, मैं वीडियो कॉल पर हूँ। बोलो, मैं सुन रही हूँ।"
+                : `Hello, I'm on video with you. Tell me what's on your mind.`;
             
             speakAiResponse(greeting);
         }, 2500);
@@ -329,17 +352,6 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     const handleCallUserSpeech = async (speechText) => {
         stopListening();
 
-        const nextLanguage = /[\u0900-\u097f]/.test(speechText)
-            ? 'hi-IN'
-            : (/\b(kya|hai|haan|nahi|nhi|acha|achha|kaise|kyu|main|mai|tum|yaar|kr|kar)\b/i.test(speechText)
-                ? 'hi-IN'
-                : 'en-IN');
-        if (nextLanguage !== recognitionLangRef.current) {
-            recognitionLangRef.current = nextLanguage;
-            localStorage.setItem('ai_call_language', nextLanguage);
-            recognitionRef.current = null;
-        }
-
         let frameData = null;
         if (isCallVideo) {
             frameData = captureFrame();
@@ -361,7 +373,8 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                     : speechText,
                 user_gender: userGender,
                 image: frameData,
-                call_mode: isCallVideo ? 'video' : 'voice'
+                call_mode: isCallVideo ? 'video' : 'voice',
+                language,
             }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -389,12 +402,14 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         } catch (e) {
             console.error(e);
             setLoading(false);
-            speakAiResponse("Arre yaar, connection me thodi dikkat aa rahi hai. Ek baar aur bolna.");
+            speakAiResponse(language === 'hi-IN'
+                ? "कनेक्शन में थोड़ी दिक्कत है, एक बार फिर बोलो।"
+                : "The connection had a problem. Please say that once more.");
         }
     };
 
     // Custom high-quality speech synthesis method
-    const speakAiResponse = (text) => {
+    const speakAiResponse = async (text) => {
         if (window.speechSynthesis) {
             window.speechSynthesis.cancel();
         }
@@ -410,8 +425,21 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         setAiSpeaking(true);
         aiSpeakingRef.current = true;
 
-        const audioUrl = `/api/ai/tts?text=${encodeURIComponent(text)}&gender=${gender}&lang=${encodeURIComponent(recognitionLangRef.current)}&t=${Date.now()}`;
-        const audio = new Audio(audioUrl);
+        let audio;
+        let objectUrl;
+        try {
+            const response = await axios.get('/api/ai/tts', {
+                params: { text, gender, lang: recognitionLangRef.current, t: Date.now() },
+                headers: { Authorization: `Bearer ${token}` },
+                responseType: 'blob',
+            });
+            objectUrl = URL.createObjectURL(response.data);
+            audio = new Audio(objectUrl);
+        } catch (error) {
+            console.warn('Natural TTS unavailable, using device voice:', error);
+            fallbackSpeakAiResponse(text);
+            return;
+        }
         ttsAudioRef.current = audio;
 
         audio.onplay = () => {
@@ -420,6 +448,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         };
 
         audio.onended = () => {
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
             setAiSpeaking(false);
             aiSpeakingRef.current = false;
             
@@ -440,6 +469,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         };
 
         audio.onerror = (e) => {
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
             console.warn("Custom TTS failed, falling back to Web Speech Synthesis API:", e);
             fallbackSpeakAiResponse(text);
         };
@@ -462,21 +492,18 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         const voices = window.speechSynthesis.getVoices();
         let selectedVoice = null;
         const isArjun = botInfo?.name === 'Arjun';
+        const languagePrefix = recognitionLangRef.current.split('-')[0].toLowerCase();
+        const languageVoices = voices.filter(voice => voice.lang.toLowerCase().startsWith(languagePrefix));
+        const naturalVoice = languageVoices.find(voice => /natural|neural|premium|enhanced|google|microsoft|siri/i.test(voice.name));
 
         if (isArjun) {
-            selectedVoice = voices.find(v => (v.lang.startsWith('hi') || v.lang.startsWith('en')) && (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('google') && !v.name.toLowerCase().includes('female')));
-            if (!selectedVoice) {
-                selectedVoice = voices.find(v => v.lang.startsWith('hi')) || voices.find(v => v.lang.startsWith('en'));
-            }
-            utterance.pitch = 0.92;
-            utterance.rate = 1.0;
+            selectedVoice = languageVoices.find(v => /male|ravi|hemant|david/i.test(v.name)) || naturalVoice || languageVoices[0];
+            utterance.pitch = 0.96;
+            utterance.rate = 0.96;
         } else {
-            selectedVoice = voices.find(v => (v.lang.startsWith('hi') || v.lang.startsWith('en')) && (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('natural') || v.name.toLowerCase().includes('aria') || v.name.toLowerCase().includes('zira') || v.name.toLowerCase().includes('google')));
-            if (!selectedVoice) {
-                selectedVoice = voices.find(v => v.lang.startsWith('hi')) || voices.find(v => v.lang.startsWith('en'));
-            }
-            utterance.pitch = 1.15;
-            utterance.rate = 1.05;
+            selectedVoice = languageVoices.find(v => /female|swara|heera|aria|zira/i.test(v.name)) || naturalVoice || languageVoices[0];
+            utterance.pitch = 1.03;
+            utterance.rate = 0.97;
         }
 
         if (selectedVoice) {
@@ -657,14 +684,14 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                 setMessages(prev => [...prev, {
                     id: Date.now(),
                     role: 'assistant',
-                    content: `Yeh rahi teri image! 🎨`,
+                    content: '🎨',
                     imageUrl: res.data.url,
                     timestamp: new Date().toISOString()
                 }]);
             } catch {
                 setMessages(prev => [...prev, {
                     id: Date.now(), role: 'assistant',
-                    content: "Arre yaar, image nahi ban payi. Ek baar aur try karo! 🙏",
+                    content: '⚠️',
                     timestamp: new Date().toISOString()
                 }]);
             }
@@ -684,8 +711,12 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${token}`
                 },
-                body: JSON.stringify({ message: text, user_gender: userGender })
+                body: JSON.stringify({ message: text, user_gender: userGender, language })
             });
+            if (!response.ok || !response.body) {
+                const errorBody = await response.json().catch(() => ({}));
+                throw new Error(errorBody.error || 'AI response unavailable');
+            }
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
@@ -904,6 +935,20 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                 }
                 .ai-icon-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
                 .ai-icon-btn--danger:hover { background: rgba(239,68,68,0.2); color: #f87171; }
+                .ai-mode-bar {
+                    display: flex; align-items: center; gap: 8px; padding: 9px 12px;
+                    overflow-x: auto; background: #111b21; border-bottom: 1px solid rgba(255,255,255,.06);
+                }
+                .ai-mode-btn {
+                    display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(255,255,255,.1);
+                    border-radius: 999px; padding: 8px 13px; white-space: nowrap; background: rgba(255,255,255,.05);
+                    color: #d1d5db; font-size: 12px; font-weight: 700; cursor: pointer;
+                }
+                .ai-mode-btn--active { background: ${isArjun ? '#2563eb' : '#7c3aed'}; border-color: transparent; color: white; }
+                .ai-language-select {
+                    margin-left: auto; min-width: 112px; border: 1px solid rgba(255,255,255,.12); border-radius: 999px;
+                    padding: 8px 12px; background: #202c33; color: white; font-size: 12px; font-weight: 700; outline: none;
+                }
 
                 /* ─── Messages area ─── */
                 .ai-messages {
@@ -1466,6 +1511,15 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                         </button>
                     )}
                 </div>
+            </div>
+
+            <div className="ai-mode-bar" aria-label="AI conversation mode">
+                <button className="ai-mode-btn ai-mode-btn--active" onClick={() => inputRef.current?.focus()}>💬 Chat</button>
+                <button className="ai-mode-btn" onClick={startCall}><PhoneIcon style={{ width: 15, height: 15 }} /> Voice call</button>
+                <button className="ai-mode-btn" onClick={startVideoCall}>📹 Video call</button>
+                <select className="ai-language-select" value={language} onChange={event => setLanguage(event.target.value)} aria-label="AI response language">
+                    {AI_LANGUAGES.map(item => <option key={item.code} value={item.code}>{item.label}</option>)}
+                </select>
             </div>
 
             {/* ─── Messages ─── */}

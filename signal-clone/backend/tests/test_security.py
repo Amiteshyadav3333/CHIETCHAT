@@ -1618,6 +1618,16 @@ class SecurityTests(unittest.TestCase):
             'message': 'Inspect this', 'image': 'data:image/svg+xml;base64,PHN2Zz4=',
         }, headers=self.auth_headers())
         self.assertEqual(invalid_image.status_code, 400)
+        unsupported_language = self.client.post('/api/ai/chat', json={
+            'message': 'Hello', 'language': 'xx-XX',
+        }, headers=self.auth_headers())
+        self.assertEqual(unsupported_language.status_code, 400)
+        with patch('routes.ai_bp._get_ai_reply', return_value='नमस्ते, मैं सुन रही हूँ।'):
+            hindi = self.client.post('/api/ai/chat', json={
+                'message': 'Hello', 'language': 'hi-IN',
+            }, headers=self.auth_headers())
+        self.assertEqual(hindi.status_code, 200)
+        self.assertEqual(hindi.json['reply'], 'नमस्ते, मैं सुन रही हूँ।')
         oversized_prompt = self.client.post('/api/ai/image', json={
             'prompt': 'x' * 2001,
         }, headers=self.auth_headers())

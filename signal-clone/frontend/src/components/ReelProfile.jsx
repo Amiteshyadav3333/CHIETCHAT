@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
-import { ArrowLeftIcon, PlayIcon, UserCircleIcon, PencilIcon, GlobeAltIcon, EllipsisVerticalIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, PlayIcon, UserCircleIcon, PencilIcon, GlobeAltIcon, EllipsisVerticalIcon, TrashIcon, ArrowPathRoundedSquareIcon, Squares2X2Icon } from '@heroicons/react/24/outline';
 import { getSafeWebsiteUrl } from '../utils/safeUrl';
 
 const ReelProfile = ({ userId, onBack, onSelectReel }) => {
@@ -13,6 +13,7 @@ const ReelProfile = ({ userId, onBack, onSelectReel }) => {
     const [editWebsite, setEditWebsite] = useState('');
     const [updating, setUpdating] = useState(false);
     const [activeMenuReelId, setActiveMenuReelId] = useState(null);
+    const [activeTab, setActiveTab] = useState('reels');
 
     useEffect(() => {
         fetchProfile();
@@ -24,7 +25,11 @@ const ReelProfile = ({ userId, onBack, onSelectReel }) => {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (!res.data?.user) throw new Error('Reel profile is unavailable');
-            setProfileData({ ...res.data, reels: Array.isArray(res.data.reels) ? res.data.reels : [] });
+            setProfileData({
+                ...res.data,
+                reels: Array.isArray(res.data.reels) ? res.data.reels : [],
+                reposts: Array.isArray(res.data.reposts) ? res.data.reposts : [],
+            });
             setEditBio(res.data.user.bio || '');
             setEditWebsite(res.data.user.websiteUrl || '');
         } catch (err) { console.error(err); }
@@ -101,7 +106,8 @@ const ReelProfile = ({ userId, onBack, onSelectReel }) => {
         );
     }
 
-    const { user, reels } = profileData;
+    const { user, reels, reposts = [] } = profileData;
+    const visibleReels = activeTab === 'reposts' ? reposts : reels;
     const safeWebsiteUrl = getSafeWebsiteUrl(user.websiteUrl);
 
     return (
@@ -119,7 +125,7 @@ const ReelProfile = ({ userId, onBack, onSelectReel }) => {
                 
                 <div className="flex gap-8 text-center mt-2">
                     <div>
-                        <p className="text-white font-bold">{reels.length}</p>
+                        <p className="text-white font-bold">{reels.length + reposts.length}</p>
                         <p className="text-gray-500 text-[10px] uppercase tracking-widest">Videos</p>
                     </div>
                     <div>
@@ -167,9 +173,14 @@ const ReelProfile = ({ userId, onBack, onSelectReel }) => {
                 </div>
             </div>
 
+            <div className="mt-4 grid grid-cols-2 border-t border-white/10 text-white/50">
+                <button onClick={() => setActiveTab('reels')} className={`flex items-center justify-center gap-2 border-b-2 py-3 text-xs font-bold uppercase tracking-wider ${activeTab === 'reels' ? 'border-white text-white' : 'border-transparent'}`}><Squares2X2Icon className="h-5 w-5" /> Reels</button>
+                <button onClick={() => setActiveTab('reposts')} className={`flex items-center justify-center gap-2 border-b-2 py-3 text-xs font-bold uppercase tracking-wider ${activeTab === 'reposts' ? 'border-green-400 text-green-400' : 'border-transparent'}`}><ArrowPathRoundedSquareIcon className="h-5 w-5" /> Reposts</button>
+            </div>
+
             {/* Videos Grid */}
             <div className="grid grid-cols-3 gap-0.5 mt-4 bg-gray-900/50">
-                {reels.map(reel => (
+                {visibleReels.map(reel => (
                     <div 
                         key={reel.id} 
                         className="aspect-[3/4] relative cursor-pointer group"
@@ -181,8 +192,9 @@ const ReelProfile = ({ userId, onBack, onSelectReel }) => {
                             <PlayIcon className="w-3 h-3 text-white" />
                             <span className="text-white text-[10px] font-bold">{reel.likesCount}</span>
                         </div>
+                        {activeTab === 'reposts' && reel.repostNote && <div className="absolute inset-x-1 top-1 rounded-lg bg-black/70 px-2 py-1 text-[10px] font-semibold text-white line-clamp-2">{reel.repostNote}</div>}
                         
-                        {currentUser?.id === user.id && (
+                        {activeTab === 'reels' && currentUser?.id === user.id && (
                             <>
                                 <button 
                                     onClick={(e) => {
@@ -210,9 +222,9 @@ const ReelProfile = ({ userId, onBack, onSelectReel }) => {
                 ))}
             </div>
 
-            {reels.length === 0 && (
+            {visibleReels.length === 0 && (
                 <div className="flex-1 flex flex-col items-center justify-center py-20 text-gray-600">
-                    <p>No videos yet</p>
+                    <p>{activeTab === 'reposts' ? 'No reposts yet' : 'No videos yet'}</p>
                 </div>
             )}
 

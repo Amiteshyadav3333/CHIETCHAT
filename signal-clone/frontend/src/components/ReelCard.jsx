@@ -1,10 +1,13 @@
 import React, { useState, useRef, useEffect, useContext } from 'react';
 import { HeartIcon, ChatBubbleOvalLeftIcon, ShareIcon, MusicalNoteIcon, EyeIcon, TrashIcon, NoSymbolIcon, ArrowDownTrayIcon } from '@heroicons/react/24/solid';
-import { HeartIcon as HeartOutline, EllipsisVerticalIcon, PencilIcon, PlayIcon } from '@heroicons/react/24/outline';
+import { HeartIcon as HeartOutline, EllipsisVerticalIcon, PencilIcon, PlayIcon, ArrowPathRoundedSquareIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import NestedComment from './NestedComment';
 import { getSafeMediaUrl, openSafeExternal } from '../utils/safeUrl';
 import { AuthContext } from '../context/AuthContext';
+import ReelShareSheet from './ReelShareSheet';
+
+const REPOST_REACTIONS = ['🔥', '❤️', '😂', '😮', '👏'];
 
 const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelete, active }) => {
     const { token } = useContext(AuthContext);
@@ -16,6 +19,12 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
     const [likesCount, setLikesCount] = useState(reel?.likesCount || 0);
     const [sharesCount, setSharesCount] = useState(reel?.sharesCount || 0);
     const [viewsCount, setViewsCount] = useState(reel?.viewsCount || 0);
+    const [repostsCount, setRepostsCount] = useState(reel?.repostsCount || 0);
+    const [isReposted, setIsReposted] = useState(Boolean(reel?.isReposted));
+    const [repostNote, setRepostNote] = useState(reel?.repostNote || '');
+    const [showRepost, setShowRepost] = useState(false);
+    const [showShare, setShowShare] = useState(false);
+    const [savingRepost, setSavingRepost] = useState(false);
     const [isFollowing, setIsFollowing] = useState(Boolean(reelOwner.isFollowing));
     const [caption, setCaption] = useState(reel?.caption || '');
     const [showComments, setShowComments] = useState(false);
@@ -153,22 +162,33 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
         }, 2000);
     };
 
-    const handleShare = async () => {
+    const saveRepost = async () => {
+        setSavingRepost(true);
         try {
-            const res = await axios.post(`/api/reels/${reel.id}/share`);
-            setSharesCount(res.data.sharesCount);
-        } catch (err) { console.error(err); }
+            const res = await axios.post(`/api/reels/${reel.id}/repost`, { note: repostNote }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setIsReposted(res.data.isReposted);
+            setRepostsCount(res.data.repostsCount);
+            setRepostNote(res.data.repostNote || '');
+            setShowRepost(false);
+            addFloatingEmoji(repostNote.trim().split(/\s+/)[0] || '🔁');
+        } catch (err) {
+            alert(err.response?.data?.error || 'Could not repost this Reel');
+        } finally { setSavingRepost(false); }
+    };
 
-        const shareData = {
-            title: 'Check out this Reel!',
-            text: reel.caption,
-            url: window.location.origin + '/reels/' + reel.id
-        };
-        if (onShare) {
-            onShare(reel);
-        } else if (navigator.share) {
-            navigator.share(shareData).catch(() => {});
-        }
+    const removeRepost = async () => {
+        setSavingRepost(true);
+        try {
+            const res = await axios.delete(`/api/reels/${reel.id}/repost`, { headers: { Authorization: `Bearer ${token}` } });
+            setIsReposted(false);
+            setRepostsCount(res.data.repostsCount);
+            setRepostNote('');
+            setShowRepost(false);
+        } catch (err) {
+            alert(err.response?.data?.error || 'Could not remove repost');
+        } finally { setSavingRepost(false); }
     };
 
     const handleDownload = () => {
@@ -324,14 +344,21 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
 
 
                 <div className="flex flex-col items-center">
-                    <button onClick={() => onReact(reel)} className="p-2 bg-blue-500/20 rounded-full animate-pulse">
+                    <button onClick={() => onReact?.(reel)} className="p-2 bg-blue-500/20 rounded-full animate-pulse">
                         <EyeIcon className="w-8 h-8 text-blue-400" />
                     </button>
                     <span className="text-white text-[10px] font-bold mt-1">React</span>
                 </div>
 
                 <div className="flex flex-col items-center">
-                    <button onClick={handleShare} className="p-2">
+                    <button onClick={() => setShowRepost(true)} className="p-2" aria-label="Repost this Reel">
+                        <ArrowPathRoundedSquareIcon className={`h-8 w-8 ${isReposted ? 'text-green-400' : 'text-white'}`} />
+                    </button>
+                    <span className="text-white text-xs font-bold">{repostsCount}</span>
+                </div>
+
+                <div className="flex flex-col items-center">
+                    <button onClick={() => setShowShare(true)} className="p-2" aria-label="Share this Reel">
                         <ShareIcon className="w-8 h-8 text-white" />
                     </button>
                     <span className="text-white text-xs font-bold">{sharesCount}</span>
@@ -449,6 +476,24 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
                     </div>
                 </div>
             )}
+
+            {showRepost && (
+                <div className="absolute inset-0 z-50 flex items-end bg-black/65" onClick={() => setShowRepost(false)}>
+                    <div className="w-full rounded-t-3xl border-t border-white/10 bg-[#171717] p-6 text-white" onClick={event => event.stopPropagation()}>
+                        <div className="mb-4 flex items-center justify-between"><div><h3 className="font-bold">{isReposted ? 'Update your repost' : 'Repost this Reel'}</h3><p className="text-xs text-white/50">It will appear in your profile</p></div><button onClick={() => setShowRepost(false)}>✕</button></div>
+                        <div className="mb-3 flex justify-between rounded-2xl bg-white/5 p-3">
+                            {REPOST_REACTIONS.map(emoji => <button key={emoji} onClick={() => setRepostNote(current => { const parts = current.split(' '); const body = REPOST_REACTIONS.includes(parts[0]) ? parts.slice(1).join(' ') : current; return `${emoji} ${body}`.trim(); })} className="text-2xl transition-transform hover:scale-125">{emoji}</button>)}
+                        </div>
+                        <textarea value={repostNote} onChange={event => setRepostNote(event.target.value)} maxLength={280} rows={3} placeholder="Add your reaction…" className="w-full resize-none rounded-2xl bg-gray-900 p-4 text-sm text-white outline-none focus:ring-1 focus:ring-green-400" />
+                        <div className="mt-4 flex gap-2">
+                            {isReposted && <button disabled={savingRepost} onClick={removeRepost} className="rounded-xl bg-red-500/15 px-4 py-3 text-sm font-bold text-red-400">Remove</button>}
+                            <button disabled={savingRepost} onClick={saveRepost} className="flex-1 rounded-xl bg-green-500 py-3 text-sm font-bold text-black disabled:opacity-50">{savingRepost ? 'Saving…' : isReposted ? 'Update repost' : 'Repost'}</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showShare && <ReelShareSheet reel={reel} token={token} onClose={() => setShowShare(false)} onShareToChat={onShare} onShared={setSharesCount} />}
 
             <style>{`
                 @keyframes float-up {

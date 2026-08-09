@@ -1,8 +1,9 @@
+import datetime
 from flask import Blueprint, jsonify, request
-from models import db, Reel, ReelLike, ReelView, ReelShare, ReelComment, Follow, User
+from models import db, Reel, ReelLike, ReelView, ReelShare, ReelRepost, ReelComment, Follow, User, Status
 from utils import (
     get_current_user_id, iso_utc, serialize_user, upload_to_cloudinary,
-    get_json_data, create_notification, queue_media_deletion, process_media_deletion_task
+    get_json_data, create_notification, queue_media_deletion, process_media_deletion_task, utc_now
 )
 
 reels_bp = Blueprint('reels_bp', __name__)
@@ -13,6 +14,38 @@ COMMENT_DEFAULT_LIMIT = 50
 COMMENT_MAX_LIMIT = 100
 MAX_REEL_CAPTION_LENGTH = 500
 MAX_COMMENT_LENGTH = 1000
+MAX_REPOST_NOTE_LENGTH = 280
+
+
+def serialize_reel(reel, current_user_id, is_following=None):
+    user_data = serialize_user(reel.user)
+    if is_following is None:
+        is_following = Follow.query.filter_by(
+            follower_id=current_user_id, followed_id=reel.user_id
+        ).first() is not None
+    user_data["isFollowing"] = is_following
+    repost = ReelRepost.query.filter_by(reel_id=reel.id, user_id=current_user_id).first()
+    return {
+        "id": reel.id,
+        "videoUrl": reel.video_url,
+        "musicUrl": reel.music_url,
+        "musicName": reel.music_name,
+        "musicVolume": reel.music_volume if reel.music_volume is not None else 0.8,
+        "caption": reel.caption,
+        "createdAt": iso_utc(reel.created_at),
+        "user": user_data,
+        "likesCount": len(reel.likes),
+        "commentsCount": len(reel.comments),
+        "sharesCount": reel.shares_count or 0,
+        "viewsCount": reel.views_count or 0,
+        "reactionsCount": Reel.query.filter_by(parent_reel_id=reel.id).count(),
+        "repostsCount": len(reel.reposts),
+        "isLiked": ReelLike.query.filter_by(reel_id=reel.id, user_id=current_user_id).first() is not None,
+        "isReposted": repost is not None,
+        "repostNote": repost.note if repost else "",
+        "parentReelId": reel.parent_reel_id,
+        "filterName": reel.filter_name
+    }
 
 
 def bounded_limit(default, maximum):
@@ -34,33 +67,7 @@ def get_reels():
     reels = query.order_by(Reel.created_at.desc()).limit(
         bounded_limit(FEED_DEFAULT_LIMIT, FEED_MAX_LIMIT)
     ).all()
-    result = []
-    for r in reels:
-        is_liked = ReelLike.query.filter_by(reel_id=r.id, user_id=user_id).first() is not None
-        is_following = Follow.query.filter_by(follower_id=user_id, followed_id=r.user_id).first() is not None
-        
-        user_data = serialize_user(r.user)
-        user_data["isFollowing"] = is_following
-
-        reactions_count = Reel.query.filter_by(parent_reel_id=r.id).count()
-        result.append({
-            "id": r.id,
-            "videoUrl": r.video_url,
-            "musicUrl": r.music_url,
-            "musicName": r.music_name,
-            "musicVolume": r.music_volume if r.music_volume is not None else 0.8,
-            "caption": r.caption,
-            "createdAt": iso_utc(r.created_at),
-            "user": user_data,
-            "likesCount": len(r.likes),
-            "commentsCount": len(r.comments),
-            "sharesCount": r.shares_count or 0,
-            "viewsCount": r.views_count or 0,
-            "reactionsCount": reactions_count,
-            "isLiked": is_liked,
-            "parentReelId": r.parent_reel_id,
-            "filterName": r.filter_name
-        })
+    result = [serialize_reel(r, user_id) for r in reels]
     return jsonify(result)
 
 @reels_bp.route('/api/users/<int:uid>/reels', methods=['GET'])
@@ -78,29 +85,16 @@ def get_user_reels(uid):
     following_count = Follow.query.filter_by(follower_id=uid).count()
     is_following = Follow.query.filter_by(follower_id=user_id, followed_id=uid).first() is not None
 
-    result = []
-    for r in reels:
-        is_liked = ReelLike.query.filter_by(reel_id=r.id, user_id=user_id).first() is not None
-        reactions_count = Reel.query.filter_by(parent_reel_id=r.id).count()
-        user_data = serialize_user(user)
-        user_data["isFollowing"] = is_following
-        result.append({
-            "id": r.id,
-            "videoUrl": r.video_url,
-            "musicUrl": r.music_url,
-            "musicName": r.music_name,
-            "musicVolume": r.music_volume if r.music_volume is not None else 0.8,
-            "caption": r.caption,
-            "createdAt": iso_utc(r.created_at),
-            "user": user_data,
-            "likesCount": len(r.likes),
-            "commentsCount": len(r.comments),
-            "sharesCount": r.shares_count or 0,
-            "reactionsCount": reactions_count,
-            "isLiked": is_liked,
-            "parentReelId": r.parent_reel_id,
-            "filterName": r.filter_name
-        })
+    result = [serialize_reel(r, user_id, is_following) for r in reels]
+    repost_rows = ReelRepost.query.filter_by(user_id=uid).order_by(ReelRepost.created_at.desc()).limit(
+        bounded_limit(FEED_DEFAULT_LIMIT, FEED_MAX_LIMIT)
+    ).all()
+    reposts = []
+    for row in repost_rows:
+        item = serialize_reel(row.reel, user_id)
+        item["repostNote"] = row.note or ""
+        item["repostedAt"] = iso_utc(row.created_at)
+        reposts.append(item)
     
     return jsonify({
         "user": {
@@ -109,7 +103,8 @@ def get_user_reels(uid):
             "followingCount": following_count,
             "isFollowing": is_following
         },
-        "reels": result
+        "reels": result,
+        "reposts": reposts
     })
 
 @reels_bp.route('/api/reels', methods=['POST'])
@@ -339,6 +334,56 @@ def share_reel(reel_id):
         reel.shares_count = (reel.shares_count or 0) + 1
         db.session.commit()
     return jsonify({"sharesCount": reel.shares_count})
+
+@reels_bp.route('/api/reels/<int:reel_id>/repost', methods=['POST', 'DELETE'])
+def repost_reel(reel_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    reel = db.get_or_404(Reel, reel_id)
+    existing = ReelRepost.query.filter_by(reel_id=reel_id, user_id=user_id).first()
+    if request.method == 'DELETE':
+        if existing:
+            db.session.delete(existing)
+            db.session.commit()
+        reposts_count = ReelRepost.query.filter_by(reel_id=reel_id).count()
+        return jsonify({"isReposted": False, "repostsCount": reposts_count, "repostNote": ""})
+
+    raw_note = get_json_data().get('note', '')
+    if not isinstance(raw_note, str):
+        return jsonify({"error": "Repost reaction must be text"}), 400
+    note = raw_note.strip()
+    if len(note) > MAX_REPOST_NOTE_LENGTH:
+        return jsonify({"error": f"Repost reaction must be {MAX_REPOST_NOTE_LENGTH} characters or less"}), 400
+    created = existing is None
+    if existing:
+        existing.note = note
+    else:
+        existing = ReelRepost(reel_id=reel_id, user_id=user_id, note=note)
+        db.session.add(existing)
+    db.session.commit()
+    if created and reel.user_id != user_id:
+        create_notification(reel.user_id, user_id, 'repost', 'reposted your reel', reel_id)
+    return jsonify({"isReposted": True, "repostsCount": len(reel.reposts), "repostNote": existing.note or ""})
+
+@reels_bp.route('/api/reels/<int:reel_id>/story', methods=['POST'])
+def share_reel_to_story(reel_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    reel = db.get_or_404(Reel, reel_id)
+    raw_caption = get_json_data().get('caption', '')
+    if not isinstance(raw_caption, str):
+        return jsonify({"error": "Caption must be text"}), 400
+    caption = raw_caption.strip()[:300] or f"Reel by @{reel.user.username}"
+    status = Status(
+        user_id=user_id, media_url=reel.video_url, media_type='video', caption=caption,
+        music_url=reel.music_url, music_name=reel.music_name, duration=15,
+        expires_at=utc_now() + datetime.timedelta(hours=24)
+    )
+    db.session.add(status)
+    db.session.commit()
+    return jsonify({"message": "Reel added to your story", "id": status.id}), 201
 
 @reels_bp.route('/api/reels/<int:reel_id>/view', methods=['POST'])
 def view_reel(reel_id):

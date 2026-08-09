@@ -127,6 +127,11 @@ def canonical_sensitive_path():
 def protect_sensitive_routes():
     g.request_id = request.headers.get('X-Request-ID') or uuid.uuid4().hex
     g.request_started_at = time.monotonic()
+    # CORS preflight does not perform the sensitive action and must never depend
+    # on Redis availability. The browser will only send the real request after
+    # this automatic OPTIONS response succeeds.
+    if request.method == 'OPTIONS':
+        return None
     if request.method not in ('GET', 'HEAD', 'OPTIONS'):
         cookie_name = app.config.get('AUTH_COOKIE_NAME', 'cheetchat_session')
         cookie_token = request.cookies.get(cookie_name)

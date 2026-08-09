@@ -7,6 +7,7 @@ from config import Config
 # Allowed origins for CORS to support credentials
 ALLOWED_ORIGINS = list(dict.fromkeys([
     Config.FRONTEND_URL,
+    "https://chat.indiasearch.site",
     "http://localhost:5173",
     "http://localhost:3000",
 ]))

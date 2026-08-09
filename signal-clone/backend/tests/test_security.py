@@ -547,6 +547,30 @@ class SecurityTests(unittest.TestCase):
             app_module._redis_client = original_client
             app.config['IS_PRODUCTION'] = original_production
 
+    def test_login_cors_preflight_does_not_depend_on_redis(self):
+        class BrokenRedis:
+            def eval(self, *_args):
+                raise ConnectionError('redis unavailable')
+        original_client = app_module._redis_client
+        original_production = app.config.get('IS_PRODUCTION')
+        app_module._redis_client = BrokenRedis()
+        app.config['IS_PRODUCTION'] = True
+        try:
+            response = self.client.options('/api/login', headers={
+                'Origin': 'https://chat.indiasearch.site',
+                'Access-Control-Request-Method': 'POST',
+                'Access-Control-Request-Headers': 'content-type',
+            })
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(
+                response.headers.get('Access-Control-Allow-Origin'),
+                'https://chat.indiasearch.site',
+            )
+            self.assertIn('POST', response.headers.get('Access-Control-Allow-Methods', ''))
+        finally:
+            app_module._redis_client = original_client
+            app.config['IS_PRODUCTION'] = original_production
+
     @patch('routes.payments_bp.create_provider_order', side_effect=RuntimeError('secret-provider-detail'))
     def test_production_server_errors_do_not_leak_internal_details(self, _create_order):
         original_production = app.config.get('IS_PRODUCTION')

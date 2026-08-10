@@ -150,3 +150,27 @@ body {
     font: 700 18px system-ui;
   }
 }
+
+body.snap-mode-active {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+body.snap-mode-active img,
+body.snap-mode-active video,
+body.snap-mode-active audio {
+  pointer-events: none;
+}
+
+body.snap-mode-active.snap-capture-shield::after {
+  content: 'Snap Mode protected content';
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: grid;
+  place-items: center;
+  background: #050505;
+  color: #facc15;
+  font: 800 18px system-ui;
+}

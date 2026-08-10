@@ -763,8 +763,21 @@ class SecurityTests(unittest.TestCase):
 
     def test_snap_message_hides_ten_minutes_after_session_end(self):
         payer = socketio.test_client(app, auth={'token': self.token})
+        receiver = socketio.test_client(app, auth={'token': self.payee_token})
+        receiver.get_received()
+        normal = payer.emit('send_message', {
+            'chatId': self.chat_id,
+            'clientMessageId': 'normal-before-snap-1',
+            'content': self.encrypted_envelope('normal-payload'),
+            'type': 'text',
+        }, callback=True)
+        self.assertTrue(normal['ok'])
         enabled = payer.emit('set_snap_mode', {'chatId': self.chat_id, 'enabled': True}, callback=True)
         self.assertTrue(enabled['ok'])
+        notices = [event for event in receiver.get_received() if event['name'] == 'snap_mode_update']
+        self.assertEqual(len(notices), 1)
+        self.assertTrue(notices[0]['args'][0]['enabled'])
+        self.assertEqual(notices[0]['args'][0]['initiatedBy'], self.user_id)
         result = payer.emit('send_message', {
             'chatId': self.chat_id,
             'clientMessageId': 'snap-retention-1',
@@ -781,6 +794,7 @@ class SecurityTests(unittest.TestCase):
         still_visible = self.client.get(f'/api/chats/{self.chat_id}/messages', headers=self.auth_headers())
         self.assertEqual(still_visible.status_code, 200)
         self.assertIn(result['messageId'], [item['id'] for item in still_visible.get_json()])
+        self.assertNotIn(normal['messageId'], [item['id'] for item in still_visible.get_json()])
         ended = payer.emit('set_snap_mode', {'chatId': self.chat_id, 'enabled': False}, callback=True)
         self.assertTrue(ended['ok'])
         self.assertIsNotNone(ended['snapExpiresAt'])
@@ -792,6 +806,7 @@ class SecurityTests(unittest.TestCase):
         self.assertNotIn(result['messageId'], [item['id'] for item in hidden.get_json()])
         with app.app_context():
             self.assertEqual(Message.query.filter_by(client_message_id='snap-retention-1').count(), 1)
+        receiver.disconnect()
         payer.disconnect()
 
     def test_socket_rejects_plaintext_partial_envelopes_and_untrusted_metadata(self):

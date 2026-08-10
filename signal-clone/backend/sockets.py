@@ -462,8 +462,18 @@ def register_socket_events(socketio):
                 Message.snap_expires_at.is_(None),
             ).update({Message.snap_expires_at: snap_expires_at}, synchronize_session=False)
         db.session.commit()
-        payload = {"chatId": chat_id, "enabled": bool(chat.snap_mode), "snapExpiresAt": iso_utc(snap_expires_at)}
-        socketio.emit('snap_mode_update', payload, room=str(chat_id))
+        initiator = db.session.get(User, user_id)
+        payload = {
+            "chatId": chat_id,
+            "enabled": bool(chat.snap_mode),
+            "snapExpiresAt": iso_utc(snap_expires_at),
+            "initiatedBy": user_id,
+            "initiatorName": initiator.username if initiator else "A participant",
+        }
+        # User rooms reach every participant even when that chat is not open.
+        # This makes the privacy warning immediate on all connected devices.
+        for participant_id in get_chat_participant_ids(chat_id):
+            socketio.emit('snap_mode_update', payload, room=f"user_{participant_id}")
         return {"ok": True, **payload}
 
     @socketio.on('join_call')

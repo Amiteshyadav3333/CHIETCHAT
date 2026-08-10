@@ -207,6 +207,8 @@ def get_chats():
             p_deleted_at = my_participant.deleted_at if my_participant else None
 
             query = Message.query.filter(Message.chat_id == chat.id)
+            if chat.snap_mode:
+                query = query.filter(Message.snap_mode.is_(True))
             if deleted_msg_ids:
                 query = query.filter(~Message.id.in_(list(deleted_msg_ids)))
             if p_deleted_at:
@@ -352,6 +354,9 @@ def get_messages(chat_id):
 
     deleted_msg_ids_subquery = db.session.query(MessageDeletion.message_id).filter(MessageDeletion.user_id == user_id).subquery()
     query = Message.query.filter(Message.chat_id == chat_id, ~Message.id.in_(deleted_msg_ids_subquery))
+    chat = db.session.get(Chat, chat_id)
+    if chat and chat.snap_mode:
+        query = query.filter(Message.snap_mode.is_(True))
     if p_deleted_at:
         query = query.filter(Message.timestamp > p_deleted_at)
 

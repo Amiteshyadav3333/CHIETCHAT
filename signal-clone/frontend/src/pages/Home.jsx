@@ -190,6 +190,7 @@ const Home = () => {
     const [showChatDraw, setShowChatDraw] = useState(false);
     const [disappearingTtl, setDisappearingTtl] = useState(0);
     const [snapMode, setSnapMode] = useState(false);
+    const [snapNotice, setSnapNotice] = useState(null);
     const [showTopDropdown, setShowTopDropdown] = useState(false);
     const [showMessageSearch, setShowMessageSearch] = useState(false);
     const [messageSearchQuery, setMessageSearchQuery] = useState('');
@@ -669,11 +670,28 @@ const Home = () => {
             event.preventDefault();
             navigator.clipboard?.writeText('').catch(() => {});
         };
+        const preventSnapActions = event => event.preventDefault();
+        const updateCaptureShield = () => {
+            document.body.classList.toggle('snap-capture-shield', document.hidden || !document.hasFocus());
+        };
         document.addEventListener('keydown', blockCaptureShortcut, true);
+        document.addEventListener('contextmenu', preventSnapActions, true);
+        document.addEventListener('copy', preventSnapActions, true);
+        document.addEventListener('dragstart', preventSnapActions, true);
+        document.addEventListener('visibilitychange', updateCaptureShield, true);
+        window.addEventListener('blur', updateCaptureShield, true);
+        window.addEventListener('focus', updateCaptureShield, true);
         document.body.classList.add('snap-mode-active');
         return () => {
             document.removeEventListener('keydown', blockCaptureShortcut, true);
+            document.removeEventListener('contextmenu', preventSnapActions, true);
+            document.removeEventListener('copy', preventSnapActions, true);
+            document.removeEventListener('dragstart', preventSnapActions, true);
+            document.removeEventListener('visibilitychange', updateCaptureShield, true);
+            window.removeEventListener('blur', updateCaptureShield, true);
+            window.removeEventListener('focus', updateCaptureShield, true);
             document.body.classList.remove('snap-mode-active');
+            document.body.classList.remove('snap-capture-shield');
         };
     }, [snapMode]);
 
@@ -719,7 +737,7 @@ const Home = () => {
             setCallRingState(prev => ({ ...prev, [data.chatId]: data.status }));
         });
 
-        socket.on('snap_mode_update', ({ chatId, enabled, snapExpiresAt }) => {
+        socket.on('snap_mode_update', ({ chatId, enabled, snapExpiresAt, initiatedBy, initiatorName }) => {
             localStorage.setItem(`chat_snap_mode_${chatId}`, enabled ? '1' : '0');
             setChats(current => current.map(chat => chat.id === chatId ? { ...chat, snapMode: enabled } : chat));
             setActiveChat(current => current?.id === chatId ? { ...current, snapMode: enabled } : current);
@@ -729,6 +747,14 @@ const Home = () => {
                     : message));
             }
             if (activeChatRef.current?.id === chatId) setSnapMode(enabled);
+            if (enabled && Number(initiatedBy) !== Number(user.id)) {
+                const affectedChat = chats.find(chat => chat.id === chatId);
+                setSnapNotice({
+                    chatId,
+                    title: 'Snap Mode started',
+                    message: `${initiatorName || affectedChat?.name || 'A participant'} ne Snap Mode start kiya hai. Purani normal chat hidden hai; is session ke messages aur media par capture/download restrictions active hain.`,
+                });
+            }
         });
 
         socket.on('peer_ringing', (data) => {
@@ -1039,7 +1065,7 @@ const Home = () => {
             socket.off('snap_mode_update');
             socket.off('typing_update');
         };
-    }, [socket, user, publicKey, fetchChats, decryptMessageForCurrentUser, processQueue]);
+    }, [socket, user, publicKey, fetchChats, decryptMessageForCurrentUser, processQueue, chats]);
 
     useEffect(() => {
         if (!activeChat) {
@@ -1918,6 +1944,7 @@ const Home = () => {
 
     return (
         <div className="flex h-[100dvh] bg-signal-bg overflow-hidden text-gray-100 font-sans relative">
+            {snapNotice && <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md" role="alertdialog" aria-modal="true"><div className="w-full max-w-sm rounded-3xl border border-yellow-400/30 bg-[#111b21] p-6 shadow-2xl"><div className="text-5xl">👻</div><h2 className="mt-4 text-xl font-black text-yellow-300">{snapNotice.title}</h2><p className="mt-3 text-sm leading-6 text-gray-200">{snapNotice.message}</p><div className="mt-4 rounded-xl bg-yellow-400/10 p-3 text-xs leading-5 text-yellow-100">Snap chat end hone ke 10 minutes baad session content sabhi users se hide hoga. System screenshot ko web browser 100% control nahi kar sakta.</div><div className="mt-5 flex gap-2"><button type="button" onClick={() => { const chat = chats.find(item => item.id === snapNotice.chatId); if (chat) setActiveChat(chat); setSnapNotice(null); }} className="flex-1 rounded-xl border border-yellow-400/40 py-3 text-sm font-bold text-yellow-200">Open chat</button><button type="button" onClick={() => setSnapNotice(null)} className="flex-1 rounded-xl bg-yellow-400 py-3 text-sm font-black text-black">I understand</button></div></div></div>}
             {appLocked && <AppLockOverlay error={unlockError} onPinChange={setUnlockPin} onSubmit={unlockApp} pin={unlockPin} />}
             {!isOnline && <OfflineBanner />}
             {editingMessage && <EditMessageModal onCancel={() => setEditingMessage(null)} onChange={setEditText} onSubmit={submitEditMessage} text={editText} />}
@@ -2928,8 +2955,8 @@ const Home = () => {
                                 </div>
                             );
                         })()}
-                        {messages.filter(msg => !messageSearchQuery || `${msg.content || ''} ${msg.type || ''}`.toLowerCase().includes(messageSearchQuery.toLowerCase())).map((msg, idx, shownMessages) => {
-                            const prevMsg = messages[idx - 1];
+                        {messages.filter(msg => (!snapMode || msg.snapMode) && (!messageSearchQuery || `${msg.content || ''} ${msg.type || ''}`.toLowerCase().includes(messageSearchQuery.toLowerCase()))).map((msg, idx, shownMessages) => {
+                            const prevMsg = shownMessages[idx - 1];
                             const currDate = new Date(msg.timestamp).toDateString();
                             const prevDate = prevMsg ? new Date(prevMsg.timestamp).toDateString() : null;
                             const showDate = currDate !== prevDate;

@@ -447,7 +447,7 @@ const getDocIcon = (filename) => {
 };
 
 // WhatsApp-style action menu overlay
-const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, onReply, onEdit, onCopy, onForward, onReact, onPin, onDelete, onInfo, onTranslate, isLastMessage, showTranslateBtn = true, protectedMode = false }) => {
+const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, onReply, onEdit, onCopy, onForward, onReact, onPin, onDelete, onInfo, onTranslate, onDownload, onPhotoReply, isLastMessage, showTranslateBtn = true, protectedMode = false }) => {
     const menuRef = useRef(null);
     const [showFullPicker, setShowFullPicker] = useState(false);
 
@@ -463,6 +463,8 @@ const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, 
         ...(!isDeleted ? [{ icon: '📌', label: message.isPinned ? 'Unpin' : 'Pin', onClick: () => { onPin?.(); onClose(); } }] : []),
         ...(!isDeleted && !protectedMode ? [{ icon: '📋', label: 'Copy', onClick: () => { onCopy?.(); onClose(); } }] : []),
         ...(!isDeleted && !protectedMode ? [{ icon: '➡️', label: 'Forward', onClick: () => { onForward?.(); onClose(); } }] : []),
+        ...(!isDeleted && !protectedMode && message.type === 'image' ? [{ icon: '📷', label: 'Reply with photo', onClick: () => { onPhotoReply?.(); onClose(); } }] : []),
+        ...(!isDeleted && !protectedMode && message.type === 'image' ? [{ icon: '⬇️', label: 'Download photo', onClick: () => { onDownload?.(); onClose(); } }] : []),
         ...(!isDeleted && isTextMessage && showTranslateBtn ? [{ icon: '🌐', label: 'Translate', onClick: () => { onTranslate?.(); onClose(); } }] : []),
         { icon: 'ℹ️', label: 'Info', onClick: () => { onInfo?.(); onClose(); } },
         ...(!isDeleted ? [{ icon: '🗑️', label: 'Delete', danger: true, onClick: () => { onDelete?.(); onClose(); } }] : []),
@@ -568,7 +570,7 @@ const ChatBubble = ({
     message, isOwn, senderName, onDelete, senderAvatar, showAvatar,
     onReply, replyTo, onTranslate, chatId, chatTranslationLang,
     onEdit, onCopy, onForward, onReact, onPin, isLastMessage,
-    socket, token, showTranslateBtn = true, onAnnotate, snapMode = false
+    socket, token, showTranslateBtn = true, onAnnotate, onPhotoReply, snapMode = false
 }) => {
     const [, forceColourRefresh] = useState(0);
     useEffect(() => { const refresh = () => forceColourRefresh(value => value + 1); window.addEventListener('cheetchat-colour-updated', refresh); return () => window.removeEventListener('cheetchat-colour-updated', refresh); }, []);
@@ -864,7 +866,7 @@ const ChatBubble = ({
                     className="relative group/media cursor-pointer rounded-2xl overflow-hidden"
                     style={{ maxWidth: 260 }}
                     onClick={(e) => { e.stopPropagation(); if (!protectedSnapMode) setZoomedMedia({ src: cnt, type: 'image' }); }}
-                    onDoubleClick={(e) => { e.stopPropagation(); onReact?.(message, '❤️'); setHeartBurst(true); window.setTimeout(() => setHeartBurst(false), 700); }}
+                    onDoubleClick={(e) => { e.stopPropagation(); if (!protectedSnapMode) setZoomedMedia({ src: cnt, type: 'image' }); }}
                 >
                     <img
                         src={cnt}
@@ -890,6 +892,14 @@ const ChatBubble = ({
                         title="Download"
                     >
                         <ArrowDownTrayIcon className="w-4 h-4" />
+                    </button>}
+                    {!isOwn && !protectedSnapMode && <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onPhotoReply?.(message); }}
+                        className="absolute bottom-2 left-2 rounded-full border border-white/20 bg-black/65 px-3 py-1.5 text-xs font-bold text-white opacity-100 shadow-lg backdrop-blur-md transition-opacity sm:opacity-0 sm:group-hover/media:opacity-100"
+                        title="Reply with your photo"
+                    >
+                        📷 Photo reply
                     </button>}
                     {!protectedSnapMode && <button onClick={(e) => { e.stopPropagation(); onAnnotate?.({ src: cnt, type: 'image' }); }} className="absolute left-2 top-2 rounded-full bg-black/55 p-1.5 text-white opacity-0 shadow-lg transition-opacity group-hover/media:opacity-100" title="Draw on photo"><span className="text-lg leading-none">✎</span></button>}
                 </div>
@@ -1567,6 +1577,8 @@ const ChatBubble = ({
                     onCopy={() => onCopy && onCopy(message)}
                     onForward={() => !protectedSnapMode && onForward && onForward(message)}
                     onReact={(emoji) => onReact && onReact(message, emoji)}
+                    onDownload={() => handleDownload(message.content)}
+                    onPhotoReply={() => onPhotoReply?.(message)}
                     onPin={() => onPin && onPin(message)}
                     onDelete={() => onDelete && onDelete(message)}
                     onInfo={() => setShowInfoModal(true)}

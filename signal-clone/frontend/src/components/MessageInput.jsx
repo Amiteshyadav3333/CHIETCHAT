@@ -75,7 +75,8 @@ const MessageInput = ({
     showAiFeature = false,
     showSmartReplies = false,
     currentUserId, payeeId, payeeName,
-    onSchedule, token, drawSource = null, onDrawSourceConsumed, onOpenDraw
+    onSchedule, token, drawSource = null, onDrawSourceConsumed, onOpenDraw,
+    cameraOpenRequest = 0
 }) => {
     const [text, setText] = useState('');
     const [showEmoji, setShowEmoji] = useState(false);
@@ -108,6 +109,9 @@ const MessageInput = ({
         { id: 'mono', label: 'B&W', css: 'grayscale(1) contrast(1.12)' },
         { id: 'vivid', label: 'Vivid', css: 'saturate(1.8) contrast(1.08)' }
     ];
+    React.useEffect(() => {
+        if (cameraOpenRequest > 0) setShowCameraModal(true);
+    }, [cameraOpenRequest]);
     const [showGameCreator, setShowGameCreator] = useState(false);
     const [gameType, setGameType] = useState('Tic-Tac-Toe');
     const [gameMode, setGameMode] = useState('vs-friend');

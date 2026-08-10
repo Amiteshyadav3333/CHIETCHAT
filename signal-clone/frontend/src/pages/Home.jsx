@@ -191,6 +191,7 @@ const Home = () => {
     const [disappearingTtl, setDisappearingTtl] = useState(0);
     const [snapMode, setSnapMode] = useState(false);
     const [snapNotice, setSnapNotice] = useState(null);
+    const [cameraOpenRequest, setCameraOpenRequest] = useState(0);
     const [showTopDropdown, setShowTopDropdown] = useState(false);
     const [showMessageSearch, setShowMessageSearch] = useState(false);
     const [messageSearchQuery, setMessageSearchQuery] = useState('');
@@ -1337,7 +1338,7 @@ const Home = () => {
             else if (isVideo) type = file.name.startsWith('video-note-') ? 'video_note' : 'video';
 
             setUploadProgress(null);
-            handleSendMessage(url, type, null, disappearingTtl, res.data.assetId);
+            handleSendMessage(url, type, replyTo, disappearingTtl, res.data.assetId);
         } catch (err) {
             setUploadProgress(null);
             console.error(err);
@@ -3002,6 +3003,10 @@ const Home = () => {
                                             currentUserId={user.id}
                                             showTranslateBtn={showTranslateEnabled}
                                             onAnnotate={setDrawSource}
+                                            onPhotoReply={(photoMessage) => {
+                                                setReplyTo({ ...photoMessage, senderName: sender?.username || 'Photo' });
+                                                setCameraOpenRequest(value => value + 1);
+                                            }}
                                             snapMode={snapMode}
                                         />
                                     </div>
@@ -3047,6 +3052,7 @@ const Home = () => {
                         drawSource={drawSource}
                         onDrawSourceConsumed={() => setDrawSource(null)}
                         onOpenDraw={() => setShowChatDraw(true)}
+                        cameraOpenRequest={cameraOpenRequest}
                     />
                 </div>
             ) : (

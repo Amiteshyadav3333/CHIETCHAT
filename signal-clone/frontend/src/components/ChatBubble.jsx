@@ -112,10 +112,16 @@ export const DrawingMessage = ({ content }) => {
     const safeColor = value => /^#[0-9a-f]{3,8}$/i.test(String(value)) ? value : '#ffffff';
     const actions = drawing.actions.slice(0, 500);
     const safeBackground = drawing.background?.src && /^(https?:\/\/|\/uploads\/)/i.test(drawing.background.src) ? drawing.background : null;
+    const chatBackground = drawing.background?.type === 'chat' ? {
+        senderName: String(drawing.background.senderName || 'Chat message').slice(0, 80),
+        text: String(drawing.background.text || drawing.background.messageType || 'Message').slice(0, 600),
+        timestamp: String(drawing.background.timestamp || '').slice(0, 40),
+    } : null;
     return <div className="w-[260px] max-w-[68vw] overflow-hidden rounded-xl border border-white/10 bg-[#111827]">
         <svg viewBox="0 0 1000 1000" className="aspect-square w-full" role="img" aria-label="Chat drawing">
             <defs><marker id="drawing-arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="context-stroke" /></marker></defs>
             {safeBackground && (safeBackground.type === 'video' ? <foreignObject x="0" y="0" width="1000" height="1000"><video xmlns="http://www.w3.org/1999/xhtml" src={safeBackground.src} muted className="h-full w-full object-cover" /></foreignObject> : <image href={safeBackground.src} width="1000" height="1000" preserveAspectRatio="xMidYMid slice" />)}
+            {chatBackground && <foreignObject x="45" y="160" width="910" height="680"><div xmlns="http://www.w3.org/1999/xhtml" style={{ height: '100%', boxSizing: 'border-box', borderRadius: 42, padding: 55, background: 'linear-gradient(145deg,#202c33,#111b21)', border: '4px solid rgba(255,255,255,.14)', color: 'white', fontFamily: 'system-ui', overflow: 'hidden' }}><div style={{ color: '#53bdeb', fontSize: 34, fontWeight: 800, marginBottom: 28 }}>{chatBackground.senderName}</div><div style={{ fontSize: 48, lineHeight: 1.35, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{chatBackground.text}</div>{chatBackground.timestamp && <div style={{ position: 'absolute', right: 65, bottom: 45, color: '#94a3b8', fontSize: 25 }}>{new Date(chatBackground.timestamp).toLocaleString()}</div>}</div></foreignObject>}
             {actions.map((action, index) => {
                 if (action.tool === 'text') return <text key={index} x={Number(action.x) || 500} y={Number(action.y) || 500} textAnchor="middle" fill={safeColor(action.color)} fontSize={Math.max(35, Math.min(140, Number(action.size) * 10 || 50))} fontWeight="700">{String(action.text || '').slice(0, 240)}</text>;
                 const points = (action.points || []).slice(0, 2000).map(point => `${Math.max(0, Math.min(1000, Number(point.x) || 0))},${Math.max(0, Math.min(1000, Number(point.y) || 0))}`).join(' ');
@@ -447,7 +453,7 @@ const getDocIcon = (filename) => {
 };
 
 // WhatsApp-style action menu overlay
-const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, onReply, onEdit, onCopy, onForward, onReact, onPin, onDelete, onInfo, onTranslate, onDownload, onPhotoReply, isLastMessage, showTranslateBtn = true, protectedMode = false }) => {
+const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, onReply, onEdit, onCopy, onForward, onReact, onPin, onDelete, onInfo, onTranslate, onDownload, onPhotoReply, onAnnotateMessage, isLastMessage, showTranslateBtn = true, protectedMode = false }) => {
     const menuRef = useRef(null);
     const [showFullPicker, setShowFullPicker] = useState(false);
 
@@ -463,6 +469,7 @@ const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, 
         ...(!isDeleted ? [{ icon: '📌', label: message.isPinned ? 'Unpin' : 'Pin', onClick: () => { onPin?.(); onClose(); } }] : []),
         ...(!isDeleted && !protectedMode ? [{ icon: '📋', label: 'Copy', onClick: () => { onCopy?.(); onClose(); } }] : []),
         ...(!isDeleted && !protectedMode ? [{ icon: '➡️', label: 'Forward', onClick: () => { onForward?.(); onClose(); } }] : []),
+        ...(!isDeleted && !protectedMode ? [{ icon: '✎', label: 'Draw / point on message', onClick: () => { onAnnotateMessage?.(); onClose(); } }] : []),
         ...(!isDeleted && !protectedMode && message.type === 'image' ? [{ icon: '📷', label: 'Reply with photo', onClick: () => { onPhotoReply?.(); onClose(); } }] : []),
         ...(!isDeleted && !protectedMode && message.type === 'image' ? [{ icon: '⬇️', label: 'Download photo', onClick: () => { onDownload?.(); onClose(); } }] : []),
         ...(!isDeleted && isTextMessage && showTranslateBtn ? [{ icon: '🌐', label: 'Translate', onClick: () => { onTranslate?.(); onClose(); } }] : []),
@@ -1579,6 +1586,13 @@ const ChatBubble = ({
                     onReact={(emoji) => onReact && onReact(message, emoji)}
                     onDownload={() => handleDownload(message.content)}
                     onPhotoReply={() => onPhotoReply?.(message)}
+                    onAnnotateMessage={() => onAnnotate?.({
+                        type: 'chat',
+                        messageType: message.type || 'text',
+                        text: message.type === 'text' ? message.content : `[${message.type || 'message'}]`,
+                        senderName: message.senderName || (isOwn ? 'You' : senderName || 'Contact'),
+                        timestamp: message.timestamp,
+                    })}
                     onPin={() => onPin && onPin(message)}
                     onDelete={() => onDelete && onDelete(message)}
                     onInfo={() => setShowInfoModal(true)}

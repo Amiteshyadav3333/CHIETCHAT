@@ -2421,7 +2421,7 @@ const Home = () => {
             {/* Chat Room */}
             {visibleActiveChat ? (
                 <div className={`relative h-full min-h-0 flex-1 flex-col overflow-hidden bg-black/50 ${activeChat ? 'flex' : 'hidden md:flex'}`}>
-                    {showChatDraw && <DrawStudio inline onClose={() => setShowChatDraw(false)} onSendDrawing={drawing => { handleSendMessage(JSON.stringify(drawing), 'drawing', null, disappearingTtl); setShowChatDraw(false); }} />}
+                    {showChatDraw && <DrawStudio key={drawSource ? `${drawSource.type}-${drawSource.timestamp || drawSource.src}` : 'blank-draw'} initialSource={drawSource} inline onClose={() => { setShowChatDraw(false); setDrawSource(null); }} onSendDrawing={drawing => { handleSendMessage(JSON.stringify(drawing), 'drawing', null, disappearingTtl); setShowChatDraw(false); setDrawSource(null); }} />}
 
                     {/* Live Location Sharing Banner */}
                     {liveLocationSharing && liveLocationSharing.chatId === visibleActiveChat.id && (
@@ -3002,7 +3002,7 @@ const Home = () => {
                                             token={token}
                                             currentUserId={user.id}
                                             showTranslateBtn={showTranslateEnabled}
-                                            onAnnotate={setDrawSource}
+                                            onAnnotate={(source) => { setDrawSource(source); setShowChatDraw(true); }}
                                             onPhotoReply={(photoMessage) => {
                                                 setReplyTo({ ...photoMessage, senderName: sender?.username || 'Photo' });
                                                 setCameraOpenRequest(value => value + 1);

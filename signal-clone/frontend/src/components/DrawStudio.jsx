@@ -16,6 +16,41 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, initialSource = null, inli
     const [color, setColor] = useState('#22c55e');
     const [size, setSize] = useState(5);
     const [caption, setCaption] = useState('');
+    const [backgroundSource, setBackgroundSource] = useState(initialSource);
+
+    const paintBlankSpace = React.useCallback(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#111827';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        actionsRef.current = [];
+        historyRef.current = [];
+        saveHistory();
+    }, []);
+
+    const paintChat = React.useCallback((source) => {
+        const canvas = canvasRef.current;
+        if (!canvas || !source) return;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#0b141a'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        const margin = Math.max(20, canvas.width * 0.06);
+        const top = canvas.height * 0.16;
+        const cardHeight = canvas.height * 0.68;
+        ctx.fillStyle = '#202c33';
+        ctx.beginPath(); ctx.roundRect(margin, top, canvas.width - margin * 2, cardHeight, 28); ctx.fill();
+        ctx.fillStyle = '#53bdeb'; ctx.font = `800 ${Math.max(18, canvas.width * 0.045)}px system-ui`;
+        ctx.fillText(String(source.senderName || 'Chat message').slice(0, 80), margin + 30, top + 55);
+        ctx.fillStyle = '#ffffff'; ctx.font = `500 ${Math.max(20, canvas.width * 0.055)}px system-ui`;
+        const words = String(source.text || `[${source.messageType || 'message'}]`).slice(0, 600).split(/\s+/);
+        const lines = []; let line = '';
+        words.forEach(word => { const next = line ? `${line} ${word}` : word; if (ctx.measureText(next).width > canvas.width - margin * 2 - 60) { if (line) lines.push(line); line = word; } else line = next; });
+        if (line) lines.push(line);
+        lines.slice(0, 8).forEach((value, index) => ctx.fillText(value, margin + 30, top + 120 + index * Math.max(32, canvas.width * 0.075)));
+        saveHistory();
+    }, []);
 
     const paintMedia = React.useCallback((source, isVideo = false) => {
         const canvas = canvasRef.current;
@@ -74,10 +109,12 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, initialSource = null, inli
     }, []);
 
     useEffect(() => {
-        if (!initialSource) return;
-        const timer = window.setTimeout(() => paintMedia(initialSource.src, initialSource.type === 'video'), 80);
+        if (!backgroundSource) return;
+        const timer = window.setTimeout(() => backgroundSource.type === 'chat'
+            ? paintChat(backgroundSource)
+            : paintMedia(backgroundSource.src, backgroundSource.type === 'video'), 80);
         return () => window.clearTimeout(timer);
-    }, [initialSource, paintMedia]);
+    }, [backgroundSource, paintChat, paintMedia]);
 
     const point = (event) => {
         const rect = canvasRef.current.getBoundingClientRect();
@@ -156,7 +193,7 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, initialSource = null, inli
     };
     const send = () => {
         if (onSendDrawing && actionsRef.current.length) {
-            onSendDrawing({ version: 1, width: 1000, height: 1000, background: initialSource?.src ? { src: initialSource.src, type: initialSource.type } : null, actions: actionsRef.current, caption: caption.trim() });
+            onSendDrawing({ version: 2, width: 1000, height: 1000, background: backgroundSource ? { ...backgroundSource } : null, actions: actionsRef.current, caption: caption.trim() });
             return;
         }
         canvasRef.current.toBlob(blob => {
@@ -176,6 +213,7 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, initialSource = null, inli
             <div className="flex flex-wrap items-center justify-center gap-2 border-b border-white/10 bg-[#111b21] p-3">
                 {['pen', 'highlighter', 'arrow'].map(item => <button key={item} onClick={() => setTool(item)} className={`rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${tool === item ? 'bg-[#00a884]' : 'bg-white/10'}`}>{item}</button>)}
                 <button onClick={addText} className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold">Text</button>
+                <button onClick={() => { setBackgroundSource(null); paintBlankSpace(); }} className="rounded-full bg-indigo-500/20 px-3 py-1.5 text-xs font-semibold text-indigo-200">＋ New space</button>
                 <button onClick={() => fileRef.current?.click()} className="flex items-center gap-1 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold"><PhotoIcon className="h-4 w-4" /> Photo</button>
                 <input ref={fileRef} type="file" accept="image/*,video/*" className="hidden" onChange={addPhoto} />
                 <span className="mx-1 h-6 w-px bg-white/10" />

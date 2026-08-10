@@ -97,6 +97,14 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(self.client.get('/api/business/me').status_code, 401)
         self.assertEqual(self.client.get('/api/calls/ice-config').status_code, 401)
 
+    def test_chat_query_failure_does_not_invalidate_authenticated_session(self):
+        with app.app_context():
+            with patch('routes.chats_bp.ChatParticipant.query') as participant_query:
+                participant_query.filter_by.side_effect = RuntimeError('schema unavailable')
+                response = self.client.get('/api/chats', headers=self.auth_headers())
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json['error'], 'Could not load chats')
+
     def test_translation_rejects_oversized_text_before_contacting_provider(self):
         with patch('routes.main_bp.urllib.request.urlopen') as urlopen:
             response = self.client.post(

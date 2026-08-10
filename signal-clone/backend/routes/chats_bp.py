@@ -260,7 +260,10 @@ def get_chats():
         return jsonify(result)
     except Exception as e:
         report_safe_exception('chat_list_failed', e)
-        return jsonify({"error": "Invalid token"}), 401
+        # Authentication was already validated above. A query/schema failure is
+        # a server error and must never masquerade as an expired session, since
+        # clients correctly react to a real 401 by logging the user out.
+        return jsonify({"error": "Could not load chats"}), 500
 
 @chats_bp.route('/api/chats/create', methods=['POST'])
 def create_chat():

@@ -12,6 +12,7 @@ import { HeartIcon as HeartSolid } from '@heroicons/react/24/solid';
 import { generateRecoveryCode, protectPrivateKeyWithPassword } from '../utils/encryption';
 import { disablePushNotifications, enablePushNotifications } from '../utils/pushNotifications';
 import { deleteDevicePrivateKey, loadDevicePrivateKey } from '../utils/secureKeyStore';
+import AvatarCreator from './AvatarCreator';
 
 const TITLES = {
     settings: 'Settings', profile: 'Profile', account: 'Account', privacy: 'Privacy',
@@ -94,6 +95,10 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     }));
     const [fontSize, setFontSize] = useState(() => localStorage.getItem('chat_font_size') || 'medium');
     const [bubbleColor, setBubbleColor] = useState(() => localStorage.getItem('chat_bubble_color') || '#00a884');
+    const [storyPrivacy, setStoryPrivacy] = useState(() => localStorage.getItem('story_privacy') || 'contacts');
+    const [profilePrivacy, setProfilePrivacy] = useState(() => localStorage.getItem('profile_photo_privacy_mode') || user?.profilePhotoPrivacy || 'everyone');
+    const [storyExceptions, setStoryExceptions] = useState(() => localStorage.getItem('story_privacy_exceptions') || '');
+    const [profileExceptions, setProfileExceptions] = useState(() => localStorage.getItem('profile_privacy_exceptions') || '');
     const [customFont, setCustomFont] = useState(() => localStorage.getItem('chat_custom_font') || 'system');
     const [notificationSoundName, setNotificationSoundName] = useState(() => localStorage.getItem('custom_notification_name') || '');
     const [businessData, setBusinessData] = useState(() => businessDefaults(user));
@@ -481,6 +486,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                     {screen === 'profile' && (
                         <SettingsForm onSubmit={submitProfile}>
                             <Hero icon={<UserCircleIcon />} title="Edit your profile" text="Keep your public profile accurate and professional." />
+                            <AvatarCreator token={token} onCreated={updated => { onUserUpdate?.(updated); setMessage({ type: 'success', text: 'Your new avatar is live.' }); }} />
                             <Field label="Username" value={profile.username} onChange={value => setProfile({ ...profile, username: value })} required />
                             <div>
                                 <label className="block">
@@ -581,17 +587,27 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                             <SettingsGroup>
                                 <ChoiceRow 
                                     title="Who can see my profile photo" 
-                                    value={user?.profilePhotoPrivacy || 'everyone'} 
+                                    value={profilePrivacy}
                                     onChange={async (val) => {
+                                        setProfilePrivacy(val);
+                                        localStorage.setItem('profile_photo_privacy_mode', val);
                                         try {
-                                            const res = await axios.put('/api/user/privacy', { profilePhotoPrivacy: val }, {
+                                            const serverValue = ['everyone', 'contacts', 'nobody'].includes(val) ? val : 'contacts';
+                                            const res = await axios.put('/api/user/privacy', { profilePhotoPrivacy: serverValue }, {
                                                 headers: { Authorization: `Bearer ${token}` }
                                             });
                                             onUserUpdate?.(res.data);
                                         } catch (err) { console.error(err); }
                                     }}
-                                    options={[['everyone', 'Everyone'], ['contacts', 'My Contacts'], ['nobody', 'Nobody']]} 
+                                    options={[['everyone', 'Everyone'], ['contacts', 'My Contacts'], ['contacts_except', 'Contacts except…'], ['only', 'Only share with…'], ['nobody', 'Nobody']]}
                                 />
+                                {(profilePrivacy === 'contacts_except' || profilePrivacy === 'only') && <AudienceInput value={profileExceptions} onChange={value => { setProfileExceptions(value); localStorage.setItem('profile_privacy_exceptions', value); }} mode={profilePrivacy} />}
+                            </SettingsGroup>
+                            <SectionLabel>Story visibility</SectionLabel>
+                            <SettingsGroup>
+                                <ChoiceRow title="Who can see my story" value={storyPrivacy} onChange={val => { setStoryPrivacy(val); localStorage.setItem('story_privacy', val); }} options={[['contacts', 'My Contacts'], ['contacts_except', 'Contacts except…'], ['only', 'Only share with…'], ['nobody', 'Nobody']]} />
+                                {(storyPrivacy === 'contacts_except' || storyPrivacy === 'only') && <AudienceInput value={storyExceptions} onChange={value => { setStoryExceptions(value); localStorage.setItem('story_privacy_exceptions', value); }} mode={storyPrivacy} />}
+                                <InfoRow title="Private by default" text="These choices are used whenever you create a new story." />
                             </SettingsGroup>
                             
                             <SectionLabel>Security</SectionLabel>
@@ -689,7 +705,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                             <SectionLabel>Display</SectionLabel>
                             <SettingsGroup>
                                 <ChoiceRow title="App theme" value={theme} onChange={onThemeChange} options={[['light', 'Light'], ['dark', 'Dark'], ['midnight', 'Midnight'], ['business', 'Business']]} />
-                                <ChoiceRow title="Default chat wallpaper" value={wallpaper} onChange={onWallpaperChange} options={[['white', 'White'], ['gradient', 'Dark'], ['dots', 'Dots'], ['emerald', 'Emerald']]} />
+                                <ChoiceRow title="Default chat wallpaper" value={wallpaper} onChange={onWallpaperChange} options={[['white', 'Cloud'], ['gradient', 'Midnight'], ['dots', 'Night dots'], ['emerald', 'Emerald'], ['sunset', 'Sunset'], ['ocean', 'Ocean'], ['lavender', 'Lavender'], ['rose', 'Rose'], ['sand', 'Warm sand'], ['aurora', 'Aurora']]} />
                                 <ChoiceRow title="Font size" value={fontSize} onChange={val => { setFontSize(val); localStorage.setItem('chat_font_size', val); }} options={[['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']]} />
                                 <ChoiceRow title="Chat font" value={customFont} onChange={val => { setCustomFont(val); localStorage.setItem('chat_custom_font', val); }} options={[['system', 'System'], ['rounded', 'Rounded'], ['serif', 'Classic Serif'], ['mono', 'Mono']]} />
                                 <SettingsToggle icon={<FilmIcon />} title="Animated theme" subtitle="Subtle moving wallpaper effects" value={prefs.animatedTheme} onClick={() => togglePref('animatedTheme', 'animated_theme')} />
@@ -872,6 +888,7 @@ const PrimaryButton = ({ children, busy }) => <button disabled={busy} className=
 const SettingsRow = ({ icon, title, subtitle, onClick, danger = false }) => <button onClick={onClick} className="flex w-full items-center gap-4 border-b border-gray-800/70 px-5 py-4 text-left last:border-b-0 hover:bg-white/5"><span className={`h-6 w-6 [&>svg]:h-6 [&>svg]:w-6 ${danger ? 'text-red-400' : 'text-gray-400'}`}>{icon}</span><span className="min-w-0 flex-1"><span className={`block text-sm font-medium ${danger ? 'text-red-400' : 'text-white'}`}>{title}</span><span className="mt-0.5 block truncate text-xs text-gray-500">{subtitle}</span></span><ChevronRightIcon className="h-4 w-4 text-gray-600" /></button>;
 const SettingsToggle = ({ icon, title, subtitle, value, onClick }) => <button onClick={onClick} className="flex w-full items-center gap-4 border-b border-gray-800/70 px-5 py-4 text-left last:border-b-0 hover:bg-white/5"><span className="h-6 w-6 text-gray-400 [&>svg]:h-6 [&>svg]:w-6">{icon}</span><span className="min-w-0 flex-1"><span className="block text-sm font-medium text-white">{title}</span><span className="mt-0.5 block text-xs text-gray-500">{subtitle}</span></span><span className={`h-6 w-11 rounded-full p-0.5 transition ${value ? 'bg-[#00a884]' : 'bg-gray-700'}`}><span className={`block h-5 w-5 rounded-full bg-white transition ${value ? 'translate-x-5' : ''}`} /></span></button>;
 const ChoiceRow = ({ title, value, onChange, options }) => <div className="border-b border-gray-800/70 px-5 py-4 last:border-b-0"><p className="mb-3 text-sm font-medium text-white">{title}</p><div className="flex flex-wrap gap-2">{options.map(([id, label]) => <button type="button" key={id} onClick={() => onChange(id)} className={`rounded-full border px-3 py-1.5 text-xs ${value === id ? 'border-[#00a884] bg-[#00a884]/15 text-[#00a884]' : 'border-gray-700 text-gray-400 hover:border-gray-500'}`}>{label}</button>)}</div></div>;
+const AudienceInput = ({ value, onChange, mode }) => <label className="block border-b border-gray-800/70 px-5 py-4"><span className="mb-2 block text-xs font-medium text-gray-300">{mode === 'only' ? 'Only these contacts' : 'Hide from these contacts'}</span><textarea value={value} onChange={event => onChange(event.target.value)} rows={3} placeholder="Names or @handles, comma separated" className="w-full resize-none rounded-xl border border-gray-700 bg-[#202c33] px-3 py-2 text-sm text-white outline-none placeholder:text-gray-600 focus:border-[#00a884]" /><span className="mt-1 block text-[11px] text-gray-500">Example: @rahul, Priya, Family group</span></label>;
 const InfoRow = ({ title, text }) => <div className="border-b border-gray-800/70 px-5 py-4 last:border-b-0"><p className="text-sm font-medium text-white">{title}</p><p className="mt-1 text-xs leading-5 text-gray-500">{text}</p></div>;
 const Stat = ({ label, value }) => <div className="rounded-xl border border-gray-800 bg-[#202c33] p-4"><p className="text-xs text-gray-500">{label}</p><p className="mt-2 text-lg font-semibold text-white">{value}</p></div>;
 

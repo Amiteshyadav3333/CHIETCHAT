@@ -1829,6 +1829,12 @@ const Home = () => {
             ? 'linear-gradient(135deg, #06251f, #111b21 55%, #17212b)'
             : wallpaper === 'white'
                 ? '#ffffff'
+                : wallpaper === 'sunset' ? 'linear-gradient(145deg, #431407, #9a3412 48%, #701a75)'
+                : wallpaper === 'ocean' ? 'linear-gradient(145deg, #082f49, #0e7490 48%, #164e63)'
+                : wallpaper === 'lavender' ? 'linear-gradient(145deg, #312e81, #6d28d9 52%, #4c1d95)'
+                : wallpaper === 'rose' ? 'linear-gradient(145deg, #4c0519, #9f1239 52%, #831843)'
+                : wallpaper === 'sand' ? 'linear-gradient(145deg, #78350f, #a16207 52%, #713f12)'
+                : wallpaper === 'aurora' ? 'linear-gradient(135deg, #042f2e, #065f46 34%, #312e81 68%, #4c1d95)'
                 : 'linear-gradient(to bottom, #0b141a, #0d1b22)';
 
     useEffect(() => {

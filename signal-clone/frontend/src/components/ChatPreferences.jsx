@@ -3,6 +3,12 @@ const WALLPAPERS = [
     ['gradient', 'Dark', 'bg-[#0b141a]'],
     ['dots', 'Dots', 'bg-gray-700'],
     ['emerald', 'Green', 'bg-emerald-800'],
+    ['sunset', 'Sunset', 'bg-gradient-to-br from-orange-900 to-fuchsia-900'],
+    ['ocean', 'Ocean', 'bg-gradient-to-br from-sky-900 to-cyan-700'],
+    ['lavender', 'Lavender', 'bg-gradient-to-br from-indigo-900 to-violet-600'],
+    ['rose', 'Rose', 'bg-gradient-to-br from-rose-950 to-rose-700'],
+    ['sand', 'Sand', 'bg-gradient-to-br from-amber-900 to-yellow-700'],
+    ['aurora', 'Aurora', 'bg-gradient-to-br from-emerald-900 via-indigo-800 to-violet-700'],
 ];
 
 const ChatPreferences = ({ wallpaper, onWallpaperChange, disappearingTtl, onDisappearingChange }) => (
@@ -25,7 +31,7 @@ const ChatPreferences = ({ wallpaper, onWallpaperChange, disappearingTtl, onDisa
         </label>
         <div>
             <span className="mb-2 block text-sm font-medium text-white">Chat wallpaper</span>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
                 {WALLPAPERS.map(([id, label, color]) => (
                     <button
                         key={id}

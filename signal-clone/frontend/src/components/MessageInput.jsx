@@ -13,6 +13,7 @@ import ShoppingSearchModal from './ShoppingSearchModal';
 import PollCreatorModal from './PollCreatorModal';
 import ScheduleMessageModal from './ScheduleMessageModal';
 import VerifiedPaymentComposer from './VerifiedPaymentComposer';
+import DrawStudio from './DrawStudio';
 import { API_BASE_URL } from '../utils/apiBaseUrl';
 
 const LANGUAGES = [
@@ -92,6 +93,7 @@ const MessageInput = ({
     const [showScheduleModal, setShowScheduleModal] = useState(false);
     const [showShoppingModal, setShowShoppingModal] = useState(false);
     const [showPaymentComposer, setShowPaymentComposer] = useState(false);
+    const [showDrawStudio, setShowDrawStudio] = useState(false);
 
     const [showCameraModal, setShowCameraModal] = useState(false);
     const [cameraFacing, setCameraFacing] = useState('user');
@@ -597,6 +599,8 @@ const MessageInput = ({
 
             {showShoppingModal && <ShoppingSearchModal onClose={() => setShowShoppingModal(false)} />}
 
+            {showDrawStudio && <DrawStudio onClose={() => setShowDrawStudio(false)} onSend={(file, caption) => { onUpload(file); if (caption) onSend(caption, 'text', disappearingTtl); setShowDrawStudio(false); }} />}
+
             {/* Reply Preview Bar */}
             {replyTo && (
                 <div className="flex items-center gap-2 px-4 py-2 bg-[#2a3942] border-b border-gray-700 animate-slide-up">
@@ -773,6 +777,12 @@ const MessageInput = ({
             {showAttachMenu && (
                 <div ref={attachMenuRef} className="absolute bottom-full left-2 sm:left-10 mb-3 z-50 w-[calc(100vw-1rem)] max-w-sm rounded-3xl bg-[#233138] p-3 shadow-2xl border border-white/10 animate-slide-up">
                     <div className="grid grid-cols-4 gap-2">
+                        <AttachOption
+                            label="Draw"
+                            color="bg-emerald-500"
+                            icon={<span className="text-2xl text-white">✎</span>}
+                            onClick={() => { setShowDrawStudio(true); setShowAttachMenu(false); }}
+                        />
                         <AttachOption
                             label="Gallery"
                             color="bg-fuchsia-600"

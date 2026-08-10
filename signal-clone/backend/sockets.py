@@ -19,7 +19,8 @@ ALLOWED_MESSAGE_TYPES = {
     'location', 'live_location', 'contact', 'poll', 'game', 'gift', 'birthday',
     'ride', 'payment', 'business_auto_reply',
 }
-ALLOWED_MESSAGE_TTLS = {0, 3600, 86400, 604800, 2592000}
+MIN_MESSAGE_TTL = 30
+MAX_MESSAGE_TTL = 2592000
 _call_signal_windows = defaultdict(deque)
 _call_signal_windows_lock = threading.Lock()
 
@@ -288,7 +289,7 @@ def register_socket_events(socketio):
             ttl = int(data.get('ttl') or 0)
         except (TypeError, ValueError):
             return {"ok": False, "error": "Invalid disappearing-message duration", "retryable": False}
-        if ttl not in ALLOWED_MESSAGE_TTLS:
+        if ttl != 0 and not (MIN_MESSAGE_TTL <= ttl <= MAX_MESSAGE_TTL):
             return {"ok": False, "error": "Invalid disappearing-message duration", "retryable": False}
         allowed_asset_kinds = {
             'image': {'image'}, 'video': {'video'}, 'video_note': {'video'},

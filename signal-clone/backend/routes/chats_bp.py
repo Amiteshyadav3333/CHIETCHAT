@@ -329,13 +329,17 @@ def get_messages(chat_id):
 
     now = utc_now()
     expired = []
+    deletion_task_ids = []
     for message in Message.query.filter(Message.chat_id == chat_id, Message.ttl > 0).all():
         if (now - message.timestamp).total_seconds() > message.ttl:
             expired.append(message)
     for message in expired:
+        deletion_task_ids.extend(queue_claimed_upload_assets('message', message.id))
         db.session.delete(message)
     if expired:
         db.session.commit()
+        for task_id in deletion_task_ids:
+            process_media_deletion_task(task_id)
 
     participant = ChatParticipant.query.filter_by(chat_id=chat_id, user_id=user_id).first()
     p_deleted_at = participant.deleted_at if participant else None

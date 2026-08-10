@@ -1,3 +1,5 @@
+import React from 'react';
+
 const WALLPAPERS = [
     ['white', 'White', 'bg-white'],
     ['gradient', 'Dark', 'bg-[#0b141a]'],
@@ -11,13 +13,17 @@ const WALLPAPERS = [
     ['aurora', 'Aurora', 'bg-gradient-to-br from-emerald-900 via-indigo-800 to-violet-700'],
 ];
 
-const ChatPreferences = ({ wallpaper, onWallpaperChange, disappearingTtl, onDisappearingChange }) => (
+const ChatPreferences = ({ wallpaper, onWallpaperChange, disappearingTtl, onDisappearingChange, chatId, onOpenDraw, snapMode = false, onSnapModeChange }) => {
+    const colorKey = `chat_bubble_color_${chatId || 'default'}`;
+    const [contactColor, setContactColor] = React.useState(() => localStorage.getItem(colorKey) || localStorage.getItem('chat_bubble_color') || '#00a884');
+    const [customMinutes, setCustomMinutes] = React.useState('');
+    return (
     <div className="border-b border-gray-800 bg-[#111b21] px-4 py-4">
         <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-[#00a884]">Chat settings</h4>
         <label className="mb-4 block">
             <span className="mb-2 block text-sm font-medium text-white">Disappearing messages</span>
             <select
-                value={disappearingTtl}
+                value={[0, 60, 3600, 86400, 604800, 2592000].includes(Number(disappearingTtl)) ? disappearingTtl : 'custom'}
                 onChange={event => onDisappearingChange(event.target.value)}
                 className="w-full rounded-lg border border-gray-700 bg-[#202c33] px-3 py-2 text-sm text-white outline-none focus:border-[#00a884]"
             >
@@ -26,7 +32,10 @@ const ChatPreferences = ({ wallpaper, onWallpaperChange, disappearingTtl, onDisa
                 <option value={3600}>1 hour</option>
                 <option value={86400}>24 hours</option>
                 <option value={604800}>7 days</option>
+                <option value={2592000}>30 days</option>
+                <option value="custom">Custom time</option>
             </select>
+            {(String(disappearingTtl) === 'custom' || ![0, 60, 3600, 86400, 604800, 2592000].includes(Number(disappearingTtl))) && <div className="mt-2 flex gap-2"><input type="number" min="1" max="43200" value={customMinutes || (Number(disappearingTtl) ? Math.round(Number(disappearingTtl) / 60) : '')} onChange={event => setCustomMinutes(event.target.value)} placeholder="Minutes" className="min-w-0 flex-1 rounded-lg border border-gray-700 bg-[#202c33] px-3 py-2 text-sm text-white outline-none focus:border-[#00a884]" /><button type="button" onClick={() => { const minutes = Math.max(1, Math.min(43200, Number(customMinutes) || Math.round(Number(disappearingTtl) / 60) || 1)); onDisappearingChange(minutes * 60); }} className="rounded-lg bg-[#00a884] px-3 text-xs font-bold text-white">Apply</button></div>}
             <span className="mt-1 block text-[11px] leading-4 text-gray-500">New messages will disappear after the selected time.</span>
         </label>
         <div>
@@ -45,7 +54,17 @@ const ChatPreferences = ({ wallpaper, onWallpaperChange, disappearingTtl, onDisa
                 ))}
             </div>
         </div>
+        <div className="mt-4 border-t border-gray-800 pt-4">
+            <span className="mb-2 block text-sm font-medium text-white">This contact's chat colour</span>
+            <div className="flex items-center gap-3">
+                <input type="color" value={contactColor} onChange={event => { setContactColor(event.target.value); localStorage.setItem(colorKey, event.target.value); window.dispatchEvent(new Event('cheetchat-colour-updated')); }} className="h-10 w-14 rounded border-0 bg-transparent" />
+                <span className="text-xs text-gray-500">Only this conversation</span>
+            </div>
+        </div>
+        {onOpenDraw && <button type="button" onClick={onOpenDraw} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#00a884] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#079474]"><span className="text-xl">✎</span> Draw in this chat</button>}
+        {onSnapModeChange && <button type="button" onClick={() => onSnapModeChange(!snapMode)} className={`mt-3 w-full rounded-xl border px-4 py-3 text-left transition ${snapMode ? 'border-yellow-400 bg-yellow-400/10' : 'border-gray-700 bg-white/5'}`}><span className={`block text-sm font-bold ${snapMode ? 'text-yellow-300' : 'text-white'}`}>👻 Snap Mode {snapMode ? 'ON' : 'OFF'}</span><span className="mt-1 block text-[11px] leading-4 text-gray-400">Messages and media expire in 10 minutes. Downloads and forwarding are restricted.</span></button>}
     </div>
-);
+    );
+};
 
 export default ChatPreferences;

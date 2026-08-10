@@ -77,6 +77,8 @@ const VideoCallModal = ({
 
     const [isMuted, setIsMuted] = useState(false);
     const [isVideoOff, setIsVideoOff] = useState(callType === 'voice');
+    const [isScreenSharing, setIsScreenSharing] = useState(false);
+    const screenTrackRef = useRef(null);
     const [currentCallType, setCurrentCallType] = useState(callType);
     const [showControls, setShowControls] = useState(true);
     const [upgradeRequest, setUpgradeRequest] = useState(null); // { fromSocket, fromName }
@@ -752,6 +754,48 @@ const VideoCallModal = ({
         streamRef.current?.getVideoTracks().forEach(t => { t.enabled = !newOff; });
     };
 
+    const stopScreenShare = async () => {
+        const cameraTrack = cameraTrackRef.current;
+        Object.values(peersRef.current).forEach(({ pc }) => {
+            const sender = pc.getSenders().find(item => item.track?.kind === 'video');
+            if (sender && cameraTrack) sender.replaceTrack(cameraTrack);
+        });
+        screenTrackRef.current?.stop();
+        screenTrackRef.current = null;
+        setIsScreenSharing(false);
+        if (cameraTrack && streamRef.current) {
+            streamRef.current.getVideoTracks().forEach(track => streamRef.current.removeTrack(track));
+            streamRef.current.addTrack(cameraTrack);
+            setLocalStream(new MediaStream(streamRef.current.getTracks()));
+        }
+        socket?.emit('screen_share_stopped', { chatId: activeChat.id, to: Object.keys(peersRef.current)[0] });
+    };
+
+    const toggleScreenShare = async () => {
+        if (isScreenSharing) { await stopScreenShare(); return; }
+        if (!navigator.mediaDevices?.getDisplayMedia) { alert('Screen sharing is not supported on this browser.'); return; }
+        try {
+            if (currentCallType !== 'video') await actuallySwitchToVideo();
+            const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 15, max: 30 } }, audio: true });
+            const screenTrack = displayStream.getVideoTracks()[0];
+            screenTrackRef.current = screenTrack;
+            Object.values(peersRef.current).forEach(({ pc }) => {
+                const sender = pc.getSenders().find(item => item.track?.kind === 'video');
+                if (sender) sender.replaceTrack(screenTrack);
+            });
+            if (streamRef.current) {
+                streamRef.current.getVideoTracks().forEach(track => streamRef.current.removeTrack(track));
+                streamRef.current.addTrack(screenTrack);
+                setLocalStream(new MediaStream(streamRef.current.getTracks()));
+            }
+            screenTrack.onended = () => stopScreenShare();
+            setIsScreenSharing(true);
+            Object.keys(peersRef.current).forEach(to => socket?.emit('screen_share_started', { chatId: activeChat.id, to }));
+        } catch (error) {
+            if (error?.name !== 'NotAllowedError') alert('Screen share start nahi ho saka.');
+        }
+    };
+
     const flipCamera = async () => {
         if (currentCallType !== 'video') {
             await switchToVideo();
@@ -1228,6 +1272,10 @@ const VideoCallModal = ({
 
                     <ControlBtn onClick={toggleVideo} active={isVideoOff} activeColor="bg-red-600" label={isVideoOff ? 'Start Video' : 'Stop Video'}>
                         {isVideoOff ? <VideoCameraSlashIcon className="w-6 h-6" /> : <VideoCameraIcon className="w-6 h-6" />}
+                    </ControlBtn>
+
+                    <ControlBtn onClick={toggleScreenShare} active={isScreenSharing} activeColor="bg-blue-600" label={isScreenSharing ? 'Stop Sharing' : 'Share Screen'}>
+                        <span className="text-xl">▣</span>
                     </ControlBtn>
 
                 <ControlBtn onClick={flipCamera} activeColor="bg-gray-700" label="Switch Camera">

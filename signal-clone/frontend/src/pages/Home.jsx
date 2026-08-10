@@ -185,7 +185,9 @@ const Home = () => {
     }, [activeChat]);
     const [theme, setTheme] = useState(() => localStorage.getItem('chat_theme') || 'dark');
     const [wallpaper, setWallpaper] = useState(() => localStorage.getItem('chat_wallpaper') || 'white');
+    const [drawSource, setDrawSource] = useState(null);
     const [disappearingTtl, setDisappearingTtl] = useState(0);
+    const [snapMode, setSnapMode] = useState(false);
     const [showTopDropdown, setShowTopDropdown] = useState(false);
     const [showMessageSearch, setShowMessageSearch] = useState(false);
     const [messageSearchQuery, setMessageSearchQuery] = useState('');
@@ -619,17 +621,34 @@ const Home = () => {
             const stored = localStorage.getItem(`chat_translation_lang_${activeChat.id}`) || '';
             setChatTranslationLang(stored);
             setDisappearingTtl(Number(localStorage.getItem(`chat_disappearing_ttl_${activeChat.id}`) || 0));
+            const savedSnapMode = localStorage.getItem(`chat_snap_mode_${activeChat.id}`);
+            setSnapMode(savedSnapMode === null ? localStorage.getItem('snap_mode_default') === '1' : savedSnapMode === '1');
         } else {
             setChatTranslationLang('');
             setDisappearingTtl(0);
+            setSnapMode(false);
         }
     }, [activeChat?.id]);
 
     const updateDisappearingTtl = (value) => {
-        const ttl = Number(value);
+        const ttl = value === 'custom' ? 'custom' : Number(value);
         setDisappearingTtl(ttl);
         if (visibleActiveChat) localStorage.setItem(`chat_disappearing_ttl_${visibleActiveChat.id}`, String(ttl));
     };
+
+    const updateSnapMode = (enabled) => {
+        setSnapMode(enabled);
+        if (visibleActiveChat) localStorage.setItem(`chat_snap_mode_${visibleActiveChat.id}`, enabled ? '1' : '0');
+        if (enabled) updateDisappearingTtl(600);
+    };
+
+    useEffect(() => {
+        const timer = window.setInterval(() => {
+            const now = Date.now();
+            setMessages(current => current.filter(message => !message.ttl || now - new Date(message.timestamp).getTime() < Number(message.ttl) * 1000));
+        }, 1000);
+        return () => window.clearInterval(timer);
+    }, []);
 
     useEffect(() => {
         if (showInfoPanel && visibleActiveChat?.isGroup && visibleActiveChat.groupAdminId === user?.id) {
@@ -1050,6 +1069,7 @@ const Home = () => {
     }, [messages]);
 
     const handleSendMessage = async (text, type = 'text', replyMsg = null, ttl = 0, assetId = null) => {
+        ttl = snapMode ? 600 : Number(ttl || 0);
         if (!activeChat?.id || !user?.id) {
             console.warn('Message send skipped because the chat session is not ready.');
             return;
@@ -1078,9 +1098,10 @@ const Home = () => {
             replySenderName: replyMsg?.senderName || null,
             reactions: {},
             isPinned: false,
-            _isOptimistic: true
-            ,clientMessageId: tempId,
-            assetId
+            _isOptimistic: true,
+            clientMessageId: tempId,
+            assetId,
+            ttl
         };
         setMessages(prev => [...prev, optimisticMsg]);
         scrollToBottom();
@@ -2626,6 +2647,10 @@ const Home = () => {
                                                 onWallpaperChange={setWallpaper}
                                                 disappearingTtl={disappearingTtl}
                                                 onDisappearingChange={updateDisappearingTtl}
+                                                chatId={visibleActiveChat.id}
+                                                onOpenDraw={() => { setShowInfoPanel(false); setDrawSource({ blank: true }); }}
+                                                snapMode={snapMode}
+                                                onSnapModeChange={updateSnapMode}
                                             />
                                             {/* Admin controls */}
                                             {isAdmin && (
@@ -2785,6 +2810,10 @@ const Home = () => {
                                             onWallpaperChange={setWallpaper}
                                             disappearingTtl={disappearingTtl}
                                             onDisappearingChange={updateDisappearingTtl}
+                                            chatId={visibleActiveChat.id}
+                                            onOpenDraw={() => { setShowInfoPanel(false); setDrawSource({ blank: true }); }}
+                                            snapMode={snapMode}
+                                            onSnapModeChange={updateSnapMode}
                                         />
                                         {other && (
                                             <button
@@ -2892,6 +2921,8 @@ const Home = () => {
                                             token={token}
                                             currentUserId={user.id}
                                             showTranslateBtn={showTranslateEnabled}
+                                            onAnnotate={setDrawSource}
+                                            snapMode={snapMode}
                                         />
                                     </div>
                                 </React.Fragment>
@@ -2933,6 +2964,8 @@ const Home = () => {
                         payeeName={getOtherParticipant(visibleActiveChat)?.username || visibleActiveChat.name}
                         onSchedule={scheduleMessage}
                         token={token}
+                        drawSource={drawSource}
+                        onDrawSourceConsumed={() => setDrawSource(null)}
                     />
                 </div>
             ) : (

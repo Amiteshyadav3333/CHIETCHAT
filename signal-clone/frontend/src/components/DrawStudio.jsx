@@ -3,7 +3,7 @@ import { ArrowUturnLeftIcon, PhotoIcon, TrashIcon, XMarkIcon } from '@heroicons/
 
 const COLORS = ['#ffffff', '#22c55e', '#38bdf8', '#facc15', '#fb7185', '#a78bfa', '#111827'];
 
-const DrawStudio = ({ onClose, onSend }) => {
+const DrawStudio = ({ onClose, onSend, initialSource = null }) => {
     const canvasRef = useRef(null);
     const fileRef = useRef(null);
     const historyRef = useRef([]);
@@ -14,6 +14,29 @@ const DrawStudio = ({ onClose, onSend }) => {
     const [color, setColor] = useState('#22c55e');
     const [size, setSize] = useState(5);
     const [caption, setCaption] = useState('');
+
+    const paintMedia = React.useCallback((source, isVideo = false) => {
+        const canvas = canvasRef.current;
+        if (!canvas || !source) return;
+        const media = document.createElement(isVideo ? 'video' : 'img');
+        media.crossOrigin = 'anonymous';
+        media.muted = true;
+        media.playsInline = true;
+        const draw = () => {
+            const width = media.videoWidth || media.naturalWidth;
+            const height = media.videoHeight || media.naturalHeight;
+            if (!width || !height) return;
+            const ctx = canvas.getContext('2d');
+            const scale = Math.max(canvas.width / width, canvas.height / height);
+            const w = width * scale; const h = height * scale;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(media, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+            saveHistory();
+        };
+        if (isVideo) { media.addEventListener('loadeddata', () => { media.currentTime = Math.min(0.1, media.duration || 0); }); media.addEventListener('seeked', draw, { once: true }); }
+        else media.addEventListener('load', draw, { once: true });
+        media.src = source;
+    }, []);
 
     const saveHistory = () => {
         const canvas = canvasRef.current;
@@ -47,6 +70,12 @@ const DrawStudio = ({ onClose, onSend }) => {
         window.addEventListener('resize', resize);
         return () => window.removeEventListener('resize', resize);
     }, []);
+
+    useEffect(() => {
+        if (!initialSource) return;
+        const timer = window.setTimeout(() => paintMedia(initialSource.src, initialSource.type === 'video'), 80);
+        return () => window.clearTimeout(timer);
+    }, [initialSource, paintMedia]);
 
     const point = (event) => {
         const rect = canvasRef.current.getBoundingClientRect();
@@ -95,6 +124,12 @@ const DrawStudio = ({ onClose, onSend }) => {
     };
     const addPhoto = (event) => {
         const file = event.target.files?.[0]; if (!file) return;
+        if (file.type.startsWith('video/')) {
+            const url = URL.createObjectURL(file);
+            paintMedia(url, true);
+            window.setTimeout(() => URL.revokeObjectURL(url), 5000);
+            return;
+        }
         const image = new Image();
         image.onload = () => {
             const canvas = canvasRef.current; const ctx = canvas.getContext('2d');
@@ -122,7 +157,7 @@ const DrawStudio = ({ onClose, onSend }) => {
                 {['pen', 'highlighter', 'arrow'].map(item => <button key={item} onClick={() => setTool(item)} className={`rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${tool === item ? 'bg-[#00a884]' : 'bg-white/10'}`}>{item}</button>)}
                 <button onClick={addText} className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold">Text</button>
                 <button onClick={() => fileRef.current?.click()} className="flex items-center gap-1 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold"><PhotoIcon className="h-4 w-4" /> Photo</button>
-                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={addPhoto} />
+                <input ref={fileRef} type="file" accept="image/*,video/*" className="hidden" onChange={addPhoto} />
                 <span className="mx-1 h-6 w-px bg-white/10" />
                 {COLORS.map(c => <button key={c} onClick={() => setColor(c)} className={`h-7 w-7 rounded-full border-2 ${color === c ? 'border-white scale-110' : 'border-white/20'}`} style={{ background: c }} aria-label={`Choose ${c}`} />)}
                 <input type="range" min="2" max="14" value={size} onChange={e => setSize(Number(e.target.value))} className="w-24 accent-[#00a884]" />

@@ -92,6 +92,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
         animatedTheme: localStorage.getItem('animated_theme') === '1',
         autoReply: localStorage.getItem('business_auto_reply') === '1',
         showCatalog: localStorage.getItem('business_catalog') === '1',
+        snapModeDefault: localStorage.getItem('snap_mode_default') === '1',
     }));
     const [fontSize, setFontSize] = useState(() => localStorage.getItem('chat_font_size') || 'medium');
     const [bubbleColor, setBubbleColor] = useState(() => localStorage.getItem('chat_bubble_color') || '#00a884');
@@ -709,6 +710,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 <ChoiceRow title="Font size" value={fontSize} onChange={val => { setFontSize(val); localStorage.setItem('chat_font_size', val); }} options={[['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']]} />
                                 <ChoiceRow title="Chat font" value={customFont} onChange={val => { setCustomFont(val); localStorage.setItem('chat_custom_font', val); }} options={[['system', 'System'], ['rounded', 'Rounded'], ['serif', 'Classic Serif'], ['mono', 'Mono']]} />
                                 <SettingsToggle icon={<FilmIcon />} title="Animated theme" subtitle="Subtle moving wallpaper effects" value={prefs.animatedTheme} onClick={() => togglePref('animatedTheme', 'animated_theme')} />
+                                <SettingsToggle icon={<EyeSlashIcon />} title="Snap Mode by default" subtitle="New contact chats use a 10-minute timer and restrict saving/forwarding" value={prefs.snapModeDefault} onClick={() => togglePref('snapModeDefault', 'snap_mode_default')} />
                             </SettingsGroup>
                             <div className="mx-5 mt-4 rounded-xl border border-gray-800 bg-[#202c33] p-4">
                                 <label className="text-sm font-medium text-white">Sent bubble colour</label>

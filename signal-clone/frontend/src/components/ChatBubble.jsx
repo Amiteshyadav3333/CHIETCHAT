@@ -546,8 +546,10 @@ const ChatBubble = ({
     message, isOwn, senderName, onDelete, senderAvatar, showAvatar,
     onReply, replyTo, onTranslate, chatId, chatTranslationLang,
     onEdit, onCopy, onForward, onReact, onPin, isLastMessage,
-    socket, token, showTranslateBtn = true
+    socket, token, showTranslateBtn = true, onAnnotate, snapMode = false
 }) => {
+    const [, forceColourRefresh] = useState(0);
+    useEffect(() => { const refresh = () => forceColourRefresh(value => value + 1); window.addEventListener('cheetchat-colour-updated', refresh); return () => window.removeEventListener('cheetchat-colour-updated', refresh); }, []);
     const [showActionMenu, setShowActionMenu] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
     const [showTranslatorMenu, setShowTranslatorMenu] = useState(false);
@@ -689,6 +691,10 @@ const ChatBubble = ({
     }, [content, isOwn, isTextMessage, onTranslate, chatId, chatTranslationLang, localTargetLang]);
 
     const handleDownload = async (url) => {
+        if (snapMode) {
+            alert('Snap Mode mein media download ya save nahi kiya ja sakta.');
+            return;
+        }
         const safeUrl = getSafeHttpUrl(url, window.location.href);
         if (!safeUrl) return;
         try {
@@ -859,6 +865,7 @@ const ChatBubble = ({
                     >
                         <ArrowDownTrayIcon className="w-4 h-4" />
                     </button>
+                    <button onClick={(e) => { e.stopPropagation(); onAnnotate?.({ src: cnt, type: 'image' }); }} className="absolute left-2 top-2 rounded-full bg-black/55 p-1.5 text-white opacity-0 shadow-lg transition-opacity group-hover/media:opacity-100" title="Draw on photo"><span className="text-lg leading-none">✎</span></button>
                 </div>
             );
         }
@@ -880,6 +887,7 @@ const ChatBubble = ({
                     style={{ maxWidth: 260 }}
                     onClick={(e) => { e.stopPropagation(); setZoomedMedia({ src: cnt, type: 'video' }); }}
                 >
+                    <button onClick={(e) => { e.stopPropagation(); onAnnotate?.({ src: cnt, type: 'video' }); }} className="absolute left-2 top-2 z-10 rounded-full bg-black/55 p-1.5 text-white opacity-0 shadow-lg transition-opacity group-hover/media:opacity-100" title="Draw on video frame"><span className="text-lg leading-none">✎</span></button>
                     <video
                         src={cnt}
                         className="w-full object-cover block"
@@ -1312,6 +1320,7 @@ const ChatBubble = ({
         <>
             <div
                 className={`flex items-end gap-2 w-full ${isOwn ? 'flex-row-reverse' : 'flex-row'} ${hasReactions ? 'mb-7' : 'mb-1'}`}
+                onContextMenu={event => { if (snapMode) event.preventDefault(); }}
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
@@ -1375,11 +1384,12 @@ const ChatBubble = ({
                                     : 'bg-[#202c33] text-gray-100 rounded-tl-sm'
                                 }`}
                             style={isOwn ? {
-                                backgroundColor: localStorage.getItem('chat_bubble_color') || '#005c4b',
+                                backgroundColor: localStorage.getItem(`chat_bubble_color_${chatId}`) || localStorage.getItem('chat_bubble_color') || '#005c4b',
                                 fontSize: localStorage.getItem('chat_font_size') === 'large' ? '17px' : localStorage.getItem('chat_font_size') === 'small' ? '13px' : '15px',
                                 fontFamily: localStorage.getItem('chat_custom_font') === 'serif' ? 'Georgia, serif' : localStorage.getItem('chat_custom_font') === 'mono' ? 'ui-monospace, monospace' : localStorage.getItem('chat_custom_font') === 'rounded' ? 'Nunito, system-ui, sans-serif' : 'inherit'
                             } : undefined}
                         >
+                            {snapMode && <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center overflow-hidden rounded-2xl opacity-20"><span className="-rotate-12 whitespace-nowrap text-xs font-black tracking-[0.35em] text-white">SNAP MODE · {currentUser?.username || 'PRIVATE'}</span></div>}
                             {/* Reply preview */}
                             {replyTo && (
                                 <div className={`mb-1 px-2 py-1 rounded-lg border-l-4 ${isOwn ? 'border-green-300 bg-white/10' : 'border-blue-400 bg-white/5'} text-xs text-gray-300 max-w-[240px] flex items-center justify-between gap-2 bg-black/20`}>
@@ -1527,7 +1537,7 @@ const ChatBubble = ({
                     onReply={() => onReply && onReply(message)}
                     onEdit={() => onEdit && onEdit(message)}
                     onCopy={() => onCopy && onCopy(message)}
-                    onForward={() => onForward && onForward(message)}
+                    onForward={() => !snapMode && onForward && onForward(message)}
                     onReact={(emoji) => onReact && onReact(message, emoji)}
                     onPin={() => onPin && onPin(message)}
                     onDelete={() => onDelete && onDelete(message)}

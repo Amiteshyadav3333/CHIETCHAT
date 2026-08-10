@@ -75,7 +75,7 @@ const MessageInput = ({
     showAiFeature = false,
     showSmartReplies = false,
     currentUserId, payeeId, payeeName,
-    onSchedule, token
+    onSchedule, token, drawSource = null, onDrawSourceConsumed
 }) => {
     const [text, setText] = useState('');
     const [showEmoji, setShowEmoji] = useState(false);
@@ -218,6 +218,10 @@ const MessageInput = ({
             videoNoteStreamRef.current?.getTracks().forEach(track => track.stop());
         };
     }, []);
+
+    React.useEffect(() => {
+        if (drawSource) setShowDrawStudio(true);
+    }, [drawSource]);
 
     React.useEffect(() => {
         if (pickerTab === 'gif' && gifs.length === 0) {
@@ -599,7 +603,7 @@ const MessageInput = ({
 
             {showShoppingModal && <ShoppingSearchModal onClose={() => setShowShoppingModal(false)} />}
 
-            {showDrawStudio && <DrawStudio onClose={() => setShowDrawStudio(false)} onSend={(file, caption) => { onUpload(file); if (caption) onSend(caption, 'text', disappearingTtl); setShowDrawStudio(false); }} />}
+            {showDrawStudio && <DrawStudio initialSource={drawSource} onClose={() => { setShowDrawStudio(false); onDrawSourceConsumed?.(); }} onSend={(file, caption) => { onUpload(file); if (caption) onSend(caption, 'text', disappearingTtl); setShowDrawStudio(false); onDrawSourceConsumed?.(); }} />}
 
             {/* Reply Preview Bar */}
             {replyTo && (
@@ -645,6 +649,16 @@ const MessageInput = ({
                             }`}
                         >
                             {isTranslating ? 'Translating...' : 'Translate Input'}
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => { setShowDrawStudio(true); setShowAttachMenu(false); setShowEmoji(false); }}
+                            className="flex h-10 w-10 items-center justify-center rounded-full text-[#00a884] transition-all hover:bg-[#00a884]/10 hover:text-emerald-300 active:scale-90"
+                            title="Draw, point or write"
+                            aria-label="Open drawing tools"
+                        >
+                            <span className="text-2xl leading-none">✎</span>
                         </button>
                         <button
                             type="button"

@@ -443,6 +443,7 @@ class SecurityTests(unittest.TestCase):
             ('POST', '/api/reset-password'), ('POST', '/api/reset-password/key-backup'),
             ('POST', '/api/auth/2fa/login-verify'),
             ('POST', '/api/auth/google/exchange'), ('POST', '/api/auth/google/complete'),
+            ('GET', '/api/auth/google/config'),
             ('POST', '/api/payments/webhooks/razorpay'),
             ('GET', '/api/gifs'), ('GET', '/api/reels/<int:reel_id>/public'),
             ('GET', '/api/reels/<int:reel_id>/comments'),

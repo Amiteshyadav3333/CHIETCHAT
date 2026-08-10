@@ -6,7 +6,7 @@ import { generateKeys, generateRecoveryCode, protectPrivateKeyWithPassword, rest
 import { EnvelopeIcon, KeyIcon, LockClosedIcon, UserPlusIcon } from '@heroicons/react/24/outline';
 import { getDeviceFingerprint } from '../utils/deviceIdentity';
 import { loadDevicePrivateKey, saveDevicePrivateKey } from '../utils/secureKeyStore';
-import { googleAuthConfigured, supabase } from '../utils/supabaseClient';
+import { getSupabaseClient } from '../utils/supabaseClient';
 
 const Login = () => {
     const [mode, setMode] = useState('login');
@@ -48,11 +48,12 @@ const Login = () => {
     }, [token, navigate]);
 
     React.useEffect(() => {
-        if (!supabase || !new URLSearchParams(window.location.search).has('google')) return;
+        if (!new URLSearchParams(window.location.search).has('google')) return;
         let cancelled = false;
         const finishGoogleCallback = async () => {
             setGoogleLoading(true);
             try {
+                const supabase = await getSupabaseClient();
                 const code = new URLSearchParams(window.location.search).get('code');
                 const authResult = code
                     ? await supabase.auth.exchangeCodeForSession(code)
@@ -155,20 +156,19 @@ const Login = () => {
     };
 
     const startGoogleLogin = async () => {
-        if (!supabase) {
-            setMessage('Google Sign-In is not configured for this deployment.');
-            return;
-        }
         setGoogleLoading(true);
         setMessage('');
-        const { error } = await supabase.auth.signInWithOAuth({
-            provider: 'google',
-            options: {
-                redirectTo: `${window.location.origin}/login?google=callback`,
-                queryParams: { prompt: 'select_account' },
-            },
-        });
-        if (error) {
+        try {
+            const supabase = await getSupabaseClient();
+            const { error } = await supabase.auth.signInWithOAuth({
+                provider: 'google',
+                options: {
+                    redirectTo: `${window.location.origin}/login?google=callback`,
+                    queryParams: { prompt: 'select_account' },
+                },
+            });
+            if (error) throw error;
+        } catch (error) {
             setMessage(error.message || 'Could not open Google Sign-In');
             setGoogleLoading(false);
         }
@@ -324,7 +324,7 @@ const Login = () => {
 
     return (
         <div className="flex h-[100dvh] min-h-0 overflow-y-auto overscroll-contain bg-[#08090b] p-4 text-signal-text">
-            {googleOnboarding && <div className="fixed inset-0 z-[140] flex overflow-y-auto bg-black/85 p-4 backdrop-blur-md"><form onSubmit={completeGoogleOnboarding} className="m-auto max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-3xl border border-white/10 bg-[#121820] p-6 shadow-2xl"><div className="flex items-center gap-3"><img src={useGoogleAvatar && googleOnboarding.googleAvatarUrl ? googleOnboarding.googleAvatarUrl : '/cheetchat-logo.png'} alt="Profile preview" className="h-16 w-16 rounded-full object-cover" referrerPolicy="no-referrer" /><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-[#53bdeb]">Google verified</p><h2 className="truncate text-xl font-black text-white">{googleOnboarding.displayName}</h2><p className="truncate text-xs text-gray-400">{googleOnboarding.email}</p></div></div><div className="mt-5 rounded-xl bg-white/5 p-3"><p className="text-xs text-gray-400">Your CHEETCHAT ID</p><p className="mt-1 font-bold text-emerald-300">@{googleOnboarding.suggestedPlatformId}</p><p className="mt-1 text-[11px] text-gray-500">Platform automatically creates it. You can change it later in Settings.</p></div><label className="mt-5 block"><span className="mb-2 block text-sm font-semibold text-white">Mobile number</span><input autoFocus value={googlePhone} onChange={event => setGooglePhone(event.target.value.replace(/\D/g, '').slice(0, 10))} inputMode="numeric" pattern="\d{10}" maxLength={10} placeholder="10-digit mobile number" className="w-full rounded-xl border border-white/10 bg-[#202c33] px-4 py-3 text-white outline-none focus:border-[#00a884]" required /><span className="mt-2 block text-[11px] leading-4 text-yellow-200/80">Number unique रहेगा लेकिन OTP के बिना unverified माना जाएगा और recovery/login में use नहीं होगा.</span></label>{googleOnboarding.googleAvatarUrl && <label className="mt-4 flex cursor-pointer items-center justify-between rounded-xl border border-white/10 p-3"><span><span className="block text-sm font-semibold text-white">Use Google profile photo</span><span className="text-[11px] text-gray-500">Optional — off करके default avatar रखें</span></span><input type="checkbox" checked={useGoogleAvatar} onChange={event => setUseGoogleAvatar(event.target.checked)} className="h-5 w-5 accent-[#00a884]" /></label>}<div className="mt-6 flex gap-2"><button type="button" onClick={() => { setGoogleOnboarding(null); supabase?.auth.signOut(); }} className="flex-1 rounded-xl border border-white/10 py-3 text-sm font-semibold text-gray-300">Cancel</button><button type="submit" disabled={googleLoading} className="flex-1 rounded-xl bg-[#00a884] py-3 text-sm font-black text-white disabled:opacity-60">{googleLoading ? 'Creating…' : 'Create account'}</button></div></form></div>}
+            {googleOnboarding && <div className="fixed inset-0 z-[140] flex overflow-y-auto bg-black/85 p-4 backdrop-blur-md"><form onSubmit={completeGoogleOnboarding} className="m-auto max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-3xl border border-white/10 bg-[#121820] p-6 shadow-2xl"><div className="flex items-center gap-3"><img src={useGoogleAvatar && googleOnboarding.googleAvatarUrl ? googleOnboarding.googleAvatarUrl : '/cheetchat-logo.png'} alt="Profile preview" className="h-16 w-16 rounded-full object-cover" referrerPolicy="no-referrer" /><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-[#53bdeb]">Google verified</p><h2 className="truncate text-xl font-black text-white">{googleOnboarding.displayName}</h2><p className="truncate text-xs text-gray-400">{googleOnboarding.email}</p></div></div><div className="mt-5 rounded-xl bg-white/5 p-3"><p className="text-xs text-gray-400">Your CHEETCHAT ID</p><p className="mt-1 font-bold text-emerald-300">@{googleOnboarding.suggestedPlatformId}</p><p className="mt-1 text-[11px] text-gray-500">Platform automatically creates it. You can change it later in Settings.</p></div><label className="mt-5 block"><span className="mb-2 block text-sm font-semibold text-white">Mobile number</span><input autoFocus value={googlePhone} onChange={event => setGooglePhone(event.target.value.replace(/\D/g, '').slice(0, 10))} inputMode="numeric" pattern="\d{10}" maxLength={10} placeholder="10-digit mobile number" className="w-full rounded-xl border border-white/10 bg-[#202c33] px-4 py-3 text-white outline-none focus:border-[#00a884]" required /><span className="mt-2 block text-[11px] leading-4 text-yellow-200/80">Number unique रहेगा लेकिन OTP के बिना unverified माना जाएगा और recovery/login में use नहीं होगा.</span></label>{googleOnboarding.googleAvatarUrl && <label className="mt-4 flex cursor-pointer items-center justify-between rounded-xl border border-white/10 p-3"><span><span className="block text-sm font-semibold text-white">Use Google profile photo</span><span className="text-[11px] text-gray-500">Optional — off करके default avatar रखें</span></span><input type="checkbox" checked={useGoogleAvatar} onChange={event => setUseGoogleAvatar(event.target.checked)} className="h-5 w-5 accent-[#00a884]" /></label>}<div className="mt-6 flex gap-2"><button type="button" onClick={() => { setGoogleOnboarding(null); getSupabaseClient().then(client => client.auth.signOut()).catch(() => {}); }} className="flex-1 rounded-xl border border-white/10 py-3 text-sm font-semibold text-gray-300">Cancel</button><button type="submit" disabled={googleLoading} className="flex-1 rounded-xl bg-[#00a884] py-3 text-sm font-black text-white disabled:opacity-60">{googleLoading ? 'Creating…' : 'Create account'}</button></div></form></div>}
             <div className="m-auto grid w-full max-w-5xl shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-[#121418] shadow-2xl md:grid-cols-[0.95fr_1.05fr]">
                 <div className="hidden min-h-[640px] border-r border-white/10 bg-[#0d1117] p-8 md:flex md:flex-col md:justify-between">
                     <div>
@@ -392,7 +392,7 @@ const Login = () => {
                         </div>
                     )}
 
-                    {!isReset && !isOtpStep && !is2FaStep && <><button type="button" onClick={startGoogleLogin} disabled={googleLoading || !googleAuthConfigured} className="mb-4 flex w-full items-center justify-center gap-3 rounded-lg border border-white/15 bg-white px-4 py-3 font-bold text-gray-900 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"><svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3Z"/><path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.5l-3.2-2.5c-.9.6-2 1-3.4 1a5.8 5.8 0 0 1-5.4-4H3.3v2.6A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.6 14a6 6 0 0 1 0-3.9V7.5H3.3a10 10 0 0 0 0 9.1L6.6 14Z"/><path fill="#EA4335" d="M12 6a5.4 5.4 0 0 1 3.8 1.5l2.9-2.8A9.6 9.6 0 0 0 12 2a10 10 0 0 0-8.7 5.5l3.3 2.6A5.8 5.8 0 0 1 12 6Z"/></svg>{googleLoading ? 'Connecting…' : 'Continue with Google'}</button><div className="mb-4 flex items-center gap-3"><span className="h-px flex-1 bg-white/10"/><span className="text-[11px] font-bold uppercase tracking-wider text-gray-600">or use email</span><span className="h-px flex-1 bg-white/10"/></div></>}
+                    {!isReset && !isOtpStep && !is2FaStep && <><button type="button" onClick={startGoogleLogin} disabled={googleLoading} className="mb-4 flex w-full items-center justify-center gap-3 rounded-lg border border-white/15 bg-white px-4 py-3 font-bold text-gray-900 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"><svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3Z"/><path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.5l-3.2-2.5c-.9.6-2 1-3.4 1a5.8 5.8 0 0 1-5.4-4H3.3v2.6A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.6 14a6 6 0 0 1 0-3.9V7.5H3.3a10 10 0 0 0 0 9.1L6.6 14Z"/><path fill="#EA4335" d="M12 6a5.4 5.4 0 0 1 3.8 1.5l2.9-2.8A9.6 9.6 0 0 0 12 2a10 10 0 0 0-8.7 5.5l3.3 2.6A5.8 5.8 0 0 1 12 6Z"/></svg>{googleLoading ? 'Connecting…' : 'Continue with Google'}</button><div className="mb-4 flex items-center gap-3"><span className="h-px flex-1 bg-white/10"/><span className="text-[11px] font-bold uppercase tracking-wider text-gray-600">or use email</span><span className="h-px flex-1 bg-white/10"/></div></>}
 
                     <form onSubmit={handleSubmit} className="space-y-4">
                         {isRegister && !isOtpStep && (

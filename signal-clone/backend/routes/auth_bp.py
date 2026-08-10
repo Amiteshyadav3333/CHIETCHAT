@@ -291,6 +291,14 @@ def exchange_google_session():
         report_safe_exception('google_exchange_failed', exc)
         return jsonify({'error': 'Google sign-in could not be verified'}), 401
 
+@auth_bp.route('/api/auth/google/config', methods=['GET'])
+def google_auth_config():
+    supabase_url = current_app.config.get('SUPABASE_URL') or ''
+    anon_key = current_app.config.get('SUPABASE_ANON_KEY') or ''
+    if not supabase_url or not anon_key:
+        return jsonify({'error': 'Google Sign-In is not configured'}), 503
+    return jsonify({'supabaseUrl': supabase_url, 'supabaseAnonKey': anon_key}), 200
+
 @auth_bp.route('/api/auth/google/complete', methods=['POST'])
 def complete_google_registration():
     try:

@@ -711,6 +711,7 @@ const ChatBubble = ({
 
     const isMedia = ['image', 'video', 'video_note'].includes(message.type) ||
         content.match(/\.(jpg|jpeg|png|gif|webp|mp4|webm|ogg)$/i);
+    const isPhotoReaction = message.type === 'image' && replyTo?.type === 'image' && Boolean(replyTo.content);
 
     const isTextMessage = (!message.type || message.type === 'text') && !isMedia;
 
@@ -890,7 +891,12 @@ const ChatBubble = ({
                 <div
                     className="relative group/media cursor-pointer rounded-2xl overflow-hidden"
                     style={{ maxWidth: 260 }}
-                    onClick={(e) => { e.stopPropagation(); if (!protectedSnapMode) setZoomedMedia({ src: cnt, type: 'image' }); }}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        if (protectedSnapMode) return;
+                        if (!isOwn && onPhotoReply) onPhotoReply(message);
+                        else setZoomedMedia({ src: cnt, type: 'image' });
+                    }}
                     onDoubleClick={(e) => { e.stopPropagation(); if (!protectedSnapMode) setZoomedMedia({ src: cnt, type: 'image' }); }}
                 >
                     <img
@@ -901,6 +907,12 @@ const ChatBubble = ({
                         loading="lazy"
                         draggable={!protectedSnapMode}
                     />
+                    {isPhotoReaction && (
+                        <div className="absolute right-2 top-2 z-10 w-[30%] min-w-[64px] max-w-[88px] overflow-hidden rounded-xl border-2 border-white/90 bg-black shadow-xl">
+                            <img src={replyTo.content} alt="Original photo" className="aspect-[4/5] w-full object-cover" draggable={false} />
+                            <span className="block truncate bg-black/75 px-1.5 py-1 text-center text-[8px] font-bold uppercase tracking-wide text-white">Reaction to</span>
+                        </div>
+                    )}
                     {/* Hover overlay */}
                     <div className="absolute inset-0 bg-black/0 group-hover/media:bg-black/25 transition-colors flex items-center justify-center">
                         <div className="opacity-0 group-hover/media:opacity-100 transition-opacity p-2.5 bg-black/50 backdrop-blur-md rounded-full border border-white/20">
@@ -1453,7 +1465,7 @@ const ChatBubble = ({
                         >
                             {protectedSnapMode && <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center overflow-hidden rounded-2xl opacity-25"><span className="-rotate-12 whitespace-nowrap text-xs font-black tracking-[0.35em] text-white">SNAP MODE · {currentUser?.username || 'PRIVATE'}</span></div>}
                             {/* Reply preview */}
-                            {replyTo && (
+                            {replyTo && !isPhotoReaction && (
                                 <div className={`mb-1 px-2 py-1 rounded-lg border-l-4 ${isOwn ? 'border-green-300 bg-white/10' : 'border-blue-400 bg-white/5'} text-xs text-gray-300 max-w-[240px] flex items-center justify-between gap-2 bg-black/20`}>
                                     <div className="min-w-0 flex-1">
                                         <p className="font-semibold text-blue-300 truncate">{replyTo.senderName || 'Message'}</p>

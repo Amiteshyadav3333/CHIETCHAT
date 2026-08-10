@@ -76,7 +76,7 @@ const MessageInput = ({
     showSmartReplies = false,
     currentUserId, payeeId, payeeName,
     onSchedule, token, drawSource = null, onDrawSourceConsumed, onOpenDraw,
-    cameraOpenRequest = 0
+    cameraOpenRequest = 0, photoReactionSource = null, onPhotoReactionComplete
 }) => {
     const [text, setText] = useState('');
     const [showEmoji, setShowEmoji] = useState(false);
@@ -323,6 +323,7 @@ const MessageInput = ({
         if (capturedSnap?.url) URL.revokeObjectURL(capturedSnap.url);
         setCapturedSnap(null);
         setShowCameraModal(false);
+        if (photoReactionSource) onPhotoReactionComplete?.();
     };
 
     const retakeSnap = () => {
@@ -332,7 +333,7 @@ const MessageInput = ({
 
     const sendSnap = () => {
         if (!capturedSnap?.blob) return;
-        onUpload(new File([capturedSnap.blob], `snap-${Date.now()}.png`, { type: 'image/png' }));
+        onUpload(new File([capturedSnap.blob], `${photoReactionSource ? 'photo-reaction' : 'snap'}-${Date.now()}.png`, { type: 'image/png' }));
         closeCamera();
     };
 
@@ -385,6 +386,7 @@ const MessageInput = ({
             return;
         }
         files.forEach(file => onUpload(file));
+        if (photoReactionSource) onPhotoReactionComplete?.();
         e.target.value = '';
         setShowAttachMenu(false);
     };
@@ -906,6 +908,12 @@ const MessageInput = ({
                             }}
                         />
                     )}
+                    {photoReactionSource?.src && (
+                        <div className="absolute right-4 top-24 z-20 w-28 overflow-hidden rounded-2xl border-2 border-white/80 bg-black shadow-2xl sm:w-36">
+                            <img src={photoReactionSource.src} alt="Photo being reacted to" className="aspect-[4/5] w-full object-cover" />
+                            <p className="truncate bg-black/75 px-2 py-1.5 text-center text-[10px] font-bold text-white">Reacting to {photoReactionSource.senderName}</p>
+                        </div>
+                    )}
                     {/* Top bar */}
                     <div className="relative z-10 flex items-center justify-between px-4 pt-10 pb-4">
                         <button
@@ -915,7 +923,7 @@ const MessageInput = ({
                             <XMarkIcon className="w-6 h-6" />
                         </button>
                         <span className="text-white font-bold text-sm bg-black/40 px-3 py-1 rounded-full">
-                            {capturedSnap ? 'Snap ready ✨' : (cameraFacing === 'user' ? '🤳 Front' : '📷 Back')}
+                            {capturedSnap ? (photoReactionSource ? 'Reaction ready ✨' : 'Snap ready ✨') : (photoReactionSource ? '📷 Photo reaction' : (cameraFacing === 'user' ? '🤳 Front' : '📷 Back'))}
                         </span>
                         {/* Flip camera */}
                         {!capturedSnap && <button
@@ -953,7 +961,7 @@ const MessageInput = ({
                                     Retake
                                 </button>
                                 <button onClick={sendSnap} className="rounded-full bg-[#00a884] px-7 py-3 text-sm font-bold text-white shadow-xl">
-                                    Send snap ➤
+                                    {photoReactionSource ? 'Send reaction ➤' : 'Send snap ➤'}
                                 </button>
                             </>
                         ) : (

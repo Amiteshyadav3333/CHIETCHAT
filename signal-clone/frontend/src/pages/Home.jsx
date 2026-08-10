@@ -192,6 +192,7 @@ const Home = () => {
     const [snapMode, setSnapMode] = useState(false);
     const [snapNotice, setSnapNotice] = useState(null);
     const [cameraOpenRequest, setCameraOpenRequest] = useState(0);
+    const [photoReactionSource, setPhotoReactionSource] = useState(null);
     const [showTopDropdown, setShowTopDropdown] = useState(false);
     const [showMessageSearch, setShowMessageSearch] = useState(false);
     const [messageSearchQuery, setMessageSearchQuery] = useState('');
@@ -3009,6 +3010,7 @@ const Home = () => {
                                             onAnnotate={(source) => { setDrawSource(source); setShowChatDraw(true); }}
                                             onPhotoReply={(photoMessage) => {
                                                 setReplyTo({ ...photoMessage, senderName: sender?.username || 'Photo' });
+                                                setPhotoReactionSource({ src: photoMessage.content, senderName: sender?.username || 'Photo' });
                                                 setCameraOpenRequest(value => value + 1);
                                             }}
                                             snapMode={snapMode}
@@ -3057,6 +3059,8 @@ const Home = () => {
                         onDrawSourceConsumed={() => setDrawSource(null)}
                         onOpenDraw={() => setShowChatDraw(true)}
                         cameraOpenRequest={cameraOpenRequest}
+                        photoReactionSource={photoReactionSource}
+                        onPhotoReactionComplete={() => setPhotoReactionSource(null)}
                     />
                 </div>
             ) : (

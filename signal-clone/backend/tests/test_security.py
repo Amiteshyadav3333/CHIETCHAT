@@ -330,6 +330,17 @@ class SecurityTests(unittest.TestCase):
             self.assertEqual(asset.media_kind, 'image')
             self.assertGreater(asset.expires_at, utc_now())
 
+    @patch('routes.main_bp.upload_to_cloudinary', return_value='https://media.example/voice-note.webm')
+    def test_recorded_webm_audio_is_accepted_as_audio(self, _upload):
+        response = self.client.post('/api/upload', data={
+            'file': (io.BytesIO(b'\x1aE\xdf\xa3' + b'0' * 128), 'voice-note.webm', 'audio/webm'),
+        }, headers=self.auth_headers(), content_type='multipart/form-data')
+        self.assertEqual(response.status_code, 200, response.get_json())
+        with app.app_context():
+            asset = db.session.get(UploadAsset, response.json['assetId'])
+            self.assertEqual(asset.media_kind, 'audio')
+            self.assertEqual(asset.resource_type, 'video')
+
     def test_managed_media_deletion_restricts_provider_and_local_targets(self):
         with app.app_context(), patch.dict(os.environ, {'CLOUDINARY_CLOUD_NAME': 'cheetchat-cloud'}):
             reference = get_managed_media_reference(

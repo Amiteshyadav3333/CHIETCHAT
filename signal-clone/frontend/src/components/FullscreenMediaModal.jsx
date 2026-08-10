@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import { XMarkIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { formatDuration } from '../utils/mediaCompressor';
 import { getSafeMediaUrl, openSafeExternal } from '../utils/safeUrl';
+import { saveMediaToDevice } from '../utils/mediaDownload';
 
 /* ═══════════════════════════════════════════════════════════════
    ROOT PORTAL — renders directly on <body> so fixed/z-index works
@@ -50,18 +51,9 @@ const FullscreenMediaModal = ({ src, type, onClose, referenceSrc = null }) => {
     const handleDownload = async (e) => {
         e?.stopPropagation();
         try {
-            const response = await fetch(safeSrc);
-            if (!response.ok) throw new Error(`Download failed with HTTP ${response.status}`);
-            const blob = await response.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = decodeURIComponent(safeSrc.split('/').pop()) || 'media';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        } catch {
+            await saveMediaToDevice(safeSrc);
+        } catch (error) {
+            if (error?.name === 'AbortError') return;
             openSafeExternal(safeSrc);
         }
     };

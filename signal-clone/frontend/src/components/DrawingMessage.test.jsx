@@ -34,6 +34,21 @@ describe('DrawingMessage', () => {
         expect(html).toContain('chat-overlay-arrow-44');
     });
 
+    it('applies eraser strokes and exposes delete only to the drawing owner', () => {
+        const content = JSON.stringify({
+            presentation: 'chat-overlay',
+            actions: [
+                { tool: 'pen', color: '#ffffff', size: 5, points: [{ x: 10, y: 10 }, { x: 900, y: 900 }] },
+                { tool: 'eraser', size: 8, points: [{ x: 400, y: 400 }, { x: 600, y: 600 }] },
+            ],
+        });
+        const ownerHtml = renderToStaticMarkup(<ChatDrawingOverlay content={content} messageId={45} isOwn onDelete={() => {}} />);
+        expect(ownerHtml).toContain('mask');
+        expect(ownerHtml).toContain('Delete drawing');
+        const recipientHtml = renderToStaticMarkup(<ChatDrawingOverlay content={content} messageId={45} />);
+        expect(recipientHtml).not.toContain('Delete drawing');
+    });
+
     it('renders the referenced chat message together with vector marks', () => {
         const content = JSON.stringify({
             version: 2,

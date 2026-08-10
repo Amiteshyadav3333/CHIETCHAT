@@ -9,6 +9,7 @@ import BirthdayCard from './BirthdayCard';
 import { MiniGameCard } from './ChatGames';
 import { buildMapUrl, normalizeCoordinates } from '../utils/locationPrivacy';
 import { getSafeHttpUrl, getSafeMediaUrl, openSafeExternal } from '../utils/safeUrl';
+import { saveMediaToDevice } from '../utils/mediaDownload';
 
 const getPlatformLabel = (url) => {
     const lowercase = url.toLowerCase();
@@ -122,24 +123,29 @@ const DrawingArtwork = ({ drawing, className = 'aspect-square w-full', markerId 
         text: String(drawing.background.text || drawing.background.messageType || 'Message').slice(0, 600),
         timestamp: String(drawing.background.timestamp || '').slice(0, 40),
     } : null;
+    const erasers = actions.filter(action => action.tool === 'eraser');
+    const visibleActions = actions.filter(action => action.tool !== 'eraser');
+    const drawingMaskId = `${markerId}-mask`;
     return <svg viewBox="0 0 1000 1000" preserveAspectRatio="none" className={className} role="img" aria-label="Chat drawing">
             <defs><marker id={markerId} markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="context-stroke" /></marker></defs>
             {safeBackground && (safeBackground.type === 'video' ? <foreignObject x="0" y="0" width="1000" height="1000"><video xmlns="http://www.w3.org/1999/xhtml" src={safeBackground.src} muted className="h-full w-full object-cover" /></foreignObject> : <image href={safeBackground.src} width="1000" height="1000" preserveAspectRatio="xMidYMid slice" />)}
             {chatBackground && <foreignObject x="45" y="160" width="910" height="680"><div xmlns="http://www.w3.org/1999/xhtml" style={{ height: '100%', boxSizing: 'border-box', borderRadius: 42, padding: 55, background: 'linear-gradient(145deg,#202c33,#111b21)', border: '4px solid rgba(255,255,255,.14)', color: 'white', fontFamily: 'system-ui', overflow: 'hidden' }}><div style={{ color: '#53bdeb', fontSize: 34, fontWeight: 800, marginBottom: 28 }}>{chatBackground.senderName}</div><div style={{ fontSize: 48, lineHeight: 1.35, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{chatBackground.text}</div>{chatBackground.timestamp && <div style={{ position: 'absolute', right: 65, bottom: 45, color: '#94a3b8', fontSize: 25 }}>{new Date(chatBackground.timestamp).toLocaleString()}</div>}</div></foreignObject>}
-            {actions.map((action, index) => {
+            <defs><mask id={drawingMaskId}><rect width="1000" height="1000" fill="white" />{erasers.map((action, index) => <polyline key={index} points={(action.points || []).map(point => `${Number(point.x) || 0},${Number(point.y) || 0}`).join(' ')} fill="none" stroke="black" strokeWidth={Math.max(24, (Number(action.size) || 5) * 12)} strokeLinecap="round" strokeLinejoin="round" />)}</mask></defs>
+            <g mask={`url(#${drawingMaskId})`}>{visibleActions.map((action, index) => {
                 if (action.tool === 'text') return <text key={index} x={Number(action.x) || 500} y={Number(action.y) || 500} textAnchor="middle" fill={safeColor(action.color)} fontSize={Math.max(35, Math.min(140, Number(action.size) * 10 || 50))} fontWeight="700">{String(action.text || '').slice(0, 240)}</text>;
                 const points = (action.points || []).slice(0, 2000).map(point => `${Math.max(0, Math.min(1000, Number(point.x) || 0))},${Math.max(0, Math.min(1000, Number(point.y) || 0))}`).join(' ');
                 if (action.tool === 'arrow') return <polyline key={index} points={points} fill="none" stroke={safeColor(action.color)} strokeWidth={Math.max(4, action.size * 2)} strokeLinecap="round" markerEnd={`url(#${markerId})`} />;
                 return <polyline key={index} points={points} fill="none" stroke={safeColor(action.color)} strokeWidth={action.tool === 'highlighter' ? action.size * 8 : action.size * 2} strokeLinecap="round" strokeLinejoin="round" opacity={action.tool === 'highlighter' ? 0.35 : 1} />;
-            })}
+            })}</g>
         </svg>;
 };
 
-export const ChatDrawingOverlay = ({ content, messageId }) => {
+export const ChatDrawingOverlay = ({ content, messageId, isOwn = false, onDelete }) => {
     const drawing = parseDrawing(content);
     if (!drawing || drawing.presentation !== 'chat-overlay') return null;
     return <div className="pointer-events-none relative z-20 h-0 w-full overflow-visible" aria-label="Drawing on chat">
         <DrawingArtwork drawing={drawing} markerId={`chat-overlay-arrow-${messageId || 'latest'}`} className="absolute bottom-0 left-0 h-[min(68vh,620px)] w-full drop-shadow-[0_1px_1px_rgba(0,0,0,0.55)]" />
+        {isOwn && onDelete && <button type="button" onClick={() => onDelete(messageId)} className="pointer-events-auto absolute bottom-2 right-2 rounded-full border border-red-300/30 bg-black/70 px-3 py-1.5 text-[10px] font-bold text-red-200 shadow-lg backdrop-blur" aria-label="Delete drawing">Delete drawing</button>}
     </div>;
 };
 
@@ -749,19 +755,9 @@ const ChatBubble = ({
         const safeUrl = getSafeHttpUrl(url, window.location.href);
         if (!safeUrl) return;
         try {
-            const response = await fetch(safeUrl);
-            if (!response.ok) throw new Error(`Download failed with HTTP ${response.status}`);
-            const blob = await response.blob();
-            const blobUrl = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = blobUrl;
-            const fileName = new URL(safeUrl).pathname.split('/').pop() || 'download';
-            link.download = fileName;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(blobUrl);
+            await saveMediaToDevice(safeUrl);
         } catch (error) {
+            if (error?.name === 'AbortError') return;
             console.error('Download failed:', error);
             openSafeExternal(safeUrl);
         }

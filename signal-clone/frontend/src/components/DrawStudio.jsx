@@ -141,8 +141,9 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, initialSource = null, inli
         const p = point(event);
         activePointsRef.current.push(p);
         ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = color; ctx.fillStyle = color;
+        ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
         ctx.globalAlpha = tool === 'highlighter' ? 0.3 : 1;
-        ctx.lineWidth = tool === 'highlighter' ? size * 4 : size;
+        ctx.lineWidth = tool === 'highlighter' ? size * 4 : tool === 'eraser' ? size * 6 : size;
         if (tool === 'arrow') {
             ctx.putImageData(snapshotRef.current, 0, 0);
             ctx.beginPath(); ctx.moveTo(startRef.current.x, startRef.current.y); ctx.lineTo(p.x, p.y); ctx.stroke();
@@ -153,6 +154,7 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, initialSource = null, inli
             ctx.closePath(); ctx.fill();
         } else { ctx.lineTo(p.x, p.y); ctx.stroke(); }
         ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = 'source-over';
     };
 
     const end = () => {
@@ -211,7 +213,7 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, initialSource = null, inli
                 <button onClick={() => { actionsRef.current = []; const ctx = canvasRef.current.getContext('2d'); if (inline) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); else { ctx.fillStyle = '#111827'; ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height); } saveHistory(); }} className="rounded-full p-2 hover:bg-white/10" title="Clear"><TrashIcon className="h-5 w-5" /></button>
             </header>
             <div className="flex flex-wrap items-center justify-center gap-2 border-b border-white/10 bg-[#111b21] p-3">
-                {['pen', 'highlighter', 'arrow'].map(item => <button key={item} onClick={() => setTool(item)} className={`rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${tool === item ? 'bg-[#00a884]' : 'bg-white/10'}`}>{item}</button>)}
+                {['pen', 'highlighter', 'arrow', 'eraser'].map(item => <button key={item} onClick={() => setTool(item)} className={`rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${tool === item ? 'bg-[#00a884]' : 'bg-white/10'}`}>{item}</button>)}
                 <button onClick={addText} className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold">Text</button>
                 <button onClick={() => { setBackgroundSource(null); paintBlankSpace(); }} className="rounded-full bg-indigo-500/20 px-3 py-1.5 text-xs font-semibold text-indigo-200">＋ New space</button>
                 <button onClick={() => fileRef.current?.click()} className="flex items-center gap-1 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold"><PhotoIcon className="h-4 w-4" /> Photo</button>

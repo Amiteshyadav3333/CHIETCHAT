@@ -2959,7 +2959,7 @@ const Home = () => {
                         })()}
                         {messages.filter(msg => (!snapMode || msg.snapMode) && (!messageSearchQuery || `${msg.content || ''} ${msg.type || ''}`.toLowerCase().includes(messageSearchQuery.toLowerCase()))).map((msg, idx, shownMessages) => {
                             if (msg.type === 'drawing' && isChatOverlayDrawing(msg.content)) {
-                                return <ChatDrawingOverlay key={msg.id || idx} content={msg.content} messageId={msg.id} />;
+                                return <ChatDrawingOverlay key={msg.id || idx} content={msg.content} messageId={msg.id} isOwn={msg.senderId === user.id} onDelete={() => handleDeleteMessage(msg)} />;
                             }
                             const prevMsg = shownMessages[idx - 1];
                             const currDate = new Date(msg.timestamp).toDateString();

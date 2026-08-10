@@ -21,19 +21,19 @@ from observability import report_safe_exception
 UPLOAD_EXTENSIONS = {
     'image': {'jpg', 'jpeg', 'png', 'gif', 'webp'},
     'video': {'mp4', 'mov', 'webm', 'avi'},
-    'audio': {'mp3', 'wav', 'm4a', 'aac', 'oga', 'ogg', 'flac'},
+    'audio': {'mp3', 'wav', 'm4a', 'aac', 'oga', 'ogg', 'flac', 'webm'},
     'document': {'pdf', 'txt', 'docx', 'xlsx', 'pptx'},
 }
 
 
-def _detected_upload_kind(header, extension):
+def _detected_upload_kind(header, extension, mimetype=''):
     if header.startswith(b'\xff\xd8\xff') or header.startswith(b'\x89PNG\r\n\x1a\n') or header[:6] in (b'GIF87a', b'GIF89a'):
         return 'image'
     if header.startswith(b'RIFF') and header[8:12] == b'WEBP': return 'image'
     if header.startswith(b'%PDF-'): return 'document'
     if header.startswith(b'PK\x03\x04') and extension in {'docx', 'xlsx', 'pptx'}: return 'document'
     if header[4:8] == b'ftyp': return 'audio' if extension == 'm4a' else 'video'
-    if header.startswith(b'\x1aE\xdf\xa3'): return 'video'
+    if header.startswith(b'\x1aE\xdf\xa3'): return 'audio' if str(mimetype).lower().startswith('audio/') else 'video'
     if header.startswith(b'RIFF') and header[8:12] == b'AVI ': return 'video'
     if header.startswith(b'RIFF') and header[8:12] == b'WAVE': return 'audio'
     if header.startswith((b'ID3', b'OggS', b'fLaC')) or (len(header) > 1 and header[0] == 0xff and header[1] & 0xe0 == 0xe0): return 'audio'
@@ -58,7 +58,7 @@ def validate_upload(file, allowed_kinds, max_bytes):
     file.stream.seek(current)
     if size <= 0 or size > max_bytes:
         raise ValueError(f'File must be between 1 byte and {max_bytes // (1024 * 1024)} MB')
-    detected_kind = _detected_upload_kind(header, extension)
+    detected_kind = _detected_upload_kind(header, extension, getattr(file, 'mimetype', ''))
     if detected_kind not in allowed_kinds or extension not in UPLOAD_EXTENSIONS[detected_kind]:
         raise ValueError('File contents do not match the selected file type')
     return detected_kind

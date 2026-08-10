@@ -481,8 +481,10 @@ const MessageInput = ({
 
     const startRecording = async () => {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mediaRecorder = new MediaRecorder(stream);
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+            const preferredType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+                .find(type => MediaRecorder.isTypeSupported?.(type));
+            const mediaRecorder = new MediaRecorder(stream, preferredType ? { mimeType: preferredType } : undefined);
             mediaRecorderRef.current = mediaRecorder;
             audioChunksRef.current = [];
 
@@ -491,13 +493,25 @@ const MessageInput = ({
             };
 
             mediaRecorder.onstop = () => {
-                const blob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType || 'audio/webm' });
-                const file = new File([blob], `voice-${Date.now()}.webm`, { type: blob.type });
+                const mimeType = mediaRecorder.mimeType || preferredType || 'audio/webm';
+                const blob = new Blob(audioChunksRef.current, { type: mimeType });
+                const extension = mimeType.includes('mp4') ? 'm4a' : mimeType.includes('ogg') ? 'ogg' : 'webm';
+                const file = new File([blob], `voice-${Date.now()}.${extension}`, { type: mimeType });
                 stream.getTracks().forEach(t => t.stop());
+                mediaRecorderRef.current = null;
+                setIsRecording(false);
                 if (blob.size > 0) onUpload(file);
+                else alert('Voice recording was empty. Please record again.');
             };
 
-            mediaRecorder.start();
+            mediaRecorder.onerror = () => {
+                stream.getTracks().forEach(track => track.stop());
+                mediaRecorderRef.current = null;
+                setIsRecording(false);
+                alert('Voice recording failed. Please try again.');
+            };
+
+            mediaRecorder.start(250);
             setIsRecording(true);
         } catch {
             alert('Microphone permission needed.');
@@ -505,8 +519,11 @@ const MessageInput = ({
     };
 
     const stopRecording = () => {
-        mediaRecorderRef.current?.stop();
-        setIsRecording(false);
+        const recorder = mediaRecorderRef.current;
+        if (recorder?.state === 'recording') {
+            recorder.requestData?.();
+            recorder.stop();
+        }
     };
 
     const openVideoNote = async () => {

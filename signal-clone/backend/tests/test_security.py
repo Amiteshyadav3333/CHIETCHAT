@@ -191,6 +191,52 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('csrfToken', response.get_json())
 
+    @patch('routes.auth_bp.get_supabase_user')
+    def test_google_signup_creates_linked_account_and_returning_login(self, get_supabase_user):
+        get_supabase_user.return_value = {
+            'id': 'google-subject-123',
+            'email': 'google-user@example.com',
+            'email_confirmed_at': '2026-08-10T10:00:00Z',
+            'app_metadata': {'provider': 'google', 'providers': ['google']},
+            'user_metadata': {'full_name': 'Google User', 'avatar_url': 'https://example.com/avatar.png'},
+            'identities': [{'provider': 'google'}],
+        }
+        exchange = self.client.post('/api/auth/google/exchange', json={'accessToken': 'supabase-token'})
+        self.assertEqual(exchange.status_code, 200)
+        self.assertTrue(exchange.json['onboardingRequired'])
+        completed = self.client.post('/api/auth/google/complete', json={
+            'accessToken': 'supabase-token',
+            'phone': '7777777777',
+            'useGoogleAvatar': True,
+            'publicKey': 'p' * 100,
+            'encryptedRecoveryKey': 'r' * 100,
+            'deviceFingerprint': 'google-browser',
+        })
+        self.assertEqual(completed.status_code, 200)
+        self.assertIn('csrfToken', completed.json)
+        with app.app_context():
+            user = User.query.filter_by(supabase_user_id='google-subject-123').one()
+            self.assertEqual(user.auth_provider, 'google')
+            self.assertIsNone(user.password_hash)
+            self.assertFalse(user.phone_verified)
+            self.assertTrue(user.platform_id)
+        returning = self.client.post('/api/auth/google/exchange', json={'accessToken': 'supabase-token'})
+        self.assertEqual(returning.status_code, 200)
+        self.assertEqual(returning.json['user']['phone'], '7777777777')
+
+    @patch('routes.auth_bp.get_supabase_user')
+    def test_google_signup_does_not_auto_link_existing_password_email(self, get_supabase_user):
+        get_supabase_user.return_value = {
+            'id': 'different-google-subject',
+            'email': 'audit@example.com',
+            'email_confirmed_at': '2026-08-10T10:00:00Z',
+            'app_metadata': {'provider': 'google'},
+            'identities': [{'provider': 'google'}],
+        }
+        response = self.client.post('/api/auth/google/exchange', json={'accessToken': 'supabase-token'})
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json['code'], 'EXISTING_EMAIL_ACCOUNT')
+
     def test_login_issues_http_only_cookie_without_exposing_jwt_in_json(self):
         with app.test_request_context('/api/login', method='POST', json={'deviceFingerprint': 'browser-test'}):
             user = db.session.get(User, self.user_id)
@@ -396,6 +442,7 @@ class SecurityTests(unittest.TestCase):
             ('POST', '/api/login/verify-otp'), ('POST', '/api/forgot-password'),
             ('POST', '/api/reset-password'), ('POST', '/api/reset-password/key-backup'),
             ('POST', '/api/auth/2fa/login-verify'),
+            ('POST', '/api/auth/google/exchange'), ('POST', '/api/auth/google/complete'),
             ('POST', '/api/payments/webhooks/razorpay'),
             ('GET', '/api/gifs'), ('GET', '/api/reels/<int:reel_id>/public'),
             ('GET', '/api/reels/<int:reel_id>/comments'),

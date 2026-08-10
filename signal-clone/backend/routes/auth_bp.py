@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, current_app, request
 from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy.exc import IntegrityError
 import jwt
 import datetime
 import hashlib
@@ -9,6 +10,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import secrets
+import re
 from observability import report_safe_exception
 from models import (
     db, User, PendingRegistration, Chat, ChatParticipant, GroupJoinRequest,
@@ -105,6 +107,35 @@ def send_password_recovery(email):
 
 def get_supabase_user(access_token):
     return supabase_auth_request('user', None, method='GET', bearer_token=access_token)
+
+def verified_google_identity(access_token):
+    supabase_user = get_supabase_user(access_token)
+    app_metadata = supabase_user.get('app_metadata') or {}
+    providers = set(app_metadata.get('providers') or [])
+    if app_metadata.get('provider'):
+        providers.add(app_metadata['provider'])
+    providers.update(
+        identity.get('provider') for identity in (supabase_user.get('identities') or [])
+        if isinstance(identity, dict) and identity.get('provider')
+    )
+    email = str(supabase_user.get('email') or '').strip().lower()
+    subject = str(supabase_user.get('id') or '').strip()
+    if 'google' not in providers or not email or not subject or not supabase_user.get('email_confirmed_at'):
+        raise ValueError('A verified Google account is required')
+    return supabase_user, subject, email
+
+def available_platform_id(display_name):
+    reserved = {'admin', 'support', 'official', 'cheetchat', 'system', 'security'}
+    base = re.sub(r'[^a-z0-9]+', '_', str(display_name or '').lower()).strip('_')[:24] or 'user'
+    if len(base) < 3 or base in reserved:
+        base = f'user_{base}'[:24]
+    if not User.query.filter(db.func.lower(User.platform_id) == base).first():
+        return base
+    for _ in range(20):
+        candidate = f'{base[:23]}_{secrets.token_hex(2)}'
+        if not User.query.filter(db.func.lower(User.platform_id) == candidate).first():
+            return candidate
+    return f'user_{secrets.token_hex(8)}'
 
 def complete_login(user):
     if user.two_factor_enabled:
@@ -230,6 +261,91 @@ def logout_current_session():
     response.delete_cookie(current_app.config['AUTH_COOKIE_NAME'], path='/', partitioned=current_app.config['IS_PRODUCTION'])
     response.delete_cookie('cheetchat_csrf', path='/', partitioned=current_app.config['IS_PRODUCTION'])
     return response
+
+@auth_bp.route('/api/auth/google/exchange', methods=['POST'])
+def exchange_google_session():
+    try:
+        data = get_json_data()
+        supabase_user, subject, email = verified_google_identity(data.get('accessToken') or '')
+        user = User.query.filter_by(supabase_user_id=subject).first()
+        if user:
+            return finalize_login(user)
+        if User.query.filter(db.func.lower(User.email) == email).first():
+            return jsonify({
+                'error': 'This email already uses email/password login. Sign in with your existing method.',
+                'code': 'EXISTING_EMAIL_ACCOUNT',
+            }), 409
+        metadata = supabase_user.get('user_metadata') or {}
+        display_name = str(metadata.get('full_name') or metadata.get('name') or email.split('@')[0]).strip()[:80]
+        avatar_url = str(metadata.get('avatar_url') or metadata.get('picture') or '').strip()
+        return jsonify({
+            'onboardingRequired': True,
+            'email': email,
+            'displayName': display_name or 'CHEETCHAT user',
+            'suggestedPlatformId': available_platform_id(display_name),
+            'googleAvatarUrl': avatar_url if avatar_url.startswith('https://') else '',
+        }), 200
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 401
+    except Exception as exc:
+        report_safe_exception('google_exchange_failed', exc)
+        return jsonify({'error': 'Google sign-in could not be verified'}), 401
+
+@auth_bp.route('/api/auth/google/complete', methods=['POST'])
+def complete_google_registration():
+    try:
+        data = get_json_data()
+        supabase_user, subject, email = verified_google_identity(data.get('accessToken') or '')
+        existing_google = User.query.filter_by(supabase_user_id=subject).first()
+        if existing_google:
+            return finalize_login(existing_google)
+        if User.query.filter(db.func.lower(User.email) == email).first():
+            return jsonify({'error': 'This email already has a CHEETCHAT account'}), 409
+        phone = normalize_phone(data.get('phone'))
+        if not is_valid_phone(phone):
+            return jsonify({'error': 'Phone number must be exactly 10 digits'}), 400
+        if User.query.filter_by(phone=phone).first() or PendingRegistration.query.filter_by(phone=phone).first():
+            return jsonify({'error': 'This phone number is unavailable'}), 409
+        public_key = data.get('publicKey')
+        encrypted_recovery_key = data.get('encryptedRecoveryKey')
+        if not isinstance(public_key, str) or not 50 <= len(public_key) <= 20000:
+            return jsonify({'error': 'Encryption key setup is required'}), 400
+        if not isinstance(encrypted_recovery_key, str) or not 50 <= len(encrypted_recovery_key) <= 20000:
+            return jsonify({'error': 'Recovery key setup is required'}), 400
+        metadata = supabase_user.get('user_metadata') or {}
+        display_name = str(metadata.get('full_name') or metadata.get('name') or email.split('@')[0]).strip()[:80] or 'CHEETCHAT user'
+        avatar_url = str(metadata.get('avatar_url') or metadata.get('picture') or '').strip()
+        use_google_avatar = data.get('useGoogleAvatar') is True and avatar_url.startswith('https://')
+        user = User(
+            username=display_name,
+            email=email,
+            phone=phone,
+            password_hash=None,
+            auth_provider='google',
+            supabase_user_id=subject,
+            phone_verified=False,
+            public_key=public_key,
+            encrypted_private_key=None,
+            encrypted_recovery_key=encrypted_recovery_key,
+            email_verified=True,
+            avatar=avatar_url if use_google_avatar and len(avatar_url) <= 200 else f'https://api.dicebear.com/7.x/initials/svg?seed={urllib.parse.quote(display_name)}',
+            platform_id=available_platform_id(display_name),
+            profile_setup_done=True,
+            last_seen=utc_now(),
+        )
+        db.session.add(user)
+        db.session.flush()
+        return finalize_login(user)
+    except ValueError as exc:
+        db.session.rollback()
+        return jsonify({'error': str(exc)}), 401
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'error': 'This Google account or phone number is already registered'}), 409
+    except Exception as exc:
+        db.session.rollback()
+        report_safe_exception('google_registration_failed', exc)
+        return jsonify({'error': 'Google account could not be created'}), 500
 
 @auth_bp.route('/api/register', methods=['POST'])
 def register():
@@ -385,6 +501,8 @@ def login():
                 "otpRequired": True,
                 "passwordLocked": True
             }), 423
+        if not user.password_hash:
+            return jsonify({"error": "This account uses Google Sign-In"}), 409
         if check_password_hash(user.password_hash, password):
             if not user.email_verified:
                 send_email_otp(email, create_user=True)

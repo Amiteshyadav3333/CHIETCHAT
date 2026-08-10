@@ -99,6 +99,8 @@ _sensitive_limits = {
     '/api/reset-password': (10, 60 * 60),
     '/api/reset-password/key-backup': (10, 60 * 60),
     '/api/auth/2fa/login-verify': (10, 15 * 60),
+    '/api/auth/google/exchange': (20, 15 * 60),
+    '/api/auth/google/complete': (5, 15 * 60),
     '/api/ai/chat': (60, 60 * 60),
     '/api/ai/chat/stream': (60, 60 * 60),
     '/api/ai/image': (10, 60 * 60),
@@ -140,6 +142,8 @@ _csrf_exempt_auth_paths = {
     '/api/forgot-password',
     '/api/reset-password',
     '/api/auth/2fa/login-verify',
+    '/api/auth/google/exchange',
+    '/api/auth/google/complete',
 }
 
 @app.before_request

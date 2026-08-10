@@ -272,7 +272,7 @@ def add_missing_columns(inspector, table_name, columns):
             db.session.rollback()
             raise RuntimeError(f"Could not add {table_name}.{column_name}: {e}") from e
 
-SCHEMA_VERSION = '20260810_16_snap_session_expiry'
+SCHEMA_VERSION = '20260810_17_google_auth'
 
 
 def ensure_database_schema(force=False):
@@ -339,7 +339,19 @@ def ensure_database_schema(force=False):
             'two_factor_enabled': db.Boolean(),
             'two_factor_secret': db.String(100),
             'bio_expires_at': db.DateTime(),
+            'auth_provider': db.String(20),
+            'supabase_user_id': db.String(64),
+            'phone_verified': db.Boolean(),
         })
+        if 'user' in inspector.get_table_names() and db.engine.dialect.name == 'postgresql':
+            db.session.execute(text('ALTER TABLE "user" ALTER COLUMN password_hash DROP NOT NULL'))
+        if 'user' in inspector.get_table_names():
+            user_indexes = {index['name'] for index in inspect(db.engine).get_indexes('user')}
+            if 'uq_user_supabase_user_id' not in user_indexes:
+                db.session.execute(text(
+                    'CREATE UNIQUE INDEX uq_user_supabase_user_id '
+                    'ON "user" (supabase_user_id) WHERE supabase_user_id IS NOT NULL'
+                ))
         add_missing_columns(inspector, 'pending_registration', {
             'encrypted_private_key': db.Text(),
             'encrypted_recovery_key': db.Text(),
@@ -367,6 +379,10 @@ def ensure_database_schema(force=False):
                 updates.append("profile_photo_privacy = COALESCE(profile_photo_privacy, 'everyone')")
             if 'two_factor_enabled' in user_columns:
                 updates.append('two_factor_enabled = COALESCE(two_factor_enabled, FALSE)')
+            if 'auth_provider' in user_columns:
+                updates.append("auth_provider = COALESCE(auth_provider, 'password')")
+            if 'phone_verified' in user_columns:
+                updates.append('phone_verified = COALESCE(phone_verified, FALSE)')
             if updates:
                 db.session.execute(text(f'UPDATE "user" SET {", ".join(updates)}'))
         if 'chat_participant' in inspector.get_table_names():

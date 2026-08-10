@@ -657,7 +657,6 @@ const ChatBubble = ({
     const [swipeX, setSwipeX] = useState(0);
     const [swiping, setSwiping] = useState(false);
     const [zoomedMedia, setZoomedMedia] = useState(null);
-    const [heartBurst, setHeartBurst] = useState(false);
     const [videoNoteExpanded, setVideoNoteExpanded] = useState(false);
 
     const [translatedText, setTranslatedText] = useState('');
@@ -883,7 +882,6 @@ const ChatBubble = ({
                         loading="lazy"
                         draggable={!protectedSnapMode}
                     />
-                    {heartBurst && <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"><span className="animate-[ping_650ms_ease-out_1] text-7xl drop-shadow-2xl">❤️</span></div>}
                     {/* Hover overlay */}
                     <div className="absolute inset-0 bg-black/0 group-hover/media:bg-black/25 transition-colors flex items-center justify-center">
                         <div className="opacity-0 group-hover/media:opacity-100 transition-opacity p-2.5 bg-black/50 backdrop-blur-md rounded-full border border-white/20">

@@ -10,6 +10,8 @@ const PUBLIC_AUTH_PATHS = new Set([
     '/api/forgot-password',
     '/api/reset-password',
     '/api/auth/2fa/login-verify',
+    '/api/auth/google/exchange',
+    '/api/auth/google/complete',
 ]);
 
 const requestPath = (requestUrl) => {

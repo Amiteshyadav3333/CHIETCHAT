@@ -3,13 +3,15 @@ import { ArrowUturnLeftIcon, PhotoIcon, TrashIcon, XMarkIcon } from '@heroicons/
 
 const COLORS = ['#ffffff', '#22c55e', '#38bdf8', '#facc15', '#fb7185', '#a78bfa', '#111827'];
 
-const DrawStudio = ({ onClose, onSend, initialSource = null, inline = false }) => {
+const DrawStudio = ({ onClose, onSend, onSendDrawing, initialSource = null, inline = false }) => {
     const canvasRef = useRef(null);
     const fileRef = useRef(null);
     const historyRef = useRef([]);
     const drawingRef = useRef(false);
     const startRef = useRef(null);
     const snapshotRef = useRef(null);
+    const activePointsRef = useRef([]);
+    const actionsRef = useRef([]);
     const [tool, setTool] = useState('pen');
     const [color, setColor] = useState('#22c55e');
     const [size, setSize] = useState(5);
@@ -89,6 +91,7 @@ const DrawStudio = ({ onClose, onSend, initialSource = null, inline = false }) =
         const p = point(event);
         drawingRef.current = true;
         startRef.current = p;
+        activePointsRef.current = [p];
         snapshotRef.current = ctx.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height);
         ctx.beginPath(); ctx.moveTo(p.x, p.y);
     };
@@ -99,6 +102,7 @@ const DrawStudio = ({ onClose, onSend, initialSource = null, inline = false }) =
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
         const p = point(event);
+        activePointsRef.current.push(p);
         ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = color; ctx.fillStyle = color;
         ctx.globalAlpha = tool === 'highlighter' ? 0.3 : 1;
         ctx.lineWidth = tool === 'highlighter' ? size * 4 : size;
@@ -114,13 +118,23 @@ const DrawStudio = ({ onClose, onSend, initialSource = null, inline = false }) =
         ctx.globalAlpha = 1;
     };
 
-    const end = () => { if (!drawingRef.current) return; drawingRef.current = false; saveHistory(); };
+    const end = () => {
+        if (!drawingRef.current) return;
+        drawingRef.current = false;
+        const canvas = canvasRef.current;
+        const normalize = p => ({ x: Math.round((p.x / canvas.width) * 1000), y: Math.round((p.y / canvas.height) * 1000) });
+        const points = activePointsRef.current.map(normalize);
+        if (points.length > 1) actionsRef.current.push({ tool, color, size, points: tool === 'arrow' ? [points[0], points[points.length - 1]] : points });
+        saveHistory();
+    };
     const addText = () => {
         const value = window.prompt('Canvas par kya likhna hai?');
         if (!value) return;
         const ctx = canvasRef.current.getContext('2d');
         ctx.fillStyle = color; ctx.font = `700 ${Math.max(22, size * 5)}px system-ui`; ctx.textAlign = 'center';
-        ctx.fillText(value, canvasRef.current.width / 2, canvasRef.current.height / 2); saveHistory();
+        ctx.fillText(value, canvasRef.current.width / 2, canvasRef.current.height / 2);
+        actionsRef.current.push({ tool: 'text', color, size, text: value.slice(0, 240), x: 500, y: 500 });
+        saveHistory();
     };
     const addPhoto = (event) => {
         const file = event.target.files?.[0]; if (!file) return;
@@ -140,18 +154,24 @@ const DrawStudio = ({ onClose, onSend, initialSource = null, inline = false }) =
         };
         image.src = URL.createObjectURL(file);
     };
-    const send = () => canvasRef.current.toBlob(blob => {
+    const send = () => {
+        if (onSendDrawing && actionsRef.current.length) {
+            onSendDrawing({ version: 1, width: 1000, height: 1000, background: initialSource?.src ? { src: initialSource.src, type: initialSource.type } : null, actions: actionsRef.current, caption: caption.trim() });
+            return;
+        }
+        canvasRef.current.toBlob(blob => {
         if (!blob) return;
         onSend(new File([blob], `drawing-${Date.now()}.png`, { type: 'image/png' }), caption.trim());
-    }, 'image/png');
+        }, 'image/png');
+    };
 
     return (
         <div className={`${inline ? 'absolute inset-0 z-[55] bg-black/10 backdrop-blur-[1px]' : 'fixed inset-0 z-[100] bg-[#090e11]'} flex flex-col text-white`}>
             <header className="flex h-16 items-center gap-3 border-b border-white/10 bg-[#111b21]/95 px-4">
                 <button onClick={onClose} className="rounded-full p-2 hover:bg-white/10"><XMarkIcon className="h-6 w-6" /></button>
                 <div className="flex-1"><h2 className="font-bold">Draw & point</h2><p className="text-xs text-gray-400">Photo, chat screenshot ya blank canvas par mark karein</p></div>
-                <button onClick={() => { const h = historyRef.current; if (h.length > 1) { h.pop(); restore(h[h.length - 1]); } }} className="rounded-full p-2 hover:bg-white/10" title="Undo"><ArrowUturnLeftIcon className="h-5 w-5" /></button>
-                <button onClick={() => { const ctx = canvasRef.current.getContext('2d'); if (inline) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); else { ctx.fillStyle = '#111827'; ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height); } saveHistory(); }} className="rounded-full p-2 hover:bg-white/10" title="Clear"><TrashIcon className="h-5 w-5" /></button>
+                <button onClick={() => { const h = historyRef.current; if (h.length > 1) { h.pop(); actionsRef.current.pop(); restore(h[h.length - 1]); } }} className="rounded-full p-2 hover:bg-white/10" title="Undo"><ArrowUturnLeftIcon className="h-5 w-5" /></button>
+                <button onClick={() => { actionsRef.current = []; const ctx = canvasRef.current.getContext('2d'); if (inline) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); else { ctx.fillStyle = '#111827'; ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height); } saveHistory(); }} className="rounded-full p-2 hover:bg-white/10" title="Clear"><TrashIcon className="h-5 w-5" /></button>
             </header>
             <div className="flex flex-wrap items-center justify-center gap-2 border-b border-white/10 bg-[#111b21] p-3">
                 {['pen', 'highlighter', 'arrow'].map(item => <button key={item} onClick={() => setTool(item)} className={`rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${tool === item ? 'bg-[#00a884]' : 'bg-white/10'}`}>{item}</button>)}

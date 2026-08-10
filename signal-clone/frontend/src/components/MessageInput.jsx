@@ -603,7 +603,7 @@ const MessageInput = ({
 
             {showShoppingModal && <ShoppingSearchModal onClose={() => setShowShoppingModal(false)} />}
 
-            {showDrawStudio && <DrawStudio initialSource={drawSource} onClose={() => { setShowDrawStudio(false); onDrawSourceConsumed?.(); }} onSend={(file, caption) => { onUpload(file); if (caption) onSend(caption, 'text', disappearingTtl); setShowDrawStudio(false); onDrawSourceConsumed?.(); }} />}
+            {showDrawStudio && <DrawStudio initialSource={drawSource} onClose={() => { setShowDrawStudio(false); onDrawSourceConsumed?.(); }} onSendDrawing={drawing => { onSend(JSON.stringify(drawing), 'drawing', disappearingTtl); setShowDrawStudio(false); onDrawSourceConsumed?.(); }} onSend={(file, caption) => { onUpload(file); if (caption) onSend(caption, 'text', disappearingTtl); setShowDrawStudio(false); onDrawSourceConsumed?.(); }} />}
 
             {/* Reply Preview Bar */}
             {replyTo && (

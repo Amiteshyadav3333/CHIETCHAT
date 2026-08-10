@@ -105,6 +105,28 @@ const ClockIcon = ({ className }) => (
 const SWIPE_THRESHOLD = 60;
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
+export const DrawingMessage = ({ content }) => {
+    let drawing;
+    try { drawing = typeof content === 'string' ? JSON.parse(content) : content; } catch { drawing = null; }
+    if (!drawing?.actions?.length) return <p className="text-sm italic text-white/60">Drawing unavailable</p>;
+    const safeColor = value => /^#[0-9a-f]{3,8}$/i.test(String(value)) ? value : '#ffffff';
+    const actions = drawing.actions.slice(0, 500);
+    const safeBackground = drawing.background?.src && /^(https?:\/\/|\/uploads\/)/i.test(drawing.background.src) ? drawing.background : null;
+    return <div className="w-[260px] max-w-[68vw] overflow-hidden rounded-xl border border-white/10 bg-[#111827]">
+        <svg viewBox="0 0 1000 1000" className="aspect-square w-full" role="img" aria-label="Chat drawing">
+            <defs><marker id="drawing-arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="context-stroke" /></marker></defs>
+            {safeBackground && (safeBackground.type === 'video' ? <foreignObject x="0" y="0" width="1000" height="1000"><video xmlns="http://www.w3.org/1999/xhtml" src={safeBackground.src} muted className="h-full w-full object-cover" /></foreignObject> : <image href={safeBackground.src} width="1000" height="1000" preserveAspectRatio="xMidYMid slice" />)}
+            {actions.map((action, index) => {
+                if (action.tool === 'text') return <text key={index} x={Number(action.x) || 500} y={Number(action.y) || 500} textAnchor="middle" fill={safeColor(action.color)} fontSize={Math.max(35, Math.min(140, Number(action.size) * 10 || 50))} fontWeight="700">{String(action.text || '').slice(0, 240)}</text>;
+                const points = (action.points || []).slice(0, 2000).map(point => `${Math.max(0, Math.min(1000, Number(point.x) || 0))},${Math.max(0, Math.min(1000, Number(point.y) || 0))}`).join(' ');
+                if (action.tool === 'arrow') return <polyline key={index} points={points} fill="none" stroke={safeColor(action.color)} strokeWidth={Math.max(4, action.size * 2)} strokeLinecap="round" markerEnd="url(#drawing-arrow)" />;
+                return <polyline key={index} points={points} fill="none" stroke={safeColor(action.color)} strokeWidth={action.tool === 'highlighter' ? action.size * 8 : action.size * 2} strokeLinecap="round" strokeLinejoin="round" opacity={action.tool === 'highlighter' ? 0.35 : 1} />;
+            })}
+        </svg>
+        {drawing.caption && <p className="border-t border-white/10 px-3 py-2 text-sm text-white">{drawing.caption}</p>}
+    </div>;
+};
+
 // ── Full Emoji Picker Data ──
 const EMOJI_CATEGORIES = [
     {
@@ -788,6 +810,8 @@ const ChatBubble = ({
     };
 
     const renderContent = (cnt, type) => {
+
+        if (type === 'drawing') return <DrawingMessage content={cnt} />;
 
         // ── WHATSAPP-STYLE VIDEO NOTE ──
         if (type === 'video_note') {

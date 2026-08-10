@@ -18,6 +18,7 @@ ALLOWED_MESSAGE_TYPES = {
     'text', 'image', 'video', 'video_note', 'audio', 'file', 'gif', 'sticker',
     'location', 'live_location', 'contact', 'poll', 'game', 'gift', 'birthday',
     'ride', 'payment', 'business_auto_reply',
+    'drawing',
 }
 MIN_MESSAGE_TTL = 1
 MAX_MESSAGE_TTL = 315360000

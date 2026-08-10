@@ -728,6 +728,22 @@ class SecurityTests(unittest.TestCase):
             self.assertEqual(Message.query.filter_by(client_message_id='offline-message-123').count(), 1)
         payer.disconnect()
 
+    def test_socket_accepts_native_drawing_and_custom_second_ttl(self):
+        payer = socketio.test_client(app, auth={'token': self.token})
+        result = payer.emit('send_message', {
+            'chatId': self.chat_id,
+            'clientMessageId': 'native-drawing-1',
+            'content': self.encrypted_envelope('drawing-vector-payload'),
+            'type': 'drawing',
+            'ttl': 45,
+        }, callback=True)
+        self.assertTrue(result['ok'])
+        with app.app_context():
+            stored = Message.query.filter_by(client_message_id='native-drawing-1').one()
+            self.assertEqual(stored.type, 'drawing')
+            self.assertEqual(stored.ttl, 45)
+        payer.disconnect()
+
     def test_socket_rejects_plaintext_partial_envelopes_and_untrusted_metadata(self):
         payer = socketio.test_client(app, auth={'token': self.token})
         plaintext = payer.emit('send_message', {

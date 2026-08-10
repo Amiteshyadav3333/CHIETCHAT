@@ -1091,7 +1091,7 @@ const Home = () => {
             chatId: activeChat.id,
             senderId: user.id,
             senderName: user.username || 'CHEETCHAT user',
-            content: type === 'text' ? text : type,
+            content: text,
             type,
             status: 'sending',
             timestamp: new Date().toISOString(),
@@ -2350,8 +2350,8 @@ const Home = () => {
 
             {/* Chat Room */}
             {visibleActiveChat ? (
-                <div className={`flex-1 flex flex-col h-full bg-black/50 relative ${activeChat ? 'flex' : 'hidden md:flex'}`}>
-                    {showChatDraw && <DrawStudio inline onClose={() => setShowChatDraw(false)} onSend={(file, caption) => { handleUpload(file); if (caption) handleSendMessage(caption, 'text', null, disappearingTtl); setShowChatDraw(false); }} />}
+                <div className={`relative h-full min-h-0 flex-1 flex-col overflow-hidden bg-black/50 ${activeChat ? 'flex' : 'hidden md:flex'}`}>
+                    {showChatDraw && <DrawStudio inline onClose={() => setShowChatDraw(false)} onSendDrawing={drawing => { handleSendMessage(JSON.stringify(drawing), 'drawing', null, disappearingTtl); setShowChatDraw(false); }} />}
 
                     {/* Live Location Sharing Banner */}
                     {liveLocationSharing && liveLocationSharing.chatId === visibleActiveChat.id && (
@@ -2851,7 +2851,7 @@ const Home = () => {
 
                     {/* Messages Area - WhatsApp style background */}
                     <div
-                        className={`flex-1 overflow-y-auto px-4 py-3 space-y-0.5 ${localStorage.getItem('animated_theme') === '1' ? 'animated-chat-wallpaper' : ''}`}
+                        className={`min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 space-y-0.5 ${localStorage.getItem('animated_theme') === '1' ? 'animated-chat-wallpaper' : ''}`}
                         style={{ background: chatBackground, backgroundSize: wallpaper === 'dots' ? '18px 18px' : undefined }}
                     >
                         {(() => {

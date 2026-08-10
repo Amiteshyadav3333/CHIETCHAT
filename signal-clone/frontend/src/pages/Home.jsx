@@ -3,7 +3,7 @@ import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import { SocketContext } from '../context/SocketContext';
 import ContactList from '../components/ContactList';
-import ChatBubble, { DateSeparator } from '../components/ChatBubble';
+import ChatBubble, { ChatDrawingOverlay, DateSeparator, isChatOverlayDrawing } from '../components/ChatBubble';
 import MessageInput from '../components/MessageInput';
 import DrawStudio from '../components/DrawStudio';
 import IncomingCallModal from '../components/IncomingCallModal';
@@ -2421,7 +2421,7 @@ const Home = () => {
             {/* Chat Room */}
             {visibleActiveChat ? (
                 <div className={`relative h-full min-h-0 flex-1 flex-col overflow-hidden bg-black/50 ${activeChat ? 'flex' : 'hidden md:flex'}`}>
-                    {showChatDraw && <DrawStudio key={drawSource ? `${drawSource.type}-${drawSource.timestamp || drawSource.src}` : 'blank-draw'} initialSource={drawSource} inline onClose={() => { setShowChatDraw(false); setDrawSource(null); }} onSendDrawing={drawing => { handleSendMessage(JSON.stringify(drawing), 'drawing', null, disappearingTtl); setShowChatDraw(false); setDrawSource(null); }} />}
+                    {showChatDraw && <DrawStudio key={drawSource ? `${drawSource.type}-${drawSource.timestamp || drawSource.src}` : 'blank-draw'} initialSource={drawSource} inline onClose={() => { setShowChatDraw(false); setDrawSource(null); }} onSendDrawing={drawing => { handleSendMessage(JSON.stringify({ ...drawing, presentation: drawSource ? 'card' : 'chat-overlay' }), 'drawing', null, disappearingTtl); setShowChatDraw(false); setDrawSource(null); }} />}
 
                     {/* Live Location Sharing Banner */}
                     {liveLocationSharing && liveLocationSharing.chatId === visibleActiveChat.id && (
@@ -2933,6 +2933,10 @@ const Home = () => {
                         style={{ background: chatBackground, backgroundSize: wallpaper === 'dots' ? '18px 18px' : undefined }}
                     >
                         {(() => {
+                            const latestOverlay = [...messages].reverse().find(message => message.type === 'drawing' && isChatOverlayDrawing(message.content) && (!snapMode || message.snapMode));
+                            return latestOverlay ? <ChatDrawingOverlay content={latestOverlay.content} messageId={latestOverlay.id} /> : null;
+                        })()}
+                        {(() => {
                             const other = getOtherParticipant(visibleActiveChat);
                             const otherBio = other?.bio;
                             return otherBio && showBioBanner && (
@@ -2956,7 +2960,7 @@ const Home = () => {
                                 </div>
                             );
                         })()}
-                        {messages.filter(msg => (!snapMode || msg.snapMode) && (!messageSearchQuery || `${msg.content || ''} ${msg.type || ''}`.toLowerCase().includes(messageSearchQuery.toLowerCase()))).map((msg, idx, shownMessages) => {
+                        {messages.filter(msg => (!snapMode || msg.snapMode) && !(msg.type === 'drawing' && isChatOverlayDrawing(msg.content)) && (!messageSearchQuery || `${msg.content || ''} ${msg.type || ''}`.toLowerCase().includes(messageSearchQuery.toLowerCase()))).map((msg, idx, shownMessages) => {
                             const prevMsg = shownMessages[idx - 1];
                             const currDate = new Date(msg.timestamp).toDateString();
                             const prevDate = prevMsg ? new Date(prevMsg.timestamp).toDateString() : null;

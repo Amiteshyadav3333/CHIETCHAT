@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { DrawingMessage } from './ChatBubble';
+import { ChatDrawingOverlay, DrawingMessage, isChatOverlayDrawing } from './ChatBubble';
 
 describe('DrawingMessage', () => {
     it('renders native vector drawing actions instead of an image attachment', () => {
@@ -21,6 +21,17 @@ describe('DrawingMessage', () => {
 
     it('handles malformed drawing payloads safely', () => {
         expect(renderToStaticMarkup(<DrawingMessage content="not-json" />)).toContain('Drawing unavailable');
+    });
+
+    it('renders Instagram-style drawings as a chat overlay instead of a media card', () => {
+        const content = JSON.stringify({
+            presentation: 'chat-overlay',
+            actions: [{ tool: 'pen', color: '#22c55e', size: 5, points: [{ x: 10, y: 10 }, { x: 900, y: 900 }] }],
+        });
+        expect(isChatOverlayDrawing(content)).toBe(true);
+        const html = renderToStaticMarkup(<ChatDrawingOverlay content={content} messageId={44} />);
+        expect(html).toContain('Drawing on chat');
+        expect(html).toContain('chat-overlay-arrow-44');
     });
 
     it('renders the referenced chat message together with vector marks', () => {

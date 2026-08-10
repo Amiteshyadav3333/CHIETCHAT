@@ -105,10 +105,15 @@ const ClockIcon = ({ className }) => (
 const SWIPE_THRESHOLD = 60;
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
-export const DrawingMessage = ({ content }) => {
+const parseDrawing = content => {
     let drawing;
     try { drawing = typeof content === 'string' ? JSON.parse(content) : content; } catch { drawing = null; }
-    if (!drawing?.actions?.length) return <p className="text-sm italic text-white/60">Drawing unavailable</p>;
+    return drawing?.actions?.length ? drawing : null;
+};
+
+export const isChatOverlayDrawing = content => parseDrawing(content)?.presentation === 'chat-overlay';
+
+const DrawingArtwork = ({ drawing, className = 'aspect-square w-full', markerId = 'drawing-arrow' }) => {
     const safeColor = value => /^#[0-9a-f]{3,8}$/i.test(String(value)) ? value : '#ffffff';
     const actions = drawing.actions.slice(0, 500);
     const safeBackground = drawing.background?.src && /^(https?:\/\/|\/uploads\/)/i.test(drawing.background.src) ? drawing.background : null;
@@ -117,18 +122,32 @@ export const DrawingMessage = ({ content }) => {
         text: String(drawing.background.text || drawing.background.messageType || 'Message').slice(0, 600),
         timestamp: String(drawing.background.timestamp || '').slice(0, 40),
     } : null;
-    return <div className="w-[260px] max-w-[68vw] overflow-hidden rounded-xl border border-white/10 bg-[#111827]">
-        <svg viewBox="0 0 1000 1000" className="aspect-square w-full" role="img" aria-label="Chat drawing">
-            <defs><marker id="drawing-arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="context-stroke" /></marker></defs>
+    return <svg viewBox="0 0 1000 1000" preserveAspectRatio="none" className={className} role="img" aria-label="Chat drawing">
+            <defs><marker id={markerId} markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="context-stroke" /></marker></defs>
             {safeBackground && (safeBackground.type === 'video' ? <foreignObject x="0" y="0" width="1000" height="1000"><video xmlns="http://www.w3.org/1999/xhtml" src={safeBackground.src} muted className="h-full w-full object-cover" /></foreignObject> : <image href={safeBackground.src} width="1000" height="1000" preserveAspectRatio="xMidYMid slice" />)}
             {chatBackground && <foreignObject x="45" y="160" width="910" height="680"><div xmlns="http://www.w3.org/1999/xhtml" style={{ height: '100%', boxSizing: 'border-box', borderRadius: 42, padding: 55, background: 'linear-gradient(145deg,#202c33,#111b21)', border: '4px solid rgba(255,255,255,.14)', color: 'white', fontFamily: 'system-ui', overflow: 'hidden' }}><div style={{ color: '#53bdeb', fontSize: 34, fontWeight: 800, marginBottom: 28 }}>{chatBackground.senderName}</div><div style={{ fontSize: 48, lineHeight: 1.35, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{chatBackground.text}</div>{chatBackground.timestamp && <div style={{ position: 'absolute', right: 65, bottom: 45, color: '#94a3b8', fontSize: 25 }}>{new Date(chatBackground.timestamp).toLocaleString()}</div>}</div></foreignObject>}
             {actions.map((action, index) => {
                 if (action.tool === 'text') return <text key={index} x={Number(action.x) || 500} y={Number(action.y) || 500} textAnchor="middle" fill={safeColor(action.color)} fontSize={Math.max(35, Math.min(140, Number(action.size) * 10 || 50))} fontWeight="700">{String(action.text || '').slice(0, 240)}</text>;
                 const points = (action.points || []).slice(0, 2000).map(point => `${Math.max(0, Math.min(1000, Number(point.x) || 0))},${Math.max(0, Math.min(1000, Number(point.y) || 0))}`).join(' ');
-                if (action.tool === 'arrow') return <polyline key={index} points={points} fill="none" stroke={safeColor(action.color)} strokeWidth={Math.max(4, action.size * 2)} strokeLinecap="round" markerEnd="url(#drawing-arrow)" />;
+                if (action.tool === 'arrow') return <polyline key={index} points={points} fill="none" stroke={safeColor(action.color)} strokeWidth={Math.max(4, action.size * 2)} strokeLinecap="round" markerEnd={`url(#${markerId})`} />;
                 return <polyline key={index} points={points} fill="none" stroke={safeColor(action.color)} strokeWidth={action.tool === 'highlighter' ? action.size * 8 : action.size * 2} strokeLinecap="round" strokeLinejoin="round" opacity={action.tool === 'highlighter' ? 0.35 : 1} />;
             })}
-        </svg>
+        </svg>;
+};
+
+export const ChatDrawingOverlay = ({ content, messageId }) => {
+    const drawing = parseDrawing(content);
+    if (!drawing || drawing.presentation !== 'chat-overlay') return null;
+    return <div className="pointer-events-none sticky top-0 z-20 h-0 w-full overflow-visible" aria-label="Drawing on chat">
+        <DrawingArtwork drawing={drawing} markerId={`chat-overlay-arrow-${messageId || 'latest'}`} className="absolute left-0 top-0 h-[calc(100dvh-9rem)] w-full drop-shadow-[0_1px_1px_rgba(0,0,0,0.55)]" />
+    </div>;
+};
+
+export const DrawingMessage = ({ content }) => {
+    const drawing = parseDrawing(content);
+    if (!drawing) return <p className="text-sm italic text-white/60">Drawing unavailable</p>;
+    return <div className="w-[260px] max-w-[68vw] overflow-hidden rounded-xl border border-white/10 bg-[#111827]">
+        <DrawingArtwork drawing={drawing} />
         {drawing.caption && <p className="border-t border-white/10 px-3 py-2 text-sm text-white">{drawing.caption}</p>}
     </div>;
 };

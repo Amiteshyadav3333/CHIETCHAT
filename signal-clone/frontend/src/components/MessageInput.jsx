@@ -796,7 +796,7 @@ const MessageInput = ({
                 <div ref={attachMenuRef} className="absolute bottom-full left-2 sm:left-10 mb-3 z-50 w-[calc(100vw-1rem)] max-w-sm rounded-3xl bg-[#233138] p-3 shadow-2xl border border-white/10 animate-slide-up">
                     <div className="grid grid-cols-4 gap-2">
                         <AttachOption
-                            label="Draw"
+                            label="Draw on chat"
                             color="bg-emerald-500"
                             icon={<span className="text-2xl text-white">✎</span>}
                             onClick={() => { if (onOpenDraw) onOpenDraw(); else setShowDrawStudio(true); setShowAttachMenu(false); }}

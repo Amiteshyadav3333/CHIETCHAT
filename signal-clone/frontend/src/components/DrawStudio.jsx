@@ -206,7 +206,7 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, initialSource = null, inli
         <div className={`${inline ? 'absolute inset-0 z-[55] bg-black/10 backdrop-blur-[1px]' : 'fixed inset-0 z-[100] bg-[#090e11]'} flex flex-col text-white`}>
             <header className="flex h-16 items-center gap-3 border-b border-white/10 bg-[#111b21]/95 px-4">
                 <button onClick={onClose} className="rounded-full p-2 hover:bg-white/10"><XMarkIcon className="h-6 w-6" /></button>
-                <div className="flex-1"><h2 className="font-bold">Draw & point</h2><p className="text-xs text-gray-400">Photo, chat screenshot ya blank canvas par mark karein</p></div>
+                <div className="flex-1"><h2 className="font-bold">Draw on chat</h2><p className="text-xs text-gray-400">Chat par draw, highlight, point ya text likhein</p></div>
                 <button onClick={() => { const h = historyRef.current; if (h.length > 1) { h.pop(); actionsRef.current.pop(); restore(h[h.length - 1]); } }} className="rounded-full p-2 hover:bg-white/10" title="Undo"><ArrowUturnLeftIcon className="h-5 w-5" /></button>
                 <button onClick={() => { actionsRef.current = []; const ctx = canvasRef.current.getContext('2d'); if (inline) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); else { ctx.fillStyle = '#111827'; ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height); } saveHistory(); }} className="rounded-full p-2 hover:bg-white/10" title="Clear"><TrashIcon className="h-5 w-5" /></button>
             </header>

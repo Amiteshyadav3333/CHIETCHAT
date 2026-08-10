@@ -49,9 +49,11 @@ if (API_BASE_URL) {
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch(error => {
-            console.warn('Offline app shell registration failed', error);
-        });
+        navigator.serviceWorker.register('/sw.js')
+            .then(registration => registration.update())
+            .catch(error => {
+                console.warn('Offline app shell registration failed', error);
+            });
     });
 }
 

@@ -1,4 +1,4 @@
-const SHELL_CACHE = 'cheetchat-shell-v4';
+const SHELL_CACHE = 'cheetchat-shell-v5';
 
 self.addEventListener('install', (event) => {
     event.waitUntil(
@@ -27,19 +27,15 @@ self.addEventListener('fetch', (event) => {
 
     if (request.mode === 'navigate') {
         event.respondWith(
-            caches.match('/index.html').then(cached => {
-                const refresh = fetch(request).then(response => {
+            fetch(request).then(response => {
                     if (response.ok) {
-                        // Clone synchronously, before the browser starts consuming the body.
                         const cacheCopy = response.clone();
                         caches.open(SHELL_CACHE)
                             .then(cache => cache.put('/index.html', cacheCopy))
                             .catch(() => {});
                     }
                     return response;
-                }).catch(() => cached);
-                return cached || refresh;
-            })
+                }).catch(() => caches.match('/index.html'))
         );
         return;
     }

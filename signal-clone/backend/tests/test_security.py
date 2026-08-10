@@ -123,6 +123,22 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         urlopen.assert_not_called()
 
+    def test_ai_grammar_returns_only_corrected_text(self):
+        with patch('routes.ai_bp._get_ai_reply', return_value='Corrected text: I am your friend, Amit.'):
+            response = self.client.post(
+                '/api/ai/grammar', headers=self.auth_headers(),
+                json={'text': 'i are my friend Amit .'},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['corrected'], 'I am your friend, Amit.')
+
+    def test_ai_grammar_requires_auth_and_rejects_oversized_text(self):
+        self.assertEqual(self.client.post('/api/ai/grammar', json={'text': 'hello'}).status_code, 401)
+        response = self.client.post(
+            '/api/ai/grammar', headers=self.auth_headers(), json={'text': 'x' * 2001},
+        )
+        self.assertEqual(response.status_code, 400)
+
     def test_operations_health_reports_degraded_and_stale_worker_without_taking_api_down(self):
         with app.app_context():
             heartbeat = WorkerHeartbeat(

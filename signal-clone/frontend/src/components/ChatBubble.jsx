@@ -138,8 +138,8 @@ const DrawingArtwork = ({ drawing, className = 'aspect-square w-full', markerId 
 export const ChatDrawingOverlay = ({ content, messageId }) => {
     const drawing = parseDrawing(content);
     if (!drawing || drawing.presentation !== 'chat-overlay') return null;
-    return <div className="pointer-events-none sticky top-0 z-20 h-0 w-full overflow-visible" aria-label="Drawing on chat">
-        <DrawingArtwork drawing={drawing} markerId={`chat-overlay-arrow-${messageId || 'latest'}`} className="absolute left-0 top-0 h-[calc(100dvh-9rem)] w-full drop-shadow-[0_1px_1px_rgba(0,0,0,0.55)]" />
+    return <div className="pointer-events-none relative z-20 h-0 w-full overflow-visible" aria-label="Drawing on chat">
+        <DrawingArtwork drawing={drawing} markerId={`chat-overlay-arrow-${messageId || 'latest'}`} className="absolute bottom-0 left-0 h-[min(68vh,620px)] w-full drop-shadow-[0_1px_1px_rgba(0,0,0,0.55)]" />
     </div>;
 };
 
@@ -894,10 +894,11 @@ const ChatBubble = ({
                     onClick={(e) => {
                         e.stopPropagation();
                         if (protectedSnapMode) return;
-                        if (!isOwn && onPhotoReply) onPhotoReply(message);
+                        if (isPhotoReaction) setZoomedMedia({ src: cnt, type: 'image', referenceSrc: replyTo.content });
+                        else if (!isOwn && onPhotoReply) onPhotoReply(message);
                         else setZoomedMedia({ src: cnt, type: 'image' });
                     }}
-                    onDoubleClick={(e) => { e.stopPropagation(); if (!protectedSnapMode) setZoomedMedia({ src: cnt, type: 'image' }); }}
+                    onDoubleClick={(e) => { e.stopPropagation(); if (!protectedSnapMode) setZoomedMedia({ src: cnt, type: 'image', referenceSrc: isPhotoReaction ? replyTo.content : null }); }}
                 >
                     <img
                         src={cnt}
@@ -1594,6 +1595,7 @@ const ChatBubble = ({
                     <FullscreenMediaModal
                         src={zoomedMedia.src}
                         type={zoomedMedia.type}
+                        referenceSrc={zoomedMedia.referenceSrc}
                         onClose={() => setZoomedMedia(null)}
                     />
                 )}

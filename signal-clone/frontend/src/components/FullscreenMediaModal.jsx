@@ -12,7 +12,7 @@ const Portal = ({ children }) => ReactDOM.createPortal(children, document.body);
 /* ═══════════════════════════════════════════════════════════════
    MAIN EXPORT — dispatch to right viewer
    ═══════════════════════════════════════════════════════════════ */
-const FullscreenMediaModal = ({ src, type, onClose }) => {
+const FullscreenMediaModal = ({ src, type, onClose, referenceSrc = null }) => {
     useEffect(() => {
         if (!src) return;
         // Prevent body scroll while open
@@ -29,6 +29,7 @@ const FullscreenMediaModal = ({ src, type, onClose }) => {
     if (!src) return null;
 
     const safeSrc = getSafeMediaUrl(src, window.location.href);
+    const safeReferenceSrc = referenceSrc ? getSafeMediaUrl(referenceSrc, window.location.href) : null;
     if (!safeSrc) {
         return (
             <Portal>
@@ -72,7 +73,7 @@ const FullscreenMediaModal = ({ src, type, onClose }) => {
                     ? <VideoViewer src={safeSrc} onClose={onClose} onDownload={handleDownload} />
                     : isAudio
                         ? <AudioViewer src={safeSrc} onClose={onClose} onDownload={handleDownload} />
-                        : <ImageViewer src={safeSrc} onClose={onClose} onDownload={handleDownload} />
+                        : <ImageViewer src={safeSrc} referenceSrc={safeReferenceSrc} onClose={onClose} onDownload={handleDownload} />
                 }
             </div>
         </Portal>
@@ -82,7 +83,7 @@ const FullscreenMediaModal = ({ src, type, onClose }) => {
 /* ═══════════════════════════════════════════════════════════════
    IMAGE VIEWER — WhatsApp style with pinch/double-tap zoom
    ═══════════════════════════════════════════════════════════════ */
-const ImageViewer = ({ src, onClose, onDownload }) => {
+const ImageViewer = ({ src, referenceSrc, onClose, onDownload }) => {
     const [scale, setScale] = useState(1);
     const [pos, setPos] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
@@ -192,6 +193,13 @@ const ImageViewer = ({ src, onClose, onDownload }) => {
                     </button>
                 </div>
             </div>
+
+            {referenceSrc && (
+                <div style={{ position: 'absolute', right: 16, top: 112, zIndex: 12, width: 'min(28vw, 132px)', overflow: 'hidden', borderRadius: 16, border: '2px solid rgba(255,255,255,.9)', background: '#000', boxShadow: '0 12px 36px rgba(0,0,0,.65)' }}>
+                    <img src={referenceSrc} alt="Original photo" draggable={false} style={{ width: '100%', aspectRatio: '4 / 5', objectFit: 'cover', display: 'block' }} />
+                    <div style={{ padding: '6px 8px', color: '#fff', background: 'rgba(0,0,0,.82)', textAlign: 'center', fontSize: 9, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase' }}>Original photo</div>
+                </div>
+            )}
 
             {/* Image area */}
             <div

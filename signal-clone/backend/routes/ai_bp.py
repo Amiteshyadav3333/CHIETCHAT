@@ -494,6 +494,36 @@ def _save_turn(user_id, user_msg, ai_reply):
 
 # ── Routes ───────────────────────────────────────────────────────
 
+@ai_bp.route('/api/ai/grammar', methods=['POST'])
+def ai_grammar():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    text = data.get('text')
+    if not isinstance(text, str) or not text.strip():
+        return jsonify({"error": "Text is required"}), 400
+    source = text.strip()
+    if len(source) > 2000:
+        return jsonify({"error": "Text is too long"}), 400
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a grammar correction engine. Correct grammar, spelling, punctuation, "
+                "capitalization and subject-verb agreement while preserving the intended meaning, "
+                "names, language and tone. Return only the corrected message with no quotes, label, "
+                "markdown or explanation."
+            ),
+        },
+        {"role": "user", "content": source},
+    ]
+    corrected = str(_get_ai_reply(messages) or '').strip()
+    if corrected.startswith('Arre yaar, abhi thodi problem') or not corrected or len(corrected) > 4000:
+        return jsonify({"error": "AI grammar service is temporarily unavailable"}), 503
+    corrected = re.sub(r'^(?:corrected(?: sentence| text)?\s*:\s*)', '', corrected, flags=re.I).strip().strip('"')
+    return jsonify({"corrected": corrected}), 200
+
 @ai_bp.route('/api/ai/chat', methods=['POST'])
 def ai_chat():
     user_id = get_current_user_id()

@@ -2934,10 +2934,6 @@ const Home = () => {
                         style={{ background: chatBackground, backgroundSize: wallpaper === 'dots' ? '18px 18px' : undefined }}
                     >
                         {(() => {
-                            const latestOverlay = [...messages].reverse().find(message => message.type === 'drawing' && isChatOverlayDrawing(message.content) && (!snapMode || message.snapMode));
-                            return latestOverlay ? <ChatDrawingOverlay content={latestOverlay.content} messageId={latestOverlay.id} /> : null;
-                        })()}
-                        {(() => {
                             const other = getOtherParticipant(visibleActiveChat);
                             const otherBio = other?.bio;
                             return otherBio && showBioBanner && (
@@ -2961,7 +2957,10 @@ const Home = () => {
                                 </div>
                             );
                         })()}
-                        {messages.filter(msg => (!snapMode || msg.snapMode) && !(msg.type === 'drawing' && isChatOverlayDrawing(msg.content)) && (!messageSearchQuery || `${msg.content || ''} ${msg.type || ''}`.toLowerCase().includes(messageSearchQuery.toLowerCase()))).map((msg, idx, shownMessages) => {
+                        {messages.filter(msg => (!snapMode || msg.snapMode) && (!messageSearchQuery || `${msg.content || ''} ${msg.type || ''}`.toLowerCase().includes(messageSearchQuery.toLowerCase()))).map((msg, idx, shownMessages) => {
+                            if (msg.type === 'drawing' && isChatOverlayDrawing(msg.content)) {
+                                return <ChatDrawingOverlay key={msg.id || idx} content={msg.content} messageId={msg.id} />;
+                            }
                             const prevMsg = shownMessages[idx - 1];
                             const currDate = new Date(msg.timestamp).toDateString();
                             const prevDate = prevMsg ? new Date(prevMsg.timestamp).toDateString() : null;

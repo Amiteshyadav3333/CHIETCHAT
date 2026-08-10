@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import axios from 'axios';
 import { 
     PaperAirplaneIcon, FaceSmileIcon, PaperClipIcon, MicrophoneIcon, 
     StopIcon, XMarkIcon, ChartBarIcon, MapPinIcon, DocumentIcon,
@@ -84,6 +85,7 @@ const MessageInput = ({
     const [gifSearch, setGifSearch] = useState('');
     const [gifs, setGifs] = useState([]);
     const [loadingGifs, setLoadingGifs] = useState(false);
+    const [grammarLoading, setGrammarLoading] = useState(false);
     const [showAttachMenu, setShowAttachMenu] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
     const [showVideoNote, setShowVideoNote] = useState(false);
@@ -144,9 +146,8 @@ const MessageInput = ({
         setSmartReplies(replies);
     }, [lastMessageText, showSmartReplies]);
 
-    const handleGrammarFix = () => {
-        if (!text.trim()) return;
-        let t = text.trim();
+    const localGrammarFallback = (value) => {
+        let t = value.trim();
         t = t.charAt(0).toUpperCase() + t.slice(1);
         const rules = [
             { regex: /\bi\b/g, replacement: 'I' },
@@ -165,6 +166,9 @@ const MessageInput = ({
             { regex: /\btomorrow\b/gi, replacement: "tomorrow" },
             { regex: /\bhow r u\b/gi, replacement: "how are you" },
             { regex: /\bhow are u\b/gi, replacement: "how are you" },
+            { regex: /\bI are\b/g, replacement: 'I am' },
+            { regex: /\b(he|she|it) are\b/gi, replacement: '$1 is' },
+            { regex: /\b(you|we|they) is\b/gi, replacement: '$1 are' },
         ];
         rules.forEach(rule => {
             t = t.replace(rule.regex, rule.replacement);
@@ -172,8 +176,29 @@ const MessageInput = ({
         if (!/[.!?]$/.test(t)) {
             t += '.';
         }
-        setText(t);
-        inputRef.current?.focus();
+        return t.replace(/\s+([,.!?])/g, '$1').replace(/([,.!?])(?=[A-Za-z])/g, '$1 ');
+    };
+
+    const requestGrammarFix = async (value) => {
+        const source = value.trim();
+        if (!source) return source;
+        try {
+            const response = await axios.post('/api/ai/grammar', { text: source });
+            return response.data.corrected || localGrammarFallback(source);
+        } catch {
+            return localGrammarFallback(source);
+        }
+    };
+
+    const handleGrammarFix = async () => {
+        if (!text.trim() || grammarLoading) return;
+        setGrammarLoading(true);
+        try {
+            setText(await requestGrammarFix(text));
+            inputRef.current?.focus();
+        } finally {
+            setGrammarLoading(false);
+        }
     };
     
     const showTranslator = chatTranslationLang !== '';
@@ -346,7 +371,7 @@ const MessageInput = ({
             if (suspicious && !window.confirm('CHEETCHAT safety: This message may contain a risky link or request for sensitive information. Send anyway?')) return;
         }
 
-        let finalWord = trimmed;
+        let finalWord = showAiFeature ? await requestGrammarFix(trimmed) : trimmed;
         if (showTranslator && onTranslate) {
             setIsTranslating(true);
             try {
@@ -1076,9 +1101,9 @@ const MessageInput = ({
                             <button
                                 type="button"
                                 onClick={handleGrammarFix}
-                                disabled={!text.trim()}
+                                disabled={!text.trim() || grammarLoading}
                                 className={`w-10 h-10 flex items-center justify-center rounded-full transition-all active:scale-90 ${text.trim() ? 'text-violet-400 hover:text-violet-300 hover:bg-violet-400/10' : 'text-gray-600 cursor-not-allowed'}`}
-                                title="AI Grammar Fix"
+                                title={grammarLoading ? 'Correcting grammar…' : 'AI Grammar Fix'}
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 21l-.813-5.096L3.091 15.091l5.096-.813L9 9.187l.813 5.091 5.096.813-5.096.813zM19.071 4.929l-.312 1.948-1.948.312 1.948.312.312 1.948.312-1.948 1.948-.312-1.948-.312-.312-1.948zM19.071 19.071l-.312 1.948-1.948.312 1.948.312.312 1.948.312-1.948 1.948-.312-1.948-.312-.312-1.948z" />

@@ -174,6 +174,15 @@ class SecurityTests(unittest.TestCase):
         self.assertTrue(any('cheetchat_session=;' in value for value in cookies))
         self.assertTrue(any('cheetchat_csrf=;' in value for value in cookies))
 
+    def test_stale_cookie_without_csrf_does_not_block_login(self):
+        self.client.set_cookie('cheetchat_session', self.token)
+        response = self.client.post('/api/login', json={
+            'email': 'audit@example.com',
+            'password': 'old-password',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('csrfToken', response.get_json())
+
     def test_login_issues_http_only_cookie_without_exposing_jwt_in_json(self):
         with app.test_request_context('/api/login', method='POST', json={'deviceFingerprint': 'browser-test'}):
             user = db.session.get(User, self.user_id)

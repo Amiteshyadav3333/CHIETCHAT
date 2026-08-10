@@ -126,6 +126,22 @@ def canonical_sensitive_path():
         return '/api/messages/:id'
     return request.path
 
+
+# These endpoints establish or recover authentication and therefore cannot
+# require a CSRF token from an existing session. In particular, a stale auth
+# cookie must not prevent the user from logging in and replacing that cookie.
+# The authenticated logout endpoint deliberately remains protected.
+_csrf_exempt_auth_paths = {
+    '/api/login',
+    '/api/login/request-otp',
+    '/api/login/verify-otp',
+    '/api/register',
+    '/api/register/verify-otp',
+    '/api/forgot-password',
+    '/api/reset-password',
+    '/api/auth/2fa/login-verify',
+}
+
 @app.before_request
 def protect_sensitive_routes():
     g.request_id = request.headers.get('X-Request-ID') or uuid.uuid4().hex
@@ -135,7 +151,7 @@ def protect_sensitive_routes():
     # this automatic OPTIONS response succeeds.
     if request.method == 'OPTIONS':
         return None
-    if request.method not in ('GET', 'HEAD', 'OPTIONS'):
+    if request.method not in ('GET', 'HEAD', 'OPTIONS') and request.path not in _csrf_exempt_auth_paths:
         cookie_name = app.config.get('AUTH_COOKIE_NAME', 'cheetchat_session')
         cookie_token = request.cookies.get(cookie_name)
         bearer = request.headers.get('Authorization', '')

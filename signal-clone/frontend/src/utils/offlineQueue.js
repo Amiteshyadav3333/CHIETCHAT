@@ -16,7 +16,7 @@ export const getOfflineQueue = (userId) => {
 
 export const enqueueOfflineMessage = (
     userId, chatId, content, type, replyTo = null, disappearingTtl = 0, clientMessageId = null,
-    assetId = null, scheduledFor = null,
+    assetId = null, scheduledFor = null, snapMode = false,
 ) => {
     if (!userId || !chatId) throw new Error('User and chat are required for offline delivery');
     if (!isEncryptedPayload(content)) throw new Error('Offline messages must be encrypted before storage');
@@ -26,7 +26,7 @@ export const enqueueOfflineMessage = (
     if (existing) return existing;
     const safeReplyReference = replyTo?.id ? { id: replyTo.id } : null;
     const message = {
-        tempId, userId, chatId, content, type, replyTo: safeReplyReference, disappearingTtl, assetId, scheduledFor,
+        tempId, userId, chatId, content, type, replyTo: safeReplyReference, disappearingTtl, assetId, scheduledFor, snapMode,
         timestamp: new Date().toISOString(), status: 'sending',
     };
     queue.push(message);

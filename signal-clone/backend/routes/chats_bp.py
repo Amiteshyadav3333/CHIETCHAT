@@ -4,6 +4,7 @@ import json
 import hashlib
 import hmac
 import datetime
+from sqlalchemy import or_
 from models import db, Chat, ChatParticipant, Message, User, MessageDeletion, PaymentOrder, ScheduledMessage, CallRecord
 from extensions import socketio
 from utils import (
@@ -210,6 +211,7 @@ def get_chats():
                 query = query.filter(~Message.id.in_(list(deleted_msg_ids)))
             if p_deleted_at:
                 query = query.filter(Message.timestamp > p_deleted_at)
+            query = query.filter(or_(Message.snap_mode.is_(False), Message.snap_mode.is_(None), Message.snap_expires_at.is_(None), Message.snap_expires_at > utc_now()))
 
             last_msg = query.order_by(Message.timestamp.desc()).first()
             unread_count = query.filter(
@@ -244,6 +246,7 @@ def get_chats():
                 "groupAdminId": chat.group_admin_id,
                 "isPublic": getattr(chat, 'is_public', False),
                 "isChatDisabled": getattr(chat, 'is_chat_disabled', False),
+                "snapMode": bool(getattr(chat, 'snap_mode', False)),
                 "unreadCount": unread_count,
                 "lastMessage": {
                     "content": last_msg.content if last_msg and last_msg.type == 'text' else (last_msg.type if last_msg else "No messages"),
@@ -350,6 +353,7 @@ def get_messages(chat_id):
         query = query.filter(Message.timestamp > p_deleted_at)
 
     messages = query.order_by(Message.timestamp.asc()).all()
+    messages = [message for message in messages if not message.snap_mode or message.snap_expires_at is None or message.snap_expires_at > now]
     
     from models import StarredMessage, PollVote
     starred_ids = {s.message_id for s in StarredMessage.query.filter_by(user_id=user_id).all()}
@@ -370,6 +374,8 @@ def get_messages(chat_id):
         "type": m.type,
         "timestamp": iso_utc(m.timestamp),
         "ttl": m.ttl,
+        "snapMode": bool(m.snap_mode),
+        "snapExpiresAt": iso_utc(m.snap_expires_at),
         "replyToId": m.reply_to_id,
         "replyContent": m.reply_content,
         "replySenderName": m.reply_sender_name,

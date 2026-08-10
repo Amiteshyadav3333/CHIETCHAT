@@ -54,6 +54,7 @@ class Chat(db.Model):
     group_admin_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     is_public = db.Column(db.Boolean, default=False)
     is_chat_disabled = db.Column(db.Boolean, default=False)
+    snap_mode = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=utc_now)
 
     messages = db.relationship('Message', backref='chat', lazy=True)
@@ -226,6 +227,8 @@ class Message(db.Model):
     type = db.Column(db.String(20), default='text')
     timestamp = db.Column(db.DateTime, default=utc_now)
     ttl = db.Column(db.Integer, default=0)
+    snap_mode = db.Column(db.Boolean, nullable=False, default=False)
+    snap_expires_at = db.Column(db.DateTime, nullable=True, index=True)
     reply_to_id = db.Column(db.Integer, nullable=True)
     reply_content = db.Column(db.Text, nullable=True)
     reply_sender_name = db.Column(db.String(80), nullable=True)

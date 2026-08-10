@@ -744,6 +744,39 @@ class SecurityTests(unittest.TestCase):
             self.assertEqual(stored.ttl, 45)
         payer.disconnect()
 
+    def test_snap_message_hides_ten_minutes_after_session_end(self):
+        payer = socketio.test_client(app, auth={'token': self.token})
+        enabled = payer.emit('set_snap_mode', {'chatId': self.chat_id, 'enabled': True}, callback=True)
+        self.assertTrue(enabled['ok'])
+        result = payer.emit('send_message', {
+            'chatId': self.chat_id,
+            'clientMessageId': 'snap-retention-1',
+            'content': self.encrypted_envelope('snap-payload'),
+            'type': 'image',
+        }, callback=True)
+        self.assertTrue(result['ok'])
+        with app.app_context():
+            stored = Message.query.filter_by(client_message_id='snap-retention-1').one()
+            self.assertTrue(stored.snap_mode)
+            self.assertEqual(stored.ttl, 7 * 24 * 60 * 60)
+            stored.timestamp = utc_now() - timedelta(minutes=11)
+            db.session.commit()
+        still_visible = self.client.get(f'/api/chats/{self.chat_id}/messages', headers=self.auth_headers())
+        self.assertEqual(still_visible.status_code, 200)
+        self.assertIn(result['messageId'], [item['id'] for item in still_visible.get_json()])
+        ended = payer.emit('set_snap_mode', {'chatId': self.chat_id, 'enabled': False}, callback=True)
+        self.assertTrue(ended['ok'])
+        self.assertIsNotNone(ended['snapExpiresAt'])
+        with app.app_context():
+            stored = Message.query.filter_by(client_message_id='snap-retention-1').one()
+            stored.snap_expires_at = utc_now() - timedelta(seconds=1)
+            db.session.commit()
+        hidden = self.client.get(f'/api/chats/{self.chat_id}/messages', headers=self.auth_headers())
+        self.assertNotIn(result['messageId'], [item['id'] for item in hidden.get_json()])
+        with app.app_context():
+            self.assertEqual(Message.query.filter_by(client_message_id='snap-retention-1').count(), 1)
+        payer.disconnect()
+
     def test_socket_rejects_plaintext_partial_envelopes_and_untrusted_metadata(self):
         payer = socketio.test_client(app, auth={'token': self.token})
         plaintext = payer.emit('send_message', {

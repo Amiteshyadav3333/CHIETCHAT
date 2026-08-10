@@ -379,6 +379,7 @@ def ensure_database_schema(force=False):
             'group_admin_id': db.Integer(),
             'is_public': db.Boolean(),
             'is_chat_disabled': db.Boolean(),
+            'snap_mode': db.Boolean(),
             'created_at': db.DateTime(),
         })
         add_missing_columns(inspector, 'message', {
@@ -394,6 +395,8 @@ def ensure_database_schema(force=False):
             'reactions': db.Text(),
             'is_pinned': db.Boolean(),
             'client_message_id': db.String(100),
+            'snap_mode': db.Boolean(),
+            'snap_expires_at': db.DateTime(),
         })
         add_missing_columns(inspector, 'payment_order', {
             'provider_refund_id': db.String(100),

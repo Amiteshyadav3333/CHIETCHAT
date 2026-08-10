@@ -97,3 +97,22 @@ services:
         sync: false
       - key: PYTHON_VERSION
         value: 3.11.9
+  - type: cron
+    name: chietchat-retention-cleanup
+    runtime: python
+    region: singapore
+    rootDir: .
+    schedule: "*/10 * * * *"
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: python backend/scripts/cleanup_retention.py --limit 1000 --confirm
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: PAYMENT_RETENTION_DAYS
+        value: "2555"

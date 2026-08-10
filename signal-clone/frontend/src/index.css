@@ -134,3 +134,19 @@ body {
   75% { transform: scale(.96); filter: hue-rotate(220deg) saturate(1.7); }
   100% { transform: translate(0) scale(1); filter: none; }
 }
+@media print {
+  body.snap-mode-active * {
+    visibility: hidden !important;
+  }
+  body.snap-mode-active::before {
+    content: 'Snap Mode content cannot be printed';
+    visibility: visible;
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: #050505;
+    color: #facc15;
+    font: 700 18px system-ui;
+  }
+}

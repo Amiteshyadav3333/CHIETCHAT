@@ -225,6 +225,8 @@ const Home = () => {
 
     // Non-Encrypted Ref
     const messagesEndRef = useRef(null);
+    const messagesContainerRef = useRef(null);
+    const userScrolledUpRef = useRef(false);
     const avatarInputRef = useRef(null);
     const contactDpInputRef = useRef(null);
     const activeChatRef = useRef(activeChat);
@@ -297,6 +299,7 @@ const Home = () => {
                     content: encryptedContent,
                     type: msg.type,
                     ttl: msg.disappearingTtl,
+                    snapMode: Boolean(msg.snapMode),
                     replyToId: msg.replyTo?.id || null,
                     replyContent: null,
                     replySenderName: null
@@ -624,7 +627,7 @@ const Home = () => {
             setChatTranslationLang(stored);
             setDisappearingTtl(Number(localStorage.getItem(`chat_disappearing_ttl_${activeChat.id}`) || 0));
             const savedSnapMode = localStorage.getItem(`chat_snap_mode_${activeChat.id}`);
-            setSnapMode(savedSnapMode === null ? localStorage.getItem('snap_mode_default') === '1' : savedSnapMode === '1');
+            setSnapMode(Boolean(activeChat.snapMode) || (savedSnapMode === null ? localStorage.getItem('snap_mode_default') === '1' : savedSnapMode === '1'));
         } else {
             setChatTranslationLang('');
             setDisappearingTtl(0);
@@ -641,16 +644,38 @@ const Home = () => {
     const updateSnapMode = (enabled) => {
         setSnapMode(enabled);
         if (visibleActiveChat) localStorage.setItem(`chat_snap_mode_${visibleActiveChat.id}`, enabled ? '1' : '0');
-        if (enabled) updateDisappearingTtl(600);
+        if (visibleActiveChat?.id) socket?.emit('set_snap_mode', { chatId: visibleActiveChat.id, enabled });
     };
 
     useEffect(() => {
         const timer = window.setInterval(() => {
             const now = Date.now();
-            setMessages(current => current.filter(message => !message.ttl || now - new Date(message.timestamp).getTime() < Number(message.ttl) * 1000));
+            setMessages(current => current.filter(message => {
+                if (message.snapMode) {
+                    return !message.snapExpiresAt || now < new Date(message.snapExpiresAt).getTime();
+                }
+                const lifetime = Number(message.ttl || 0);
+                return !lifetime || now - new Date(message.timestamp).getTime() < lifetime * 1000;
+            }));
         }, 1000);
         return () => window.clearInterval(timer);
     }, []);
+
+    useEffect(() => {
+        if (!snapMode) return;
+        const blockCaptureShortcut = event => {
+            const captureShortcut = event.key === 'PrintScreen' || ((event.metaKey || event.ctrlKey) && event.shiftKey && ['3', '4', '5', 's', 'S'].includes(event.key));
+            if (!captureShortcut) return;
+            event.preventDefault();
+            navigator.clipboard?.writeText('').catch(() => {});
+        };
+        document.addEventListener('keydown', blockCaptureShortcut, true);
+        document.body.classList.add('snap-mode-active');
+        return () => {
+            document.removeEventListener('keydown', blockCaptureShortcut, true);
+            document.body.classList.remove('snap-mode-active');
+        };
+    }, [snapMode]);
 
     useEffect(() => {
         if (showInfoPanel && visibleActiveChat?.isGroup && visibleActiveChat.groupAdminId === user?.id) {
@@ -692,6 +717,18 @@ const Home = () => {
 
         socket.on('ring_status', (data) => {
             setCallRingState(prev => ({ ...prev, [data.chatId]: data.status }));
+        });
+
+        socket.on('snap_mode_update', ({ chatId, enabled, snapExpiresAt }) => {
+            localStorage.setItem(`chat_snap_mode_${chatId}`, enabled ? '1' : '0');
+            setChats(current => current.map(chat => chat.id === chatId ? { ...chat, snapMode: enabled } : chat));
+            setActiveChat(current => current?.id === chatId ? { ...current, snapMode: enabled } : current);
+            if (!enabled && snapExpiresAt && activeChatRef.current?.id === chatId) {
+                setMessages(current => current.map(message => message.snapMode && !message.snapExpiresAt
+                    ? { ...message, snapExpiresAt }
+                    : message));
+            }
+            if (activeChatRef.current?.id === chatId) setSnapMode(enabled);
         });
 
         socket.on('peer_ringing', (data) => {
@@ -766,6 +803,8 @@ const Home = () => {
             }
 
             if (activeChatRef.current && readableMsg.chatId === activeChatRef.current.id) {
+                const shouldFollowMessage = readableMsg.senderId === user.id || !userScrolledUpRef.current;
+                if (readableMsg.senderId === user.id) userScrolledUpRef.current = false;
                 setMessages(prev => {
                     // Replace optimistic message from same sender, or skip if already exists
                     if (readableMsg.senderId === user.id) {
@@ -789,7 +828,7 @@ const Home = () => {
                     if (prev.some(message => message.id === readableMsg.id)) return prev;
                     return [...prev, readableMsg];
                 });
-                scrollToBottom();
+                if (shouldFollowMessage) window.requestAnimationFrame(() => scrollToBottom());
                 if (readableMsg.senderId !== user.id) {
                     socket.emit('mark_read', { chatId: readableMsg.chatId });
                 }
@@ -997,6 +1036,7 @@ const Home = () => {
             socket.off('chat_deleted');
             socket.off('message_reaction_update');
             socket.off('message_pin_update');
+            socket.off('snap_mode_update');
             socket.off('typing_update');
         };
     }, [socket, user, publicKey, fetchChats, decryptMessageForCurrentUser, processQueue]);
@@ -1008,6 +1048,7 @@ const Home = () => {
         }
 
         setMessages([]);
+        userScrolledUpRef.current = false;
         let cancelled = false;
 
         const loadCachedMessages = async () => {
@@ -1017,7 +1058,7 @@ const Home = () => {
             const decrypted = await decryptMessagesForCurrentUser(cached);
             if (!cancelled) {
                 setMessages(decrypted);
-                setTimeout(scrollToBottom, 50);
+                setTimeout(() => scrollToBottom('auto'), 50);
             }
         };
         loadCachedMessages();
@@ -1034,7 +1075,7 @@ const Home = () => {
 
                 saveEncryptedMessages(user?.id, activeChat.id, res.data);
                 
-                scrollToBottom();
+                window.requestAnimationFrame(() => scrollToBottom('auto'));
 
                 socket?.emit('join_room', { room: activeChat.id });
                 socket?.emit('mark_read', { chatId: activeChat.id });
@@ -1056,22 +1097,20 @@ const Home = () => {
         return () => window.removeEventListener('cheetchat-business-automation-updated', refreshAutomation);
     }, [token]);
 
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const scrollToBottom = (behavior = 'smooth') => {
+        messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' });
+        userScrolledUpRef.current = false;
     };
 
     useEffect(() => {
-        if (messages.length > 0) {
-            scrollToBottom();
-            const timer = setTimeout(() => {
-                scrollToBottom();
-            }, 100);
-            return () => clearTimeout(timer);
+        if (messages.length > 0 && !userScrolledUpRef.current) {
+            const frame = window.requestAnimationFrame(() => scrollToBottom());
+            return () => window.cancelAnimationFrame(frame);
         }
-    }, [messages]);
+    }, [messages.length]);
 
     const handleSendMessage = async (text, type = 'text', replyMsg = null, ttl = 0, assetId = null) => {
-        ttl = snapMode ? 600 : Number(ttl || 0);
+        ttl = Number(ttl || 0);
         if (!activeChat?.id || !user?.id) {
             console.warn('Message send skipped because the chat session is not ready.');
             return;
@@ -1103,8 +1142,10 @@ const Home = () => {
             _isOptimistic: true,
             clientMessageId: tempId,
             assetId,
-            ttl
+            ttl,
+            snapMode
         };
+        userScrolledUpRef.current = false;
         setMessages(prev => [...prev, optimisticMsg]);
         scrollToBottom();
         setReplyTo(null);
@@ -1146,7 +1187,7 @@ const Home = () => {
             encryptedContent = await encryptForRecipients(recipientPublicKeys, text);
 
             if (!navigator.onLine || !socket || !socket.connected) {
-                enqueueOfflineMessage(user.id, activeChat.id, encryptedContent, type, replyMsg, ttl, tempId, assetId);
+                enqueueOfflineMessage(user.id, activeChat.id, encryptedContent, type, replyMsg, ttl, tempId, assetId, null, snapMode);
                 setMessages(prev => prev.map(message => message.id === tempId
                     ? { ...message, status: 'queued' }
                     : message));
@@ -1160,6 +1201,7 @@ const Home = () => {
                     content: encryptedContent,
                     type,
                     ttl,
+                    snapMode,
                     replyToId: replyMsg?.id || null,
                     replyContent: null,
                     replySenderName: null
@@ -1169,7 +1211,7 @@ const Home = () => {
                 : message));
         } catch (err) {
             if (err.retryable !== false && encryptedContent) {
-                enqueueOfflineMessage(user.id, activeChat.id, encryptedContent, type, replyMsg, ttl, tempId, assetId);
+                enqueueOfflineMessage(user.id, activeChat.id, encryptedContent, type, replyMsg, ttl, tempId, assetId, null, snapMode);
             }
             setMessages(prev => prev.map(m => m.id === tempId ? {
                 ...m, status: err.retryable === false ? 'failed' : 'queued'
@@ -2766,7 +2808,8 @@ const Home = () => {
                                             {other?.isOnline ? 'Online' : formatLastSeen(other?.lastSeen)}
                                         </p>
                                     </div>
-                                    <div className="flex flex-col gap-1 p-3">
+                                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3" style={{ scrollbarWidth: 'thin' }}>
+                                    <div className="flex flex-col gap-1">
                                         {other && (
                                             <div className="mb-2 rounded-xl border border-violet-500/20 bg-violet-500/5 p-3">
                                                 <div className="flex items-center gap-3">
@@ -2844,6 +2887,7 @@ const Home = () => {
                                             Delete Chat
                                         </button>
                                     </div>
+                                    </div>
                                 </div>
                             </div>
                         );
@@ -2851,6 +2895,12 @@ const Home = () => {
 
                     {/* Messages Area - WhatsApp style background */}
                     <div
+                        ref={messagesContainerRef}
+                        onScroll={event => {
+                            const element = event.currentTarget;
+                            const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+                            userScrolledUpRef.current = distanceFromBottom > 120;
+                        }}
                         className={`min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 space-y-0.5 ${localStorage.getItem('animated_theme') === '1' ? 'animated-chat-wallpaper' : ''}`}
                         style={{ background: chatBackground, backgroundSize: wallpaper === 'dots' ? '18px 18px' : undefined }}
                     >

@@ -292,6 +292,9 @@ def register_socket_events(socketio):
             return {"ok": False, "error": "Invalid disappearing-message duration", "retryable": False}
         if ttl != 0 and not (MIN_MESSAGE_TTL <= ttl <= MAX_MESSAGE_TTL):
             return {"ok": False, "error": "Invalid disappearing-message duration", "retryable": False}
+        snap_mode = bool(getattr(chat, 'snap_mode', False)) or data.get('snapMode') is True
+        if snap_mode:
+            ttl = 7 * 24 * 60 * 60
         allowed_asset_kinds = {
             'image': {'image'}, 'video': {'video'}, 'video_note': {'video'},
             'audio': {'audio'}, 'file': {'document'},
@@ -334,6 +337,8 @@ def register_socket_events(socketio):
             content=content,
             type=message_type,
             ttl=ttl,
+            snap_mode=snap_mode,
+            snap_expires_at=None,
             reply_to_id=reply_to_id,
             # Reply preview plaintext must never bypass the encrypted envelope.
             reply_content=None,
@@ -359,6 +364,8 @@ def register_socket_events(socketio):
             "timestamp": iso_utc(new_msg.timestamp),
             "chatId": chat_id,
             "ttl": new_msg.ttl,
+            "snapMode": bool(new_msg.snap_mode),
+            "snapExpiresAt": iso_utc(new_msg.snap_expires_at),
             "replyToId": new_msg.reply_to_id,
             "replyContent": new_msg.reply_content,
             "replySenderName": new_msg.reply_sender_name,
@@ -432,6 +439,32 @@ def register_socket_events(socketio):
             "username": user.username if user else "Someone",
             "isTyping": bool(data.get('isTyping'))
         }, room=str(chat_id), include_self=False)
+
+    @socketio.on('set_snap_mode')
+    def on_set_snap_mode(data):
+        user_id = get_socket_user_id()
+        try:
+            chat_id = int(data.get('chatId'))
+        except (TypeError, ValueError, AttributeError):
+            return {"ok": False, "error": "Invalid chat"}
+        if not user_id or not user_can_access_chat(user_id, chat_id):
+            return {"ok": False, "error": "Forbidden"}
+        chat = db.session.get(Chat, chat_id)
+        if not chat:
+            return {"ok": False, "error": "Chat not found"}
+        chat.snap_mode = data.get('enabled') is True
+        snap_expires_at = None
+        if not chat.snap_mode:
+            snap_expires_at = utc_now() + datetime.timedelta(minutes=10)
+            Message.query.filter(
+                Message.chat_id == chat_id,
+                Message.snap_mode.is_(True),
+                Message.snap_expires_at.is_(None),
+            ).update({Message.snap_expires_at: snap_expires_at}, synchronize_session=False)
+        db.session.commit()
+        payload = {"chatId": chat_id, "enabled": bool(chat.snap_mode), "snapExpiresAt": iso_utc(snap_expires_at)}
+        socketio.emit('snap_mode_update', payload, room=str(chat_id))
+        return {"ok": True, **payload}
 
     @socketio.on('join_call')
     def on_join_call(data):

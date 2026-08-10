@@ -447,7 +447,7 @@ const getDocIcon = (filename) => {
 };
 
 // WhatsApp-style action menu overlay
-const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, onReply, onEdit, onCopy, onForward, onReact, onPin, onDelete, onInfo, onTranslate, isLastMessage, showTranslateBtn = true }) => {
+const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, onReply, onEdit, onCopy, onForward, onReact, onPin, onDelete, onInfo, onTranslate, isLastMessage, showTranslateBtn = true, protectedMode = false }) => {
     const menuRef = useRef(null);
     const [showFullPicker, setShowFullPicker] = useState(false);
 
@@ -461,8 +461,8 @@ const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, 
         { icon: '↩️', label: 'Reply', onClick: () => { onReply?.(); onClose(); } },
         ...(isOwn && isTextMessage && !isDeleted && isLastMessage ? [{ icon: '✏️', label: 'Edit', onClick: () => { onEdit?.(); onClose(); } }] : []),
         ...(!isDeleted ? [{ icon: '📌', label: message.isPinned ? 'Unpin' : 'Pin', onClick: () => { onPin?.(); onClose(); } }] : []),
-        ...(!isDeleted ? [{ icon: '📋', label: 'Copy', onClick: () => { onCopy?.(); onClose(); } }] : []),
-        ...(!isDeleted ? [{ icon: '➡️', label: 'Forward', onClick: () => { onForward?.(); onClose(); } }] : []),
+        ...(!isDeleted && !protectedMode ? [{ icon: '📋', label: 'Copy', onClick: () => { onCopy?.(); onClose(); } }] : []),
+        ...(!isDeleted && !protectedMode ? [{ icon: '➡️', label: 'Forward', onClick: () => { onForward?.(); onClose(); } }] : []),
         ...(!isDeleted && isTextMessage && showTranslateBtn ? [{ icon: '🌐', label: 'Translate', onClick: () => { onTranslate?.(); onClose(); } }] : []),
         { icon: 'ℹ️', label: 'Info', onClick: () => { onInfo?.(); onClose(); } },
         ...(!isDeleted ? [{ icon: '🗑️', label: 'Delete', danger: true, onClick: () => { onDelete?.(); onClose(); } }] : []),
@@ -679,6 +679,7 @@ const ChatBubble = ({
     const isSwiping = useRef(false);
 
     const content = message.content || '';
+    const protectedSnapMode = snapMode || Boolean(message.snapMode);
     const isDeleted = message.type === 'deleted' || message.deletedAt;
 
     const isMedia = ['image', 'video', 'video_note'].includes(message.type) ||
@@ -713,7 +714,7 @@ const ChatBubble = ({
     }, [content, isOwn, isTextMessage, onTranslate, chatId, chatTranslationLang, localTargetLang]);
 
     const handleDownload = async (url) => {
-        if (snapMode) {
+        if (protectedSnapMode) {
             alert('Snap Mode mein media download ya save nahi kiya ja sakta.');
             return;
         }
@@ -862,7 +863,7 @@ const ChatBubble = ({
                 <div
                     className="relative group/media cursor-pointer rounded-2xl overflow-hidden"
                     style={{ maxWidth: 260 }}
-                    onClick={(e) => { e.stopPropagation(); setZoomedMedia({ src: cnt, type: 'image' }); }}
+                    onClick={(e) => { e.stopPropagation(); if (!protectedSnapMode) setZoomedMedia({ src: cnt, type: 'image' }); }}
                     onDoubleClick={(e) => { e.stopPropagation(); onReact?.(message, '❤️'); setHeartBurst(true); window.setTimeout(() => setHeartBurst(false), 700); }}
                 >
                     <img
@@ -871,6 +872,7 @@ const ChatBubble = ({
                         className="w-full object-cover block"
                         style={{ maxHeight: 320, minHeight: 80, minWidth: 120 }}
                         loading="lazy"
+                        draggable={!protectedSnapMode}
                     />
                     {heartBurst && <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"><span className="animate-[ping_650ms_ease-out_1] text-7xl drop-shadow-2xl">❤️</span></div>}
                     {/* Hover overlay */}
@@ -882,14 +884,14 @@ const ChatBubble = ({
                         </div>
                     </div>
                     {/* Download button */}
-                    <button
+                    {!protectedSnapMode && <button
                         onClick={(e) => { e.stopPropagation(); handleDownload(cnt); }}
                         className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/80 rounded-full text-white opacity-0 group-hover/media:opacity-100 transition-opacity shadow-lg"
                         title="Download"
                     >
                         <ArrowDownTrayIcon className="w-4 h-4" />
-                    </button>
-                    <button onClick={(e) => { e.stopPropagation(); onAnnotate?.({ src: cnt, type: 'image' }); }} className="absolute left-2 top-2 rounded-full bg-black/55 p-1.5 text-white opacity-0 shadow-lg transition-opacity group-hover/media:opacity-100" title="Draw on photo"><span className="text-lg leading-none">✎</span></button>
+                    </button>}
+                    {!protectedSnapMode && <button onClick={(e) => { e.stopPropagation(); onAnnotate?.({ src: cnt, type: 'image' }); }} className="absolute left-2 top-2 rounded-full bg-black/55 p-1.5 text-white opacity-0 shadow-lg transition-opacity group-hover/media:opacity-100" title="Draw on photo"><span className="text-lg leading-none">✎</span></button>}
                 </div>
             );
         }
@@ -909,15 +911,17 @@ const ChatBubble = ({
                 <div
                     className="relative group/media cursor-pointer rounded-2xl overflow-hidden"
                     style={{ maxWidth: 260 }}
-                    onClick={(e) => { e.stopPropagation(); setZoomedMedia({ src: cnt, type: 'video' }); }}
+                    onClick={(e) => { e.stopPropagation(); if (!protectedSnapMode) setZoomedMedia({ src: cnt, type: 'video' }); }}
                 >
-                    <button onClick={(e) => { e.stopPropagation(); onAnnotate?.({ src: cnt, type: 'video' }); }} className="absolute left-2 top-2 z-10 rounded-full bg-black/55 p-1.5 text-white opacity-0 shadow-lg transition-opacity group-hover/media:opacity-100" title="Draw on video frame"><span className="text-lg leading-none">✎</span></button>
+                    {!protectedSnapMode && <button onClick={(e) => { e.stopPropagation(); onAnnotate?.({ src: cnt, type: 'video' }); }} className="absolute left-2 top-2 z-10 rounded-full bg-black/55 p-1.5 text-white opacity-0 shadow-lg transition-opacity group-hover/media:opacity-100" title="Draw on video frame"><span className="text-lg leading-none">✎</span></button>}
                     <video
                         src={cnt}
                         className="w-full object-cover block"
                         style={{ maxHeight: 320, minHeight: 100 }}
                         preload={localStorage.getItem('media_auto_download') === '0' ? 'none' : 'metadata'}
                         muted
+                        controlsList="nodownload noplaybackrate"
+                        disablePictureInPicture={protectedSnapMode}
                     />
                     {/* Play overlay */}
                     <div className="absolute inset-0 bg-black/30 group-hover/media:bg-black/45 transition-colors flex items-center justify-center">
@@ -935,13 +939,13 @@ const ChatBubble = ({
                         <span className="text-white text-[10px] font-semibold">Video</span>
                     </div>
                     {/* Download button */}
-                    <button
+                    {!protectedSnapMode && <button
                         onClick={(e) => { e.stopPropagation(); handleDownload(cnt); }}
                         className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/80 rounded-full text-white opacity-0 group-hover/media:opacity-100 transition-opacity shadow-lg"
                         title="Download"
                     >
                         <ArrowDownTrayIcon className="w-4 h-4" />
-                    </button>
+                    </button>}
                 </div>
             );
         }
@@ -1344,7 +1348,7 @@ const ChatBubble = ({
         <>
             <div
                 className={`flex items-end gap-2 w-full ${isOwn ? 'flex-row-reverse' : 'flex-row'} ${hasReactions ? 'mb-7' : 'mb-1'}`}
-                onContextMenu={event => { if (snapMode) event.preventDefault(); }}
+                onContextMenu={event => { if (protectedSnapMode) event.preventDefault(); }}
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
@@ -1413,7 +1417,7 @@ const ChatBubble = ({
                                 fontFamily: localStorage.getItem('chat_custom_font') === 'serif' ? 'Georgia, serif' : localStorage.getItem('chat_custom_font') === 'mono' ? 'ui-monospace, monospace' : localStorage.getItem('chat_custom_font') === 'rounded' ? 'Nunito, system-ui, sans-serif' : 'inherit'
                             } : undefined}
                         >
-                            {snapMode && <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center overflow-hidden rounded-2xl opacity-20"><span className="-rotate-12 whitespace-nowrap text-xs font-black tracking-[0.35em] text-white">SNAP MODE · {currentUser?.username || 'PRIVATE'}</span></div>}
+                            {protectedSnapMode && <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center overflow-hidden rounded-2xl opacity-25"><span className="-rotate-12 whitespace-nowrap text-xs font-black tracking-[0.35em] text-white">SNAP MODE · {currentUser?.username || 'PRIVATE'}</span></div>}
                             {/* Reply preview */}
                             {replyTo && (
                                 <div className={`mb-1 px-2 py-1 rounded-lg border-l-4 ${isOwn ? 'border-green-300 bg-white/10' : 'border-blue-400 bg-white/5'} text-xs text-gray-300 max-w-[240px] flex items-center justify-between gap-2 bg-black/20`}>
@@ -1561,13 +1565,14 @@ const ChatBubble = ({
                     onReply={() => onReply && onReply(message)}
                     onEdit={() => onEdit && onEdit(message)}
                     onCopy={() => onCopy && onCopy(message)}
-                    onForward={() => !snapMode && onForward && onForward(message)}
+                    onForward={() => !protectedSnapMode && onForward && onForward(message)}
                     onReact={(emoji) => onReact && onReact(message, emoji)}
                     onPin={() => onPin && onPin(message)}
                     onDelete={() => onDelete && onDelete(message)}
                     onInfo={() => setShowInfoModal(true)}
                     onTranslate={() => { setShowTranslatorMenu(true); }}
                     showTranslateBtn={showTranslateBtn}
+                    protectedMode={protectedSnapMode}
                 />,
                 document.body
             )}

@@ -3,7 +3,7 @@ import { ArrowUturnLeftIcon, PhotoIcon, TrashIcon, XMarkIcon } from '@heroicons/
 
 const COLORS = ['#ffffff', '#22c55e', '#38bdf8', '#facc15', '#fb7185', '#a78bfa', '#111827'];
 
-const DrawStudio = ({ onClose, onSend, initialSource = null }) => {
+const DrawStudio = ({ onClose, onSend, initialSource = null, inline = false }) => {
     const canvasRef = useRef(null);
     const fileRef = useRef(null);
     const historyRef = useRef([]);
@@ -61,8 +61,8 @@ const DrawStudio = ({ onClose, onSend, initialSource = null }) => {
             canvas.width = Math.max(320, Math.floor(rect.width));
             canvas.height = Math.max(360, Math.floor(rect.height));
             const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#111827';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            if (inline) ctx.clearRect(0, 0, canvas.width, canvas.height);
+            else { ctx.fillStyle = '#111827'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
             if (previous) restore(previous);
             else saveHistory();
         };
@@ -146,12 +146,12 @@ const DrawStudio = ({ onClose, onSend, initialSource = null }) => {
     }, 'image/png');
 
     return (
-        <div className="fixed inset-0 z-[100] flex flex-col bg-[#090e11] text-white">
-            <header className="flex h-16 items-center gap-3 border-b border-white/10 px-4">
+        <div className={`${inline ? 'absolute inset-0 z-[55] bg-black/10 backdrop-blur-[1px]' : 'fixed inset-0 z-[100] bg-[#090e11]'} flex flex-col text-white`}>
+            <header className="flex h-16 items-center gap-3 border-b border-white/10 bg-[#111b21]/95 px-4">
                 <button onClick={onClose} className="rounded-full p-2 hover:bg-white/10"><XMarkIcon className="h-6 w-6" /></button>
                 <div className="flex-1"><h2 className="font-bold">Draw & point</h2><p className="text-xs text-gray-400">Photo, chat screenshot ya blank canvas par mark karein</p></div>
                 <button onClick={() => { const h = historyRef.current; if (h.length > 1) { h.pop(); restore(h[h.length - 1]); } }} className="rounded-full p-2 hover:bg-white/10" title="Undo"><ArrowUturnLeftIcon className="h-5 w-5" /></button>
-                <button onClick={() => { const ctx = canvasRef.current.getContext('2d'); ctx.fillStyle = '#111827'; ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height); saveHistory(); }} className="rounded-full p-2 hover:bg-white/10" title="Clear"><TrashIcon className="h-5 w-5" /></button>
+                <button onClick={() => { const ctx = canvasRef.current.getContext('2d'); if (inline) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); else { ctx.fillStyle = '#111827'; ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height); } saveHistory(); }} className="rounded-full p-2 hover:bg-white/10" title="Clear"><TrashIcon className="h-5 w-5" /></button>
             </header>
             <div className="flex flex-wrap items-center justify-center gap-2 border-b border-white/10 bg-[#111b21] p-3">
                 {['pen', 'highlighter', 'arrow'].map(item => <button key={item} onClick={() => setTool(item)} className={`rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${tool === item ? 'bg-[#00a884]' : 'bg-white/10'}`}>{item}</button>)}
@@ -162,7 +162,7 @@ const DrawStudio = ({ onClose, onSend, initialSource = null }) => {
                 {COLORS.map(c => <button key={c} onClick={() => setColor(c)} className={`h-7 w-7 rounded-full border-2 ${color === c ? 'border-white scale-110' : 'border-white/20'}`} style={{ background: c }} aria-label={`Choose ${c}`} />)}
                 <input type="range" min="2" max="14" value={size} onChange={e => setSize(Number(e.target.value))} className="w-24 accent-[#00a884]" />
             </div>
-            <main className="min-h-0 flex-1 p-2 sm:p-4"><canvas ref={canvasRef} onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end} onTouchStart={start} onTouchMove={move} onTouchEnd={end} className="h-full w-full touch-none rounded-2xl bg-[#111827] shadow-2xl" /></main>
+            <main className={`min-h-0 flex-1 ${inline ? '' : 'p-2 sm:p-4'}`}><canvas ref={canvasRef} onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end} onTouchStart={start} onTouchMove={move} onTouchEnd={end} className={`h-full w-full touch-none ${inline ? 'bg-transparent' : 'rounded-2xl bg-[#111827] shadow-2xl'}`} /></main>
             <footer className="flex items-center gap-2 border-t border-white/10 bg-[#111b21] p-3 sm:px-6">
                 <input value={caption} onChange={e => setCaption(e.target.value)} placeholder="Caption likhein…" className="min-w-0 flex-1 rounded-full bg-[#202c33] px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-[#00a884]" />
                 <button onClick={send} className="rounded-full bg-[#00a884] px-5 py-3 text-sm font-bold hover:bg-[#079474]">Send drawing</button>

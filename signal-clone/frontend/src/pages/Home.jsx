@@ -5,6 +5,7 @@ import { SocketContext } from '../context/SocketContext';
 import ContactList from '../components/ContactList';
 import ChatBubble, { DateSeparator } from '../components/ChatBubble';
 import MessageInput from '../components/MessageInput';
+import DrawStudio from '../components/DrawStudio';
 import IncomingCallModal from '../components/IncomingCallModal';
 import VideoCallModal from '../components/VideoCall';
 import AvatarZoom from '../components/AvatarZoom';
@@ -186,6 +187,7 @@ const Home = () => {
     const [theme, setTheme] = useState(() => localStorage.getItem('chat_theme') || 'dark');
     const [wallpaper, setWallpaper] = useState(() => localStorage.getItem('chat_wallpaper') || 'white');
     const [drawSource, setDrawSource] = useState(null);
+    const [showChatDraw, setShowChatDraw] = useState(false);
     const [disappearingTtl, setDisappearingTtl] = useState(0);
     const [snapMode, setSnapMode] = useState(false);
     const [showTopDropdown, setShowTopDropdown] = useState(false);
@@ -2118,7 +2120,7 @@ const Home = () => {
             </aside>
 
             {/* Sidebar */}
-            <div className={`w-full md:w-[360px] lg:w-[390px] border-r border-gray-800 flex flex-col ${activeChat ? 'hidden md:flex' : 'flex'}`}>
+            <div className={`h-full min-h-0 w-full overflow-hidden md:w-[360px] lg:w-[390px] border-r border-gray-800 flex flex-col ${activeChat ? 'hidden md:flex' : 'flex'}`}>
                 {/* Header */}
                 <div className="p-4 bg-signal-secondary flex justify-between items-center shadow-md z-10">
                     <div className="flex items-center gap-3">
@@ -2349,6 +2351,7 @@ const Home = () => {
             {/* Chat Room */}
             {visibleActiveChat ? (
                 <div className={`flex-1 flex flex-col h-full bg-black/50 relative ${activeChat ? 'flex' : 'hidden md:flex'}`}>
+                    {showChatDraw && <DrawStudio inline onClose={() => setShowChatDraw(false)} onSend={(file, caption) => { handleUpload(file); if (caption) handleSendMessage(caption, 'text', null, disappearingTtl); setShowChatDraw(false); }} />}
 
                     {/* Live Location Sharing Banner */}
                     {liveLocationSharing && liveLocationSharing.chatId === visibleActiveChat.id && (
@@ -2648,7 +2651,7 @@ const Home = () => {
                                                 disappearingTtl={disappearingTtl}
                                                 onDisappearingChange={updateDisappearingTtl}
                                                 chatId={visibleActiveChat.id}
-                                                onOpenDraw={() => { setShowInfoPanel(false); setDrawSource({ blank: true }); }}
+                                                onOpenDraw={() => { setShowInfoPanel(false); setShowChatDraw(true); }}
                                                 snapMode={snapMode}
                                                 onSnapModeChange={updateSnapMode}
                                             />
@@ -2811,7 +2814,7 @@ const Home = () => {
                                             disappearingTtl={disappearingTtl}
                                             onDisappearingChange={updateDisappearingTtl}
                                             chatId={visibleActiveChat.id}
-                                            onOpenDraw={() => { setShowInfoPanel(false); setDrawSource({ blank: true }); }}
+                                            onOpenDraw={() => { setShowInfoPanel(false); setShowChatDraw(true); }}
                                             snapMode={snapMode}
                                             onSnapModeChange={updateSnapMode}
                                         />
@@ -2966,6 +2969,7 @@ const Home = () => {
                         token={token}
                         drawSource={drawSource}
                         onDrawSourceConsumed={() => setDrawSource(null)}
+                        onOpenDraw={() => setShowChatDraw(true)}
                     />
                 </div>
             ) : (

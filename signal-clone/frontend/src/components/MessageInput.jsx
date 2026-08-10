@@ -75,7 +75,7 @@ const MessageInput = ({
     showAiFeature = false,
     showSmartReplies = false,
     currentUserId, payeeId, payeeName,
-    onSchedule, token, drawSource = null, onDrawSourceConsumed
+    onSchedule, token, drawSource = null, onDrawSourceConsumed, onOpenDraw
 }) => {
     const [text, setText] = useState('');
     const [showEmoji, setShowEmoji] = useState(false);
@@ -653,7 +653,7 @@ const MessageInput = ({
 
                         <button
                             type="button"
-                            onClick={() => { setShowDrawStudio(true); setShowAttachMenu(false); setShowEmoji(false); }}
+                            onClick={() => { if (onOpenDraw) onOpenDraw(); else setShowDrawStudio(true); setShowAttachMenu(false); setShowEmoji(false); }}
                             className="flex h-10 w-10 items-center justify-center rounded-full text-[#00a884] transition-all hover:bg-[#00a884]/10 hover:text-emerald-300 active:scale-90"
                             title="Draw, point or write"
                             aria-label="Open drawing tools"
@@ -795,7 +795,7 @@ const MessageInput = ({
                             label="Draw"
                             color="bg-emerald-500"
                             icon={<span className="text-2xl text-white">✎</span>}
-                            onClick={() => { setShowDrawStudio(true); setShowAttachMenu(false); }}
+                            onClick={() => { if (onOpenDraw) onOpenDraw(); else setShowDrawStudio(true); setShowAttachMenu(false); }}
                         />
                         <AttachOption
                             label="Gallery"

@@ -1274,10 +1274,6 @@ const VideoCallModal = ({
                         {isVideoOff ? <VideoCameraSlashIcon className="w-6 h-6" /> : <VideoCameraIcon className="w-6 h-6" />}
                     </ControlBtn>
 
-                    <ControlBtn onClick={toggleScreenShare} active={isScreenSharing} activeColor="bg-blue-600" label={isScreenSharing ? 'Stop Sharing' : 'Share Screen'}>
-                        <span className="text-xl">▣</span>
-                    </ControlBtn>
-
                 <ControlBtn onClick={flipCamera} activeColor="bg-gray-700" label="Switch Camera">
                     <ArrowPathIcon className="w-6 h-6" />
                 </ControlBtn>
@@ -1303,6 +1299,13 @@ const VideoCallModal = ({
                             >
                                 <UserPlusIcon className="w-5 h-5 text-gray-300" />
                                 <span>Add Participant</span>
+                            </button>
+                            <button
+                                onClick={() => { toggleScreenShare(); setShowMoreMenu(false); }}
+                                className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium transition ${isScreenSharing ? 'bg-blue-500/15 text-blue-300' : 'text-white hover:bg-white/10'}`}
+                            >
+                                <span className="flex h-5 w-5 items-center justify-center text-lg">▣</span>
+                                <span>{isScreenSharing ? 'Stop screen sharing' : 'Share screen'}</span>
                             </button>
                             <button
                                 onClick={() => { setIsVoiceCancellationOn(prev => !prev); setShowMoreMenu(false); }}

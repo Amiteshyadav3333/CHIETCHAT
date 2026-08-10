@@ -32,7 +32,7 @@ const ContactList = ({
     };
 
     return (
-        <div className="flex flex-col overflow-y-auto h-full">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
             {chats.map(chat => {
                 const displayName = nicknames[chat.id] || chat.name;
                 const isMuted = mutedChats.includes(chat.id);

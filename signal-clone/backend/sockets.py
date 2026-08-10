@@ -19,8 +19,8 @@ ALLOWED_MESSAGE_TYPES = {
     'location', 'live_location', 'contact', 'poll', 'game', 'gift', 'birthday',
     'ride', 'payment', 'business_auto_reply',
 }
-MIN_MESSAGE_TTL = 30
-MAX_MESSAGE_TTL = 2592000
+MIN_MESSAGE_TTL = 1
+MAX_MESSAGE_TTL = 315360000
 _call_signal_windows = defaultdict(deque)
 _call_signal_windows_lock = threading.Lock()
 

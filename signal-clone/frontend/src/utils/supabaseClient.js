@@ -7,7 +7,10 @@ export const supabase = supabaseUrl && supabaseAnonKey
     ? createClient(supabaseUrl, supabaseAnonKey, {
         auth: {
             flowType: 'pkce',
-            detectSessionInUrl: true,
+            // Login.jsx exchanges the callback code exactly once. Leaving URL
+            // detection enabled races that explicit exchange and can consume
+            // the PKCE verifier before the callback handler reads it.
+            detectSessionInUrl: false,
             persistSession: true,
             autoRefreshToken: true,
         },

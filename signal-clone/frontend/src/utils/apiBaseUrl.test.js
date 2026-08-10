@@ -2,18 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { resolveApiBaseUrl } from './apiBaseUrl';
 
 describe('production API URL resolution', () => {
-    it('replaces the retired Render hostname', () => {
+    it('uses the same origin proxy even when a Render hostname is configured', () => {
         expect(resolveApiBaseUrl('https://chietchat.onrender.com', true))
-            .toBe('https://chietchat-backend.onrender.com');
+            .toBe('');
     });
 
-    it('uses the production backend when the build variable is missing or unsafe', () => {
-        expect(resolveApiBaseUrl('', true)).toBe('https://chietchat-backend.onrender.com');
+    it('uses the same origin proxy when the build variable is missing or unsafe', () => {
+        expect(resolveApiBaseUrl('', true)).toBe('');
         expect(resolveApiBaseUrl('http://api.example.com', true))
-            .toBe('https://chietchat-backend.onrender.com');
+            .toBe('');
     });
 
-    it('preserves an explicitly configured HTTPS backend', () => {
-        expect(resolveApiBaseUrl('https://api.example.com/', true)).toBe('https://api.example.com');
+    it('keeps development API overrides available', () => {
+        expect(resolveApiBaseUrl('https://api.example.com/', false)).toBe('https://api.example.com');
     });
 });

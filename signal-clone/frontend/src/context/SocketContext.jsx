@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import io from 'socket.io-client';
 import axios from 'axios';
 import { AuthContext } from './AuthContext';
-import { API_BASE_URL } from '../utils/apiBaseUrl';
+import { API_BASE_URL, SOCKET_BASE_URL } from '../utils/apiBaseUrl';
 
 export const SocketContext = createContext();
 
@@ -13,7 +13,7 @@ export const SocketProvider = ({ children }) => {
     useEffect(() => {
         if (token) {
             // We can pass token in auth object
-            const url = API_BASE_URL || '/';
+            const url = import.meta.env.PROD ? SOCKET_BASE_URL : (API_BASE_URL || '/');
             const newSocket = io(url, {
                 auth: async (callback) => {
                     if (token !== 'cookie-session') {

@@ -310,10 +310,16 @@ def complete_google_registration():
         if User.query.filter(db.func.lower(User.email) == email).first():
             return jsonify({'error': 'This email already has a CHEETCHAT account'}), 409
         phone = normalize_phone(data.get('phone'))
-        if not is_valid_phone(phone):
-            return jsonify({'error': 'Phone number must be exactly 10 digits'}), 400
-        if User.query.filter_by(phone=phone).first() or PendingRegistration.query.filter_by(phone=phone).first():
-            return jsonify({'error': 'This phone number is unavailable'}), 409
+        if phone:
+            if not is_valid_phone(phone):
+                return jsonify({'error': 'Phone number must be exactly 10 digits'}), 400
+            if User.query.filter_by(phone=phone).first() or PendingRegistration.query.filter_by(phone=phone).first():
+                return jsonify({'error': 'This phone number is unavailable'}), 409
+        else:
+            # Keep compatibility with existing databases where phone is NOT NULL.
+            # This private value is never exposed or searchable and is replaced
+            # when the user links a real number later.
+            phone = f"google:{hashlib.sha256(subject.encode()).hexdigest()[:12]}"
         public_key = data.get('publicKey')
         encrypted_recovery_key = data.get('encryptedRecoveryKey')
         if not isinstance(public_key, str) or not 50 <= len(public_key) <= 20000:

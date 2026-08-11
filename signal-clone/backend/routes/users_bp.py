@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 from werkzeug.utils import secure_filename
-from models import db, User, Block, Follow, ProfileAudienceAvatar
+from models import db, User, PendingRegistration, Block, Follow, ProfileAudienceAvatar
 from extensions import socketio
 from utils import (
     get_current_user_id, get_contact_user_ids, serialize_user, get_json_data,
@@ -12,6 +12,29 @@ from utils import (
 users_bp = Blueprint('users_bp', __name__)
 
 ALLOWED_AVATAR_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
+
+
+@users_bp.route('/api/user/link-phone', methods=['POST'])
+def link_phone():
+    """Link a discoverable phone number after phone-free Google onboarding."""
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    if user.phone and not str(user.phone).startswith('google:'):
+        return jsonify({"error": "A phone number is already linked"}), 409
+    phone = normalize_phone(get_json_data().get('phone'))
+    if not is_valid_phone(phone):
+        return jsonify({"error": "Phone number must be exactly 10 digits"}), 400
+    existing = User.query.filter(User.phone == phone, User.id != user_id).first()
+    if existing or PendingRegistration.query.filter_by(phone=phone).first():
+        return jsonify({"error": "This phone number is unavailable"}), 409
+    user.phone = phone
+    user.phone_verified = False
+    db.session.commit()
+    return jsonify({"message": "Phone number linked", "user": serialize_user(user, viewer_id=user.id)}), 200
 
 @users_bp.route('/api/user/contact-avatar/<int:viewer_id>', methods=['POST'])
 def set_contact_specific_avatar(viewer_id):

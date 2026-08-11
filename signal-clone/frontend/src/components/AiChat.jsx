@@ -703,7 +703,9 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
         const streamUrl = `${cleanBaseUrl}/api/ai/chat/stream`;
 
-        // Streaming chat
+        // Streaming chat. If a proxy/browser cannot keep the stream open, use
+        // the regular JSON endpoint so a temporary SSE problem does not break chat.
+        let fullText = '';
         try {
             const response = await fetch(streamUrl, {
                 method: 'POST',
@@ -720,18 +722,22 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
-            let fullText = '';
+            let pending = '';
+            let streamDone = false;
 
-            while (true) {
+            while (!streamDone) {
                 if (abortRef.current) break;
                 const { done, value } = await reader.read();
-                if (done) break;
-                const chunk = decoder.decode(value);
-                const lines = chunk.split('\n');
+                pending += decoder.decode(value || new Uint8Array(), { stream: !done });
+                const lines = pending.split(/\r?\n/);
+                pending = done ? '' : lines.pop();
                 for (const line of lines) {
                     if (line.startsWith('data: ')) {
                         const data = line.slice(6);
-                        if (data === '[DONE]') break;
+                        if (data === '[DONE]') {
+                            streamDone = true;
+                            break;
+                        }
                         try {
                             const obj = JSON.parse(data);
                             if (obj.token) {
@@ -741,24 +747,41 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                         } catch { }
                     }
                 }
+                if (done) break;
             }
 
-            if (fullText) {
-                setMessages(prev => [...prev, {
-                    id: Date.now(),
-                    role: 'assistant',
-                    content: fullText,
-                    timestamp: new Date().toISOString()
-                }]);
+            if (!fullText && !abortRef.current) throw new Error('Empty AI stream');
+        } catch (streamError) {
+            if (!fullText && !abortRef.current) {
+                try {
+                    const fallback = await axios.post(`${cleanBaseUrl}/api/ai/chat`,
+                        { message: text, user_gender: userGender, language },
+                        { headers: { Authorization: `Bearer ${token}` }, timeout: 65000 }
+                    );
+                    fullText = String(fallback.data?.reply || '').trim();
+                    if (!fullText) throw new Error('Empty AI response');
+                } catch (fallbackError) {
+                    console.error('AI chat failed', {
+                        stream: streamError?.message,
+                        fallback: fallbackError?.response?.data?.error || fallbackError?.message
+                    });
+                }
             }
-            setStreamingText('');
-        } catch {
+        }
+
+        if (fullText) {
+            setMessages(prev => [...prev, {
+                id: Date.now(), role: 'assistant', content: fullText,
+                timestamp: new Date().toISOString()
+            }]);
+        } else if (!abortRef.current) {
             setMessages(prev => [...prev, {
                 id: Date.now(), role: 'assistant',
-                content: "Yaar, kuch problem aa gayi. Thodi der baad try karo! 🙏",
+                content: "Abhi AI se connect nahi ho pa raha. Ek baar phir try karo 🙏",
                 timestamp: new Date().toISOString()
             }]);
         }
+        setStreamingText('');
         setLoading(false);
     };
 

@@ -57,45 +57,38 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
     });
 }
 
+const WhiteCheetChatMark = () => (
+    <div className="flex flex-col items-center" aria-label="CHEETCHAT">
+        <svg viewBox="0 0 72 72" className="h-24 w-24 text-white" role="img" aria-hidden="true">
+            <path fill="currentColor" d="M36 7C19.98 7 7 18.64 7 33c0 7.25 3.31 13.8 8.65 18.52L12.8 64l13.48-6.12A32.2 32.2 0 0 0 36 59c16.02 0 29-11.64 29-26S52.02 7 36 7Z" />
+            <path fill="#000" d="M45.8 25.2c-2.35-2.18-5.26-3.27-8.74-3.27-6.92 0-11.67 4.7-11.67 11.3 0 6.63 4.7 11.34 11.67 11.34 3.5 0 6.43-1.1 8.78-3.3l-3.54-3.7a7.1 7.1 0 0 1-4.93 1.86c-3.84 0-6.4-2.55-6.4-6.2 0-3.62 2.56-6.15 6.4-6.15 1.9 0 3.53.62 4.9 1.84l3.53-3.72Z" />
+        </svg>
+        <span className="mt-4 text-xl font-black tracking-[0.28em] text-white">CHEETCHAT</span>
+    </div>
+);
+
 const ProtectedRoute = ({ children }) => {
     const { token, loading } = React.useContext(AuthContext);
-    if (loading) {
-        return (
-            <div className="flex h-[100dvh] items-center justify-center bg-[#111b21]">
-                <div className="flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 rounded-full border-4 border-[#00a884]/20 border-t-[#00a884] animate-spin" />
-                    <p className="text-gray-400 text-sm font-medium">Loading...</p>
-                </div>
-            </div>
-        );
-    }
+    if (loading) return <div className="flex h-[100dvh] items-center justify-center bg-black"><WhiteCheetChatMark /></div>;
     return token ? children : <Navigate to="/login" />;
 };
 
 const SplashScreen = () => {
-    const [render, setRender] = React.useState(() => !sessionStorage.getItem('app_shell_seen'));
+    const [render, setRender] = React.useState(true);
     const [fade, setFade] = React.useState(false);
     
     React.useEffect(() => {
         if (!render) return undefined;
-        sessionStorage.setItem('app_shell_seen', '1');
-        const timer1 = setTimeout(() => setFade(true), 120);
-        const timer2 = setTimeout(() => setRender(false), 280);
+        const timer1 = setTimeout(() => setFade(true), 260);
+        const timer2 = setTimeout(() => setRender(false), 420);
         return () => { clearTimeout(timer1); clearTimeout(timer2); };
     }, [render]);
 
     if (!render) return null;
 
     return (
-        <div className={`fixed inset-0 flex flex-col items-center justify-center bg-[#111b21] z-[9999] transition-opacity duration-500 ease-in-out ${fade ? 'opacity-0' : 'opacity-100'}`}>
-            <div className="flex-1 flex items-center justify-center">
-                <img src="/cheetchat-logo.png" alt="CHEETCHAT" className="h-24 w-24 rounded-3xl object-cover shadow-[0_0_40px_rgba(20,125,245,0.45)] animate-pulse" />
-            </div>
-            <div className="pb-10 flex flex-col items-center">
-                <span className="text-gray-400 text-xs font-medium mb-1 tracking-wider uppercase">from</span>
-                <span className="text-[#00a884] text-xl font-bold tracking-widest uppercase">CHEETCHAT</span>
-                <span className="mt-1 text-[10px] text-gray-500">Super all-in-one platform · Developed in India 🇮🇳</span>
-            </div>
+        <div className={`fixed inset-0 z-[9999] flex items-center justify-center bg-black transition-opacity duration-150 ease-out ${fade ? 'opacity-0' : 'opacity-100'}`}>
+            <WhiteCheetChatMark />
         </div>
     );
 };

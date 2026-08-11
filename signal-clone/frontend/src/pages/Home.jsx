@@ -29,7 +29,10 @@ import SidebarEmojiPicker from '../components/SidebarEmojiPicker';
 import { AppLockOverlay, EditMessageModal, ForwardMessageModal, OfflineBanner } from '../components/HomeOverlays';
 
 const Reels = React.lazy(() => import('./Reels'));
-const Social = React.lazy(() => import('./Social'));
+// Social is the launch surface, so begin downloading its chunk as soon as the
+// authenticated Home module evaluates instead of waiting for the first paint.
+const socialModulePromise = import('./Social');
+const Social = React.lazy(() => socialModulePromise);
 const PodLiveView = React.lazy(() => import('./PodLiveView'));
 const AiChat = React.lazy(() => import('../components/AiChat'));
 const AiSmartSpace = React.lazy(() => import('../components/AiSmartSpace'));
@@ -55,18 +58,9 @@ const Home = () => {
     const [chats, setChats] = useState(() => {
         return loadChatMetadata(user?.id);
     });
-    const [activeChat, setActiveChat] = useState(() => {
-        try {
-            const savedChatId = localStorage.getItem('activeChatId');
-            if (savedChatId) {
-                const found = loadChatMetadata(user?.id).find(c => c.id === parseInt(savedChatId, 10));
-                if (found) return found;
-            }
-        } catch (e) {
-            console.error("Failed to restore active chat synchronously", e);
-        }
-        return null;
-    });
+    // Every fresh app launch opens Social. Chats remain cached and ready, but a
+    // private conversation is never restored onto the screen automatically.
+    const [activeChat, setActiveChat] = useState(null);
     const [messages, setMessages] = useState(() => {
         purgeLegacyMessageCaches();
         return [];
@@ -87,14 +81,14 @@ const Home = () => {
     const [unlockPin, setUnlockPin] = useState('');
     const [unlockError, setUnlockError] = useState('');
     const [blockedUsers, setBlockedUsers] = useState([]);
-    const [showReels, setShowReels] = useState(() => localStorage.getItem('activeView') === 'reels');
-    const [showSocial, setShowSocial] = useState(() => localStorage.getItem('activeView') === 'social');
-    const [showAiChat, setShowAiChat] = useState(() => localStorage.getItem('activeView') === 'ai');
+    const [showReels, setShowReels] = useState(false);
+    const [showSocial, setShowSocial] = useState(true);
+    const [showAiChat, setShowAiChat] = useState(false);
     const [showSmartSpace, setShowSmartSpace] = useState(false);
     const [smartSpaceButtonEnabled, setSmartSpaceButtonEnabled] = useState(() => localStorage.getItem('smart_space_button_enabled') === '1');
-    const [showPodlive, setShowPodlive] = useState(() => localStorage.getItem('activeView') === 'podlive');
+    const [showPodlive, setShowPodlive] = useState(false);
     const [socialDeepLink, setSocialDeepLink] = useState(null); // { type: 'post'|'profile', id }
-    const [showSettings, setShowSettings] = useState(() => localStorage.getItem('activeView') === 'settings');
+    const [showSettings, setShowSettings] = useState(false);
     const [navPeekOpen, setNavPeekOpen] = useState(false);
     const [sidebarSearchQuery, setSidebarSearchQuery] = useState('');
     const [showSidebarEmoji, setShowSidebarEmoji] = useState(false);
@@ -112,11 +106,20 @@ const Home = () => {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
+    useEffect(() => {
+        localStorage.removeItem('activeChatId');
+        localStorage.setItem('activeView', 'social');
+    }, []);
+
     // Search Modal States
     const [showSearchModal, setShowSearchModal] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [searchedUser, setSearchedUser] = useState(null);
     const [searchError, setSearchError] = useState('');
+    const [showLinkPhoneModal, setShowLinkPhoneModal] = useState(false);
+    const [linkPhone, setLinkPhone] = useState('');
+    const [linkPhoneError, setLinkPhoneError] = useState('');
+    const [linkingPhone, setLinkingPhone] = useState(false);
     const [notifications, setNotifications] = useState([]);
     const [showNotifications, setShowNotifications] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
@@ -533,7 +536,7 @@ const Home = () => {
     };
 
     useEffect(() => {
-        if (token) fetchChats({ restoreActive: true });
+        if (token) fetchChats();
     }, [token, fetchChats]);
 
     useEffect(() => {
@@ -1384,6 +1387,40 @@ const Home = () => {
         }
     };
 
+    const openNewChat = () => {
+        setShowNotifications(false);
+        setShowSettings(false);
+        if (!user?.phone) {
+            setLinkPhoneError('');
+            setShowLinkPhoneModal(true);
+            return;
+        }
+        setShowSearchModal(true);
+    };
+
+    const handleLinkPhone = async (event) => {
+        event.preventDefault();
+        if (linkPhone.length !== 10) {
+            setLinkPhoneError('Phone number must be exactly 10 digits');
+            return;
+        }
+        setLinkingPhone(true);
+        setLinkPhoneError('');
+        try {
+            const response = await axios.post('/api/user/link-phone', { phone: linkPhone }, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            updateUser(response.data.user);
+            setShowLinkPhoneModal(false);
+            setLinkPhone('');
+            setShowSearchModal(true);
+        } catch (error) {
+            setLinkPhoneError(error.response?.data?.error || 'Could not link this number');
+        } finally {
+            setLinkingPhone(false);
+        }
+    };
+
     const requestCallPermissions = async (type = 'video') => {
         if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
             alert('Calls need camera/microphone access in a secure HTTPS browser window.');
@@ -1910,11 +1947,11 @@ const Home = () => {
         { label: 'PodLive', icon: MicrophoneIcon, active: showPodlive, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(true); setShowAiChat(false); } },
         { label: 'AI', icon: SparklesIcon, active: showAiChat, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(false); setShowAiChat(true); } },
         { label: 'Notify', icon: BellIcon, active: showNotifications, action: openNotifications, badge: unreadCount },
-        { label: 'New', icon: PlusIcon, active: showSearchModal, action: () => { setShowNotifications(false); setShowSettings(false); setShowSearchModal(true); } },
+        { label: 'New', icon: PlusIcon, active: showSearchModal || showLinkPhoneModal, action: openNewChat },
         { label: 'Settings', icon: Cog6ToothIcon, active: showSettings, action: () => { setShowNotifications(false); setShowSearchModal(false); setShowSettings(true); } }
     ];
 
-    const featureOverlayOpen = showSearchModal || showNotifications || showSettings || showCallModal || incomingCall;
+    const featureOverlayOpen = showSearchModal || showLinkPhoneModal || showNotifications || showSettings || showCallModal || incomingCall;
     const appNavHidden = featureOverlayOpen || Boolean(activeChat);
     const chatBackground = wallpaper === 'dots'
         ? 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.12) 1px, transparent 0), #0b141a'
@@ -1951,6 +1988,20 @@ const Home = () => {
             {!isOnline && <OfflineBanner />}
             {editingMessage && <EditMessageModal onCancel={() => setEditingMessage(null)} onChange={setEditText} onSubmit={submitEditMessage} text={editText} />}
             {forwardMessage && <ForwardMessageModal activeChatId={visibleActiveChat?.id} chats={chats} message={forwardMessage} onClose={() => setForwardMessage(null)} onForward={handleForwardToChat} />}
+
+            {showLinkPhoneModal && (
+                <div className="fixed inset-0 z-[155] flex items-center justify-center bg-black/80 p-4">
+                    <form onSubmit={handleLinkPhone} className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#111b21] p-6 shadow-2xl">
+                        <button type="button" onClick={() => setShowLinkPhoneModal(false)} className="float-right text-sm text-gray-400 hover:text-white">Close</button>
+                        <div className="text-4xl">📱</div>
+                        <h2 className="mt-4 text-xl font-black text-white">Link your number and find your friends</h2>
+                        <p className="mt-2 text-sm leading-6 text-gray-400">Add your mobile number to discover friends and let them find you on CHEETCHAT.</p>
+                        <input autoFocus value={linkPhone} onChange={event => setLinkPhone(event.target.value.replace(/\D/g, '').slice(0, 10))} inputMode="numeric" pattern="\d{10}" maxLength={10} placeholder="10-digit mobile number" className="mt-5 w-full rounded-xl border border-white/10 bg-[#202c33] px-4 py-3 text-white outline-none focus:border-[#00a884]" required />
+                        {linkPhoneError && <p className="mt-2 text-sm text-red-400">{linkPhoneError}</p>}
+                        <button type="submit" disabled={linkingPhone} className="mt-5 w-full rounded-xl bg-[#00a884] py-3 text-sm font-black text-white disabled:opacity-60">{linkingPhone ? 'Linking…' : 'Link number'}</button>
+                    </form>
+                </div>
+            )}
 
 
             {showSearchModal && (
@@ -2220,12 +2271,7 @@ const Home = () => {
                     </div>
                     <div className="flex gap-2">
                         <button 
-                            onClick={() => {
-                                setShowNotifications(false);
-                                setShowSearchModal(false);
-                                setShowSettings(false);
-                                setShowSearchModal(true);
-                            }} 
+                            onClick={openNewChat}
                             className="p-2 hover:bg-gray-700/55 rounded-full text-signal-accent transition-colors" 
                             title="New Chat"
                         >

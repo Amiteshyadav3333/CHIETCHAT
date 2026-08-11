@@ -710,7 +710,7 @@ def serialize_user(user, viewer_id=None):
     return {
         "id": user.id,
         "username": user.username,
-        "phone": user.phone,
+        "phone": "" if str(user.phone or '').startswith('google:') else user.phone,
         "avatar": avatar,
         "hasCustomAudienceAvatar": bool(viewer_id and viewer_id != user.id and avatar != user.avatar),
         "publicKey": user.public_key,

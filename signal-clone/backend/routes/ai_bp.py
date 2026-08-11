@@ -40,13 +40,39 @@ def _detect_language(text: str) -> str:
     """Detect the language of the current turn so old memory cannot override it."""
     text = text or ''
     if re.search(r'[\u0900-\u097f]', text):
-        return 'hindi'
+        return 'devanagari'
+    for pattern, language in (
+        (r'[\u0980-\u09ff]', 'Bengali (Bengali script)'),
+        (r'[\u0b80-\u0bff]', 'Tamil (Tamil script)'),
+        (r'[\u0c00-\u0c7f]', 'Telugu (Telugu script)'),
+        (r'[\u0a80-\u0aff]', 'Gujarati (Gujarati script)'),
+        (r'[\u0a00-\u0a7f]', 'Punjabi (Gurmukhi script)'),
+        (r'[\u0600-\u06ff]', 'Arabic (Arabic script)'),
+    ):
+        if re.search(pattern, text):
+            return language
     hinglish_words = re.findall(
         r'\b(kya|hai|haan|ha|nahi|nhi|acha|achha|kaise|kyu|main|mai|mujhe|tum|aap|'
         r'yaar|yr|kar|karo|batao|bolo|chahiye|wala|wali|raha|rahi|hoon|hu)\b',
         text.lower()
     )
-    return 'hinglish' if len(hinglish_words) >= 1 else 'english'
+    if hinglish_words:
+        return 'Roman Hinglish'
+    if re.search(r'[A-Za-z]', text):
+        # Latin script is shared by many languages. Let the model distinguish
+        # English, Spanish, French, etc. from the complete current message.
+        return 'the language used in the current message (auto-detect the Latin-script language)'
+    return ''
+
+
+def _response_language_instruction(text: str, language_code: str | None) -> str:
+    """Prefer the current message's language; use the UI choice only for ambiguous turns."""
+    detected = _detect_language(text)
+    if detected == 'devanagari':
+        detected = 'Marathi (Devanagari script)' if language_code == 'mr-IN' else 'Hindi (Devanagari script)'
+    if detected:
+        return detected
+    return SUPPORTED_LANGUAGES.get(language_code, 'the language used in the current message')
 
 
 def _detect_mode(message: str, history) -> str:
@@ -442,12 +468,14 @@ def _build_messages(user_id, new_user_msg, user_gender=None, user_name=None, lan
         .limit(MEMORY_LIMIT).all()
     history = list(reversed(history))
 
-    current_language = SUPPORTED_LANGUAGES.get(language_code) or _detect_language(new_user_msg)
+    current_language = _response_language_instruction(new_user_msg, language_code)
     mode = _detect_mode(new_user_msg, history)
     system_prompt = _build_system_prompt(user_gender or 'unknown', user_name or 'User')
     system_prompt += f"\n\n🎯 LIVE STYLE MEMORY:\n{_conversation_style_hint(history)}"
     system_prompt += (
-        f"\n\nCURRENT TURN:\n- Language: {current_language}. Reply only in this language/script."
+        f"\n\nCURRENT TURN:\n- Language: {current_language}. Reply only in the language and script of "
+        "the user's CURRENT message. The saved language preference is only a fallback for emoji-only "
+        "or otherwise ambiguous messages; never let it override clear current-message language."
         f"\n- Conversation mode: {mode}."
     )
     system_prompt += (
@@ -619,6 +647,10 @@ def ai_chat_stream():
 
     def generate():
         full_reply = []
+
+        # Send headers immediately. This prevents hosting proxies from treating
+        # the request as idle while the first AI provider establishes a connection.
+        yield ": connected\n\n"
 
         # Try Groq streaming first
         resp = _call_groq(messages, stream=True)

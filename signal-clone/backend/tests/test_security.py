@@ -31,7 +31,7 @@ from call_records import maintain_call_records
 from payment_reconciliation import reconcile_payments
 from observability import report_safe_exception
 from ai_retention import maintain_ai_memory
-from routes.ai_bp import _save_turn
+from routes.ai_bp import _build_messages, _response_language_instruction, _save_turn
 from routes.auth_bp import create_token, finalize_login
 from scripts import cleanup_retention
 from utils import (
@@ -140,33 +140,47 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_operations_health_reports_degraded_and_stale_worker_without_taking_api_down(self):
+        # This test isolates worker health from optional Redis readiness. A
+        # developer's local REDIS_URL must not make its result environment-dependent.
+        with patch.object(app_module, '_redis_client', None):
+            with app.app_context():
+                heartbeat = WorkerHeartbeat(
+                    name='scheduled-delivery', last_run_at=utc_now(),
+                    last_success_at=utc_now() - timedelta(minutes=10), status='degraded',
+                )
+                db.session.add(heartbeat)
+                db.session.commit()
+            api_ready = self.client.get('/health/ready')
+            self.assertEqual(api_ready.status_code, 200)
+            recent = self.client.get('/health/operations')
+            self.assertEqual(recent.status_code, 503)
+            self.assertEqual(recent.json['worker'], 'degraded')
+            with app.app_context():
+                heartbeat = db.session.get(WorkerHeartbeat, 'scheduled-delivery')
+                heartbeat.status = 'ok'
+                heartbeat.last_run_at = utc_now()
+                db.session.commit()
+            healthy = self.client.get('/health/operations')
+            self.assertEqual(healthy.status_code, 200)
+            self.assertEqual(healthy.json['worker'], 'ok')
+            with app.app_context():
+                heartbeat = db.session.get(WorkerHeartbeat, 'scheduled-delivery')
+                heartbeat.last_run_at = utc_now() - timedelta(minutes=4)
+                db.session.commit()
+            stale = self.client.get('/health/operations')
+            self.assertEqual(stale.status_code, 503)
+            self.assertEqual(stale.json['worker'], 'stale')
+
+    def test_ai_current_message_language_overrides_saved_preference(self):
+        self.assertEqual(_response_language_instruction('क्या कर रहे हो?', 'en-IN'), 'Hindi (Devanagari script)')
+        self.assertEqual(_response_language_instruction('kya kar rahe ho?', 'en-IN'), 'Roman Hinglish')
+        self.assertIn('auto-detect', _response_language_instruction('Bonjour, comment allez-vous?', 'hi-IN'))
+        self.assertEqual(_response_language_instruction('தமிழில் பேசுங்கள்', 'en-IN'), 'Tamil (Tamil script)')
+
         with app.app_context():
-            heartbeat = WorkerHeartbeat(
-                name='scheduled-delivery', last_run_at=utc_now(),
-                last_success_at=utc_now() - timedelta(minutes=10), status='degraded',
-            )
-            db.session.add(heartbeat)
-            db.session.commit()
-        api_ready = self.client.get('/health/ready')
-        self.assertEqual(api_ready.status_code, 200)
-        recent = self.client.get('/health/operations')
-        self.assertEqual(recent.status_code, 503)
-        self.assertEqual(recent.json['worker'], 'degraded')
-        with app.app_context():
-            heartbeat = db.session.get(WorkerHeartbeat, 'scheduled-delivery')
-            heartbeat.status = 'ok'
-            heartbeat.last_run_at = utc_now()
-            db.session.commit()
-        healthy = self.client.get('/health/operations')
-        self.assertEqual(healthy.status_code, 200)
-        self.assertEqual(healthy.json['worker'], 'ok')
-        with app.app_context():
-            heartbeat = db.session.get(WorkerHeartbeat, 'scheduled-delivery')
-            heartbeat.last_run_at = utc_now() - timedelta(minutes=4)
-            db.session.commit()
-        stale = self.client.get('/health/operations')
-        self.assertEqual(stale.status_code, 503)
-        self.assertEqual(stale.json['worker'], 'stale')
+            prompt = _build_messages(self.user_id, 'How are you today?', 'male', 'Amit', 'hi-IN')[0]['content']
+        self.assertIn('auto-detect the Latin-script language', prompt)
+        self.assertIn('never let it override clear current-message language', prompt)
 
     def test_safe_reporter_never_interpolates_private_exception_value_into_logs(self):
         marker = 'private-email-password-message-marker'
@@ -252,6 +266,37 @@ class SecurityTests(unittest.TestCase):
         response = self.client.post('/api/auth/google/exchange', json={'accessToken': 'supabase-token'})
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json['code'], 'EXISTING_EMAIL_ACCOUNT')
+
+    @patch('routes.auth_bp.get_supabase_user')
+    def test_google_signup_can_skip_phone_and_link_it_later(self, get_supabase_user):
+        get_supabase_user.return_value = {
+            'id': 'google-no-phone-subject',
+            'email': 'google-no-phone@example.com',
+            'email_confirmed_at': '2026-08-10T10:00:00Z',
+            'app_metadata': {'provider': 'google', 'providers': ['google']},
+            'user_metadata': {'full_name': 'No Phone User'},
+            'identities': [{'provider': 'google'}],
+        }
+        completed = self.client.post('/api/auth/google/complete', json={
+            'accessToken': 'supabase-token',
+            'publicKey': 'p' * 100,
+            'encryptedRecoveryKey': 'r' * 100,
+            'deviceFingerprint': 'google-no-phone-browser',
+        })
+        self.assertEqual(completed.status_code, 200)
+        self.assertEqual(completed.json['user']['phone'], '')
+        csrf_token = completed.json['csrfToken']
+
+        linked = self.client.post('/api/user/link-phone', json={'phone': '7666666666'}, headers={
+            'Authorization': 'Bearer cookie-session',
+            'X-CSRF-Token': csrf_token,
+        })
+        self.assertEqual(linked.status_code, 200)
+        self.assertEqual(linked.json['user']['phone'], '7666666666')
+        with app.app_context():
+            user = User.query.filter_by(supabase_user_id='google-no-phone-subject').one()
+            self.assertEqual(user.phone, '7666666666')
+            self.assertFalse(user.phone_verified)
 
     def test_login_issues_http_only_cookie_without_exposing_jwt_in_json(self):
         with app.test_request_context('/api/login', method='POST', json={'deviceFingerprint': 'browser-test'}):

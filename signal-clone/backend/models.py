@@ -33,6 +33,7 @@ class User(db.Model):
     hide_online_status = db.Column(db.Boolean, default=False)
     read_receipts = db.Column(db.Boolean, default=True)
     profile_photo_privacy = db.Column(db.String(20), default='everyone')  # everyone | contacts | nobody
+    phone_number_privacy = db.Column(db.String(20), nullable=False, default='nobody')  # everyone | contacts | nobody
     two_factor_enabled = db.Column(db.Boolean, default=False)
     two_factor_secret = db.Column(db.String(100), nullable=True)
     bio_expires_at = db.Column(db.DateTime, nullable=True)
@@ -54,10 +55,18 @@ class Chat(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     is_group = db.Column(db.Boolean, default=False)
     name = db.Column(db.String(100), nullable=True)
+    avatar = db.Column(db.String(500), nullable=True)
     group_admin_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     is_public = db.Column(db.Boolean, default=False)
     is_chat_disabled = db.Column(db.Boolean, default=False)
     snap_mode = db.Column(db.Boolean, nullable=False, default=False)
+    description = db.Column(db.String(500), nullable=True)
+    group_username = db.Column(db.String(64), nullable=True, unique=True)
+    slow_mode_seconds = db.Column(db.Integer, nullable=False, default=0)
+    members_can_send_media = db.Column(db.Boolean, nullable=False, default=True)
+    members_can_add_members = db.Column(db.Boolean, nullable=False, default=False)
+    reactions_enabled = db.Column(db.Boolean, nullable=False, default=True)
+    join_approval_required = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=utc_now)
 
     messages = db.relationship('Message', backref='chat', lazy=True)
@@ -414,6 +423,8 @@ class SocialPost(db.Model):
     media_type = db.Column(db.String(20), nullable=True)  # image | video
     retweet_of_id = db.Column(db.Integer, db.ForeignKey('social_post.id'), nullable=True)
     share_count = db.Column(db.Integer, default=0)
+    post_kind = db.Column(db.String(20), nullable=False, default='standard')  # standard | community
+    poll_options = db.Column(db.Text, nullable=True)  # JSON string array
     created_at = db.Column(db.DateTime, default=utc_now)
 
     user = db.relationship('User')
@@ -421,6 +432,7 @@ class SocialPost(db.Model):
     likes = db.relationship('SocialPostLike', backref='post', lazy=True, cascade='all, delete-orphan')
     unique_shares = db.relationship('SocialPostShare', backref='post', lazy=True, cascade='all, delete-orphan')
     comments = db.relationship('SocialPostComment', backref='post', lazy=True, cascade='all, delete-orphan')
+    poll_votes = db.relationship('SocialPollVote', backref='post', lazy=True, cascade='all, delete-orphan')
     retweet_of = db.relationship('SocialPost', remote_side='SocialPost.id', foreign_keys='SocialPost.retweet_of_id', backref=db.backref('retweets', cascade='all, delete-orphan'))
 
 class SocialPostLike(db.Model):
@@ -429,6 +441,14 @@ class SocialPostLike(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now)
     __table_args__ = (db.UniqueConstraint('post_id', 'user_id', name='uq_social_post_user_like'),)
+
+class SocialPollVote(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(db.Integer, db.ForeignKey('social_post.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    option_index = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now)
+    __table_args__ = (db.UniqueConstraint('post_id', 'user_id', name='uq_social_poll_user_vote'),)
 
 
 class SocialPostShare(db.Model):

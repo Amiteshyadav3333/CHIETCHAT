@@ -4,13 +4,15 @@ import json
 import hashlib
 import hmac
 import datetime
+from werkzeug.utils import secure_filename
 from sqlalchemy import or_
 from models import db, Chat, ChatParticipant, Message, User, MessageDeletion, PaymentOrder, ScheduledMessage, CallRecord
 from extensions import socketio
 from utils import (
     get_current_user_id, user_can_access_chat, serialize_user, 
     iso_utc, get_json_data, has_contact, is_blocked, utc_now,
-    queue_claimed_upload_assets, process_media_deletion_task
+    queue_claimed_upload_assets, process_media_deletion_task, upload_to_cloudinary,
+    queue_media_deletion
 )
 from scheduled_messages import valid_encrypted_envelope
 from observability import report_safe_exception
@@ -241,13 +243,20 @@ def get_chats():
                 "isGroup": chat.is_group,
                 "isArchived": archive_map.get(chat.id, False),
                 "name": chat_name,
-                "avatar": chat_avatar,
+                "avatar": chat.avatar if chat.is_group else chat_avatar,
                 "myAvatarForContact": my_audience_profile['avatar'] if my_audience_profile else None,
                 "hasCustomAvatarForContact": my_audience_profile['hasCustomAudienceAvatar'] if my_audience_profile else False,
                 "participants": part_data,
                 "groupAdminId": chat.group_admin_id,
                 "isPublic": getattr(chat, 'is_public', False),
                 "isChatDisabled": getattr(chat, 'is_chat_disabled', False),
+                "description": getattr(chat, 'description', None) or '',
+                "groupUsername": getattr(chat, 'group_username', None) or '',
+                "slowModeSeconds": getattr(chat, 'slow_mode_seconds', 0) or 0,
+                "membersCanSendMedia": getattr(chat, 'members_can_send_media', True) is not False,
+                "membersCanAddMembers": bool(getattr(chat, 'members_can_add_members', False)),
+                "reactionsEnabled": getattr(chat, 'reactions_enabled', True) is not False,
+                "joinApprovalRequired": bool(getattr(chat, 'join_approval_required', False)),
                 "snapMode": bool(getattr(chat, 'snap_mode', False)),
                 "unreadCount": unread_count,
                 "lastMessage": {
@@ -489,6 +498,9 @@ def react_message(message_id):
     message = db.session.get(Message, message_id)
     if not message or not user_can_access_chat(user_id, message.chat_id):
         return jsonify({"error": "Message not found"}), 404
+    chat = db.session.get(Chat, message.chat_id)
+    if chat and chat.is_group and getattr(chat, 'reactions_enabled', True) is False:
+        return jsonify({"error": "Reactions are disabled in this group"}), 403
     data = get_json_data()
     raw_emoji = data.get('emoji')
     if not isinstance(raw_emoji, str):
@@ -561,6 +573,94 @@ def create_group():
     except Exception as e:
         report_safe_exception('group_creation_failed', e)
         return jsonify({"error": "Failed to create group"}), 500
+
+@chats_bp.route('/api/groups/<int:chat_id>/settings', methods=['PATCH'])
+def update_group_settings(chat_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    group = db.session.get(Chat, chat_id)
+    if not group or not group.is_group:
+        return jsonify({"error": "Group not found"}), 404
+    if group.group_admin_id != user_id:
+        return jsonify({"error": "Only the group owner can change settings"}), 403
+
+    data = get_json_data()
+    if 'name' in data:
+        name = str(data.get('name') or '').strip()
+        if not name:
+            return jsonify({"error": "Group name is required"}), 400
+        group.name = name[:100]
+    if 'description' in data:
+        group.description = str(data.get('description') or '').strip()[:500]
+    if 'groupUsername' in data:
+        username = str(data.get('groupUsername') or '').strip().lower().lstrip('@')
+        if username and (len(username) < 5 or not username.replace('_', '').isalnum()):
+            return jsonify({"error": "Username must be 5+ letters, numbers or underscores"}), 400
+        duplicate = Chat.query.filter(Chat.group_username == username, Chat.id != chat_id).first() if username else None
+        if duplicate:
+            return jsonify({"error": "That group username is already taken"}), 409
+        group.group_username = username or None
+    if 'isPublic' in data:
+        group.is_public = bool(data['isPublic'])
+    if 'slowModeSeconds' in data:
+        allowed = {0, 10, 30, 60, 300, 900, 3600}
+        seconds = int(data.get('slowModeSeconds') or 0)
+        if seconds not in allowed:
+            return jsonify({"error": "Invalid slow mode interval"}), 400
+        group.slow_mode_seconds = seconds
+    for api_key, attr in (
+        ('membersCanSendMedia', 'members_can_send_media'),
+        ('membersCanAddMembers', 'members_can_add_members'),
+        ('reactionsEnabled', 'reactions_enabled'),
+        ('joinApprovalRequired', 'join_approval_required'),
+    ):
+        if api_key in data:
+            setattr(group, attr, bool(data[api_key]))
+    db.session.commit()
+    return jsonify({
+        "id": group.id, "name": group.name, "description": group.description or '',
+        "groupUsername": group.group_username or '', "isPublic": bool(group.is_public),
+        "slowModeSeconds": group.slow_mode_seconds or 0,
+        "membersCanSendMedia": group.members_can_send_media is not False,
+        "membersCanAddMembers": bool(group.members_can_add_members),
+        "reactionsEnabled": group.reactions_enabled is not False,
+        "joinApprovalRequired": bool(group.join_approval_required),
+    })
+
+@chats_bp.route('/api/groups/<int:chat_id>/avatar', methods=['POST', 'DELETE'])
+def update_group_avatar(chat_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    group = db.session.get(Chat, chat_id)
+    if not group or not group.is_group:
+        return jsonify({"error": "Group not found"}), 404
+    if group.group_admin_id != user_id:
+        return jsonify({"error": "Only the group admin can change the photo"}), 403
+    previous = group.avatar
+    if request.method == 'DELETE':
+        group.avatar = None
+    else:
+        file = request.files.get('avatar')
+        if not file or not file.filename:
+            return jsonify({"error": "Select a group photo"}), 400
+        filename = secure_filename(file.filename)
+        extension = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+        if extension not in {'jpg', 'jpeg', 'png', 'gif', 'webp'}:
+            return jsonify({"error": "Please upload a JPG, PNG, GIF, or WebP image"}), 400
+        try:
+            group.avatar = upload_to_cloudinary(file, folder='chietchat/group-avatars', resource_type='image')
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        except Exception:
+            return jsonify({"error": "Group photo upload failed"}), 500
+    deletion_task = queue_media_deletion(previous, 'image')
+    db.session.commit()
+    if deletion_task:
+        process_media_deletion_task(deletion_task.id)
+    emit_message_update(chat_id, 'group_profile_updated', {"chatId": chat_id, "avatar": group.avatar})
+    return jsonify({"id": group.id, "avatar": group.avatar})
 
 # Add Participant to Group
 @chats_bp.route('/api/chats/<int:chat_id>/participants', methods=['POST'])
@@ -679,7 +779,7 @@ def join_group(chat_id):
 
     user = db.session.get(User, user_id)
 
-    if getattr(group, 'is_public', False):
+    if getattr(group, 'is_public', False) and not getattr(group, 'join_approval_required', False):
         # Directly join
         participant = ChatParticipant(chat_id=chat_id, user_id=user_id)
         db.session.add(participant)

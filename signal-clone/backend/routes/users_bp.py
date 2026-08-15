@@ -557,6 +557,10 @@ def update_privacy_settings():
         val = data.get('profilePhotoPrivacy')
         if val in ['everyone', 'contacts', 'nobody']:
             user.profile_photo_privacy = val
+    if 'phoneNumberPrivacy' in data:
+        val = data.get('phoneNumberPrivacy')
+        if val in ['everyone', 'contacts', 'nobody']:
+            user.phone_number_privacy = val
 
     db.session.commit()
     

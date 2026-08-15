@@ -604,6 +604,22 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 />
                                 {(profilePrivacy === 'contacts_except' || profilePrivacy === 'only') && <AudienceInput value={profileExceptions} onChange={value => { setProfileExceptions(value); localStorage.setItem('profile_privacy_exceptions', value); }} mode={profilePrivacy} />}
                             </SettingsGroup>
+                            <SectionLabel>Phone number visibility</SectionLabel>
+                            <SettingsGroup>
+                                <ChoiceRow
+                                    title="Who can see my phone number"
+                                    value={user?.phoneNumberPrivacy || 'nobody'}
+                                    onChange={async (val) => {
+                                        try {
+                                            const res = await axios.put('/api/user/privacy', { phoneNumberPrivacy: val }, { headers: { Authorization: `Bearer ${token}` } });
+                                            onUserUpdate?.(res.data);
+                                        } catch (err) { console.error(err); }
+                                    }}
+                                    options={[["nobody", "Nobody (username only)"], ["contacts", "My Contacts"], ["everyone", "Everyone"]]}
+                                />
+                                <InfoRow title="Groups stay private" text="Your phone number is never displayed in group member lists. Members see only your username and unique CHEETCHAT ID." />
+                                <SettingsRow icon={<ShieldCheckIcon />} title="Read Privacy Policy" subtitle="Scrollable details about your data and privacy controls" onClick={() => window.open('/privacy', '_blank', 'noopener,noreferrer')} />
+                            </SettingsGroup>
                             <SectionLabel>Story visibility</SectionLabel>
                             <SettingsGroup>
                                 <ChoiceRow title="Who can see my story" value={storyPrivacy} onChange={val => { setStoryPrivacy(val); localStorage.setItem('story_privacy', val); }} options={[['contacts', 'My Contacts'], ['contacts_except', 'Contacts except…'], ['only', 'Only share with…'], ['nobody', 'Nobody']]} />

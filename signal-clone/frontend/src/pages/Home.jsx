@@ -25,6 +25,7 @@ import { emitWithAcknowledgement } from '../utils/socketAcknowledgement';
 import ChatPreferences from '../components/ChatPreferences';
 import DeleteChatModal from '../components/DeleteChatModal';
 import UserAvatar from '../components/UserAvatar';
+import TelegramGroupInfo from '../components/TelegramGroupInfo';
 import SidebarEmojiPicker from '../components/SidebarEmojiPicker';
 import { AppLockOverlay, EditMessageModal, ForwardMessageModal, OfflineBanner } from '../components/HomeOverlays';
 
@@ -2735,6 +2736,23 @@ const Home = () => {
                     {showInfoPanel && (() => {
                         if (visibleActiveChat.isGroup) {
                             const isAdmin = visibleActiveChat.groupAdminId === user?.id;
+                            if (visibleActiveChat) return (
+                                <TelegramGroupInfo
+                                    chat={visibleActiveChat}
+                                    user={user}
+                                    token={token}
+                                    messages={messages}
+                                    requests={groupRequests}
+                                    onRespondRequest={handleRespondRequest}
+                                    onClose={() => setShowInfoPanel(false)}
+                                    onTogglePosting={handleToggleMuteGroup}
+                                    onDelete={() => { setShowInfoPanel(false); handleDeleteChat(visibleActiveChat.id); }}
+                                    onUpdated={(settings) => {
+                                        setChats(prev => prev.map(item => item.id === visibleActiveChat.id ? { ...item, ...settings } : item));
+                                        setActiveChat(prev => prev?.id === visibleActiveChat.id ? { ...prev, ...settings } : prev);
+                                    }}
+                                />
+                            );
                             return (
                                 <div className="absolute inset-0 z-40 bg-black/70 flex justify-end" onClick={() => setShowInfoPanel(false)}>
                                     <div className="w-80 bg-[#111b21] h-full flex flex-col shadow-2xl animate-slide-left" onClick={e => e.stopPropagation()}>

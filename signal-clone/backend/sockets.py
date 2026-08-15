@@ -286,6 +286,18 @@ def register_socket_events(socketio):
         message_type = str(data.get('type') or 'text')
         if message_type not in ALLOWED_MESSAGE_TYPES:
             return {"ok": False, "error": "Unsupported message type", "retryable": False}
+        if chat and chat.is_group and chat.group_admin_id != socket_user_id:
+            media_types = {'image', 'video', 'video_note', 'audio', 'file', 'gif', 'sticker', 'drawing'}
+            if message_type in media_types and getattr(chat, 'members_can_send_media', True) is False:
+                return {"ok": False, "error": "Only admins can send media in this group", "retryable": False}
+            slow_seconds = int(getattr(chat, 'slow_mode_seconds', 0) or 0)
+            if slow_seconds:
+                last_sent = Message.query.filter_by(chat_id=chat_id, sender_id=socket_user_id).order_by(Message.timestamp.desc()).first()
+                if last_sent and last_sent.timestamp:
+                    elapsed = (utc_now() - last_sent.timestamp).total_seconds()
+                    if elapsed < slow_seconds:
+                        wait_for = max(1, int(slow_seconds - elapsed))
+                        return {"ok": False, "error": f"Slow mode: wait {wait_for} seconds", "retryable": False}
         try:
             ttl = int(data.get('ttl') or 0)
         except (TypeError, ValueError):

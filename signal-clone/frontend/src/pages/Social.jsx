@@ -7,7 +7,7 @@ import {
     TrashIcon, UsersIcon, ArrowPathRoundedSquareIcon, ShareIcon,
     PencilIcon, LinkIcon, CalendarIcon, ArrowUpTrayIcon, UserCircleIcon,
     EllipsisHorizontalIcon, MagnifyingGlassIcon, BookmarkIcon,
-    HomeIcon, SparklesIcon
+    HomeIcon, SparklesIcon, ChartBarIcon
 } from '@heroicons/react/24/outline';
 import {
     HeartIcon as HeartSolidIcon,
@@ -157,7 +157,25 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
     );
 };
 
-const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onShareToChat, onDelete, onFollow, onOpenProfile }) => {
+const CommunityComposer = ({ avatar, caption, setCaption, pollOptions, setPollOptions, posting, onSubmit }) => {
+    const [pollOpen, setPollOpen] = useState(false);
+    const updateOption = (index, value) => setPollOptions(items => items.map((item, i) => i === index ? value : item));
+    const validOptions = pollOptions.filter(item => item.trim()).length;
+    return <div className="border-b border-[#2f3336] bg-gradient-to-b from-[#0b1721] to-black px-4 py-4">
+        <div className="mb-3 flex items-center gap-2 text-sm font-bold text-[#1d9bf0]"><UsersIcon className="h-5 w-5" />Create a community post</div>
+        <div className="flex gap-3"><img src={avatar} alt="" className="h-10 w-10 rounded-full object-cover" /><div className="min-w-0 flex-1">
+            <textarea value={caption} onChange={e => setCaption(e.target.value.slice(0, 1000))} rows={3} placeholder="Share an update with your community…" className="w-full resize-none bg-transparent text-lg text-white outline-none placeholder:text-[#71767b]" />
+            {pollOpen && <div className="mt-3 space-y-2 rounded-2xl border border-[#2f3336] bg-[#101820] p-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-[#71767b]">Poll options</p>
+                {pollOptions.map((option, index) => <div key={index} className="flex gap-2"><input value={option} onChange={e => updateOption(index, e.target.value.slice(0, 100))} placeholder={`Option ${index + 1}`} className="flex-1 rounded-xl border border-[#333639] bg-black px-3 py-2 text-sm text-white outline-none focus:border-[#1d9bf0]" />{index > 1 && <button onClick={() => setPollOptions(items => items.filter((_, i) => i !== index))} className="text-[#71767b] hover:text-red-400"><XMarkIcon className="h-5 w-5" /></button>}</div>)}
+                {pollOptions.length < 4 && <button onClick={() => setPollOptions(items => [...items, ''])} className="text-sm font-semibold text-[#1d9bf0]">+ Add option</button>}
+            </div>}
+            <div className="mt-3 flex items-center justify-between border-t border-[#2f3336] pt-3"><button onClick={() => { setPollOpen(v => !v); if (pollOpen) setPollOptions(['', '']); }} className={`flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold ${pollOpen ? 'bg-[#1d9bf0]/15 text-[#1d9bf0]' : 'text-[#71767b] hover:bg-white/5'}`}><ChartBarIcon className="h-5 w-5" />Poll</button><button onClick={onSubmit} disabled={posting || !caption.trim() || (pollOpen && validOptions < 2)} className="rounded-full bg-[#1d9bf0] px-5 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">{posting ? 'Publishing…' : 'Publish'}</button></div>
+        </div></div>
+    </div>;
+};
+
+const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onShareToChat, onDelete, onFollow, onOpenProfile, onPollVote }) => {
     const [commentsOpen, setCommentsOpen] = useState(false);
     const [comments, setComments] = useState([]);
     const [comment, setComment] = useState('');
@@ -269,6 +287,11 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
                 </div>
 
                 {postCaption && <p style={{ marginTop: 4, fontSize: 15, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#e7e9ea' }}>{postCaption}</p>}
+
+                {displayPost.poll && <div className="mt-3 space-y-2 rounded-2xl border border-[#2f3336] bg-[#0b1117] p-3">
+                    {displayPost.poll.options.map((option, index) => { const count = displayPost.poll.counts[index] || 0; const pct = displayPost.poll.totalVotes ? Math.round(count * 100 / displayPost.poll.totalVotes) : 0; const selected = displayPost.poll.selectedOption === index; return <button key={index} onClick={() => onPollVote?.(index)} className={`relative w-full overflow-hidden rounded-xl border px-3 py-2.5 text-left text-sm font-semibold ${selected ? 'border-[#1d9bf0] text-white' : 'border-[#333639] text-[#e7e9ea]'}`}><span className="absolute inset-y-0 left-0 bg-[#1d9bf0]/20 transition-all" style={{ width: `${pct}%` }} /><span className="relative flex justify-between gap-3"><span>{option}</span><span className="text-[#8b98a5]">{pct}%</span></span></button>; })}
+                    <p className="px-1 text-xs text-[#71767b]">{displayPost.poll.totalVotes} vote{displayPost.poll.totalVotes === 1 ? '' : 's'} · vote can be changed</p>
+                </div>}
 
                 {postMedia && (
                     <div style={{ marginTop: 12, borderRadius: 16, overflow: 'hidden', border: '1px solid #2f3336', maxHeight: 500 }}>
@@ -667,6 +690,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat }) => {
     const [loading, setLoading] = useState(true);
     const [caption, setCaption] = useState('');
     const [media, setMedia] = useState(null);
+    const [pollOptions, setPollOptions] = useState(['', '']);
     const [preview, setPreview] = useState(null);
     const [posting, setPosting] = useState(false);
     const [showChannelForm, setShowChannelForm] = useState(false);
@@ -683,7 +707,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat }) => {
         setLoading(true);
         const t = tab || activeTab;
         try {
-            const feed = t === 'following' ? 'following' : 'all';
+            const feed = t === 'following' ? 'following' : t === 'community' ? 'community' : 'all';
             const res = await axios.get('/api/social/posts?feed=' + feed, { headers: authHeaders(token) });
             setPosts(res.data);
         } catch { } finally { setLoading(false); }
@@ -722,17 +746,19 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat }) => {
         return () => URL.revokeObjectURL(url);
     }, [media]);
 
-    const submitPost = async (channelId) => {
+    const submitPost = async (channelId, postKind = 'standard') => {
         if (!caption.trim() && !media) return;
         setPosting(true);
         const fd = new FormData();
         fd.append('caption', caption);
+        fd.append('postKind', postKind);
+        if (postKind === 'community' && pollOptions.filter(item => item.trim()).length >= 2) fd.append('pollOptions', JSON.stringify(pollOptions.filter(item => item.trim())));
         if (channelId) fd.append('channelId', channelId);
         if (media) fd.append('media', media);
         try {
             const res = await axios.post('/api/social/posts', fd, { headers: { ...authHeaders(token), 'Content-Type': 'multipart/form-data' } });
             channelId ? setChannelPosts(p => [res.data, ...p]) : setPosts(p => [res.data, ...p]);
-            setCaption(''); setMedia(null); if (fileRef.current) fileRef.current.value = '';
+            setCaption(''); setMedia(null); setPollOptions(['', '']); if (fileRef.current) fileRef.current.value = '';
         } catch (err) { alert((err.response && err.response.data && err.response.data.error) || 'Could not post'); } finally { setPosting(false); }
     };
 
@@ -772,6 +798,13 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat }) => {
         const patch = p => p.id === postId ? { ...p, shareCount } : p;
         isChannelPost ? setChannelPosts(p => p.map(patch)) : setPosts(p => p.map(patch));
     };
+    const votePoll = async (postId, optionIndex, isChannelPost = false) => {
+        try {
+            const { data } = await axios.post(`/api/social/posts/${postId}/poll-vote`, { optionIndex }, { headers: authHeaders(token) });
+            const patch = post => post.id === postId ? { ...post, poll: data } : post;
+            isChannelPost ? setChannelPosts(items => items.map(patch)) : setPosts(items => items.map(patch));
+        } catch (error) { alert(error.response?.data?.error || 'Could not record vote'); }
+    };
     const deletePost = async (postId, isChannelPost) => {
         if (!window.confirm('Delete this post?')) return;
         try { await axios.delete('/api/social/posts/' + postId, { headers: authHeaders(token) }); isChannelPost ? setChannelPosts(p => p.filter(x => x.id !== postId)) : setPosts(p => p.filter(x => x.id !== postId)); } catch { alert('Delete failed'); }
@@ -784,7 +817,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat }) => {
             onBack={() => setProfileView(null)} onOpenProfile={openProfile} onShareToChat={onShareToChat} />
     );
     const currentPosts = selectedChannel ? channelPosts : posts;
-    const TABS = [{ key: 'for-you', label: 'For You' }, { key: 'following', label: 'Following' }, { key: 'channels', label: 'Spaces' }];
+    const TABS = [{ key: 'for-you', label: 'For You' }, { key: 'community', label: 'Community' }, { key: 'following', label: 'Following' }, { key: 'channels', label: 'Spaces' }];
 
     const displayedPosts = currentPosts.filter(post => {
         if (!searchQuery) return true;
@@ -822,6 +855,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat }) => {
                         </div>
                         {[
                             { icon: <HomeIcon className="w-7 h-7" />, label: 'Home', action: () => { setSelectedChannel(null); setActiveTab('for-you'); } },
+                            { icon: <ChartBarIcon className="w-7 h-7" />, label: 'Community', action: () => { setSelectedChannel(null); setActiveTab('community'); } },
                             { icon: <UsersIcon className="w-7 h-7" />, label: 'Spaces', action: () => { setSelectedChannel(null); setActiveTab('channels'); } },
                             { icon: <UserCircleIcon className="w-7 h-7" />, label: 'Profile', action: () => setProfileView({ userId: user.id }) },
                             { icon: <ArrowLeftIcon className="w-7 h-7" />, label: 'Back', action: onBack },
@@ -892,15 +926,15 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat }) => {
                             <ChannelsList channels={displayedChannels} loading={loading} onOpen={fetchChannel} onSubscribe={requestSubscribe} onCreateNew={() => setShowChannelForm(true)} />
                         ) : (
                             <div>
-                                <div className="padding-4 px-4 py-3 border-b border-[#2f3336]">
+                                {activeTab === 'community' ? <CommunityComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} pollOptions={pollOptions} setPollOptions={setPollOptions} posting={posting} onSubmit={() => submitPost(null, 'community')} /> : <div className="padding-4 px-4 py-3 border-b border-[#2f3336]">
                                     <CheetChatComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} media={media} setMedia={setMedia} preview={preview} fileRef={fileRef} posting={posting} onSubmit={() => submitPost(null)} />
-                                </div>
+                                </div>}
                                 {loading ? <CheetChatLoading /> : displayedPosts.length ? displayedPosts.map(post => (
                                     <div key={post.id} ref={post.id === highlightedPostId ? highlightedRef : null} style={post.id === highlightedPostId ? { outline: '2px solid #1d9bf0' } : {}}>
                                         <TweetCard post={post} currentUser={user} token={token}
                                             onLike={() => likePost(post.id)} onRetweet={() => retweetPost(post.id)}
                                             onShare={count => sharePost(post.id, false, count)} onShareToChat={onShareToChat} onDelete={() => deletePost(post.id)}
-                                            onFollow={() => toggleFollow(post.user.id)} onOpenProfile={openProfile} />
+                                            onFollow={() => toggleFollow(post.user.id)} onOpenProfile={openProfile} onPollVote={index => votePoll(post.id, index)} />
                                     </div>
                                 )) : <CheetChatEmptyState text={activeTab === 'following' ? 'Follow people to build your feed.' : 'No posts matches search criteria.'} />}
                             </div>
@@ -911,6 +945,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat }) => {
                     <nav className="flex md:hidden items-center border-t border-[#2f3336] flex-shrink-0 bg-black py-1">
                         {[
                             { icon: <HomeIcon className="w-6 h-6" />, action: () => { setSelectedChannel(null); setActiveTab('for-you'); } },
+                            { icon: <ChartBarIcon className="w-6 h-6" />, action: () => { setSelectedChannel(null); setActiveTab('community'); } },
                             { icon: <UsersIcon className="w-6 h-6" />, action: () => { setSelectedChannel(null); setActiveTab('channels'); } },
                             { icon: user && user.avatar ? <img src={user.avatar} alt="" className="w-6 h-6 rounded-full object-cover" /> : <UserCircleIcon className="w-6 h-6" />, action: () => setProfileView({ userId: user.id }) },
                         ].map((btn, i) => (

@@ -336,6 +336,7 @@ def ensure_database_schema(force=False):
             'hide_online_status': db.Boolean(),
             'read_receipts': db.Boolean(),
             'profile_photo_privacy': db.String(20),
+            'phone_number_privacy': db.String(20),
             'two_factor_enabled': db.Boolean(),
             'two_factor_secret': db.String(100),
             'bio_expires_at': db.DateTime(),
@@ -377,6 +378,8 @@ def ensure_database_schema(force=False):
                 updates.append('read_receipts = COALESCE(read_receipts, TRUE)')
             if 'profile_photo_privacy' in user_columns:
                 updates.append("profile_photo_privacy = COALESCE(profile_photo_privacy, 'everyone')")
+            if 'phone_number_privacy' in user_columns:
+                updates.append("phone_number_privacy = COALESCE(phone_number_privacy, 'nobody')")
             if 'two_factor_enabled' in user_columns:
                 updates.append('two_factor_enabled = COALESCE(two_factor_enabled, FALSE)')
             if 'auth_provider' in user_columns:
@@ -392,10 +395,18 @@ def ensure_database_schema(force=False):
         add_missing_columns(inspector, 'chat', {
             'is_group': db.Boolean(),
             'name': db.String(100),
+            'avatar': db.String(500),
             'group_admin_id': db.Integer(),
             'is_public': db.Boolean(),
             'is_chat_disabled': db.Boolean(),
             'snap_mode': db.Boolean(),
+            'description': db.String(500),
+            'group_username': db.String(64),
+            'slow_mode_seconds': db.Integer(),
+            'members_can_send_media': db.Boolean(),
+            'members_can_add_members': db.Boolean(),
+            'reactions_enabled': db.Boolean(),
+            'join_approval_required': db.Boolean(),
             'created_at': db.DateTime(),
         })
         add_missing_columns(inspector, 'message', {
@@ -473,6 +484,8 @@ def ensure_database_schema(force=False):
         add_missing_columns(inspector, 'social_post', {
             'retweet_of_id': db.Integer(),
             'share_count': db.Integer(),
+            'post_kind': db.String(20),
+            'poll_options': db.Text(),
         })
         add_missing_columns(inspector, 'social_post_comment', {
             'parent_id': db.Integer(),
@@ -707,10 +720,15 @@ def serialize_user(user, viewer_id=None):
     if user.bio_expires_at and utc_now() > user.bio_expires_at:
         user_bio = ""
 
+    show_phone = viewer_id == user.id or user.phone_number_privacy == 'everyone'
+    if user.phone_number_privacy == 'contacts' and viewer_id and viewer_id != user.id:
+        show_phone = has_contact(user.id, viewer_id)
+    public_phone = user.phone if show_phone and not str(user.phone or '').startswith('google:') else ''
+
     return {
         "id": user.id,
         "username": user.username,
-        "phone": "" if str(user.phone or '').startswith('google:') else user.phone,
+        "phone": public_phone,
         "avatar": avatar,
         "hasCustomAudienceAvatar": bool(viewer_id and viewer_id != user.id and avatar != user.avatar),
         "publicKey": user.public_key,
@@ -724,6 +742,7 @@ def serialize_user(user, viewer_id=None):
         "hideOnlineStatus": bool(user.hide_online_status),
         "readReceipts": bool(user.read_receipts),
         "profilePhotoPrivacy": user.profile_photo_privacy,
+        "phoneNumberPrivacy": user.phone_number_privacy,
         "twoFactorEnabled": bool(user.two_factor_enabled),
         "recoveryKeyEnabled": bool(user.encrypted_recovery_key) if viewer_id == user.id else None,
         "gender": getattr(user, 'gender', None) or ""

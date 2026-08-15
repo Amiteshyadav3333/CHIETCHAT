@@ -1,10 +1,11 @@
 import datetime
+import json
 from flask import Blueprint, current_app, jsonify, request
 from sqlalchemy import or_
 from werkzeug.utils import secure_filename
 
 from models import (
-    db, User, Follow, SocialPost, SocialPostLike, SocialPostShare, SocialPostComment,
+    db, User, Follow, SocialPost, SocialPostLike, SocialPostShare, SocialPostComment, SocialPollVote,
     Channel, ChannelMembership, CommentReply, Status
 )
 from utils import (
@@ -64,6 +65,18 @@ def serialize_post(post, current_user_id):
             "retweetCount": SocialPost.query.filter_by(retweet_of_id=orig.id).count()
         }
     retweet_count = SocialPost.query.filter_by(retweet_of_id=post.id).count()
+    poll_options = []
+    try:
+        poll_options = json.loads(post.poll_options or '[]')
+    except (TypeError, ValueError):
+        poll_options = []
+    vote_counts = [0] * len(poll_options)
+    selected_poll_option = None
+    for vote in post.poll_votes:
+        if 0 <= vote.option_index < len(vote_counts):
+            vote_counts[vote.option_index] += 1
+        if vote.user_id == current_user_id:
+            selected_poll_option = vote.option_index
     return {
         "id": post.id,
         "caption": post.caption or "",
@@ -81,6 +94,8 @@ def serialize_post(post, current_user_id):
         "isRetweet": post.retweet_of_id is not None,
         "originalPost": original_post,
         "canDelete": post.user_id == current_user_id or (post.channel and post.channel.owner_id == current_user_id)
+        ,"postKind": post.post_kind or 'standard'
+        ,"poll": {"options": poll_options, "counts": vote_counts, "totalVotes": sum(vote_counts), "selectedOption": selected_poll_option} if poll_options else None
     }
 
 def serialize_comment(comment, current_user_id):
@@ -148,6 +163,10 @@ def get_social_posts():
 
     feed = request.args.get('feed', 'all')
     query = SocialPost.query.filter_by(channel_id=None)
+    if feed == 'community':
+        query = query.filter(SocialPost.post_kind == 'community')
+    else:
+        query = query.filter(or_(SocialPost.post_kind == 'standard', SocialPost.post_kind.is_(None)))
     if feed == 'following':
         followed_ids = [f.followed_id for f in Follow.query.filter_by(follower_id=user_id).all()]
         if not followed_ids:
@@ -166,6 +185,18 @@ def create_social_post():
         return jsonify({"error": "Unauthorized"}), 401
 
     caption = request.form.get('caption', '').strip()
+    post_kind = request.form.get('postKind', 'standard').strip().lower()
+    if post_kind not in {'standard', 'community'}:
+        return jsonify({"error": "Invalid post type"}), 400
+    poll_options = []
+    raw_poll_options = request.form.get('pollOptions', '')
+    if raw_poll_options:
+        try:
+            poll_options = [str(item).strip()[:100] for item in json.loads(raw_poll_options) if str(item).strip()]
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid poll options"}), 400
+        if len(poll_options) < 2 or len(poll_options) > 4:
+            return jsonify({"error": "A poll needs 2 to 4 options"}), 400
     if len(caption) > MAX_POST_CAPTION_LENGTH:
         return jsonify({"error": f"Caption must be {MAX_POST_CAPTION_LENGTH} characters or less"}), 400
     channel_id = request.form.get('channelId')
@@ -199,11 +230,34 @@ def create_social_post():
         channel_id=channel.id if channel else None,
         caption=caption,
         media_url=media_url,
-        media_type=media_type
+        media_type=media_type,
+        post_kind=post_kind,
+        poll_options=json.dumps(poll_options) if poll_options else None,
     )
     db.session.add(post)
     db.session.commit()
     return jsonify(serialize_post(post, user_id)), 201
+
+@social_bp.route('/api/social/posts/<int:post_id>/poll-vote', methods=['POST'])
+def vote_social_poll(post_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    post = db.get_or_404(SocialPost, post_id)
+    try:
+        options = json.loads(post.poll_options or '[]')
+        option_index = int(get_json_data().get('optionIndex'))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid poll vote"}), 400
+    if option_index < 0 or option_index >= len(options):
+        return jsonify({"error": "Invalid poll option"}), 400
+    vote = SocialPollVote.query.filter_by(post_id=post.id, user_id=user_id).first()
+    if vote:
+        vote.option_index = option_index
+    else:
+        db.session.add(SocialPollVote(post_id=post.id, user_id=user_id, option_index=option_index))
+    db.session.commit()
+    return jsonify(serialize_post(post, user_id)["poll"])
 
 # ─── RETWEET ──────────────────────────────────────────────────────────────────
 

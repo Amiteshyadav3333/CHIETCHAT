@@ -43,8 +43,8 @@ const LegalPage = ({ type }) => {
     const content = LEGAL_CONTENT[type] || LEGAL_CONTENT.privacy;
 
     return (
-        <main className="min-h-screen bg-[#f0f2f5] px-4 py-8 text-[#111b21]">
-            <article className="mx-auto max-w-3xl overflow-hidden rounded-lg border border-black/10 bg-white shadow-sm">
+        <main className="h-dvh overflow-hidden bg-[#f0f2f5] p-3 text-[#111b21] sm:p-6">
+            <article className="mx-auto flex h-full max-w-3xl flex-col overflow-hidden rounded-xl border border-black/10 bg-white shadow-sm">
                 <header className="flex items-center gap-3 bg-[#008069] px-5 py-4 text-white">
                     <button onClick={() => window.history.length > 1 ? window.history.back() : window.close()} title="Go back" className="rounded-full p-2 hover:bg-white/10">
                         <ArrowLeftIcon className="h-5 w-5" />
@@ -55,7 +55,7 @@ const LegalPage = ({ type }) => {
                         <p className="text-xs text-white/75">{content.updated}</p>
                     </div>
                 </header>
-                <div className="space-y-7 p-6 sm:p-8">
+                <div className="flex-1 space-y-7 overflow-y-auto overscroll-contain p-6 sm:p-8" style={{ scrollbarGutter: 'stable' }}>
                     <div className="flex gap-3 rounded-lg bg-[#e7fce8] p-4 text-sm">
                         <LockClosedIcon className="h-5 w-5 shrink-0 text-[#008069]" />
                         <p>{content.intro}</p>

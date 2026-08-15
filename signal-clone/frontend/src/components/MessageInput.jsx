@@ -98,6 +98,7 @@ const MessageInput = ({
     const [showPaymentComposer, setShowPaymentComposer] = useState(false);
     const [showDrawStudio, setShowDrawStudio] = useState(false);
     const [stickerDraft, setStickerDraft] = useState(null);
+    const [photoDraft, setPhotoDraft] = useState(null);
     const [stickerBusy, setStickerBusy] = useState(false);
 
     const [showCameraModal, setShowCameraModal] = useState(false);
@@ -408,20 +409,24 @@ const MessageInput = ({
 
     const handleFileChange = (e) => {
         const files = Array.from(e.target.files);
+        e.target.value = '';
         if (files.length === 0) return;
         if (files.length > 15) {
             alert('You can only select up to 15 files at once.');
             return;
         }
+        if (files.length === 1 && files[0].type.startsWith('image/')) {
+            const file = files[0];
+            setPhotoDraft({ file, url: URL.createObjectURL(file) });
+            setShowAttachMenu(false);
+            return;
+        }
         files.forEach(file => onUpload(file));
         if (photoReactionSource) onPhotoReactionComplete?.();
-        e.target.value = '';
         setShowAttachMenu(false);
     };
 
-    const createStickerFromPhoto = async (event) => {
-        const file = event.target.files?.[0];
-        event.target.value = '';
+    const convertPhotoToSticker = async (file) => {
         if (!file) return;
         if (!file.type.startsWith('image/')) return alert('Please choose a photo.');
         if (file.size > 20 * 1024 * 1024) return alert('Photo must be smaller than 20MB.');
@@ -443,10 +448,30 @@ const MessageInput = ({
             if (!blob) throw new Error('Sticker conversion failed');
             const stickerFile = new File([blob], `sticker-${Date.now()}.webp`, { type: 'image/webp' });
             setStickerDraft({ file: stickerFile, url: URL.createObjectURL(blob) });
+            if (photoDraft?.url) URL.revokeObjectURL(photoDraft.url);
+            setPhotoDraft(null);
             setShowAttachMenu(false);
         } catch (error) {
             alert(error.message || 'Could not create sticker from this photo.');
         } finally { setStickerBusy(false); }
+    };
+
+    const createStickerFromPhoto = async (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        await convertPhotoToSticker(file);
+    };
+
+    const closePhotoDraft = () => {
+        if (photoDraft?.url) URL.revokeObjectURL(photoDraft.url);
+        setPhotoDraft(null);
+    };
+
+    const sendPhotoDraft = () => {
+        if (!photoDraft) return;
+        onUpload(photoDraft.file);
+        if (photoReactionSource) onPhotoReactionComplete?.();
+        closePhotoDraft();
     };
 
     const closeStickerDraft = () => {
@@ -696,6 +721,8 @@ const MessageInput = ({
             {showShoppingModal && <ShoppingSearchModal onClose={() => setShowShoppingModal(false)} />}
 
             {showDrawStudio && <DrawStudio initialSource={drawSource} onClose={() => { setShowDrawStudio(false); onDrawSourceConsumed?.(); }} onSendDrawing={drawing => { onSend(JSON.stringify(drawing), 'drawing', disappearingTtl); setShowDrawStudio(false); onDrawSourceConsumed?.(); }} onSend={(file, caption) => { onUpload(file); if (caption) onSend(caption, 'text', disappearingTtl); setShowDrawStudio(false); onDrawSourceConsumed?.(); }} />}
+
+            {photoDraft && <div className="fixed inset-0 z-[119] flex items-center justify-center bg-black/85 p-5"><div className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#182229] p-5 text-center shadow-2xl"><div className="flex items-center justify-between"><h3 className="text-lg font-black text-white">Selected photo</h3><button onClick={closePhotoDraft} className="rounded-full p-2 text-gray-400 hover:bg-white/10 hover:text-white"><XMarkIcon className="h-5 w-5" /></button></div><div className="my-5 flex aspect-square items-center justify-center overflow-hidden rounded-3xl bg-black/30"><img src={photoDraft.url} alt="Selected photo preview" className="h-full w-full object-contain" /></div><p className="mb-4 text-xs text-gray-400">Send it as a normal photo or turn this selected photo into a sticker.</p><div className="grid grid-cols-2 gap-3"><button onClick={sendPhotoDraft} disabled={stickerBusy} className="rounded-full border border-white/15 py-3 text-sm font-black text-white hover:bg-white/10">Send Photo</button><button onClick={() => convertPhotoToSticker(photoDraft.file)} disabled={stickerBusy} className="rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 py-3 text-sm font-black text-white disabled:opacity-50">{stickerBusy ? 'Creating…' : '✨ Make Sticker'}</button></div></div></div>}
 
             {stickerDraft && <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/85 p-5"><div className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#182229] p-5 text-center shadow-2xl"><div className="flex items-center justify-between"><h3 className="text-lg font-black text-white">Photo sticker</h3><button onClick={closeStickerDraft} className="rounded-full p-2 text-gray-400 hover:bg-white/10 hover:text-white"><XMarkIcon className="h-5 w-5" /></button></div><div className="my-5 flex aspect-square items-center justify-center rounded-3xl bg-[radial-gradient(circle_at_center,_#334155,_#111827)] p-4"><img src={stickerDraft.url} alt="Sticker preview" className="h-full w-full object-contain drop-shadow-2xl" /></div><p className="mb-4 text-xs text-gray-400">Your photo is resized to a high-quality 512×512 WebP sticker.</p><button onClick={sendStickerDraft} className="w-full rounded-full bg-[#00a884] py-3 font-black text-white hover:bg-[#029878]">Send sticker</button></div></div>}
 

@@ -277,6 +277,49 @@ def add_missing_columns(inspector, table_name, columns):
 # already applied.
 SCHEMA_VERSION = '20260816_18_groups_privacy_community'
 
+def ensure_runtime_compat_schema():
+    """Repair columns required by the currently deployed models.
+
+    Render pre-deploy hooks are not guaranteed on every plan/deploy path. Keep
+    this deliberately small and idempotent so a new web worker cannot serve
+    requests against the previous release's schema.
+    """
+    db.session.execute(text('SELECT 1'))
+    db.session.commit()
+    db.create_all()
+    inspector = inspect(db.engine)
+    add_missing_columns(inspector, 'user', {
+        'phone_number_privacy': db.String(20),
+    })
+    inspector = inspect(db.engine)
+    add_missing_columns(inspector, 'chat', {
+        'avatar': db.String(500), 'description': db.String(500),
+        'group_username': db.String(64), 'slow_mode_seconds': db.Integer(),
+        'members_can_send_media': db.Boolean(), 'members_can_add_members': db.Boolean(),
+        'reactions_enabled': db.Boolean(), 'join_approval_required': db.Boolean(),
+    })
+    inspector = inspect(db.engine)
+    add_missing_columns(inspector, 'social_post', {
+        'post_kind': db.String(20), 'poll_options': db.Text(),
+    })
+    if 'user' in inspector.get_table_names():
+        db.session.execute(text(
+            "UPDATE \"user\" SET phone_number_privacy = COALESCE(phone_number_privacy, 'nobody')"
+        ))
+    if 'chat' in inspector.get_table_names():
+        db.session.execute(text(
+            'UPDATE chat SET slow_mode_seconds = COALESCE(slow_mode_seconds, 0), '
+            'members_can_send_media = COALESCE(members_can_send_media, TRUE), '
+            'members_can_add_members = COALESCE(members_can_add_members, FALSE), '
+            'reactions_enabled = COALESCE(reactions_enabled, TRUE), '
+            'join_approval_required = COALESCE(join_approval_required, FALSE)'
+        ))
+    if 'social_post' in inspector.get_table_names():
+        db.session.execute(text(
+            "UPDATE social_post SET post_kind = COALESCE(post_kind, 'standard')"
+        ))
+    db.session.commit()
+
 
 def ensure_database_schema(force=False):
     try:

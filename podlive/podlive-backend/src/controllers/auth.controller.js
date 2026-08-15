@@ -126,16 +126,15 @@ exports.checkHandle = async (req, res) => {
 exports.cheetchatSso = async (req, res) => {
     let claimedTicketId = null;
     try {
-        const secret = process.env.PODLIVE_SSO_SECRET || '';
-        if (secret.length < 32) return res.status(503).json({ error: 'Single sign-on is not configured.' });
         const { ticket } = req.body || {};
         if (!ticket) return res.status(400).json({ error: 'SSO ticket is required.' });
-        const identity = jwt.verify(ticket, secret, {
-            algorithms: ['HS256'], issuer: 'cheetchat', audience: 'podlive', maxAge: '60s'
+        const cheetchatApi = String(process.env.CHEETCHAT_API_URL || 'https://chietchat-backend.onrender.com').replace(/\/+$/, '');
+        const verificationResponse = await fetch(`${cheetchatApi}/api/auth/podlive-sso/verify`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticket })
         });
-        if (identity.purpose !== 'podlive_sso' || !identity.jti || !identity.sub || !identity.email) {
-            return res.status(401).json({ error: 'Invalid SSO ticket.' });
-        }
+        const identity = await verificationResponse.json();
+        if (!verificationResponse.ok) return res.status(verificationResponse.status).json({ error: identity.error || 'CHEETCHAT could not verify this sign-in.' });
+        if (!identity.jti || !identity.sub || !identity.email) return res.status(401).json({ error: 'Invalid SSO identity.' });
         const now = Date.now();
         for (const [jti, expiresAt] of usedSsoTickets) if (expiresAt <= now) usedSsoTickets.delete(jti);
         if (usedSsoTickets.has(identity.jti)) return res.status(409).json({ error: 'SSO ticket was already used.' });
@@ -173,7 +172,6 @@ exports.cheetchatSso = async (req, res) => {
         return res.json({ user: { id: user.id, unique_handle: user.unique_handle, email: user.email, display_name: user.display_name, avatar_url: user.avatar_url }, ...tokens });
     } catch (error) {
         if (claimedTicketId) usedSsoTickets.delete(claimedTicketId);
-        if (error.name === 'TokenExpiredError' || error.name === 'JsonWebTokenError') return res.status(401).json({ error: 'SSO ticket is invalid or expired.' });
         console.error('CHEETCHAT SSO Error:', error);
         return res.status(500).json({ error: 'Could not complete single sign-on.' });
     }

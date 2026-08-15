@@ -229,9 +229,6 @@ def create_podlive_sso_ticket():
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({'error': 'Unauthorized'}), 401
-    secret = current_app.config.get('PODLIVE_SSO_SECRET') or ''
-    if len(secret) < 32:
-        return jsonify({'error': 'PodLive single sign-on is not configured'}), 503
     user = db.session.get(User, user_id)
     if not user:
         return jsonify({'error': 'Unauthorized'}), 401
@@ -243,12 +240,40 @@ def create_podlive_sso_ticket():
         'name': user.username, 'avatar': user.avatar or '',
         'iat': now, 'exp': now + datetime.timedelta(seconds=60),
         'jti': secrets.token_urlsafe(24),
-    }, secret, algorithm='HS256')
+    }, current_app.config['JWT_SECRET_KEY'], algorithm='HS256')
     return jsonify({
         'ticket': ticket,
         'url': current_app.config.get('PODLIVE_URL', 'https://podlive-sigma.vercel.app'),
         'expiresIn': 60,
     })
+
+@auth_bp.route('/api/auth/podlive-sso/verify', methods=['POST'])
+def verify_podlive_sso_ticket():
+    """Verify a PodLive ticket server-to-server and consume it once."""
+    ticket = str(get_json_data().get('ticket') or '')
+    if not ticket:
+        return jsonify({'error': 'SSO ticket is required'}), 401
+    try:
+        identity = jwt.decode(
+            ticket, current_app.config['JWT_SECRET_KEY'], algorithms=['HS256'],
+            issuer='cheetchat', audience='podlive', options={'require': ['exp', 'iat', 'jti', 'sub']},
+        )
+        if identity.get('purpose') != 'podlive_sso':
+            raise jwt.InvalidTokenError('Invalid ticket purpose')
+        redis_client = current_app.extensions.get('cheetchat_redis')
+        if redis_client is not None:
+            consumed = redis_client.set(f"podlive:sso:{identity['jti']}", '1', nx=True, ex=90)
+            if not consumed:
+                return jsonify({'error': 'SSO ticket was already used'}), 409
+        return jsonify({
+            'sub': identity['sub'], 'email': identity.get('email', ''),
+            'handle': identity.get('handle', ''), 'name': identity.get('name', ''),
+            'avatar': identity.get('avatar', ''), 'jti': identity['jti'],
+        })
+    except jwt.ExpiredSignatureError:
+        return jsonify({'error': 'SSO ticket expired'}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({'error': 'Invalid SSO ticket'}), 401
 
 @auth_bp.route('/api/auth/csrf', methods=['GET'])
 def get_csrf_token():

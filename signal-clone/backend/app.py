@@ -41,7 +41,7 @@ from extensions import socketio, cors, ALLOWED_ORIGINS
 from models import db, WorkerHeartbeat
 
 # Utils
-from utils import ensure_database_schema, utc_now
+from utils import ensure_database_schema, ensure_runtime_compat_schema, utc_now
 
 # Blueprints
 from routes.auth_bp import auth_bp
@@ -328,8 +328,12 @@ app.register_blueprint(business_bp)
 app.register_blueprint(payments_bp)
 app.register_blueprint(calls_bp)
 
-# Create new feature tables and add backward-compatible columns before the
-# first request. The helper exits safely when the database is unavailable.
+# Always repair the small set of columns required by the running release.
+# This protects production when a hosting plan skips a pre-deploy hook.
+with app.app_context():
+    ensure_runtime_compat_schema()
+
+# Run the full historical migration outside production startup unless opted in.
 if not app.config.get('IS_PRODUCTION') or os.environ.get('AUTO_MIGRATE_SCHEMA') == '1':
     with app.app_context():
         ensure_database_schema()

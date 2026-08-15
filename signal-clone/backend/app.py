@@ -41,7 +41,7 @@ from extensions import socketio, cors, ALLOWED_ORIGINS
 from models import db, WorkerHeartbeat
 
 # Utils
-from utils import ensure_database_schema, ensure_runtime_compat_schema, utc_now
+from utils import ensure_runtime_compat_schema, utc_now
 
 # Blueprints
 from routes.auth_bp import auth_bp
@@ -333,10 +333,11 @@ app.register_blueprint(calls_bp)
 with app.app_context():
     ensure_runtime_compat_schema()
 
-# Run the full historical migration outside production startup unless opted in.
-if not app.config.get('IS_PRODUCTION') or os.environ.get('AUTO_MIGRATE_SCHEMA') == '1':
-    with app.app_context():
-        ensure_database_schema()
+# Never run the full historical migration inside a Gunicorn worker. Some older
+# Render services still have AUTO_MIGRATE_SCHEMA=1 in their dashboard; honoring
+# it here performs PostgreSQL index reflection before the port is bound and can
+# kill every deploy on provider statement timeouts. backend/migrate.py remains
+# the only entry point for the full versioned migration.
 
 # Register Sockets
 register_socket_events(socketio)

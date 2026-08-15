@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 from werkzeug.utils import secure_filename
-from models import db, User, PendingRegistration, Block, Follow, ProfileAudienceAvatar
+from models import db, User, PendingRegistration, Block, Follow, ProfileAudienceAvatar, Notification
 from extensions import socketio
 from utils import (
     get_current_user_id, get_contact_user_ids, serialize_user, get_json_data,
@@ -475,10 +475,70 @@ def update_profile():
     # Gender update
     if 'gender' in data and data['gender'] in ('male', 'female', ''):
         user.gender = data['gender'] or None
+    if 'birthDate' in data:
+        from datetime import date
+        raw_birth_date = str(data.get('birthDate') or '').strip()
+        if not raw_birth_date:
+            user.birth_date = None
+        else:
+            try:
+                parsed_birth_date = date.fromisoformat(raw_birth_date)
+            except ValueError:
+                return jsonify({"error": "Enter a valid birth date"}), 400
+            today = date.today()
+            if parsed_birth_date > today or parsed_birth_date.year < today.year - 120:
+                return jsonify({"error": "Enter a valid birth date"}), 400
+            user.birth_date = parsed_birth_date
     db.session.commit()
     payload = serialize_user(user)
     emit_to_user_chat_contacts(user_id, 'user_profile_updated', {"user": payload})
     return jsonify(payload)
+
+
+@users_bp.route('/api/contacts/birthdays', methods=['GET'])
+def contact_birthdays():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    from datetime import date
+    today = date.today()
+    contacts = User.query.filter(User.id.in_(get_contact_user_ids(user_id)), User.birth_date.isnot(None)).all()
+    result = []
+    for contact in contacts:
+        is_today = contact.birth_date.month == today.month and contact.birth_date.day == today.day
+        if is_today:
+            result.append({
+                "id": f"birthday-{contact.id}-{today.year}", "type": "birthday_reminder",
+                "content": "has a birthday today 🎂", "targetId": contact.id,
+                "isRead": False, "createdAt": today.isoformat() + "T00:00:00Z",
+                "sender": serialize_user(contact, viewer_id=user_id), "postPreview": None,
+            })
+    return jsonify(result)
+
+
+@users_bp.route('/api/users/<int:contact_id>/birthday-wish', methods=['POST'])
+def send_birthday_wish(contact_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    if contact_id not in get_contact_user_ids(user_id):
+        return jsonify({"error": "Birthday wishes can only be sent to contacts"}), 403
+    from datetime import date
+    contact = db.session.get(User, contact_id)
+    today = date.today()
+    if not contact or not contact.birth_date or (contact.birth_date.month, contact.birth_date.day) != (today.month, today.day):
+        return jsonify({"error": "This contact does not have a birthday today"}), 400
+    existing = Notification.query.filter_by(
+        recipient_id=contact_id, sender_id=user_id, type='birthday_wish', target_id=today.year
+    ).first()
+    if existing:
+        return jsonify({"message": "Birthday wish already sent", "sent": True})
+    db.session.add(Notification(
+        recipient_id=contact_id, sender_id=user_id, type='birthday_wish',
+        content='wished you a Happy Birthday! 🎉🎂', target_id=today.year,
+    ))
+    db.session.commit()
+    return jsonify({"message": "Birthday wish sent!", "sent": True}), 201
 
 
 @users_bp.route('/api/users/<int:followed_id>/follow', methods=['POST'])

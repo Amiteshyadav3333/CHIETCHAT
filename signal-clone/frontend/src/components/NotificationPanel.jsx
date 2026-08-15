@@ -20,6 +20,8 @@ const ACTIVITY_META = {
     channel_request: { icon: UsersIcon,                      color: 'text-yellow-400',  bg: 'bg-yellow-500/15',  label: 'channel activity' },
     mention:         { icon: StarIcon,                        color: 'text-orange-400',  bg: 'bg-orange-500/15',  label: 'mentioned you' },
     share:           { icon: ArrowUpTrayIcon,                 color: 'text-teal-400',    bg: 'bg-teal-500/15',    label: 'shared your post' },
+    birthday_reminder: { icon: StarIcon, color: 'text-pink-400', bg: 'bg-pink-500/15', label: 'has a birthday today' },
+    birthday_wish:   { icon: StarIcon, color: 'text-pink-400', bg: 'bg-pink-500/15', label: 'sent a birthday wish' },
 };
 
 const getMeta = (type) => ACTIVITY_META[type] || {
@@ -29,7 +31,7 @@ const getMeta = (type) => ACTIVITY_META[type] || {
     label: 'new activity'
 };
 
-const NotificationPanel = ({ notifications, onClose, onMarkRead, onMarkAllRead, onNavigate }) => {
+const NotificationPanel = ({ notifications, onClose, onMarkRead, onMarkAllRead, onNavigate, onBirthdayWish }) => {
     const [filter, setFilter] = useState('all');
 
     const filtered = filter === 'unread'
@@ -121,7 +123,7 @@ const NotificationPanel = ({ notifications, onClose, onMarkRead, onMarkAllRead, 
                 ) : (
                     <div className="py-1">
                         {/* Group by date */}
-                        <NotificationGroups notifications={filtered} onClickItem={handleClick} />
+                        <NotificationGroups notifications={filtered} onClickItem={handleClick} onBirthdayWish={onBirthdayWish} />
                     </div>
                 )}
             </div>
@@ -139,7 +141,7 @@ const NotificationPanel = ({ notifications, onClose, onMarkRead, onMarkAllRead, 
 };
 
 // ── Group by Today / Yesterday / Older ──────────────────────────────────────
-const NotificationGroups = ({ notifications, onClickItem }) => {
+const NotificationGroups = ({ notifications, onClickItem, onBirthdayWish }) => {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const yesterdayStart = new Date(todayStart - 86400000);
@@ -161,7 +163,7 @@ const NotificationGroups = ({ notifications, onClickItem }) => {
                             <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{label}</p>
                         </div>
                         {items.map(n => (
-                            <NotificationItem key={n.id} notification={n} onClick={() => onClickItem(n)} />
+                            <NotificationItem key={n.id} notification={n} onClick={() => onClickItem(n)} onBirthdayWish={onBirthdayWish} />
                         ))}
                     </div>
                 ) : null
@@ -171,7 +173,7 @@ const NotificationGroups = ({ notifications, onClickItem }) => {
 };
 
 // ── Single Notification Item ──────────────────────────────────────────────────
-const NotificationItem = ({ notification: n, onClick }) => {
+const NotificationItem = ({ notification: n, onClick, onBirthdayWish }) => {
     const meta = getMeta(n.type);
     const Icon = meta.icon;
 
@@ -247,6 +249,7 @@ const NotificationItem = ({ notification: n, onClick }) => {
                         {n.postPreview}
                     </div>
                 )}
+                {n.type === 'birthday_reminder' && <button type="button" onClick={e => { e.stopPropagation(); onBirthdayWish?.(n); }} className="mt-2 rounded-full bg-gradient-to-r from-pink-500 to-violet-500 px-4 py-1.5 text-xs font-black text-white">🎂 Send birthday wish</button>}
             </div>
 
             {/* Arrow indicator */}

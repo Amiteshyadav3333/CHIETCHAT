@@ -275,7 +275,7 @@ def add_missing_columns(inspector, table_name, columns):
 # Bump this marker whenever models gain columns or tables. Production runs
 # ensure_database_schema() in the pre-deploy step and skips versions it has
 # already applied.
-SCHEMA_VERSION = '20260816_19_premium_creators'
+SCHEMA_VERSION = '20260816_20_contact_birthdays'
 
 def ensure_runtime_compat_schema():
     """Repair columns required by the currently deployed models.
@@ -312,6 +312,7 @@ def ensure_runtime_compat_schema():
     add_missing_columns(inspector, 'user', {
         'phone_number_privacy': db.String(20),
         'is_premium': db.Boolean(), 'is_verified': db.Boolean(),
+        'birth_date': db.Date(),
     })
     inspector = inspect(db.engine)
     add_missing_columns(inspector, 'chat', {
@@ -820,6 +821,7 @@ def serialize_user(user, viewer_id=None):
         "readReceipts": bool(user.read_receipts),
         "isPremium": bool(user.is_premium),
         "isVerified": bool(user.is_verified or user.is_premium),
+        "birthDate": user.birth_date.isoformat() if user.birth_date and viewer_id == user.id else "",
         "profilePhotoPrivacy": user.profile_photo_privacy,
         "phoneNumberPrivacy": user.phone_number_privacy,
         "twoFactorEnabled": bool(user.two_factor_enabled),

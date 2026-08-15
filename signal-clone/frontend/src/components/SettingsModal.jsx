@@ -59,7 +59,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     const [message, setMessage] = useState(null);
     const [busy, setBusy] = useState(false);
     const [businessTitle, setBusinessTitle] = useState('Business tools');
-    const [profile, setProfile] = useState({ username: user?.username || '', bio: user?.bio || '', websiteUrl: user?.websiteUrl || '', platformId: user?.platformId || '', gender: user?.gender || '' });
+    const [profile, setProfile] = useState({ username: user?.username || '', bio: user?.bio || '', websiteUrl: user?.websiteUrl || '', platformId: user?.platformId || '', gender: user?.gender || '', birthDate: user?.birthDate || '' });
     const [passwords, setPasswords] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
     
     // Sessions and 2FA states
@@ -507,6 +507,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                             </div>
                             <Field label="Bio" value={profile.bio} onChange={value => setProfile({ ...profile, bio: value })} />
                             <Field label="Website" value={profile.websiteUrl} onChange={value => setProfile({ ...profile, websiteUrl: value })} placeholder="https://example.com" />
+                            <label className="block"><span className="mb-2 block text-sm font-medium text-gray-200">Birthday</span><input type="date" value={profile.birthDate} max={new Date().toISOString().slice(0, 10)} onChange={e => setProfile({ ...profile, birthDate: e.target.value })} className="w-full rounded-lg border border-gray-700 bg-[#202c33] px-4 py-3 text-sm text-white outline-none focus:border-violet-500" /><p className="mt-1 text-xs text-gray-500">Your exact birth date stays private. Contacts only see a reminder on your birthday.</p></label>
                             <div>
                                 <label className="block">
                                     <span className="mb-2 block text-sm font-medium text-gray-200">Gender <span className="text-xs text-gray-500">(AI will adopt opposite gender persona)</span></span>

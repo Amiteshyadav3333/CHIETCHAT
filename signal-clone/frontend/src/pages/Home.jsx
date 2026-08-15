@@ -552,12 +552,23 @@ const Home = () => {
     const fetchNotifications = async () => {
         if (!token) return;
         try {
-            const res = await axios.get('/api/notifications', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setNotifications(res.data);
-            setUnreadCount(res.data.filter(n => !n.isRead).length);
+            const headers = { Authorization: `Bearer ${token}` };
+            const [res, birthdays] = await Promise.all([
+                axios.get('/api/notifications', { headers }),
+                axios.get('/api/contacts/birthdays', { headers }).catch(() => ({ data: [] }))
+            ]);
+            const merged = [...birthdays.data, ...res.data];
+            setNotifications(merged);
+            setUnreadCount(merged.filter(n => !n.isRead).length);
         } catch (err) { console.error(err); }
+    };
+
+    const handleBirthdayWish = async (notification) => {
+        try {
+            const res = await axios.post(`/api/users/${notification.targetId}/birthday-wish`, {}, { headers: { Authorization: `Bearer ${token}` } });
+            alert(res.data.message || 'Birthday wish sent!');
+            setNotifications(items => items.filter(item => item.id !== notification.id));
+        } catch (err) { alert(err.response?.data?.error || 'Could not send birthday wish'); }
     };
 
     const handleMarkAllRead = async () => {
@@ -1252,7 +1263,7 @@ const Home = () => {
         }
     };
 
-    const handleUpload = async (file) => {
+    const handleUpload = async (file, preferredType = null) => {
         if (!token) { logout(); return; }
 
         const maxSize = 100 * 1024 * 1024;
@@ -1333,14 +1344,16 @@ const Home = () => {
             });
 
             const url = res.data.url;
-            let type = 'file';
+            let type = preferredType || 'file';
             const isImage = file.type.startsWith('image/') || url.match(/\.(jpg|jpeg|png|gif|webp)$/i);
             const isAudio = file.type.startsWith('audio/') || file.name.startsWith('voice-') || url.match(/\.(mp3|wav|m4a|aac|oga)$/i);
             const isVideo = !isAudio && (file.type.startsWith('video/') || url.match(/\.(mp4|webm|ogg|mov)$/i));
 
-            if (isImage) type = 'image';
-            else if (isAudio) type = 'audio';
-            else if (isVideo) type = file.name.startsWith('video-note-') ? 'video_note' : 'video';
+            if (!preferredType) {
+                if (isImage) type = 'image';
+                else if (isAudio) type = 'audio';
+                else if (isVideo) type = file.name.startsWith('video-note-') ? 'video_note' : 'video';
+            }
 
             setUploadProgress(null);
             handleSendMessage(url, type, replyTo, disappearingTtl, res.data.assetId);
@@ -3250,6 +3263,7 @@ const Home = () => {
                     onMarkRead={handleMarkSingleRead}
                     onMarkAllRead={handleMarkAllRead}
                     onNavigate={handleNotificationNavigate}
+                    onBirthdayWish={handleBirthdayWish}
                 />
                 </React.Suspense>
             )}

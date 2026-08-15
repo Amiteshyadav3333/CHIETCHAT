@@ -41,6 +41,7 @@ class User(db.Model):
     gender = db.Column(db.String(10), nullable=True)  # 'male' | 'female' | None
     is_premium = db.Column(db.Boolean, nullable=False, default=False)
     is_verified = db.Column(db.Boolean, nullable=False, default=False)
+    birth_date = db.Column(db.Date, nullable=True)
 
 class PendingRegistration(db.Model):
     id = db.Column(db.Integer, primary_key=True)

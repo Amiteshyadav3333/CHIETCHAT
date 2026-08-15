@@ -97,6 +97,8 @@ const MessageInput = ({
     const [showShoppingModal, setShowShoppingModal] = useState(false);
     const [showPaymentComposer, setShowPaymentComposer] = useState(false);
     const [showDrawStudio, setShowDrawStudio] = useState(false);
+    const [stickerDraft, setStickerDraft] = useState(null);
+    const [stickerBusy, setStickerBusy] = useState(false);
 
     const [showCameraModal, setShowCameraModal] = useState(false);
     const [cameraFacing, setCameraFacing] = useState('user');
@@ -234,6 +236,7 @@ const MessageInput = ({
     const cameraInputRef = useRef(null);
     const documentInputRef = useRef(null);
     const audioInputRef = useRef(null);
+    const stickerInputRef = useRef(null);
     const typingTimerRef = useRef(null);
 
     const attachMenuRef = useRef(null);
@@ -414,6 +417,47 @@ const MessageInput = ({
         if (photoReactionSource) onPhotoReactionComplete?.();
         e.target.value = '';
         setShowAttachMenu(false);
+    };
+
+    const createStickerFromPhoto = async (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        if (!file.type.startsWith('image/')) return alert('Please choose a photo.');
+        if (file.size > 20 * 1024 * 1024) return alert('Photo must be smaller than 20MB.');
+        setStickerBusy(true);
+        try {
+            const bitmap = await createImageBitmap(file);
+            const canvas = document.createElement('canvas');
+            canvas.width = 512; canvas.height = 512;
+            const context = canvas.getContext('2d');
+            context.clearRect(0, 0, 512, 512);
+            const scale = Math.min(480 / bitmap.width, 480 / bitmap.height);
+            const width = Math.round(bitmap.width * scale);
+            const height = Math.round(bitmap.height * scale);
+            context.imageSmoothingEnabled = true;
+            context.imageSmoothingQuality = 'high';
+            context.drawImage(bitmap, (512 - width) / 2, (512 - height) / 2, width, height);
+            bitmap.close?.();
+            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.9));
+            if (!blob) throw new Error('Sticker conversion failed');
+            const stickerFile = new File([blob], `sticker-${Date.now()}.webp`, { type: 'image/webp' });
+            setStickerDraft({ file: stickerFile, url: URL.createObjectURL(blob) });
+            setShowAttachMenu(false);
+        } catch (error) {
+            alert(error.message || 'Could not create sticker from this photo.');
+        } finally { setStickerBusy(false); }
+    };
+
+    const closeStickerDraft = () => {
+        if (stickerDraft?.url) URL.revokeObjectURL(stickerDraft.url);
+        setStickerDraft(null);
+    };
+
+    const sendStickerDraft = () => {
+        if (!stickerDraft) return;
+        onUpload(stickerDraft.file, 'sticker');
+        closeStickerDraft();
     };
 
     const handleCreatePoll = poll => {
@@ -653,6 +697,8 @@ const MessageInput = ({
 
             {showDrawStudio && <DrawStudio initialSource={drawSource} onClose={() => { setShowDrawStudio(false); onDrawSourceConsumed?.(); }} onSendDrawing={drawing => { onSend(JSON.stringify(drawing), 'drawing', disappearingTtl); setShowDrawStudio(false); onDrawSourceConsumed?.(); }} onSend={(file, caption) => { onUpload(file); if (caption) onSend(caption, 'text', disappearingTtl); setShowDrawStudio(false); onDrawSourceConsumed?.(); }} />}
 
+            {stickerDraft && <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/85 p-5"><div className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#182229] p-5 text-center shadow-2xl"><div className="flex items-center justify-between"><h3 className="text-lg font-black text-white">Photo sticker</h3><button onClick={closeStickerDraft} className="rounded-full p-2 text-gray-400 hover:bg-white/10 hover:text-white"><XMarkIcon className="h-5 w-5" /></button></div><div className="my-5 flex aspect-square items-center justify-center rounded-3xl bg-[radial-gradient(circle_at_center,_#334155,_#111827)] p-4"><img src={stickerDraft.url} alt="Sticker preview" className="h-full w-full object-contain drop-shadow-2xl" /></div><p className="mb-4 text-xs text-gray-400">Your photo is resized to a high-quality 512×512 WebP sticker.</p><button onClick={sendStickerDraft} className="w-full rounded-full bg-[#00a884] py-3 font-black text-white hover:bg-[#029878]">Send sticker</button></div></div>}
+
             {/* Reply Preview Bar */}
             {replyTo && (
                 <div className="flex items-center gap-2 px-4 py-2 bg-[#2a3942] border-b border-gray-700 animate-slide-up">
@@ -856,6 +902,12 @@ const MessageInput = ({
                             color="bg-rose-500"
                             icon={<CameraIcon className="w-6 h-6 text-white" />}
                             onClick={() => setShowCameraModal(true)}
+                        />
+                        <AttachOption
+                            label={stickerBusy ? 'Creating…' : 'Photo Sticker'}
+                            color="bg-gradient-to-br from-violet-500 to-fuchsia-600"
+                            icon={<span className="text-2xl">✨</span>}
+                            onClick={() => !stickerBusy && stickerInputRef.current?.click()}
                         />
                         <AttachOption
                             label="Schedule"
@@ -1132,6 +1184,7 @@ const MessageInput = ({
 
                 {/* Hidden file inputs */}
                 <input ref={galleryInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="image/*,video/*" />
+                <input ref={stickerInputRef} type="file" className="hidden" onChange={createStickerFromPhoto} accept="image/jpeg,image/png,image/webp,image/heic,image/heif" />
                 <input ref={cameraInputRef} type="file" className="hidden" onChange={handleFileChange} accept="image/*,video/*" capture="environment" />
                 <input ref={documentInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="*/*" />
                 <input ref={audioInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="audio/*" />

@@ -69,6 +69,8 @@ services:
         value: https://chietchat-backend.onrender.com
       - key: PODLIVE_URL
         value: https://podlive-sigma.vercel.app
+      - key: PODLIVE_API_URL
+        value: https://podlive-api-18as.onrender.com
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET

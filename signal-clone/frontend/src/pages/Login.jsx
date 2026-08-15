@@ -71,7 +71,7 @@ const Login = () => {
                     setGoogleOnboarding({ ...response.data, accessToken: session.access_token });
                     setUseGoogleAvatar(Boolean(response.data.googleAvatarUrl));
                 } else {
-                    await finishLogin(response.data.user, null, null, false, response.data.keyBackup, '', response.data.csrfToken, response.data.recoveryKeyBackup);
+                    await finishLogin(response.data.user, null, null, false, response.data.keyBackup, '', response.data.csrfToken, response.data.recoveryKeyBackup, response.data.podliveSession);
                 }
             } catch (error) {
                 window.history.replaceState({}, '', '/login');
@@ -107,7 +107,7 @@ const Login = () => {
         setTwoFactorUserId(null);
     };
 
-    const finishLogin = async (userData, authToken, keysToStore = null, needsProfileSetup = false, keyBackup = null, recoveryCode = '', csrfToken = null, recoveryKeyBackup = null) => {
+    const finishLogin = async (userData, authToken, keysToStore = null, needsProfileSetup = false, keyBackup = null, recoveryCode = '', csrfToken = null, recoveryKeyBackup = null, podliveSession = null) => {
         if (csrfToken) sessionStorage.setItem('cheetchat_csrf_token', csrfToken);
         if (keysToStore) {
             await saveDevicePrivateKey(userData.id, keysToStore.privateKeyString);
@@ -147,6 +147,9 @@ const Login = () => {
             sessionStorage.setItem('pending_nav', '/recovery-code');
         } else if (needsProfileSetup) {
             sessionStorage.setItem('pending_nav', '/setup-profile');
+        }
+        if (podliveSession?.accessToken && podliveSession?.user) {
+            sessionStorage.setItem('podlive_session', JSON.stringify(podliveSession));
         }
         login(userData, authToken, csrfToken);
     };
@@ -194,7 +197,7 @@ const Login = () => {
                 encryptedRecoveryKey,
                 deviceFingerprint,
             });
-            await finishLogin(response.data.user, null, keys, false, null, recoveryCode, response.data.csrfToken, response.data.recoveryKeyBackup);
+            await finishLogin(response.data.user, null, keys, false, null, recoveryCode, response.data.csrfToken, response.data.recoveryKeyBackup, response.data.podliveSession);
         } catch (error) {
             setMessage(error.response?.data?.error || error.message || 'Could not create Google account');
         } finally {
@@ -239,13 +242,13 @@ const Login = () => {
                     token: twoFactorCode,
                     deviceFingerprint
                 });
-                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken, res.data.recoveryKeyBackup);
+                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken, res.data.recoveryKeyBackup, res.data.podliveSession);
                 return;
             }
 
             if (isLogin && isOtpStep) {
                 const res = await axios.post('/api/login/verify-otp', { email: cleanEmail, otp, deviceFingerprint });
-                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken, res.data.recoveryKeyBackup);
+                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken, res.data.recoveryKeyBackup, res.data.podliveSession);
                 return;
             }
 
@@ -259,13 +262,13 @@ const Login = () => {
                     setSubmitting(false);
                     return;
                 }
-                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken, res.data.recoveryKeyBackup);
+                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken, res.data.recoveryKeyBackup, res.data.podliveSession);
                 return;
             }
 
             if (isRegister && isOtpStep) {
                 const res = await axios.post('/api/register/verify-otp', { email: cleanEmail, otp, deviceFingerprint });
-                await finishLogin(res.data.user, res.data.token, pendingKeys, res.data.needsProfileSetup ?? true, res.data.keyBackup, pendingRecoveryCode, res.data.csrfToken, res.data.recoveryKeyBackup);
+                await finishLogin(res.data.user, res.data.token, pendingKeys, res.data.needsProfileSetup ?? true, res.data.keyBackup, pendingRecoveryCode, res.data.csrfToken, res.data.recoveryKeyBackup, res.data.podliveSession);
                 return;
             }
 

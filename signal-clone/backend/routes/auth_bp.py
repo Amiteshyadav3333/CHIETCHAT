@@ -158,6 +158,47 @@ def mask_email(email):
         return 'your registered email'
     return f"{local[:2]}{'*' * max(2, len(local) - 2)}@{domain}"
 
+def provision_podlive_session(user):
+    """Create/link a PodLive account without sharing the CHEETCHAT password."""
+    if current_app.config.get('TESTING'):
+        return None
+    api_url = current_app.config.get('PODLIVE_API_URL', '').rstrip('/')
+    if not api_url.startswith('https://') and current_app.config.get('IS_PRODUCTION'):
+        return None
+    derived_password = hmac.new(
+        current_app.config['JWT_SECRET_KEY'].encode(),
+        f'podlive-account:{user.id}'.encode(), hashlib.sha256,
+    ).hexdigest()
+    login_payload = {'email': user.email, 'password': derived_password}
+
+    def post(path, payload):
+        body = json.dumps(payload).encode()
+        req = urllib.request.Request(
+            f'{api_url}{path}', data=body,
+            headers={'Content-Type': 'application/json'}, method='POST',
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=3) as response:
+                return response.status, json.loads(response.read().decode())
+        except urllib.error.HTTPError as error:
+            try:
+                return error.code, json.loads(error.read().decode())
+            except Exception:
+                return error.code, {}
+
+    try:
+        status, payload = post('/api/auth/login', login_payload)
+        if status == 200:
+            return payload
+        handle = (user.platform_id or f'cheetchat_{user.id}')[:30]
+        status, payload = post('/api/auth/register', {
+            **login_payload, 'unique_handle': handle, 'display_name': user.username,
+        })
+        return payload if status in (200, 201) else None
+    except Exception as error:
+        report_safe_exception('podlive_auto_provision_failed', error)
+        return None
+
 def finalize_login(user):
     user.last_seen = utc_now()
     user.failed_login_attempts = 0
@@ -187,6 +228,7 @@ def finalize_login(user):
         "user": serialize_user(user, viewer_id=user.id),
         "keyBackup": user.encrypted_private_key,
         "recoveryKeyBackup": user.encrypted_recovery_key,
+        "podliveSession": provision_podlive_session(user),
     })
     response.set_cookie(
         current_app.config['AUTH_COOKIE_NAME'], token, httponly=True,
@@ -526,6 +568,7 @@ def verify_registration_otp():
             "keyBackup": user.encrypted_private_key,
             "recoveryKeyBackup": user.encrypted_recovery_key,
             "needsProfileSetup": True
+            ,"podliveSession": provision_podlive_session(user)
         })
         response.set_cookie(
             current_app.config['AUTH_COOKIE_NAME'], token, httponly=True,

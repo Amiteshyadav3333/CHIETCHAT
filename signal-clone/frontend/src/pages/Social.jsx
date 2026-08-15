@@ -21,6 +21,8 @@ import SocialShareSheet from '../components/SocialShareSheet';
 
 const authHeaders = (token) => ({ Authorization: `Bearer ${token}` });
 
+const VerifiedBadge = ({ premium }) => premium ? <span title="Premium verified" className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#1d9bf0] text-[10px] font-black text-white">✓</span> : null;
+
 const CheetChatLogo = ({ className, style, hideTextOnMobile = true }) => (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, ...style }} className={className}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-8 h-8 text-[#1d9bf0] flex-shrink-0">
@@ -90,8 +92,11 @@ const TweetAction = ({ icon, count, onClick, active, activeColor, hoverColor, ho
     </button>
 );
 
-const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, preview, fileRef, posting, onSubmit }) => {
-    const maxChars = 280;
+const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, preview, fileRef, posting, onSubmit, isPremium }) => {
+    const [articleMode, setArticleMode] = useState(false);
+    const [articleTitle, setArticleTitle] = useState('');
+    const [monetized, setMonetized] = useState(false);
+    const maxChars = articleMode && isPremium ? 10000 : 280;
     const remaining = maxChars - caption.length;
     const progress = Math.min((caption.length / maxChars) * 100, 100);
     const isOverLimit = remaining < 0;
@@ -103,6 +108,7 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
         <div style={{ display: 'flex', gap: 12 }}>
             <img src={avatar} alt="" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, marginTop: 4 }} />
             <div style={{ flex: 1, minWidth: 0 }}>
+                {articleMode && <input value={articleTitle} onChange={e => setArticleTitle(e.target.value.slice(0, 200))} placeholder="Article title" className="mb-2 w-full border-0 border-b border-white/10 bg-transparent pb-2 text-xl font-black text-white outline-none" />}
                 <textarea
                     id="tweet-composer"
                     value={caption}
@@ -133,6 +139,8 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                             <PhotoIcon style={{ width: 20, height: 20 }} />
                         </button>
+                        <button type="button" onClick={() => isPremium ? setArticleMode(v => !v) : alert('Articles are available with Premium')} className={`rounded-full px-3 py-2 text-xs font-bold ${articleMode ? 'bg-blue-500/20 text-blue-400' : 'text-[#1d9bf0]'}`}>Article</button>
+                        <button type="button" onClick={() => isPremium ? setMonetized(v => !v) : alert('Paid posts are available with Premium')} className={`rounded-full px-3 py-2 text-xs font-bold ${monetized ? 'bg-amber-500/20 text-amber-300' : 'text-[#1d9bf0]'}`}>₹ Earn</button>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         {caption.length > 0 && (
@@ -146,7 +154,7 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
                             </svg>
                         )}
                         <div style={{ width: 1, height: 24, background: '#2f3336' }} />
-                        <button onClick={onSubmit} disabled={posting || !canPost}
+                        <button onClick={() => onSubmit({ postKind: articleMode ? 'article' : 'standard', articleTitle, isMonetized: monetized })} disabled={posting || !canPost || (articleMode && !articleTitle.trim())}
                             style={{ padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, border: 'none', cursor: canPost ? 'pointer' : 'not-allowed', background: canPost ? '#1d9bf0' : '#0f4f6e', color: canPost ? '#fff' : '#71767b', transition: 'background 0.15s' }}>
                             {posting ? 'Posting…' : 'Post'}
                         </button>
@@ -248,7 +256,7 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
                 )}
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
-                        <button onClick={() => onOpenProfile(authorId)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#e7e9ea', fontWeight: 700, fontSize: 14 }}>{authorName}</button>
+                        <button onClick={() => onOpenProfile(authorId)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#e7e9ea', fontWeight: 700, fontSize: 14 }}>{authorName}</button><VerifiedBadge premium={displayPost.user?.isVerified} />
                         <span style={{ fontSize: 14, color: '#71767b' }}>{authorHandle}</span>
                         <span style={{ color: '#71767b' }}>·</span>
                         <span style={{ fontSize: 14, color: '#71767b', whiteSpace: 'nowrap' }}>{formatDate(postDate)}</span>
@@ -286,7 +294,10 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
                     </div>
                 </div>
 
+                {displayPost.articleTitle && <div className="mt-3 rounded-2xl border border-blue-500/20 bg-blue-500/10 p-4"><span className="text-[10px] font-black uppercase tracking-widest text-blue-400">Premium article</span><h2 className="mt-1 text-xl font-black text-white">{displayPost.articleTitle}</h2></div>}
+                {displayPost.isMonetized && <span className="mt-2 inline-flex rounded-full bg-amber-400/15 px-2 py-1 text-[10px] font-bold text-amber-300">Creator earnings enabled</span>}
                 {postCaption && <p style={{ marginTop: 4, fontSize: 15, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#e7e9ea' }}>{postCaption}</p>}
+                {authorId === currentUser?.id && currentUser?.isPremium && <button onClick={async e => { e.stopPropagation(); try { const { data } = await axios.get(`/api/social/posts/${post.id}/analytics`, { headers: authHeaders(token) }); alert(`Views: ${data.views}\nEngagement: ${data.engagement}\nEarnings: ₹${(data.earningsPaise / 100).toFixed(2)}`); } catch (err) { alert(err.response?.data?.error || 'Analytics unavailable'); } }} className="mt-3 inline-flex items-center gap-1 rounded-full bg-white/5 px-3 py-1.5 text-xs font-bold text-blue-400"><ChartBarIcon className="h-4 w-4" />Advanced analytics</button>}
 
                 {displayPost.poll && <div className="mt-3 space-y-2 rounded-2xl border border-[#2f3336] bg-[#0b1117] p-3">
                     {displayPost.poll.options.map((option, index) => { const count = displayPost.poll.counts[index] || 0; const pct = displayPost.poll.totalVotes ? Math.round(count * 100 / displayPost.poll.totalVotes) : 0; const selected = displayPost.poll.selectedOption === index; return <button key={index} onClick={() => onPollVote?.(index)} className={`relative w-full overflow-hidden rounded-xl border px-3 py-2.5 text-left text-sm font-semibold ${selected ? 'border-[#1d9bf0] text-white' : 'border-[#333639] text-[#e7e9ea]'}`}><span className="absolute inset-y-0 left-0 bg-[#1d9bf0]/20 transition-all" style={{ width: `${pct}%` }} /><span className="relative flex justify-between gap-3"><span>{option}</span><span className="text-[#8b98a5]">{pct}%</span></span></button>; })}
@@ -746,12 +757,15 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat }) => {
         return () => URL.revokeObjectURL(url);
     }, [media]);
 
-    const submitPost = async (channelId, postKind = 'standard') => {
+    const submitPost = async (channelId, postKind = 'standard', premiumOptions = {}) => {
+        if (typeof postKind === 'object') { premiumOptions = postKind; postKind = premiumOptions.postKind || 'standard'; }
         if (!caption.trim() && !media) return;
         setPosting(true);
         const fd = new FormData();
         fd.append('caption', caption);
         fd.append('postKind', postKind);
+        if (premiumOptions.articleTitle) fd.append('articleTitle', premiumOptions.articleTitle);
+        if (premiumOptions.isMonetized) fd.append('isMonetized', 'true');
         if (postKind === 'community' && pollOptions.filter(item => item.trim()).length >= 2) fd.append('pollOptions', JSON.stringify(pollOptions.filter(item => item.trim())));
         if (channelId) fd.append('channelId', channelId);
         if (media) fd.append('media', media);
@@ -927,7 +941,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat }) => {
                         ) : (
                             <div>
                                 {activeTab === 'community' ? <CommunityComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} pollOptions={pollOptions} setPollOptions={setPollOptions} posting={posting} onSubmit={() => submitPost(null, 'community')} /> : <div className="padding-4 px-4 py-3 border-b border-[#2f3336]">
-                                    <CheetChatComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} media={media} setMedia={setMedia} preview={preview} fileRef={fileRef} posting={posting} onSubmit={() => submitPost(null)} />
+                                    <CheetChatComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} media={media} setMedia={setMedia} preview={preview} fileRef={fileRef} posting={posting} isPremium={user?.isPremium} onSubmit={options => submitPost(null, options)} />
                                 </div>}
                                 {loading ? <CheetChatLoading /> : displayedPosts.length ? displayedPosts.map(post => (
                                     <div key={post.id} ref={post.id === highlightedPostId ? highlightedRef : null} style={post.id === highlightedPostId ? { outline: '2px solid #1d9bf0' } : {}}>

@@ -275,7 +275,7 @@ def add_missing_columns(inspector, table_name, columns):
 # Bump this marker whenever models gain columns or tables. Production runs
 # ensure_database_schema() in the pre-deploy step and skips versions it has
 # already applied.
-SCHEMA_VERSION = '20260816_18_groups_privacy_community'
+SCHEMA_VERSION = '20260816_19_premium_creators'
 
 def ensure_runtime_compat_schema():
     """Repair columns required by the currently deployed models.
@@ -311,6 +311,7 @@ def ensure_runtime_compat_schema():
     db.session.commit()
     add_missing_columns(inspector, 'user', {
         'phone_number_privacy': db.String(20),
+        'is_premium': db.Boolean(), 'is_verified': db.Boolean(),
     })
     inspector = inspect(db.engine)
     add_missing_columns(inspector, 'chat', {
@@ -322,10 +323,15 @@ def ensure_runtime_compat_schema():
     inspector = inspect(db.engine)
     add_missing_columns(inspector, 'social_post', {
         'post_kind': db.String(20), 'poll_options': db.Text(),
+        'article_title': db.String(200), 'is_monetized': db.Boolean(),
+        'views_count': db.Integer(), 'earnings_paise': db.Integer(),
     })
+    inspector = inspect(db.engine)
+    add_missing_columns(inspector, 'reel', {'is_monetized': db.Boolean(), 'earnings_paise': db.Integer()})
     if 'user' in inspector.get_table_names():
         db.session.execute(text(
-            "UPDATE \"user\" SET phone_number_privacy = COALESCE(phone_number_privacy, 'nobody')"
+            "UPDATE \"user\" SET phone_number_privacy = COALESCE(phone_number_privacy, 'nobody'), "
+            "is_premium = COALESCE(is_premium, FALSE), is_verified = COALESCE(is_verified, FALSE)"
         ))
     if 'chat' in inspector.get_table_names():
         db.session.execute(text(
@@ -337,8 +343,12 @@ def ensure_runtime_compat_schema():
         ))
     if 'social_post' in inspector.get_table_names():
         db.session.execute(text(
-            "UPDATE social_post SET post_kind = COALESCE(post_kind, 'standard')"
+            "UPDATE social_post SET post_kind = COALESCE(post_kind, 'standard'), "
+            "is_monetized = COALESCE(is_monetized, FALSE), views_count = COALESCE(views_count, 0), "
+            "earnings_paise = COALESCE(earnings_paise, 0)"
         ))
+    if 'reel' in inspector.get_table_names():
+        db.session.execute(text('UPDATE reel SET is_monetized = COALESCE(is_monetized, FALSE), earnings_paise = COALESCE(earnings_paise, 0)'))
     db.session.commit()
 
 
@@ -808,6 +818,8 @@ def serialize_user(user, viewer_id=None):
         "hideLastSeen": bool(user.hide_last_seen),
         "hideOnlineStatus": bool(user.hide_online_status),
         "readReceipts": bool(user.read_receipts),
+        "isPremium": bool(user.is_premium),
+        "isVerified": bool(user.is_verified or user.is_premium),
         "profilePhotoPrivacy": user.profile_photo_privacy,
         "phoneNumberPrivacy": user.phone_number_privacy,
         "twoFactorEnabled": bool(user.two_factor_enabled),

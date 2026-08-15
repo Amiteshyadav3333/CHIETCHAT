@@ -22,6 +22,7 @@ FEED_MAX_LIMIT = 50
 COMMENT_DEFAULT_LIMIT = 50
 COMMENT_MAX_LIMIT = 100
 MAX_POST_CAPTION_LENGTH = 1000
+MAX_ARTICLE_LENGTH = 10000
 MAX_COMMENT_LENGTH = 1000
 MAX_CHANNEL_QUERY_LENGTH = 100
 
@@ -96,11 +97,15 @@ def serialize_post(post, current_user_id):
         "canDelete": post.user_id == current_user_id or (post.channel and post.channel.owner_id == current_user_id)
         ,"postKind": post.post_kind or 'standard'
         ,"poll": {"options": poll_options, "counts": vote_counts, "totalVotes": sum(vote_counts), "selectedOption": selected_poll_option} if poll_options else None
+        ,"articleTitle": post.article_title or ""
+        ,"isMonetized": bool(post.is_monetized)
+        ,"viewsCount": post.views_count or 0
+        ,"earningsPaise": post.earnings_paise or 0 if post.user_id == current_user_id else None
     }
 
 def serialize_comment(comment, current_user_id):
     replies = comment.replies
-    sorted_replies = sorted(replies, key=lambda r: r.created_at)
+    sorted_replies = sorted(replies, key=lambda r: (not bool(r.user.is_premium), r.created_at))
     return {
         "id": comment.id,
         "content": comment.content,
@@ -108,6 +113,7 @@ def serialize_comment(comment, current_user_id):
         "user": serialize_user(comment.user),
         "parentId": comment.parent_id,
         "replies": [serialize_comment(r, current_user_id) for r in sorted_replies]
+        ,"isBoosted": bool(comment.user.is_premium)
     }
 
 
@@ -186,9 +192,16 @@ def create_social_post():
 
     caption = request.form.get('caption', '').strip()
     post_kind = request.form.get('postKind', 'standard').strip().lower()
-    if post_kind not in {'standard', 'community'}:
+    if post_kind not in {'standard', 'community', 'article'}:
         return jsonify({"error": "Invalid post type"}), 400
     poll_options = []
+    user = db.session.get(User, user_id)
+    is_monetized = request.form.get('isMonetized', 'false').lower() == 'true'
+    article_title = request.form.get('articleTitle', '').strip()[:200]
+    if (post_kind == 'article' or is_monetized) and not user.is_premium:
+        return jsonify({"error": "Premium membership is required for articles and paid posts"}), 403
+    if post_kind == 'article' and not article_title:
+        return jsonify({"error": "Article title is required"}), 400
     raw_poll_options = request.form.get('pollOptions', '')
     if raw_poll_options:
         try:
@@ -197,8 +210,9 @@ def create_social_post():
             return jsonify({"error": "Invalid poll options"}), 400
         if len(poll_options) < 2 or len(poll_options) > 4:
             return jsonify({"error": "A poll needs 2 to 4 options"}), 400
-    if len(caption) > MAX_POST_CAPTION_LENGTH:
-        return jsonify({"error": f"Caption must be {MAX_POST_CAPTION_LENGTH} characters or less"}), 400
+    caption_limit = MAX_ARTICLE_LENGTH if post_kind == 'article' else MAX_POST_CAPTION_LENGTH
+    if len(caption) > caption_limit:
+        return jsonify({"error": f"Caption must be {caption_limit} characters or less"}), 400
     channel_id = request.form.get('channelId')
     channel = None
     if channel_id:
@@ -233,10 +247,30 @@ def create_social_post():
         media_type=media_type,
         post_kind=post_kind,
         poll_options=json.dumps(poll_options) if poll_options else None,
+        article_title=article_title or None,
+        is_monetized=is_monetized,
     )
     db.session.add(post)
     db.session.commit()
     return jsonify(serialize_post(post, user_id)), 201
+
+@social_bp.route('/api/social/posts/<int:post_id>/analytics', methods=['GET'])
+def social_post_analytics(post_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    post = db.get_or_404(SocialPost, post_id)
+    if post.user_id != user_id:
+        return jsonify({"error": "Only the creator can view analytics"}), 403
+    if not post.user.is_premium:
+        return jsonify({"error": "Premium membership is required"}), 403
+    return jsonify({
+        "views": post.views_count or 0, "likes": len(post.likes),
+        "comments": len(post.comments), "reposts": len(post.retweets),
+        "shares": post.share_count or 0,
+        "engagement": len(post.likes) + len(post.comments) + len(post.retweets) + (post.share_count or 0),
+        "earningsPaise": post.earnings_paise or 0,
+    })
 
 @social_bp.route('/api/social/posts/<int:post_id>/poll-vote', methods=['POST'])
 def vote_social_poll(post_id):

@@ -36,6 +36,8 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
     const [newComment, setNewComment] = useState('');
     const [floatingEmojis, setFloatingEmojis] = useState([]);
     const [videoError, setVideoError] = useState(false);
+    const [showAnalytics, setShowAnalytics] = useState(false);
+    const [analytics, setAnalytics] = useState(null);
     const videoRef = useRef(null);
     const audioRef = useRef(null);
     const viewedRef = useRef(false);
@@ -86,6 +88,13 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
             });
             onDelete(reel.id);
         } catch (err) { alert("Delete failed"); }
+    };
+
+    const openAnalytics = async () => {
+        try {
+            const { data } = await axios.get(`/api/reels/${reel.id}/analytics`, { headers: { Authorization: `Bearer ${token}` } });
+            setAnalytics(data); setShowAnalytics(true); setShowMenu(false);
+        } catch (err) { alert(err.response?.data?.error || 'Analytics unavailable'); }
     };
 
     const handleBlock = async () => {
@@ -312,6 +321,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
                                 <button onClick={() => { setShowEditCaption(true); setShowMenu(false); }} className="w-full flex items-center gap-3 p-3 text-white hover:bg-white/10 rounded-lg text-sm font-bold border-b border-white/5">
                                     <PencilIcon className="w-5 h-5 text-blue-400" /> Edit Caption
                                 </button>
+                                {currentUser?.isPremium && <button onClick={openAnalytics} className="w-full flex items-center gap-3 p-3 text-blue-300 hover:bg-white/10 rounded-lg text-sm font-bold border-b border-white/5"><EyeIcon className="w-5 h-5" /> Advanced analytics</button>}
                                 <button onClick={handleDelete} className="w-full flex items-center gap-3 p-3 text-red-500 hover:bg-white/10 rounded-lg text-sm font-bold">
                                     <TrashIcon className="w-5 h-5" /> Delete Reel
                                 </button>
@@ -390,6 +400,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
                     >
                         <img src={reelOwner.avatar || '/icons/icon-192.png'} className="w-10 h-10 rounded-full border-2 border-white shadow-lg group-hover:scale-110 transition-transform object-cover" alt="" />
                         <span className="text-white font-bold text-sm drop-shadow-md group-hover:underline">@{reelOwner.username || 'unknown'}</span>
+                        {reelOwner.isVerified && <span title="Premium verified" className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 text-[10px] font-black text-white">✓</span>}
                     </div>
                     {ownerId && currentUserId !== ownerId && (
                         <button 
@@ -449,6 +460,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
                     </form>
                 </div>
             )}
+            {showAnalytics && analytics && <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-6" onClick={() => setShowAnalytics(false)}><div className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#171717] p-6 text-white" onClick={e => e.stopPropagation()}><div className="flex items-center justify-between"><h3 className="text-xl font-black">Advanced analytics</h3><button onClick={() => setShowAnalytics(false)}>✕</button></div><div className="mt-5 grid grid-cols-2 gap-3">{[['Views', analytics.views], ['Engagement', analytics.engagement], ['Shares', analytics.shares], ['Earnings', `₹${(analytics.earningsPaise / 100).toFixed(2)}`]].map(([label, value]) => <div key={label} className="rounded-2xl bg-white/5 p-4"><p className="text-xs text-gray-400">{label}</p><p className="mt-1 text-2xl font-black">{value}</p></div>)}</div></div></div>}
 
             {/* Edit Caption Modal */}
             {showEditCaption && (

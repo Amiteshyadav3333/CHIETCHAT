@@ -38,6 +38,8 @@ def serialize_reel(reel, current_user_id, is_following=None):
         "commentsCount": len(reel.comments),
         "sharesCount": reel.shares_count or 0,
         "viewsCount": reel.views_count or 0,
+        "isMonetized": bool(reel.is_monetized),
+        "earningsPaise": reel.earnings_paise or 0 if reel.user_id == current_user_id else None,
         "reactionsCount": Reel.query.filter_by(parent_reel_id=reel.id).count(),
         "repostsCount": len(reel.reposts),
         "isLiked": ReelLike.query.filter_by(reel_id=reel.id, user_id=current_user_id).first() is not None,
@@ -118,6 +120,10 @@ def create_reel():
     
     file = request.files['video']
     caption = request.form.get('caption', '').strip()
+    user = db.session.get(User, user_id)
+    is_monetized = request.form.get('isMonetized', 'false').lower() == 'true'
+    if is_monetized and not user.is_premium:
+        return jsonify({"error": "Premium membership is required for paid reels"}), 403
     if len(caption) > MAX_REEL_CAPTION_LENGTH:
         return jsonify({"error": f"Caption must be {MAX_REEL_CAPTION_LENGTH} characters or less"}), 400
     music_url = request.form.get('musicUrl', '')
@@ -149,6 +155,7 @@ def create_reel():
             music_volume=music_volume,
             parent_reel_id=parent_reel_id,
             filter_name=filter_name
+            ,is_monetized=is_monetized
         )
         db.session.add(new_reel)
         db.session.commit()
@@ -216,7 +223,7 @@ def like_reel(reel_id):
 
 def serialize_reel_comment(comment, current_user_id):
     replies = comment.replies
-    sorted_replies = sorted(replies, key=lambda r: r.created_at)
+    sorted_replies = sorted(replies, key=lambda r: (not bool(r.user.is_premium), r.created_at))
     return {
         "id": comment.id,
         "content": comment.content,
@@ -224,6 +231,7 @@ def serialize_reel_comment(comment, current_user_id):
         "user": serialize_user(comment.user),
         "parentId": comment.parent_id,
         "replies": [serialize_reel_comment(r, current_user_id) for r in sorted_replies]
+        ,"isBoosted": bool(comment.user.is_premium)
     }
 
 @reels_bp.route('/api/reels/<int:reel_id>/comments', methods=['GET'])
@@ -396,6 +404,24 @@ def view_reel(reel_id):
         reel.views_count = (reel.views_count or 0) + 1
         db.session.commit()
     return jsonify({"viewsCount": reel.views_count})
+
+@reels_bp.route('/api/reels/<int:reel_id>/analytics', methods=['GET'])
+def reel_analytics(reel_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    reel = db.get_or_404(Reel, reel_id)
+    if reel.user_id != user_id:
+        return jsonify({"error": "Only the creator can view analytics"}), 403
+    if not reel.user.is_premium:
+        return jsonify({"error": "Premium membership is required"}), 403
+    return jsonify({
+        "views": reel.views_count or 0, "likes": len(reel.likes),
+        "comments": len(reel.comments), "reposts": len(reel.reposts),
+        "shares": reel.shares_count or 0,
+        "engagement": len(reel.likes) + len(reel.comments) + len(reel.reposts) + (reel.shares_count or 0),
+        "earningsPaise": reel.earnings_paise or 0,
+    })
 
 @reels_bp.route('/api/reels/<int:reel_id>', methods=['DELETE'])
 def delete_reel(reel_id):

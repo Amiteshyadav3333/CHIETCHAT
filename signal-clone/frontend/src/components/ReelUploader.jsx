@@ -6,7 +6,7 @@ import { XMarkIcon, VideoCameraIcon, MusicalNoteIcon, MagnifyingGlassIcon, PlayI
 const MAX_DURATION = 20; // 20 seconds
 
 const ReelUploader = ({ onClose, onSuccess }) => {
-    const { token } = useContext(AuthContext);
+    const { token, user } = useContext(AuthContext);
     const [file, setFile] = useState(null);
     const [preview, setPreview] = useState(null);
     const [caption, setCaption] = useState('');
@@ -15,6 +15,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
     const [recordTime, setRecordTime] = useState(0);
     const [mediaStream, setMediaStream] = useState(null);
     const [facingMode, setFacingMode] = useState('user');
+    const [monetized, setMonetized] = useState(false);
     
     // Music States
     const [musicName, setMusicName] = useState('');
@@ -213,6 +214,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
             formData.append('musicName', musicName);
         }
         formData.append('filterName', selectedFilter);
+        if (monetized) formData.append('isMonetized', 'true');
 
         try {
             await axios.post('/api/reels', formData, {
@@ -355,6 +357,8 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                     className="w-full bg-transparent text-white outline-none resize-none border-b border-white/10 pb-2 focus:border-white transition-colors"
                     rows={2}
                 />
+
+                <button type="button" onClick={() => user?.isPremium ? setMonetized(v => !v) : alert('Paid reels are available with Premium')} className={`flex w-full items-center justify-between rounded-xl border p-3 text-left ${monetized ? 'border-amber-400/40 bg-amber-400/10 text-amber-200' : 'border-white/10 bg-white/5 text-white'}`}><span><span className="block text-sm font-bold">₹ Get paid to post</span><span className="text-xs text-gray-400">Enable creator earnings for this Reel</span></span><span className={`rounded-full px-2 py-1 text-[10px] font-black ${user?.isPremium ? 'bg-blue-500 text-white' : 'bg-white/10 text-gray-400'}`}>{user?.isPremium ? (monetized ? 'ON' : 'PREMIUM') : 'LOCKED'}</span></button>
 
                 {/* Music Section */}
                 <div className="space-y-3">

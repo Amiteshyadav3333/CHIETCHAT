@@ -32,8 +32,9 @@ const NestedComment = ({ comment, onReply, onDelete, currentUser, onProfileClick
                 <div className="flex-1 min-w-0">
                     <div className="bg-white/5 rounded-2xl px-3.5 py-2 relative group/comment">
                         <button type="button" onClick={() => onProfileClick(comment.user.id)} className="font-bold text-xs hover:underline text-gray-200">
-                            @{comment.user.username}
+                            @{comment.user.username} {comment.user.isVerified && <span className="ml-1 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-blue-500 text-[9px] text-white" title="Premium verified">✓</span>}
                         </button>
+                        {comment.isBoosted && <span className="ml-2 rounded-full bg-violet-500/15 px-2 py-0.5 text-[9px] font-bold text-violet-300">Boosted reply</span>}
                         <p className="text-gray-100 text-sm mt-0.5 leading-relaxed break-words text-left pr-6">{comment.content}</p>
                         
                         {/* Delete comment button */}

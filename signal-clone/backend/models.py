@@ -39,6 +39,8 @@ class User(db.Model):
     bio_expires_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now)
     gender = db.Column(db.String(10), nullable=True)  # 'male' | 'female' | None
+    is_premium = db.Column(db.Boolean, nullable=False, default=False)
+    is_verified = db.Column(db.Boolean, nullable=False, default=False)
 
 class PendingRegistration(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -341,6 +343,8 @@ class Reel(db.Model):
     caption = db.Column(db.String(500), nullable=True)
     shares_count = db.Column(db.Integer, default=0)
     views_count = db.Column(db.Integer, default=0)
+    is_monetized = db.Column(db.Boolean, nullable=False, default=False)
+    earnings_paise = db.Column(db.Integer, nullable=False, default=0)
     parent_reel_id = db.Column(db.Integer, db.ForeignKey('reel.id'), nullable=True)
     filter_name = db.Column(db.String(50), nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now)
@@ -425,6 +429,10 @@ class SocialPost(db.Model):
     share_count = db.Column(db.Integer, default=0)
     post_kind = db.Column(db.String(20), nullable=False, default='standard')  # standard | community
     poll_options = db.Column(db.Text, nullable=True)  # JSON string array
+    article_title = db.Column(db.String(200), nullable=True)
+    is_monetized = db.Column(db.Boolean, nullable=False, default=False)
+    views_count = db.Column(db.Integer, nullable=False, default=0)
+    earnings_paise = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, default=utc_now)
 
     user = db.relationship('User')

@@ -129,10 +129,29 @@ exports.cheetchatSso = async (req, res) => {
         const { ticket } = req.body || {};
         if (!ticket) return res.status(400).json({ error: 'SSO ticket is required.' });
         const cheetchatApi = String(process.env.CHEETCHAT_API_URL || 'https://chietchat-backend.onrender.com').replace(/\/+$/, '');
-        const verificationResponse = await fetch(`${cheetchatApi}/api/auth/podlive-sso/verify`, {
+        let verificationResponse = await fetch(`${cheetchatApi}/api/auth/podlive-sso/verify`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticket })
         });
-        const identity = await verificationResponse.json();
+        let identity;
+        if (verificationResponse.status === 404 || verificationResponse.status === 405) {
+            // Backward-compatible path for CHEETCHAT releases that predate the
+            // dedicated SSO exchange. /auth/me validates the signed session
+            // ticket on CHEETCHAT itself, so PodLive never trusts client claims.
+            verificationResponse = await fetch(`${cheetchatApi}/api/auth/me`, {
+                headers: { Authorization: `Bearer ${ticket}` }
+            });
+            const profile = await verificationResponse.json();
+            identity = verificationResponse.ok ? {
+                sub: String(profile.user.id),
+                email: `cheetchat-${profile.user.id}@sso.invalid`,
+                handle: profile.user.platformId || `cheetchat_${profile.user.id}`,
+                name: profile.user.username,
+                avatar: profile.user.avatar || '',
+                jti: require('crypto').createHash('sha256').update(ticket).digest('hex')
+            } : profile;
+        } else {
+            identity = await verificationResponse.json();
+        }
         if (!verificationResponse.ok) return res.status(verificationResponse.status).json({ error: identity.error || 'CHEETCHAT could not verify this sign-in.' });
         if (!identity.jti || !identity.sub || !identity.email) return res.status(401).json({ error: 'Invalid SSO identity.' });
         const now = Date.now();

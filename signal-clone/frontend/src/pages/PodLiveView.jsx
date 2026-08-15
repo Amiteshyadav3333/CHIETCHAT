@@ -12,8 +12,10 @@ const PodLiveView = ({ active, onBack, token }) => {
     const openWithSingleSignOn = async () => {
         setOpening(true); setError('');
         try {
-            const { data } = await axios.post('/api/auth/podlive-sso', {}, { headers: { Authorization: `Bearer ${token}` } });
-            const base = String(data.url || 'https://podlive-sigma.vercel.app').replace(/\/$/, '');
+            // Socket tickets already exist on older CHEETCHAT deployments and
+            // carry the authenticated user/session without exposing cookies.
+            const { data } = await axios.get('/api/auth/socket-ticket', { headers: { Authorization: `Bearer ${token}` } });
+            const base = 'https://podlive-sigma.vercel.app';
             setSsoUrl(`${base}/sso?ticket=${encodeURIComponent(data.ticket)}&returnTo=${encodeURIComponent('/')}`);
             setHasConsented(true);
         } catch (requestError) {

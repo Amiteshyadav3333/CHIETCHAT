@@ -309,7 +309,7 @@ def register_socket_events(socketio):
             ttl = 7 * 24 * 60 * 60
         allowed_asset_kinds = {
             'image': {'image'}, 'video': {'video'}, 'video_note': {'video'},
-            'audio': {'audio'}, 'file': {'document'},
+            'audio': {'audio'}, 'file': {'document'}, 'sticker': {'image'},
         }.get(message_type)
         if asset_id and not allowed_asset_kinds:
             return {"ok": False, "error": "Upload asset is not valid for this message type", "retryable": False}

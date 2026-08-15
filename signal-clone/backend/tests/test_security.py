@@ -1020,9 +1020,13 @@ class SecurityTests(unittest.TestCase):
                 owner_id=self.payee_id, media_url='https://media.example/foreign.png',
                 media_kind='image', resource_type='image', expires_at=utc_now() + timedelta(days=1),
             )
-            db.session.add_all([owned, foreign])
+            sticker = UploadAsset(
+                owner_id=self.user_id, media_url='https://media.example/sticker.webp',
+                media_kind='image', resource_type='image', expires_at=utc_now() + timedelta(days=1),
+            )
+            db.session.add_all([owned, foreign, sticker])
             db.session.commit()
-            owned_id, foreign_id = owned.id, foreign.id
+            owned_id, foreign_id, sticker_id = owned.id, foreign.id, sticker.id
 
         payer = socketio.test_client(app, auth={'token': self.token})
         payload = {
@@ -1034,10 +1038,14 @@ class SecurityTests(unittest.TestCase):
         denied = payer.emit('send_message', {
             **payload, 'clientMessageId': 'attachment-message-2', 'assetId': foreign_id,
         }, callback=True)
+        sticker_sent = payer.emit('send_message', {
+            **payload, 'clientMessageId': 'attachment-sticker-1', 'type': 'sticker', 'assetId': sticker_id,
+        }, callback=True)
         self.assertTrue(first['ok'])
         self.assertTrue(repeated['duplicate'])
         self.assertFalse(denied['ok'])
         self.assertFalse(denied['retryable'])
+        self.assertTrue(sticker_sent['ok'])
         with app.app_context():
             claimed = db.session.get(UploadAsset, owned_id)
             self.assertEqual(claimed.status, 'claimed')

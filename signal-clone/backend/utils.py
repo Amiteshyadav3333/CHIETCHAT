@@ -286,8 +286,29 @@ def ensure_runtime_compat_schema():
     """
     db.session.execute(text('SELECT 1'))
     db.session.commit()
-    db.create_all()
+    # Do not call db.create_all() here. On large PostgreSQL schemas SQLAlchemy
+    # reflects every index and can hit the provider's statement timeout before
+    # Gunicorn binds its port. Create only the new runtime-critical table.
     inspector = inspect(db.engine)
+    if 'social_post' in inspector.get_table_names() and db.engine.dialect.name == 'postgresql':
+        db.session.execute(text(
+            'CREATE TABLE IF NOT EXISTS social_poll_vote ('
+            'id SERIAL PRIMARY KEY, post_id INTEGER NOT NULL REFERENCES social_post(id), '
+            'user_id INTEGER NOT NULL REFERENCES "user"(id), option_index INTEGER NOT NULL, '
+            'created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, '
+            'CONSTRAINT uq_social_poll_user_vote UNIQUE (post_id, user_id))'
+        ))
+    elif 'social_post' in inspector.get_table_names():
+        db.session.execute(text(
+            'CREATE TABLE IF NOT EXISTS social_poll_vote ('
+            'id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INTEGER NOT NULL, '
+            'user_id INTEGER NOT NULL, option_index INTEGER NOT NULL, '
+            'created_at DATETIME DEFAULT CURRENT_TIMESTAMP, '
+            'CONSTRAINT uq_social_poll_user_vote UNIQUE (post_id, user_id), '
+            'FOREIGN KEY(post_id) REFERENCES social_post(id), '
+            'FOREIGN KEY(user_id) REFERENCES user(id))'
+        ))
+    db.session.commit()
     add_missing_columns(inspector, 'user', {
         'phone_number_privacy': db.String(20),
     })

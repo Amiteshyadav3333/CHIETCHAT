@@ -22,6 +22,7 @@ import {
 } from '../utils/encryptedMessageCache';
 import { loadChatMetadata, saveChatMetadata } from '../utils/chatMetadataCache';
 import { emitWithAcknowledgement } from '../utils/socketAcknowledgement';
+import { photoUrlToStickerFile } from '../utils/photoSticker';
 import ChatPreferences from '../components/ChatPreferences';
 import DeleteChatModal from '../components/DeleteChatModal';
 import UserAvatar from '../components/UserAvatar';
@@ -1362,6 +1363,19 @@ const Home = () => {
             console.error(err);
             const msg = err.response?.data?.error || err.response?.statusText || err.message;
             alert('Upload failed: ' + msg);
+        }
+    };
+
+    const handleMessagePhotoSticker = async (photoMessage) => {
+        const sourceUrl = String(photoMessage?.content || '');
+        if (!sourceUrl) return;
+        try {
+            setUploadProgress({ fileName: 'Photo sticker', stage: 'Converting picture to sticker…', percent: 10, originalSize: null, compressedSize: null });
+            const stickerFile = await photoUrlToStickerFile(sourceUrl);
+            await handleUpload(stickerFile, 'sticker');
+        } catch (error) {
+            setUploadProgress(null);
+            alert(error.message || 'Could not make a sticker from this picture.');
         }
     };
 
@@ -3089,6 +3103,7 @@ const Home = () => {
                                                 setPhotoReactionSource({ src: photoMessage.content, senderName: sender?.username || 'Photo' });
                                                 setCameraOpenRequest(value => value + 1);
                                             }}
+                                            onMakeSticker={handleMessagePhotoSticker}
                                             snapMode={snapMode}
                                         />
                                     </div>

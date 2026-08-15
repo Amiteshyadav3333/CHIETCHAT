@@ -478,7 +478,7 @@ const getDocIcon = (filename) => {
 };
 
 // WhatsApp-style action menu overlay
-const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, onReply, onEdit, onCopy, onForward, onReact, onPin, onDelete, onInfo, onTranslate, onDownload, onPhotoReply, onAnnotateMessage, isLastMessage, showTranslateBtn = true, protectedMode = false }) => {
+const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, onReply, onEdit, onCopy, onForward, onReact, onPin, onDelete, onInfo, onTranslate, onDownload, onPhotoReply, onMakeSticker, onAnnotateMessage, isLastMessage, showTranslateBtn = true, protectedMode = false }) => {
     const menuRef = useRef(null);
     const [showFullPicker, setShowFullPicker] = useState(false);
 
@@ -496,6 +496,7 @@ const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, 
         ...(!isDeleted && !protectedMode ? [{ icon: '➡️', label: 'Forward', onClick: () => { onForward?.(); onClose(); } }] : []),
         ...(!isDeleted && !protectedMode ? [{ icon: '✎', label: 'Draw / point on message', onClick: () => { onAnnotateMessage?.(); onClose(); } }] : []),
         ...(!isDeleted && !protectedMode && message.type === 'image' ? [{ icon: '📷', label: 'Reply with photo', onClick: () => { onPhotoReply?.(); onClose(); } }] : []),
+        ...(!isDeleted && !protectedMode && message.type === 'image' ? [{ icon: '✨', label: 'Make sticker', onClick: () => { onMakeSticker?.(); onClose(); } }] : []),
         ...(!isDeleted && !protectedMode && message.type === 'image' ? [{ icon: '⬇️', label: 'Download photo', onClick: () => { onDownload?.(); onClose(); } }] : []),
         ...(!isDeleted && isTextMessage && showTranslateBtn ? [{ icon: '🌐', label: 'Translate', onClick: () => { onTranslate?.(); onClose(); } }] : []),
         { icon: 'ℹ️', label: 'Info', onClick: () => { onInfo?.(); onClose(); } },
@@ -602,7 +603,7 @@ const ChatBubble = ({
     message, isOwn, senderName, onDelete, senderAvatar, showAvatar,
     onReply, replyTo, onTranslate, chatId, chatTranslationLang,
     onEdit, onCopy, onForward, onReact, onPin, isLastMessage,
-    socket, token, showTranslateBtn = true, onAnnotate, onPhotoReply, snapMode = false
+    socket, token, showTranslateBtn = true, onAnnotate, onPhotoReply, onMakeSticker, snapMode = false
 }) => {
     const [, forceColourRefresh] = useState(0);
     useEffect(() => { const refresh = () => forceColourRefresh(value => value + 1); window.addEventListener('cheetchat-colour-updated', refresh); return () => window.removeEventListener('cheetchat-colour-updated', refresh); }, []);
@@ -1613,6 +1614,7 @@ const ChatBubble = ({
                     onReact={(emoji) => onReact && onReact(message, emoji)}
                     onDownload={() => handleDownload(message.content)}
                     onPhotoReply={() => onPhotoReply?.(message)}
+                    onMakeSticker={() => onMakeSticker?.(message)}
                     onAnnotateMessage={() => onAnnotate?.({
                         type: 'chat',
                         messageType: message.type || 'text',

@@ -16,6 +16,7 @@ import ScheduleMessageModal from './ScheduleMessageModal';
 import VerifiedPaymentComposer from './VerifiedPaymentComposer';
 import DrawStudio from './DrawStudio';
 import { API_BASE_URL } from '../utils/apiBaseUrl';
+import { photoBlobToStickerFile } from '../utils/photoSticker';
 
 const LANGUAGES = [
     { code: 'hi', name: 'Hindi (हिंदी)' },
@@ -432,22 +433,8 @@ const MessageInput = ({
         if (file.size > 20 * 1024 * 1024) return alert('Photo must be smaller than 20MB.');
         setStickerBusy(true);
         try {
-            const bitmap = await createImageBitmap(file);
-            const canvas = document.createElement('canvas');
-            canvas.width = 512; canvas.height = 512;
-            const context = canvas.getContext('2d');
-            context.clearRect(0, 0, 512, 512);
-            const scale = Math.min(480 / bitmap.width, 480 / bitmap.height);
-            const width = Math.round(bitmap.width * scale);
-            const height = Math.round(bitmap.height * scale);
-            context.imageSmoothingEnabled = true;
-            context.imageSmoothingQuality = 'high';
-            context.drawImage(bitmap, (512 - width) / 2, (512 - height) / 2, width, height);
-            bitmap.close?.();
-            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.9));
-            if (!blob) throw new Error('Sticker conversion failed');
-            const stickerFile = new File([blob], `sticker-${Date.now()}.webp`, { type: 'image/webp' });
-            setStickerDraft({ file: stickerFile, url: URL.createObjectURL(blob) });
+            const stickerFile = await photoBlobToStickerFile(file);
+            setStickerDraft({ file: stickerFile, url: URL.createObjectURL(stickerFile) });
             if (photoDraft?.url) URL.revokeObjectURL(photoDraft.url);
             setPhotoDraft(null);
             setShowAttachMenu(false);

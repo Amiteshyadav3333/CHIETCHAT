@@ -1,11 +1,25 @@
 import React, { useState } from 'react';
+import axios from 'axios';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 
-const PodLiveView = ({ active, onBack }) => {
+const PodLiveView = ({ active, onBack, token }) => {
     const [hasConsented, setHasConsented] = useState(false);
+    const [ssoUrl, setSsoUrl] = useState('');
+    const [opening, setOpening] = useState(false);
+    const [error, setError] = useState('');
     if (!active) return null;
 
-    const iframeUrl = 'https://podlive-sigma.vercel.app';
+    const openWithSingleSignOn = async () => {
+        setOpening(true); setError('');
+        try {
+            const { data } = await axios.post('/api/auth/podlive-sso', {}, { headers: { Authorization: `Bearer ${token}` } });
+            const base = String(data.url || 'https://podlive-sigma.vercel.app').replace(/\/$/, '');
+            setSsoUrl(`${base}/sso?ticket=${encodeURIComponent(data.ticket)}&returnTo=${encodeURIComponent('/')}`);
+            setHasConsented(true);
+        } catch (requestError) {
+            setError(requestError.response?.data?.error || 'Could not open PodLive. Please try again.');
+        } finally { setOpening(false); }
+    };
 
     return (
         <div className="flex flex-col h-full w-full bg-black text-gray-100 font-sans relative overflow-hidden">
@@ -22,7 +36,7 @@ const PodLiveView = ({ active, onBack }) => {
             <div className="w-full h-full flex-1 relative bg-black">
                 {hasConsented ? (
                     <iframe
-                        src={iframeUrl}
+                        src={ssoUrl}
                         className="w-full h-full border-none absolute inset-0"
                         title="PodLive App"
                         allow="microphone; camera; display-capture; autoplay; fullscreen"
@@ -35,7 +49,8 @@ const PodLiveView = ({ active, onBack }) => {
                             <div className="mb-4 text-5xl">🎙️</div>
                             <h2 className="text-xl font-bold text-white">Open PodLive?</h2>
                             <p className="mt-3 text-sm leading-6 text-gray-400">PodLive is a separate trusted service. It can request microphone, camera or screen access only after you continue and approve the browser permission.</p>
-                            <button type="button" onClick={() => setHasConsented(true)} className="mt-6 w-full rounded-xl bg-[#00a884] py-3 font-bold text-white hover:bg-[#06bd96]">Continue to PodLive</button>
+                            {error && <p className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-300">{error}</p>}
+                            <button type="button" disabled={opening} onClick={openWithSingleSignOn} className="mt-6 w-full rounded-xl bg-[#00a884] py-3 font-bold text-white hover:bg-[#06bd96] disabled:opacity-60">{opening ? 'Signing you in…' : 'Continue with CHEETCHAT'}</button>
                             <button type="button" onClick={onBack} className="mt-2 w-full rounded-xl py-3 text-sm font-semibold text-gray-400 hover:text-white">Cancel</button>
                         </div>
                     </div>

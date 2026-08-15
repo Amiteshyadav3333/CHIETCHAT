@@ -67,6 +67,10 @@ services:
         value: https://chat.indiasearch.site
       - key: BACKEND_URL
         value: https://chietchat-backend.onrender.com
+      - key: PODLIVE_URL
+        value: https://podlive-sigma.vercel.app
+      - key: PODLIVE_SSO_SECRET
+        sync: false
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET

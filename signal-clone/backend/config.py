@@ -60,6 +60,8 @@ class Config:
     SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY') or ''
     FRONTEND_URL = public_url_from_env('FRONTEND_URL', 'https://chat.indiasearch.site' if os.environ.get('RENDER') == 'true' else 'http://127.0.0.1:3000')
     BACKEND_URL = public_url_from_env('BACKEND_URL', 'https://chietchat-backend.onrender.com' if os.environ.get('RENDER') == 'true' else 'http://127.0.0.1:5000')
+    PODLIVE_URL = public_url_from_env('PODLIVE_URL', 'https://podlive-sigma.vercel.app')
+    PODLIVE_SSO_SECRET = normalized_env_value('PODLIVE_SSO_SECRET')
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
     MAX_UPLOAD_BYTES = int(os.environ.get('MAX_UPLOAD_BYTES', 100 * 1024 * 1024))
     MAX_CONTENT_LENGTH = MAX_UPLOAD_BYTES

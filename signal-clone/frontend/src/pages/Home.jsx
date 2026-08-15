@@ -3162,6 +3162,7 @@ const Home = () => {
                 <PodLiveView
                     active={showPodlive && !incomingCall && !showCallModal}
                     onBack={() => setShowPodlive(false)}
+                    token={token}
                 />
                 </React.Suspense>
             </div>}

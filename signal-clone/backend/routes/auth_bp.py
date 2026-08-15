@@ -223,6 +223,33 @@ def validate_current_session():
         },
     })
 
+@auth_bp.route('/api/auth/podlive-sso', methods=['POST'])
+def create_podlive_sso_ticket():
+    """Issue a short-lived identity ticket; the CHEETCHAT password never leaves this service."""
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    secret = current_app.config.get('PODLIVE_SSO_SECRET') or ''
+    if len(secret) < 32:
+        return jsonify({'error': 'PodLive single sign-on is not configured'}), 503
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({'error': 'Unauthorized'}), 401
+    now = datetime.datetime.now(datetime.timezone.utc)
+    ticket = jwt.encode({
+        'iss': 'cheetchat', 'aud': 'podlive', 'purpose': 'podlive_sso',
+        'sub': str(user.id), 'email': user.email,
+        'handle': user.platform_id or f'cheetchat_{user.id}',
+        'name': user.username, 'avatar': user.avatar or '',
+        'iat': now, 'exp': now + datetime.timedelta(seconds=60),
+        'jti': secrets.token_urlsafe(24),
+    }, secret, algorithm='HS256')
+    return jsonify({
+        'ticket': ticket,
+        'url': current_app.config.get('PODLIVE_URL', 'https://podlive-sigma.vercel.app'),
+        'expiresIn': 60,
+    })
+
 @auth_bp.route('/api/auth/csrf', methods=['GET'])
 def get_csrf_token():
     if not get_current_user_id():

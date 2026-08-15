@@ -272,7 +272,10 @@ def add_missing_columns(inspector, table_name, columns):
             db.session.rollback()
             raise RuntimeError(f"Could not add {table_name}.{column_name}: {e}") from e
 
-SCHEMA_VERSION = '20260810_17_google_auth'
+# Bump this marker whenever models gain columns or tables. Production runs
+# ensure_database_schema() in the pre-deploy step and skips versions it has
+# already applied.
+SCHEMA_VERSION = '20260816_18_groups_privacy_community'
 
 
 def ensure_database_schema(force=False):

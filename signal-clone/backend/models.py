@@ -32,8 +32,12 @@ class User(db.Model):
     hide_last_seen = db.Column(db.Boolean, default=False)
     hide_online_status = db.Column(db.Boolean, default=False)
     read_receipts = db.Column(db.Boolean, default=True)
-    profile_photo_privacy = db.Column(db.String(20), default='everyone')  # everyone | contacts | nobody
+    profile_photo_privacy = db.Column(db.String(20), default='everyone')
+    profile_photo_exceptions = db.Column(db.Text, nullable=True)
+    story_privacy = db.Column(db.String(20), nullable=False, default='contacts')
+    story_privacy_exceptions = db.Column(db.Text, nullable=True)
     phone_number_privacy = db.Column(db.String(20), nullable=False, default='nobody')  # everyone | contacts | nobody
+    ui_preferences = db.Column(db.Text, nullable=False, default='{}')
     two_factor_enabled = db.Column(db.Boolean, default=False)
     two_factor_secret = db.Column(db.String(100), nullable=True)
     bio_expires_at = db.Column(db.DateTime, nullable=True)

@@ -265,6 +265,23 @@ const Home = () => {
     useEffect(() => { showCallModalRef.current = showCallModal; }, [showCallModal]);
     useEffect(() => { localStorage.setItem('chat_theme', theme); }, [theme]);
     useEffect(() => { localStorage.setItem('chat_wallpaper', wallpaper); }, [wallpaper]);
+    useEffect(() => {
+        const saved = user?.uiPreferences;
+        if (!saved) return;
+        if (saved.theme) setTheme(saved.theme);
+        if (saved.wallpaper) setWallpaper(saved.wallpaper);
+        const storageMap = {
+            fontSize: 'chat_font_size', customFont: 'chat_custom_font', bubbleColor: 'chat_bubble_color',
+            animatedTheme: 'animated_theme', snapModeDefault: 'snap_mode_default', messageSounds: 'message_sounds',
+            callSounds: 'call_sounds', mediaAutoDownload: 'media_auto_download', dataSaver: 'data_saver',
+            hdMedia: 'hd_media', screenshotAlerts: 'screenshot_alerts', spamDetection: 'spam_detection',
+            incognitoKeyboard: 'incognito_keyboard'
+        };
+        Object.entries(storageMap).forEach(([key, storageKey]) => {
+            if (saved[key] !== undefined) localStorage.setItem(storageKey, typeof saved[key] === 'boolean' ? (saved[key] ? '1' : '0') : String(saved[key]));
+        });
+        window.dispatchEvent(new Event('cheetchat-colour-updated'));
+    }, [user?.uiPreferences]);
 
     useEffect(() => {
         const handleOutsideClick = (e) => {
@@ -1983,7 +2000,7 @@ const Home = () => {
         },
         { label: 'Reels', icon: PlayIcon, active: showReels, action: () => { hideAppNavForFeature(); setShowSocial(false); setShowPodlive(false); setShowReels(true); setShowAiChat(false); } },
         { label: 'Social', icon: PhotoIcon, active: showSocial, action: () => { hideAppNavForFeature(); setShowReels(false); setShowPodlive(false); setShowSocial(true); setShowAiChat(false); } },
-        { label: 'PodLive', icon: MicrophoneIcon, active: false, action: () => window.open('https://podlive-sigma.vercel.app/', '_blank', 'noopener,noreferrer') },
+        { label: 'PodLive', icon: MicrophoneIcon, active: showPodlive, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(true); setShowAiChat(false); } },
         { label: 'AI', icon: SparklesIcon, active: showAiChat, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(false); setShowAiChat(true); } },
         { label: 'Notify', icon: BellIcon, active: showNotifications, action: openNotifications, badge: unreadCount },
         { label: 'New', icon: PlusIcon, active: showSearchModal || showLinkPhoneModal, action: openNewChat },

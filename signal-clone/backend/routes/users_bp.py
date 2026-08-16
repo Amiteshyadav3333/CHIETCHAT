@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 from werkzeug.utils import secure_filename
+import json
 import secrets
 from models import db, User, PendingRegistration, Block, Follow, ProfileAudienceAvatar, Notification
 from extensions import socketio
@@ -635,8 +636,16 @@ def update_privacy_settings():
         user.read_receipts = bool(data.get('readReceipts'))
     if 'profilePhotoPrivacy' in data:
         val = data.get('profilePhotoPrivacy')
-        if val in ['everyone', 'contacts', 'nobody']:
+        if val in ['everyone', 'contacts', 'contacts_except', 'only', 'nobody']:
             user.profile_photo_privacy = val
+    if 'profilePhotoExceptions' in data:
+        user.profile_photo_exceptions = str(data.get('profilePhotoExceptions') or '')[:1000]
+    if 'storyPrivacy' in data:
+        val = data.get('storyPrivacy')
+        if val in ['contacts', 'contacts_except', 'only', 'nobody']:
+            user.story_privacy = val
+    if 'storyPrivacyExceptions' in data:
+        user.story_privacy_exceptions = str(data.get('storyPrivacyExceptions') or '')[:1000]
     if 'phoneNumberPrivacy' in data:
         val = data.get('phoneNumberPrivacy')
         if val in ['everyone', 'contacts', 'nobody']:
@@ -647,6 +656,31 @@ def update_privacy_settings():
     payload = serialize_user(user, viewer_id=user.id)
     emit_to_user_chat_contacts(user_id, 'user_profile_updated', {"user": payload})
     return jsonify(payload)
+
+
+@users_bp.route('/api/user/preferences', methods=['PUT'])
+def update_ui_preferences():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    user = db.session.get(User, user_id)
+    data = request.get_json(silent=True) or {}
+    allowed = {
+        'theme', 'wallpaper', 'fontSize', 'customFont', 'bubbleColor',
+        'animatedTheme', 'snapModeDefault', 'messageSounds', 'desktopAlerts',
+        'callSounds', 'mediaAutoDownload', 'dataSaver', 'hdMedia',
+        'screenshotAlerts', 'spamDetection', 'incognitoKeyboard'
+    }
+    try:
+        current = json.loads(user.ui_preferences or '{}')
+    except (TypeError, ValueError):
+        current = {}
+    for key, value in data.items():
+        if key in allowed and isinstance(value, (str, bool, int, float)):
+            current[key] = value if not isinstance(value, str) else value[:100]
+    user.ui_preferences = json.dumps(current)
+    db.session.commit()
+    return jsonify({"uiPreferences": current})
 
 
 @users_bp.route('/api/premium/referral', methods=['GET'])

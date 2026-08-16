@@ -55,6 +55,7 @@ const normalizeBusinessData = (data, user) => {
 };
 
 const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wallpaper, onThemeChange, onWallpaperChange, onOpenSmartSpace, smartSpaceButtonEnabled, onSmartSpaceButtonChange }) => {
+    const serverUi = user?.uiPreferences || {};
     const [screen, setScreen] = useState('settings');
     const [message, setMessage] = useState(null);
     const [busy, setBusy] = useState(false);
@@ -81,7 +82,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
         hideLastSeen: user?.hideLastSeen || false,
         hideOnlineStatus: user?.hideOnlineStatus || false,
         readReceipts: user?.readReceipts !== false,
-        incognitoKeyboard: localStorage.getItem('incognito_keyboard') === '1',
+        incognitoKeyboard: serverUi.incognitoKeyboard ?? localStorage.getItem('incognito_keyboard') === '1',
         messageSounds: localStorage.getItem('message_sounds') !== '0',
         desktopAlerts: localStorage.getItem('desktop_alerts') !== '0',
         callSounds: localStorage.getItem('call_sounds') !== '0',
@@ -91,18 +92,18 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
         screenshotAlerts: localStorage.getItem('screenshot_alerts') === '1',
         spamDetection: localStorage.getItem('spam_detection') !== '0',
         appLock: localStorage.getItem('app_lock_enabled') === '1',
-        animatedTheme: localStorage.getItem('animated_theme') === '1',
+        animatedTheme: serverUi.animatedTheme ?? localStorage.getItem('animated_theme') === '1',
         autoReply: localStorage.getItem('business_auto_reply') === '1',
         showCatalog: localStorage.getItem('business_catalog') === '1',
-        snapModeDefault: localStorage.getItem('snap_mode_default') === '1',
+        snapModeDefault: serverUi.snapModeDefault ?? localStorage.getItem('snap_mode_default') === '1',
     }));
-    const [fontSize, setFontSize] = useState(() => localStorage.getItem('chat_font_size') || 'medium');
-    const [bubbleColor, setBubbleColor] = useState(() => localStorage.getItem('chat_bubble_color') || '#00a884');
-    const [storyPrivacy, setStoryPrivacy] = useState(() => localStorage.getItem('story_privacy') || 'contacts');
-    const [profilePrivacy, setProfilePrivacy] = useState(() => localStorage.getItem('profile_photo_privacy_mode') || user?.profilePhotoPrivacy || 'everyone');
-    const [storyExceptions, setStoryExceptions] = useState(() => localStorage.getItem('story_privacy_exceptions') || '');
-    const [profileExceptions, setProfileExceptions] = useState(() => localStorage.getItem('profile_privacy_exceptions') || '');
-    const [customFont, setCustomFont] = useState(() => localStorage.getItem('chat_custom_font') || 'system');
+    const [fontSize, setFontSize] = useState(() => serverUi.fontSize || localStorage.getItem('chat_font_size') || 'medium');
+    const [bubbleColor, setBubbleColor] = useState(() => serverUi.bubbleColor || localStorage.getItem('chat_bubble_color') || '#00a884');
+    const [storyPrivacy, setStoryPrivacy] = useState(() => user?.storyPrivacy || localStorage.getItem('story_privacy') || 'contacts');
+    const [profilePrivacy, setProfilePrivacy] = useState(() => user?.profilePhotoPrivacy || localStorage.getItem('profile_photo_privacy_mode') || 'everyone');
+    const [storyExceptions, setStoryExceptions] = useState(() => user?.storyPrivacyExceptions || localStorage.getItem('story_privacy_exceptions') || '');
+    const [profileExceptions, setProfileExceptions] = useState(() => user?.profilePhotoExceptions || localStorage.getItem('profile_privacy_exceptions') || '');
+    const [customFont, setCustomFont] = useState(() => serverUi.customFont || localStorage.getItem('chat_custom_font') || 'system');
     const [notificationSoundName, setNotificationSoundName] = useState(() => localStorage.getItem('custom_notification_name') || '');
     const [businessData, setBusinessData] = useState(() => businessDefaults(user));
     const [businessAnalytics, setBusinessAnalytics] = useState(null);
@@ -112,6 +113,23 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     const go = (next) => {
         setMessage(null);
         setScreen(next);
+    };
+
+    const persistUi = async (change) => {
+        try {
+            await axios.put('/api/user/preferences', change, { headers: { Authorization: `Bearer ${token}` } });
+        } catch (error) {
+            console.error('Could not sync customization', error);
+        }
+    };
+
+    const persistPrivacy = async (change) => {
+        try {
+            const res = await axios.put('/api/user/privacy', change, { headers: { Authorization: `Bearer ${token}` } });
+            onUserUpdate?.(res.data);
+        } catch (error) {
+            console.error('Could not sync privacy', error);
+        }
     };
 
     const togglePref = async (name, storageKey) => {
@@ -127,6 +145,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
         setPrefs(current => {
             const next = !current[name];
             localStorage.setItem(storageKey, next ? '1' : '0');
+            persistUi({ [name]: next });
             return { ...current, [name]: next };
         });
     };
@@ -614,17 +633,11 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                     onChange={async (val) => {
                                         setProfilePrivacy(val);
                                         localStorage.setItem('profile_photo_privacy_mode', val);
-                                        try {
-                                            const serverValue = ['everyone', 'contacts', 'nobody'].includes(val) ? val : 'contacts';
-                                            const res = await axios.put('/api/user/privacy', { profilePhotoPrivacy: serverValue }, {
-                                                headers: { Authorization: `Bearer ${token}` }
-                                            });
-                                            onUserUpdate?.(res.data);
-                                        } catch (err) { console.error(err); }
+                                        persistPrivacy({ profilePhotoPrivacy: val, profilePhotoExceptions: profileExceptions });
                                     }}
                                     options={[['everyone', 'Everyone'], ['contacts', 'My Contacts'], ['contacts_except', 'Contacts except…'], ['only', 'Only share with…'], ['nobody', 'Nobody']]}
                                 />
-                                {(profilePrivacy === 'contacts_except' || profilePrivacy === 'only') && <AudienceInput value={profileExceptions} onChange={value => { setProfileExceptions(value); localStorage.setItem('profile_privacy_exceptions', value); }} mode={profilePrivacy} />}
+                                {(profilePrivacy === 'contacts_except' || profilePrivacy === 'only') && <AudienceInput value={profileExceptions} onChange={value => { setProfileExceptions(value); localStorage.setItem('profile_privacy_exceptions', value); persistPrivacy({ profilePhotoExceptions: value }); }} mode={profilePrivacy} />}
                             </SettingsGroup>
                             <SectionLabel>Phone number visibility</SectionLabel>
                             <SettingsGroup>
@@ -644,8 +657,8 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                             </SettingsGroup>
                             <SectionLabel>Story visibility</SectionLabel>
                             <SettingsGroup>
-                                <ChoiceRow title="Who can see my story" value={storyPrivacy} onChange={val => { setStoryPrivacy(val); localStorage.setItem('story_privacy', val); }} options={[['contacts', 'My Contacts'], ['contacts_except', 'Contacts except…'], ['only', 'Only share with…'], ['nobody', 'Nobody']]} />
-                                {(storyPrivacy === 'contacts_except' || storyPrivacy === 'only') && <AudienceInput value={storyExceptions} onChange={value => { setStoryExceptions(value); localStorage.setItem('story_privacy_exceptions', value); }} mode={storyPrivacy} />}
+                                <ChoiceRow title="Who can see my story" value={storyPrivacy} onChange={val => { setStoryPrivacy(val); localStorage.setItem('story_privacy', val); persistPrivacy({ storyPrivacy: val, storyPrivacyExceptions: storyExceptions }); }} options={[['contacts', 'My Contacts'], ['contacts_except', 'Contacts except…'], ['only', 'Only share with…'], ['nobody', 'Nobody']]} />
+                                {(storyPrivacy === 'contacts_except' || storyPrivacy === 'only') && <AudienceInput value={storyExceptions} onChange={value => { setStoryExceptions(value); localStorage.setItem('story_privacy_exceptions', value); persistPrivacy({ storyPrivacyExceptions: value }); }} mode={storyPrivacy} />}
                                 <InfoRow title="Private by default" text="These choices are used whenever you create a new story." />
                             </SettingsGroup>
                             
@@ -743,17 +756,17 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                             </SettingsGroup>
                             <SectionLabel>Display</SectionLabel>
                             <SettingsGroup>
-                                <ChoiceRow title="App theme" value={theme} onChange={onThemeChange} options={[['light', 'Light'], ['dark', 'Dark'], ['midnight', 'Midnight'], ['business', 'Business']]} />
-                                <ChoiceRow title="Default chat wallpaper" value={wallpaper} onChange={onWallpaperChange} options={[['white', 'Cloud'], ['gradient', 'Midnight'], ['dots', 'Night dots'], ['emerald', 'Emerald'], ['sunset', 'Sunset'], ['ocean', 'Ocean'], ['lavender', 'Lavender'], ['rose', 'Rose'], ['sand', 'Warm sand'], ['aurora', 'Aurora']]} />
-                                <ChoiceRow title="Font size" value={fontSize} onChange={val => { setFontSize(val); localStorage.setItem('chat_font_size', val); }} options={[['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']]} />
-                                <ChoiceRow title="Chat font" value={customFont} onChange={val => { setCustomFont(val); localStorage.setItem('chat_custom_font', val); }} options={[['system', 'System'], ['rounded', 'Rounded'], ['serif', 'Classic Serif'], ['mono', 'Mono']]} />
+                                <ChoiceRow title="App theme" value={theme} onChange={val => { onThemeChange?.(val); persistUi({ theme: val }); }} options={[['light', 'Light'], ['dark', 'Dark'], ['midnight', 'Midnight'], ['business', 'Business']]} />
+                                <ChoiceRow title="Default chat wallpaper" value={wallpaper} onChange={val => { onWallpaperChange?.(val); persistUi({ wallpaper: val }); }} options={[['white', 'Cloud'], ['gradient', 'Midnight'], ['dots', 'Night dots'], ['emerald', 'Emerald'], ['sunset', 'Sunset'], ['ocean', 'Ocean'], ['lavender', 'Lavender'], ['rose', 'Rose'], ['sand', 'Warm sand'], ['aurora', 'Aurora']]} />
+                                <ChoiceRow title="Font size" value={fontSize} onChange={val => { setFontSize(val); localStorage.setItem('chat_font_size', val); persistUi({ fontSize: val }); }} options={[['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']]} />
+                                <ChoiceRow title="Chat font" value={customFont} onChange={val => { setCustomFont(val); localStorage.setItem('chat_custom_font', val); persistUi({ customFont: val }); }} options={[['system', 'System'], ['rounded', 'Rounded'], ['serif', 'Classic Serif'], ['mono', 'Mono']]} />
                                 <SettingsToggle icon={<FilmIcon />} title="Animated theme" subtitle="Subtle moving wallpaper effects" value={prefs.animatedTheme} onClick={() => togglePref('animatedTheme', 'animated_theme')} />
                                 <SettingsToggle icon={<EyeSlashIcon />} title="Snap Mode by default" subtitle="New contact chats use a 10-minute timer and restrict saving/forwarding" value={prefs.snapModeDefault} onClick={() => togglePref('snapModeDefault', 'snap_mode_default')} />
                             </SettingsGroup>
                             <div className="mx-5 mt-4 rounded-xl border border-gray-800 bg-[#202c33] p-4">
                                 <label className="text-sm font-medium text-white">Sent bubble colour</label>
                                 <div className="mt-3 flex items-center gap-3">
-                                    <input type="color" value={bubbleColor} onChange={e => { setBubbleColor(e.target.value); localStorage.setItem('chat_bubble_color', e.target.value); }} className="h-10 w-14 rounded border-0 bg-transparent" />
+                                    <input type="color" value={bubbleColor} onChange={e => { setBubbleColor(e.target.value); localStorage.setItem('chat_bubble_color', e.target.value); window.dispatchEvent(new Event('cheetchat-colour-updated')); persistUi({ bubbleColor: e.target.value }); }} className="h-10 w-14 rounded border-0 bg-transparent" />
                                     <span className="text-xs text-gray-400">New messages pop colourfully, then settle into this colour.</span>
                                 </div>
                             </div>

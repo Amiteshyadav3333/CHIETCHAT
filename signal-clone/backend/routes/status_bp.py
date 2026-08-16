@@ -38,9 +38,16 @@ def get_statuses():
     users_map = {}
     for s in statuses:
         uid = s.user_id
+        if uid != user_id:
+            mode = s.user.story_privacy or 'contacts'
+            tokens = {part.strip().lower().lstrip('@') for part in (s.user.story_privacy_exceptions or '').split(',') if part.strip()}
+            viewer = db.session.get(type(s.user), user_id)
+            viewer_matches = bool(viewer and ({str(viewer.id), (viewer.username or '').lower(), (viewer.platform_id or '').lower()} & tokens))
+            if mode == 'nobody' or (mode == 'contacts_except' and viewer_matches) or (mode == 'only' and not viewer_matches):
+                continue
         if uid not in users_map:
             users_map[uid] = {
-                "user": serialize_user(s.user),
+                "user": serialize_user(s.user, viewer_id=user_id),
                 "statuses": []
             }
         viewed = StatusView.query.filter_by(status_id=s.id, viewer_id=user_id).first() is not None

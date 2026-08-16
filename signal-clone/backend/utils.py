@@ -275,7 +275,7 @@ def add_missing_columns(inspector, table_name, columns):
 # Bump this marker whenever models gain columns or tables. Production runs
 # ensure_database_schema() in the pre-deploy step and skips versions it has
 # already applied.
-SCHEMA_VERSION = '20260816_21_premium_referrals'
+SCHEMA_VERSION = '20260816_22_privacy_customization'
 
 def ensure_runtime_compat_schema():
     """Repair columns required by the currently deployed models.
@@ -418,7 +418,11 @@ def ensure_database_schema(force=False):
             'hide_online_status': db.Boolean(),
             'read_receipts': db.Boolean(),
             'profile_photo_privacy': db.String(20),
+            'profile_photo_exceptions': db.Text(),
+            'story_privacy': db.String(20),
+            'story_privacy_exceptions': db.Text(),
             'phone_number_privacy': db.String(20),
+            'ui_preferences': db.Text(),
             'two_factor_enabled': db.Boolean(),
             'two_factor_secret': db.String(100),
             'bio_expires_at': db.DateTime(),
@@ -460,8 +464,12 @@ def ensure_database_schema(force=False):
                 updates.append('read_receipts = COALESCE(read_receipts, TRUE)')
             if 'profile_photo_privacy' in user_columns:
                 updates.append("profile_photo_privacy = COALESCE(profile_photo_privacy, 'everyone')")
+            if 'story_privacy' in user_columns:
+                updates.append("story_privacy = COALESCE(story_privacy, 'contacts')")
             if 'phone_number_privacy' in user_columns:
                 updates.append("phone_number_privacy = COALESCE(phone_number_privacy, 'nobody')")
+            if 'ui_preferences' in user_columns:
+                updates.append("ui_preferences = COALESCE(ui_preferences, '{}')")
             if 'two_factor_enabled' in user_columns:
                 updates.append('two_factor_enabled = COALESCE(two_factor_enabled, FALSE)')
             if 'auth_provider' in user_columns:
@@ -769,10 +777,17 @@ def is_user_online(user_id):
 def serialize_user(user, viewer_id=None):
     avatar = user.avatar
     # Apply profile photo privacy rules
-    if user.profile_photo_privacy == 'nobody':
+    profile_mode = user.profile_photo_privacy or 'everyone'
+    exception_tokens = {part.strip().lower().lstrip('@') for part in (user.profile_photo_exceptions or '').split(',') if part.strip()}
+    viewer = db.session.get(User, viewer_id) if viewer_id and viewer_id != user.id else None
+    viewer_matches = bool(viewer and ({str(viewer.id), (viewer.username or '').lower(), (viewer.platform_id or '').lower()} & exception_tokens))
+    if profile_mode == 'nobody' and viewer_id != user.id:
         avatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=hidden"
-    elif user.profile_photo_privacy == 'contacts' and viewer_id and viewer_id != user.id:
-        if not has_contact(user.id, viewer_id):
+    elif viewer_id and viewer_id != user.id:
+        is_contact = has_contact(user.id, viewer_id)
+        if ((profile_mode == 'contacts' and not is_contact)
+                or (profile_mode == 'contacts_except' and (not is_contact or viewer_matches))
+                or (profile_mode == 'only' and not viewer_matches)):
             avatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=hidden"
 
     # An explicitly selected per-contact photo takes precedence over the public
@@ -830,7 +845,11 @@ def serialize_user(user, viewer_id=None):
         "referralCode": user.referral_code or "" if viewer_id == user.id else "",
         "premiumReferralCount": User.query.filter_by(referred_by_id=user.id, email_verified=True).count() if viewer_id == user.id else 0,
         "premiumReferralGoal": 7 if viewer_id == user.id else 0,
-        "profilePhotoPrivacy": user.profile_photo_privacy,
+        "profilePhotoPrivacy": profile_mode,
+        "profilePhotoExceptions": user.profile_photo_exceptions or "" if viewer_id == user.id else "",
+        "storyPrivacy": (user.story_privacy or 'contacts') if viewer_id == user.id else None,
+        "storyPrivacyExceptions": (user.story_privacy_exceptions or "") if viewer_id == user.id else "",
+        "uiPreferences": json.loads(user.ui_preferences or '{}') if viewer_id == user.id else {},
         "phoneNumberPrivacy": user.phone_number_privacy,
         "twoFactorEnabled": bool(user.two_factor_enabled),
         "recoveryKeyEnabled": bool(user.encrypted_recovery_key) if viewer_id == user.id else None,

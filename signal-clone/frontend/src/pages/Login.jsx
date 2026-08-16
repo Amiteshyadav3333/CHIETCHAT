@@ -72,7 +72,7 @@ const Login = () => {
                     setGoogleOnboarding({ ...response.data, accessToken: session.access_token });
                     setUseGoogleAvatar(Boolean(response.data.googleAvatarUrl));
                 } else {
-                    await finishLogin(response.data.user, null, null, false, response.data.keyBackup, '', response.data.csrfToken, response.data.recoveryKeyBackup, response.data.podliveSession);
+                    await finishLogin(response.data.user, null, null, false, response.data.keyBackup, '', response.data.csrfToken, response.data.recoveryKeyBackup);
                 }
             } catch (error) {
                 window.history.replaceState({}, '', '/login');
@@ -108,7 +108,7 @@ const Login = () => {
         setTwoFactorUserId(null);
     };
 
-    const finishLogin = async (userData, authToken, keysToStore = null, needsProfileSetup = false, keyBackup = null, recoveryCode = '', csrfToken = null, recoveryKeyBackup = null, podliveSession = null) => {
+    const finishLogin = async (userData, authToken, keysToStore = null, needsProfileSetup = false, keyBackup = null, recoveryCode = '', csrfToken = null, recoveryKeyBackup = null) => {
         if (csrfToken) sessionStorage.setItem('cheetchat_csrf_token', csrfToken);
         if (keysToStore) {
             await saveDevicePrivateKey(userData.id, keysToStore.privateKeyString);
@@ -195,7 +195,7 @@ const Login = () => {
                 encryptedRecoveryKey,
                 deviceFingerprint,
             });
-            await finishLogin(response.data.user, null, keys, false, null, recoveryCode, response.data.csrfToken, response.data.recoveryKeyBackup, response.data.podliveSession);
+            await finishLogin(response.data.user, null, keys, false, null, recoveryCode, response.data.csrfToken, response.data.recoveryKeyBackup);
         } catch (error) {
             setMessage(error.response?.data?.error || error.message || 'Could not create Google account');
         } finally {
@@ -240,13 +240,13 @@ const Login = () => {
                     token: twoFactorCode,
                     deviceFingerprint
                 });
-                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken, res.data.recoveryKeyBackup, res.data.podliveSession);
+                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken, res.data.recoveryKeyBackup);
                 return;
             }
 
             if (isLogin && isOtpStep) {
                 const res = await axios.post('/api/login/verify-otp', { email: cleanEmail, otp, deviceFingerprint });
-                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken, res.data.recoveryKeyBackup, res.data.podliveSession);
+                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken, res.data.recoveryKeyBackup);
                 return;
             }
 
@@ -260,13 +260,13 @@ const Login = () => {
                     setSubmitting(false);
                     return;
                 }
-                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken, res.data.recoveryKeyBackup, res.data.podliveSession);
+                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken, res.data.recoveryKeyBackup);
                 return;
             }
 
             if (isRegister && isOtpStep) {
                 const res = await axios.post('/api/register/verify-otp', { email: cleanEmail, otp, deviceFingerprint });
-                await finishLogin(res.data.user, res.data.token, pendingKeys, res.data.needsProfileSetup ?? true, res.data.keyBackup, pendingRecoveryCode, res.data.csrfToken, res.data.recoveryKeyBackup, res.data.podliveSession);
+                await finishLogin(res.data.user, res.data.token, pendingKeys, res.data.needsProfileSetup ?? true, res.data.keyBackup, pendingRecoveryCode, res.data.csrfToken, res.data.recoveryKeyBackup);
                 return;
             }
 

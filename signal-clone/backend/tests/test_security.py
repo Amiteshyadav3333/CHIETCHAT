@@ -798,6 +798,15 @@ class SecurityTests(unittest.TestCase):
             self.assertIsNone(db.session.get(ActiveSession, self.session_id))
             self.assertEqual(PushSubscription.query.filter_by(session_id=self.session_id).count(), 0)
 
+    def test_session_validation_recovers_from_invalid_saved_ui_preferences(self):
+        with app.app_context():
+            user = db.session.get(User, self.user_id)
+            user.ui_preferences = 'not-valid-json'
+            db.session.commit()
+        current = self.client.get('/api/auth/me', headers=self.auth_headers())
+        self.assertEqual(current.status_code, 200)
+        self.assertEqual(current.json['user']['uiPreferences'], {})
+
     def test_revoked_session_cannot_open_socket(self):
         with app.app_context():
             session = db.session.get(ActiveSession, self.session_id)

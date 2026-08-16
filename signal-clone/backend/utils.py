@@ -780,6 +780,13 @@ def iso_utc(dt):
 def is_user_online(user_id):
     return user_connection_counts.get(user_id, 0) > 0
 
+def parse_ui_preferences(raw_value):
+    try:
+        value = json.loads(raw_value or '{}')
+        return value if isinstance(value, dict) else {}
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+
 def serialize_user(user, viewer_id=None):
     avatar = user.avatar
     # Apply profile photo privacy rules
@@ -855,7 +862,7 @@ def serialize_user(user, viewer_id=None):
         "profilePhotoExceptions": user.profile_photo_exceptions or "" if viewer_id == user.id else "",
         "storyPrivacy": (user.story_privacy or 'contacts') if viewer_id == user.id else None,
         "storyPrivacyExceptions": (user.story_privacy_exceptions or "") if viewer_id == user.id else "",
-        "uiPreferences": json.loads(user.ui_preferences or '{}') if viewer_id == user.id else {},
+        "uiPreferences": parse_ui_preferences(user.ui_preferences) if viewer_id == user.id else {},
         "phoneNumberPrivacy": user.phone_number_privacy,
         "twoFactorEnabled": bool(user.two_factor_enabled),
         "recoveryKeyEnabled": bool(user.encrypted_recovery_key) if viewer_id == user.id else None,

@@ -311,6 +311,10 @@ def ensure_runtime_compat_schema():
     db.session.commit()
     add_missing_columns(inspector, 'user', {
         'phone_number_privacy': db.String(20),
+        'profile_photo_exceptions': db.Text(),
+        'story_privacy': db.String(20),
+        'story_privacy_exceptions': db.Text(),
+        'ui_preferences': db.Text(),
         'is_premium': db.Boolean(), 'is_verified': db.Boolean(),
         'birth_date': db.Date(),
         'referral_code': db.String(16), 'referred_by_id': db.Integer(),
@@ -336,6 +340,8 @@ def ensure_runtime_compat_schema():
     if 'user' in inspector.get_table_names():
         db.session.execute(text(
             "UPDATE \"user\" SET phone_number_privacy = COALESCE(phone_number_privacy, 'nobody'), "
+            "story_privacy = COALESCE(story_privacy, 'contacts'), "
+            "ui_preferences = COALESCE(ui_preferences, '{}'), "
             "is_premium = COALESCE(is_premium, FALSE), is_verified = COALESCE(is_verified, FALSE)"
         ))
     if 'chat' in inspector.get_table_names():

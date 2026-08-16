@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import QRCode from 'qrcode';
 import {
     ArrowLeftIcon, ArrowRightOnRectangleIcon, BellIcon, ChartBarIcon,
     ChatBubbleBottomCenterTextIcon, CheckBadgeIcon, ChevronRightIcon,
@@ -13,6 +14,7 @@ import { generateRecoveryCode, protectPrivateKeyWithPassword } from '../utils/en
 import { disablePushNotifications, enablePushNotifications } from '../utils/pushNotifications';
 import { deleteDevicePrivateKey, loadDevicePrivateKey } from '../utils/secureKeyStore';
 import AvatarCreator from './AvatarCreator';
+import { INDIAN_LANGUAGES } from './AppLanguage';
 
 const TITLES = {
     settings: 'Settings', profile: 'Profile', account: 'Account', privacy: 'Privacy',
@@ -20,7 +22,7 @@ const TITLES = {
     business: 'Business tools', help: 'Help center', password: 'Change password',
     delete: 'Delete account', activity: 'Your Activity', sessions: 'Active Sessions',
     twofactor_setup: 'Enable 2FA', twofactor_disable: 'Disable 2FA', premium: 'CHEETCHAT Premium',
-    reels: 'Reels settings', social: 'Social settings', podlive: 'PodLive settings'
+    reels: 'Reels settings', social: 'Social settings', podlive: 'PodLive settings', language: 'App language'
 };
 
 const timeAgo = (dateStr) => {
@@ -53,6 +55,15 @@ const normalizeBusinessData = (data, user) => {
         products: Array.isArray(data?.products) ? data.products.filter(Boolean) : [],
         automation: { ...defaults.automation, ...(data?.automation || {}), keywordRules: data?.automation?.keywordRules || {} }
     };
+};
+
+const PremiumUpiCard = ({ token }) => {
+    const [qr, setQr] = useState('');
+    const [price, setPrice] = useState(199);
+    const uri = `upi://pay?pa=yadavamitesh569%40oksbi&pn=CHEETCHAT%20Premium&am=${price}&cu=INR&tn=Lifetime%20Premium`;
+    useEffect(() => { axios.get('/api/payments/config', { headers: { Authorization: `Bearer ${token}` } }).then(({ data }) => setPrice(data.premiumPrice || 199)).catch(() => {}); }, [token]);
+    useEffect(() => { QRCode.toDataURL(uri, { width: 320, margin: 2 }).then(setQr).catch(() => setQr('')); }, [uri]);
+    return <div className="rounded-2xl border border-violet-400/25 bg-violet-500/10 p-4 text-center"><p className="font-black text-white">Pay ₹{price} with UPI</p>{qr && <div className="mx-auto mt-3 w-fit rounded-xl bg-white p-2"><img src={qr} alt="CHEETCHAT Premium UPI QR code" className="h-44 w-44" /></div>}<p className="mt-2 text-xs text-gray-300">UPI ID: <strong className="text-white">yadavamitesh569@oksbi</strong></p><a href={uri} className="mt-3 block rounded-xl bg-violet-500 py-3 text-sm font-black text-white">Open UPI app</a><p className="mt-2 text-[10px] leading-4 text-gray-500">Use secure provider checkout in Social for automatic server-verified activation.</p></div>;
 };
 
 const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wallpaper, onThemeChange, onWallpaperChange, onOpenSmartSpace, smartSpaceButtonEnabled, onSmartSpaceButtonChange }) => {
@@ -120,6 +131,34 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     const [businessAnalytics, setBusinessAnalytics] = useState(null);
     const [newProduct, setNewProduct] = useState({ name: '', description: '', price: '', imageUrl: '', inStock: true });
     const [keywordRulesText, setKeywordRulesText] = useState('');
+    const [appLanguage, setAppLanguage] = useState(() => localStorage.getItem('app_language') || 'en');
+
+    const changeLanguage = value => {
+        setAppLanguage(value);
+        localStorage.setItem('app_language', value);
+        persistUi({ appLanguage: value });
+        window.dispatchEvent(new Event('cheetchat-language-changed'));
+    };
+
+    const uploadCustomWallpaper = file => {
+        if (!file?.type.startsWith('image/')) return setMessage({ type: 'error', text: 'Choose a valid image file.' });
+        if (file.size > 12 * 1024 * 1024) return setMessage({ type: 'error', text: 'Wallpaper must be 12 MB or smaller.' });
+        const image = new Image();
+        const source = URL.createObjectURL(file);
+        image.onload = () => {
+            const scale = Math.min(1, 1920 / image.width, 1920 / image.height);
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(image.width * scale)); canvas.height = Math.max(1, Math.round(image.height * scale));
+            canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+            const value = canvas.toDataURL('image/jpeg', 0.82); URL.revokeObjectURL(source);
+            try {
+                localStorage.setItem('custom_chat_wallpaper', value); onWallpaperChange?.('custom'); persistUi({ wallpaper: 'custom' });
+                setMessage({ type: 'success', text: 'Custom wallpaper applied on this device.' });
+            } catch { setMessage({ type: 'error', text: 'This image is too large to save. Choose a smaller picture.' }); }
+        };
+        image.onerror = () => { URL.revokeObjectURL(source); setMessage({ type: 'error', text: 'Could not read this image.' }); };
+        image.src = source;
+    };
 
     const go = (next) => {
         setMessage(null);
@@ -133,7 +172,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
             window.dispatchEvent(new CustomEvent('cheetchat-preferences-updated', { detail: res.data.uiPreferences }));
         } catch (error) {
             console.error('Could not sync customization', error);
-            setMessage({ type: 'error', text: 'Setting save नहीं हो सकी। दोबारा कोशिश करें।' });
+            setMessage({ type: 'error', text: 'The setting could not be saved. Please try again.' });
         }
     };
 
@@ -172,7 +211,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
 
     const toggleAppLock = async () => {
         if (prefs.appLock) {
-            const pin = window.prompt('Current device PIN enter karein to disable app lock:');
+            const pin = window.prompt('Enter the current device PIN to disable app lock:');
             if (!pin) return;
             const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pin)))).map(byte => byte.toString(16).padStart(2, '0')).join('');
             if (hash !== localStorage.getItem('app_lock_pin_hash')) return setMessage({ type: 'error', text: 'Incorrect device PIN.' });
@@ -516,6 +555,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                             </button>
                             <SettingsGroup>
                                 <SettingsRow icon={<SparklesIcon />} title="CHEETCHAT Premium" subtitle={user?.isPremium ? 'Active — all creator features unlocked' : 'Invite 7 verified users to unlock every creator feature'} onClick={openPremium} />
+                                <SettingsRow icon={<span className="text-xl">文</span>} title="App language" subtitle={INDIAN_LANGUAGES.find(item => item[0] === appLanguage)?.[1] || 'English'} onClick={() => go('language')} />
                                 <SettingsRow icon={<KeyIcon />} title="Account" subtitle="Password, security and account controls" onClick={() => go('account')} />
                                 <SettingsRow icon={<LockClosedIcon />} title="Privacy" subtitle="Story, profile photo, last seen and online visibility" onClick={() => go('privacy')} />
                                 <SettingsRow icon={<ChatBubbleBottomCenterTextIcon />} title="Chats" subtitle="Appearance, media, privacy, sounds and message behaviour" onClick={() => go('chats')} />
@@ -588,6 +628,10 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                     )}
 
                     {screen === 'premium' && <div className="space-y-4 p-5"><div className="rounded-3xl border border-violet-400/30 bg-gradient-to-br from-violet-500/20 to-blue-500/10 p-6"><div className="flex items-center gap-3"><SparklesIcon className="h-9 w-9 text-violet-300" /><div><h3 className="text-xl font-black text-white">Premium creator tools</h3><p className={`text-sm font-bold ${user?.isPremium || referralStatus?.isPremium ? 'text-emerald-300' : 'text-amber-300'}`}>{user?.isPremium || referralStatus?.isPremium ? 'Active on your account' : `${referralStatus?.verifiedReferrals || 0} of 7 verified referrals`}</p></div></div>{!user?.isPremium && referralStatus && <><div className="mt-5 h-3 overflow-hidden rounded-full bg-black/30"><div className="h-full rounded-full bg-gradient-to-r from-violet-400 to-blue-400" style={{ width: `${Math.min(100, referralStatus.verifiedReferrals / 7 * 100)}%` }} /></div><div className="mt-4 rounded-2xl bg-black/25 p-4"><p className="text-xs font-bold uppercase tracking-wider text-gray-400">Your coupon</p><div className="mt-2 flex gap-2"><code className="flex-1 rounded-xl bg-black/40 px-4 py-3 text-lg font-black tracking-widest text-white">{referralStatus.referralCode}</code><button onClick={() => navigator.clipboard?.writeText(referralStatus.referralCode)} className="rounded-xl bg-white px-4 text-sm font-black text-black">Copy</button></div><p className="mt-2 text-xs text-gray-400">Share this coupon. Premium unlocks automatically after 7 referred accounts verify their email.</p></div></>}<div className="mt-6 grid gap-3 sm:grid-cols-2">{['Verified checkmark','Advanced Social analytics','Advanced Reels analytics','Boosted replies','Write long-form articles','Paid posts and Reels'].map(feature => <div key={feature} className="flex items-center gap-2 rounded-xl bg-black/20 p-3 text-sm font-semibold text-white"><span className="text-emerald-400">✓</span>{feature}</div>)}</div></div>{!user?.isPremium && <div className="rounded-2xl border border-white/10 bg-[#182229] p-4"><p className="text-sm font-bold text-white">Have a friend’s coupon?</p><div className="mt-3 flex gap-2"><input value={referralInput} onChange={e => setReferralInput(e.target.value.replace(/[^a-z0-9]/gi, '').toUpperCase().slice(0, 16))} placeholder="Enter coupon" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/25 px-3 py-2 uppercase text-white outline-none focus:border-violet-400" /><button onClick={applyReferral} disabled={busy || !referralInput} className="rounded-xl bg-violet-500 px-4 text-sm font-black text-white disabled:opacity-50">Apply</button></div><p className="mt-2 text-xs text-gray-500">A coupon can be linked once during your account’s first 7 days.</p></div>}</div>}
+
+                    {screen === 'language' && <div className="p-5"><p className="mb-4 text-sm leading-6 text-gray-400">English is the default. Select an Indian language to translate the complete app interface.</p><div className="grid gap-2 sm:grid-cols-2">{INDIAN_LANGUAGES.map(([code, name]) => <button key={code} onClick={() => changeLanguage(code)} className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left text-sm font-semibold ${appLanguage === code ? 'border-[#00a884] bg-[#00a884]/15 text-white' : 'border-white/10 bg-white/5 text-gray-200'}`}><span>{name}</span>{appLanguage === code && <span className="text-[#00a884]">✓</span>}</button>)}</div></div>}
+
+                    {screen === 'premium' && !user?.isPremium && <div className="px-5 pb-5"><PremiumUpiCard token={token} /></div>}
 
                     {screen === 'account' && (
                         <>
@@ -767,7 +811,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                             <SectionLabel>Display</SectionLabel>
                             <SettingsGroup>
                                 <ChoiceRow title="App theme" value={theme} onChange={val => { onThemeChange?.(val); persistUi({ theme: val }); }} options={[['light', 'Light'], ['dark', 'Dark'], ['midnight', 'Midnight'], ['business', 'Business']]} />
-                                <ChoiceRow title="Default chat wallpaper" value={wallpaper} onChange={val => { onWallpaperChange?.(val); persistUi({ wallpaper: val }); }} options={[['white', 'Cloud'], ['gradient', 'Midnight'], ['dots', 'Night dots'], ['emerald', 'Emerald'], ['sunset', 'Sunset'], ['ocean', 'Ocean'], ['lavender', 'Lavender'], ['rose', 'Rose'], ['sand', 'Warm sand'], ['aurora', 'Aurora']]} />
+                                <ChoiceRow title="Default chat wallpaper" value={wallpaper} onChange={val => { onWallpaperChange?.(val); persistUi({ wallpaper: val }); }} options={[['white', 'Cloud'], ['gradient', 'Midnight'], ['dots', 'Night dots'], ['emerald', 'Emerald'], ['sunset', 'Sunset'], ['ocean', 'Ocean'], ['lavender', 'Lavender'], ['rose', 'Rose'], ['sand', 'Warm sand'], ['aurora', 'Aurora'], ['custom', 'My picture']]} />
                                 <ChoiceRow title="Font size" value={fontSize} onChange={val => { setFontSize(val); localStorage.setItem('chat_font_size', val); persistUi({ fontSize: val }); }} options={[['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']]} />
                                 <ChoiceRow title="Chat font" value={customFont} onChange={val => { setCustomFont(val); localStorage.setItem('chat_custom_font', val); persistUi({ customFont: val }); }} options={[['system', 'System'], ['rounded', 'Rounded'], ['serif', 'Classic Serif'], ['mono', 'Mono']]} />
                                 <SettingsToggle icon={<FilmIcon />} title="Animated theme" subtitle="Subtle moving wallpaper effects" value={prefs.animatedTheme} onClick={() => togglePref('animatedTheme', 'animated_theme')} />
@@ -775,6 +819,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 <SettingsToggle icon={<ShieldCheckIcon />} title="Spam link detection" subtitle="Warn before sending suspicious links or repeated spam" value={prefs.spamDetection} onClick={() => togglePref('spamDetection', 'spam_detection')} />
                                 <SettingsToggle icon={<EyeSlashIcon />} title="Incognito keyboard" subtitle="Ask supported keyboards not to learn what you type" value={prefs.incognitoKeyboard} onClick={() => togglePref('incognitoKeyboard', 'incognito_keyboard')} />
                             </SettingsGroup>
+                            <label className="mx-5 mt-4 flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-[#00a884]/50 bg-[#00a884]/10 p-4 text-sm font-semibold text-white"><PhotoIcon className="h-6 w-6 text-[#00a884]" /><span><span className="block">Upload custom wallpaper</span><span className="block text-xs font-normal text-gray-400">JPG, PNG or a downloaded picture, up to 12 MB</span></span><input type="file" accept="image/*" hidden onChange={event => uploadCustomWallpaper(event.target.files?.[0])} /></label>
                             <SectionLabel>Chat media and alerts</SectionLabel>
                             <SettingsGroup>
                                 <SettingsRow icon={<BellIcon />} title="Message and call notifications" subtitle="Sounds, desktop alerts and personal notification sound" onClick={() => go('notifications')} />

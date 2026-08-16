@@ -22,6 +22,7 @@
         "emoji-picker-react": "^4.5.15",
         "framer-motion": "^10.16.4",
         "peerjs": "^1.5.5",
+        "qrcode": "^1.5.4",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
         "react-dropzone": "^14.2.3",

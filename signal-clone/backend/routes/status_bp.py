@@ -11,6 +11,7 @@ from utils import (
 )
 from extensions import socketio
 from scheduled_messages import valid_encrypted_envelope
+from content_moderation import ModerationUnavailable, reject_adult_content
 
 status_bp = Blueprint('status_bp', __name__)
 
@@ -58,6 +59,8 @@ def get_statuses():
             "caption": s.caption,
             "musicUrl": s.music_url,
             "musicName": s.music_name,
+            "musicVolume": s.music_volume if s.music_volume is not None else 0.8,
+            "musicStart": s.music_start or 0,
             "duration": s.duration,
             "createdAt": iso_utc(s.created_at),
             "expiresAt": iso_utc(s.expires_at),
@@ -107,15 +110,26 @@ def create_status():
     else:
         return jsonify({"error": "Only images and videos allowed"}), 400
 
+    music_url = request.form.get('musicUrl', None)
+    music_name = request.form.get('musicName', None)
     try:
+        music_volume = min(max(float(request.form.get('musicVolume', 0.8)), 0), 1)
+        music_start = min(max(float(request.form.get('musicStart', 0)), 0), 29)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid music controls"}), 400
+
+    try:
+        blocked, adult_score = reject_adult_content(file, media_type)
+        if blocked:
+            return jsonify({"error": "Upload blocked: adult content is not allowed", "code": "ADULT_CONTENT_BLOCKED", "adultScore": round(adult_score, 3)}), 422
         media_url = upload_to_cloudinary(file, folder='chietchat/status', resource_type=resource_type)
+    except ModerationUnavailable:
+        return jsonify({"error": "Media safety check is temporarily unavailable", "code": "MODERATION_UNAVAILABLE"}), 503
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": f"Upload failed: {str(e)}"}), 500
 
-    music_url = request.form.get('musicUrl', None)
-    music_name = request.form.get('musicName', None)
     music_asset_id = request.form.get('musicAssetId')
     try:
         duration = min(max(int(request.form.get('duration', 15)), 1), 15)
@@ -130,6 +144,8 @@ def create_status():
         caption=caption,
         music_url=music_url,
         music_name=music_name,
+        music_volume=music_volume,
+        music_start=music_start,
         duration=duration,
         expires_at=expires_at
     )

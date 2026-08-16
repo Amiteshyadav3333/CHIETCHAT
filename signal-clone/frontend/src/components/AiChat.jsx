@@ -32,7 +32,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     const [isRecording, setIsRecording] = useState(false);
     const [showEmoji, setShowEmoji] = useState(false);
     const [userGender, setUserGender] = useState('unknown');
-    const [language, setLanguage] = useState(() => localStorage.getItem('ai_language') || 'hi-IN');
+    const [language, setLanguage] = useState(() => localStorage.getItem('ai_language') || 'en-IN');
 
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
@@ -64,7 +64,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
 
     // AI Voice & Video refs
     const shouldListenRef = useRef(false);
-    const recognitionLangRef = useRef(localStorage.getItem('ai_language') || 'hi-IN');
+    const recognitionLangRef = useRef(localStorage.getItem('ai_language') || 'en-IN');
     const ttsAudioRef = useRef(null);
     const videoStreamRef = useRef(null);
     const videoRef = useRef(null);
@@ -170,7 +170,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     // Start Voice Call Flow
     const startCall = () => {
         if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) {
-            alert('Voice call के लिए Chrome या Edge में microphone speech recognition चाहिए। Text chat अभी भी काम करेगा।');
+            alert('Voice calls require microphone speech recognition in Chrome or Edge. Text chat is still available.');
             return;
         }
         setIsCallVideo(false);
@@ -207,7 +207,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     // Start Video Call Flow
     const startVideoCall = async () => {
         if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) {
-            alert('Video AI conversation के लिए Chrome या Edge speech recognition चाहिए।');
+            alert('AI video conversations require speech recognition in Chrome or Edge.');
             return;
         }
         setIsCallVideo(true);
@@ -777,7 +777,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         } else if (!abortRef.current) {
             setMessages(prev => [...prev, {
                 id: Date.now(), role: 'assistant',
-                content: "Abhi AI se connect nahi ho pa raha. Ek baar phir try karo 🙏",
+                content: "The AI service is unavailable right now. Please try again. 🙏",
                 timestamp: new Date().toISOString()
             }]);
         }
@@ -788,7 +788,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     const handleStop = () => { abortRef.current = true; setLoading(false); };
 
     const handleClearMemory = async () => {
-        if (!window.confirm('Poori conversation delete karein?')) return;
+        if (!window.confirm('Delete the entire conversation?')) return;
         await axios.delete('/api/ai/memory', { headers: { Authorization: `Bearer ${token}` } });
         const isArjun = botInfo?.name === 'Arjun';
         setMessages([{
@@ -841,12 +841,12 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
             mr.onstop = async () => {
                 stream.getTracks().forEach(t => t.stop());
                 setInput('');
-                alert('Is browser mein voice transcription support nahi hai. Chrome ya Edge mein try karo.');
+                alert('This browser does not support voice transcription. Try Chrome or Edge.');
             };
             mr.start();
             setIsRecording(true);
         } catch {
-            alert('Microphone access chahiye. Please allow karo!');
+            alert('Microphone access is required. Please allow it.');
         }
     };
 

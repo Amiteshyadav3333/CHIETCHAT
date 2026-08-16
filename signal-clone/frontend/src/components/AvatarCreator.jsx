@@ -25,11 +25,11 @@ const AvatarCreator = ({ token, onCreated }) => {
             const data = new FormData(); data.append('avatar', new File([png], `avatar-${Date.now()}.png`, { type: 'image/png' }));
             const response = await axios.post('/api/user/avatar', data, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } });
             onCreated?.(response.data.user);
-        } catch (error) { alert(error.response?.data?.error || 'Avatar save nahi ho saka.'); }
+        } catch (error) { alert(error.response?.data?.error || 'The avatar could not be saved.'); }
         finally { setBusy(false); }
     };
     return <div className="space-y-5 rounded-2xl border border-violet-500/20 bg-gradient-to-br from-violet-500/10 to-cyan-500/5 p-5">
-        <div className="flex items-center gap-4"><img src={preview} alt="Avatar preview" className="h-24 w-24 rounded-full ring-4 ring-white/10" /><div><h3 className="font-semibold text-white">Create your avatar</h3><p className="mt-1 text-xs leading-5 text-gray-400">Face, vibe aur background choose karein.</p></div></div>
+        <div className="flex items-center gap-4"><img src={preview} alt="Avatar preview" className="h-24 w-24 rounded-full ring-4 ring-white/10" /><div><h3 className="font-semibold text-white">Create your avatar</h3><p className="mt-1 text-xs leading-5 text-gray-400">Choose a face, style and background.</p></div></div>
         <Choices label="Face" values={FACES} selected={face} onSelect={setFace} />
         <Choices label="Accessory" values={ACCESSORIES} selected={accessory} onSelect={setAccessory} />
         <div><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Background</p><div className="flex flex-wrap gap-3">{BACKGROUNDS.map(value => <button type="button" aria-label={value} key={value} onClick={() => setBackground(value)} className={`h-9 w-9 rounded-full border-2 ${background === value ? 'scale-110 border-white' : 'border-transparent'}`} style={{ background: value }} />)}</div></div>

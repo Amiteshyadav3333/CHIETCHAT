@@ -43,7 +43,7 @@ const VerifiedPaymentComposer = ({ open, onClose, chatId, payeeId, payeeName, on
         event.preventDefault();
         const amount = Number(form.amount);
         if (!Number.isFinite(amount) || amount < 1 || amount > 100000) {
-            setError('Amount ₹1 se ₹1,00,000 ke beech hona chahiye.');
+            setError('The amount must be between ₹1 and ₹1,00,000.');
             return;
         }
         if (!chatId || !payeeId) {
@@ -117,8 +117,8 @@ const VerifiedPaymentComposer = ({ open, onClose, chatId, payeeId, payeeName, on
                     <label className="block text-xs font-semibold text-gray-300">Note (optional)<input maxLength={80} value={form.note} onChange={event => { requestIdRef.current = newPaymentRequestId(); setForm({ ...form, note: event.target.value }); }} placeholder="What is this payment for?" className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#1d2d27] px-4 py-3 text-sm text-white outline-none focus:border-emerald-400" /></label>
                     {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</p>}
                     <button type="submit" disabled={starting} className="w-full rounded-xl bg-emerald-500 py-3.5 text-sm font-black text-black hover:bg-emerald-400 disabled:opacity-60">{starting ? 'Starting secure checkout…' : 'Pay securely'}</button>
-                    <p className="rounded-lg bg-emerald-500/10 px-3 py-2 text-center text-[10px] leading-4 text-emerald-200">Receipt server signature aur provider reconciliation ke baad hi send hogi.</p>
-                    <p className="text-center text-[10px] leading-4 text-gray-500">CHEETCHAT आपका UPI PIN, card number या bank credentials store नहीं करता।</p>
+                    <p className="rounded-lg bg-emerald-500/10 px-3 py-2 text-center text-[10px] leading-4 text-emerald-200">The receipt is sent only after server signature verification and provider reconciliation.</p>
+                    <p className="text-center text-[10px] leading-4 text-gray-500">CHEETCHAT never stores your UPI PIN, card number or bank credentials.</p>
                 </div>
             </form>
         </div>

@@ -277,7 +277,7 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, curr
 
                     {/* Music */}
                     {currentStatus.musicUrl && (
-                        <audio ref={audioRef} src={currentStatus.musicUrl} loop onError={() => setMusicBlocked(true)} />
+                        <audio ref={audioRef} src={currentStatus.musicUrl} loop onLoadedMetadata={event => { event.currentTarget.currentTime = currentStatus.musicStart || 0; event.currentTarget.volume = currentStatus.musicVolume ?? 0.8; }} onError={() => setMusicBlocked(true)} />
                     )}
 
                     {/* Pause indicator */}

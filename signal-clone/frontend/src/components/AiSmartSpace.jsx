@@ -34,13 +34,13 @@ const AiSmartSpace = ({ chats, token, onClose, onOpenChat }) => {
         ).join('\n');
         try {
             const res = await axios.post('/api/ai/chat', {
-                message: `Mera daily communication brief banao. 5 short bullets max. Important chats, pending replies, follow-ups aur birthdays suggest karo:\n${context}`
+                message: `Create my daily communication brief in no more than five short bullet points. Suggest important chats, pending replies, follow-ups and birthdays:\n${context}`
             }, { headers: { Authorization: `Bearer ${token}` } });
             setBrief(res.data.reply);
             localStorage.setItem('smart_space_daily_brief', res.data.reply);
             localStorage.setItem('smart_space_brief_date', new Date().toDateString());
         } catch {
-            setBrief('Aaj ke important chats check karo, pending replies complete karo aur ek follow-up task add karo.');
+            setBrief('Review important chats, complete pending replies and add a follow-up task.');
         } finally { setLoadingBrief(false); }
     };
 

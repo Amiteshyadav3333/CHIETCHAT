@@ -3,7 +3,7 @@ import { AuthContext } from '../context/AuthContext';
 import axios from 'axios';
 import { XMarkIcon, VideoCameraIcon, MusicalNoteIcon, MagnifyingGlassIcon, PlayIcon, PauseIcon, ArrowPathIcon, PlusIcon } from '@heroicons/react/24/outline';
 
-const MAX_DURATION = 20; // 20 seconds
+const MAX_DURATION = 60;
 
 const ReelUploader = ({ onClose, onSuccess }) => {
     const { token, user } = useContext(AuthContext);
@@ -20,6 +20,8 @@ const ReelUploader = ({ onClose, onSuccess }) => {
     // Music States
     const [musicName, setMusicName] = useState('');
     const [selectedSong, setSelectedSong] = useState(null);
+    const [musicVolume, setMusicVolume] = useState(0.8);
+    const [mediaDuration, setMediaDuration] = useState(0);
     const [songQuery, setSongQuery] = useState('');
     const [songResults, setSongResults] = useState([]);
     const [searchingSongs, setSearchingSongs] = useState(false);
@@ -154,6 +156,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                     alert(`Video too long! Max ${MAX_DURATION} seconds allowed.`);
                     return;
                 }
+                setMediaDuration(Math.min(MAX_DURATION, Math.ceil(video.duration)));
                 setFile(selected);
                 setPreview(video.src);
             };
@@ -212,7 +215,9 @@ const ReelUploader = ({ onClose, onSuccess }) => {
         if (selectedSong) {
             formData.append('musicUrl', selectedSong.previewUrl);
             formData.append('musicName', musicName);
+            formData.append('musicVolume', String(musicVolume));
         }
+        formData.append('mediaDuration', String(mediaDuration || recordTime || MAX_DURATION));
         formData.append('filterName', selectedFilter);
         if (monetized) formData.append('isMonetized', 'true');
 
@@ -348,6 +353,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                 )}
 
                 <input ref={fileInputRef} type="file" accept="video/*" onChange={handleFileChange} className="hidden" />
+                <p className="text-center text-xs text-gray-400">Upload or record a Reel up to 60 seconds.</p>
 
                 {/* Caption */}
                 <textarea
@@ -405,6 +411,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                             </div>
                         </div>
                     )}
+                    {selectedSong && <label className="block rounded-xl bg-white/5 p-3 text-xs text-gray-300"><span className="mb-2 flex justify-between"><span>Music volume</span><strong>{Math.round(musicVolume * 100)}%</strong></span><input type="range" min="0" max="1" step="0.05" value={musicVolume} onChange={event => setMusicVolume(Number(event.target.value))} className="w-full accent-purple-500" /></label>}
                 </div>
             </div>
             

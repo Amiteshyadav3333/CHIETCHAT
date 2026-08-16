@@ -791,7 +791,7 @@ const Home = () => {
                 setSnapNotice({
                     chatId,
                     title: 'Snap Mode started',
-                    message: `${initiatorName || affectedChat?.name || 'A participant'} ne Snap Mode start kiya hai. Purani normal chat hidden hai; is session ke messages aur media par capture/download restrictions active hain.`,
+                    message: `${initiatorName || affectedChat?.name || 'A participant'} started Snap Mode. Previous normal chat content is hidden, and capture and download restrictions apply to this session.`,
                 });
             }
         });
@@ -2032,7 +2032,10 @@ const Home = () => {
 
     const featureOverlayOpen = showSearchModal || showLinkPhoneModal || showNotifications || showSettings || showCallModal || incomingCall;
     const appNavHidden = featureOverlayOpen || Boolean(activeChat);
-    const chatBackground = wallpaper === 'dots'
+    const customWallpaper = localStorage.getItem('custom_chat_wallpaper');
+    const chatBackground = wallpaper === 'custom' && customWallpaper
+        ? `center / cover fixed no-repeat url("${customWallpaper}")`
+        : wallpaper === 'dots'
         ? 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.12) 1px, transparent 0), #0b141a'
         : wallpaper === 'emerald'
             ? 'linear-gradient(135deg, #06251f, #111b21 55%, #17212b)'

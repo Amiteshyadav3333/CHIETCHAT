@@ -146,6 +146,12 @@ def create_reel():
     music_url = request.form.get('musicUrl', '')
     music_name = request.form.get('musicName', '')
     try:
+        media_duration = float(request.form.get('mediaDuration', 60))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid Reel duration"}), 400
+    if media_duration <= 0 or media_duration > 60:
+        return jsonify({"error": "Reels must be 60 seconds or shorter"}), 400
+    try:
         music_volume = float(request.form.get('musicVolume', 0.8))
         music_volume = min(max(music_volume, 0), 1)
     except (TypeError, ValueError):

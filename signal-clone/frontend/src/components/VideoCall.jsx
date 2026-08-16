@@ -792,7 +792,7 @@ const VideoCallModal = ({
             setIsScreenSharing(true);
             Object.keys(peersRef.current).forEach(to => socket?.emit('screen_share_started', { chatId: activeChat.id, to }));
         } catch (error) {
-            if (error?.name !== 'NotAllowedError') alert('Screen share start nahi ho saka.');
+            if (error?.name !== 'NotAllowedError') alert('Screen sharing could not be started.');
         }
     };
 

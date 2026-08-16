@@ -23,6 +23,8 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
     const [musicFile, setMusicFile] = useState(null);
     const [musicName, setMusicName] = useState('');
     const [selectedSong, setSelectedSong] = useState(null);
+    const [musicVolume, setMusicVolume] = useState(0.8);
+    const [musicStart, setMusicStart] = useState(0);
     const [songQuery, setSongQuery] = useState('');
     const [songResults, setSongResults] = useState([]);
     const [searchingSongs, setSearchingSongs] = useState(false);
@@ -185,6 +187,8 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
             if (selectedSong?.previewUrl) {
                 formData.append('musicUrl', selectedSong.previewUrl);
                 formData.append('musicName', `${selectedSong.title} - ${selectedSong.artist}`);
+                formData.append('musicVolume', String(musicVolume));
+                formData.append('musicStart', String(musicStart));
             } else if (musicFile) {
                 try {
                     const musicForm = new FormData();
@@ -371,6 +375,7 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
                                 </button>
                             </div>
                         )}
+                        {musicName && <div className="grid grid-cols-2 gap-3 rounded-xl bg-gray-900 p-3"><label className="text-[10px] text-gray-400">Start at {musicStart}s<input type="range" min="0" max="29" value={musicStart} onChange={event => setMusicStart(Number(event.target.value))} className="mt-2 w-full accent-purple-500" /></label><label className="text-[10px] text-gray-400">Volume {Math.round(musicVolume * 100)}%<input type="range" min="0" max="1" step="0.05" value={musicVolume} onChange={event => setMusicVolume(Number(event.target.value))} className="mt-2 w-full accent-purple-500" /></label></div>}
 
                         {songSearchOpen && (
                             <div className="rounded-xl border border-gray-800 bg-gray-950 p-3 space-y-3">

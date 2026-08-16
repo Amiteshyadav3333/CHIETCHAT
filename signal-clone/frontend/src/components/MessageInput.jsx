@@ -546,7 +546,7 @@ const MessageInput = ({
                 }
             });
         } catch {
-            alert('Video note ke liye camera aur microphone permission allow karein.');
+            alert('Allow camera and microphone access to record a video note.');
         }
     };
 

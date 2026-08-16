@@ -753,7 +753,7 @@ const ChatBubble = ({
 
     const handleDownload = async (url) => {
         if (protectedSnapMode) {
-            alert('Snap Mode mein media download ya save nahi kiya ja sakta.');
+            alert('Media cannot be downloaded or saved in Snap Mode.');
             return;
         }
         const safeUrl = getSafeHttpUrl(url, window.location.href);

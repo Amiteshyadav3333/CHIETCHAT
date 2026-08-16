@@ -18,6 +18,7 @@ import FullscreenMediaModal from '../components/FullscreenMediaModal';
 import NestedComment from '../components/NestedComment';
 import { getSafeWebsiteUrl } from '../utils/safeUrl';
 import SocialShareSheet from '../components/SocialShareSheet';
+import QRCode from 'qrcode';
 
 const authHeaders = (token) => ({ Authorization: `Bearer ${token}` });
 
@@ -140,8 +141,8 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <input ref={fileRef} type="file" accept="image/*,video/*" multiple style={{ display: 'none' }} onChange={e => {
                             const selected = Array.from(e.target.files || []);
-                            if (selected.length > 4) { alert('एक post में अधिकतम 4 photos चुन सकते हैं।'); e.target.value = ''; return; }
-                            if (selected.length > 1 && selected.some(file => !file.type.startsWith('image/'))) { alert('Multiple selection में केवल photos चुनें; video अकेले upload करें।'); e.target.value = ''; return; }
+                            if (selected.length > 4) { alert('You can select up to four photos in one post.'); e.target.value = ''; return; }
+                            if (selected.length > 1 && selected.some(file => !file.type.startsWith('image/'))) { alert('Multiple selection supports photos only. Upload a video separately.'); e.target.value = ''; return; }
                             setMedia(selected);
                         }} />
                         <button onClick={() => fileRef.current && fileRef.current.click()} title="Photo/Video"
@@ -752,6 +753,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
     const [premiumPrompt, setPremiumPrompt] = useState(false);
     const [premiumPrice, setPremiumPrice] = useState(199);
     const [premiumBuying, setPremiumBuying] = useState(false);
+    const [upiQr, setUpiQr] = useState('');
     const [posting, setPosting] = useState(false);
     const [showChannelForm, setShowChannelForm] = useState(false);
     const [channelForm, setChannelForm] = useState({ name: '', description: '', cover: null });
@@ -806,6 +808,12 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
         return () => urls.forEach(url => URL.revokeObjectURL(url));
     }, [media]);
 
+    useEffect(() => {
+        if (!premiumPrompt) return;
+        const uri = `upi://pay?pa=yadavamitesh569%40oksbi&pn=CHEETCHAT%20Premium&am=${premiumPrice}&cu=INR&tn=Lifetime%20Premium`;
+        QRCode.toDataURL(uri, { width: 320, margin: 2 }).then(setUpiQr).catch(() => setUpiQr(''));
+    }, [premiumPrompt, premiumPrice]);
+
     const submitPost = async (channelId, postKind = 'standard', premiumOptions = {}) => {
         if (typeof postKind === 'object') { premiumOptions = postKind; postKind = premiumOptions.postKind || 'standard'; }
         if (!caption.trim() && media.length === 0) return;
@@ -845,13 +853,13 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                 handler: async result => {
                     const verified = await axios.post(`/api/payments/orders/${payment.id}/verify`, result, { headers });
                     if (verified.data.user) updateUser(verified.data.user);
-                    setPremiumPrompt(false); alert('Premium active हो गया है। अब आप unlimited posts कर सकते हैं।');
+                    setPremiumPrompt(false); alert('Premium is active. You can now publish unlimited posts.');
                 },
                 modal: { ondismiss: () => setPremiumBuying(false) }, theme: { color: '#8b5cf6' },
             });
             instance.on('payment.failed', response => alert(response.error?.description || 'Payment failed'));
             instance.open();
-        } catch (error) { alert(error.response?.data?.error || error.message || 'Premium checkout शुरू नहीं हो सका'); }
+        } catch (error) { alert(error.response?.data?.error || error.message || 'Premium checkout could not be opened.'); }
         finally { setPremiumBuying(false); }
     };
 
@@ -1091,11 +1099,15 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                 <div className="fixed inset-0 z-[180] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={() => setPremiumPrompt(false)}>
                     <div onClick={event => event.stopPropagation()} className="w-full max-w-md rounded-3xl border border-violet-400/25 bg-gradient-to-br from-[#1b1230] to-[#10131d] p-6 text-center shadow-2xl">
                         <SparklesIcon className="mx-auto h-12 w-12 text-violet-300" />
-                        <h2 className="mt-3 text-2xl font-black text-white">आज की 3 free posts पूरी हुईं</h2>
-                        <p className="mt-2 text-sm leading-6 text-gray-300">Premium के साथ unlimited Social posts, articles, analytics और creator tools unlock करें।</p>
+                        <h2 className="mt-3 text-2xl font-black text-white">Your three free posts are used</h2>
+                        <p className="mt-2 text-sm leading-6 text-gray-300">Upgrade for unlimited posts, articles, analytics and creator tools.</p>
                         <div className="mt-5 rounded-2xl bg-white/5 p-4"><p className="text-xs font-bold uppercase tracking-wider text-violet-300">Lifetime Premium</p><p className="mt-1 text-3xl font-black text-white">₹{premiumPrice}</p></div>
-                        <button disabled={premiumBuying} onClick={buyPremium} className="mt-5 w-full rounded-xl bg-violet-500 py-3.5 text-sm font-black text-white hover:bg-violet-400 disabled:opacity-60">{premiumBuying ? 'Checkout खोल रहे हैं…' : 'Buy Premium'}</button>
-                        <button onClick={() => setPremiumPrompt(false)} className="mt-3 text-sm font-semibold text-gray-400">कल फिर free post करें</button>
+                        {upiQr && <div className="mx-auto mt-4 w-fit rounded-2xl bg-white p-3"><img src={upiQr} alt="UPI payment QR code" className="h-48 w-48" /></div>}
+                        <p className="mt-2 text-xs text-gray-300">Scan using any UPI app or pay to <strong className="text-white">yadavamitesh569@oksbi</strong>.</p>
+                        <a href={`upi://pay?pa=yadavamitesh569%40oksbi&pn=CHEETCHAT%20Premium&am=${premiumPrice}&cu=INR&tn=Lifetime%20Premium`} className="mt-3 block w-full rounded-xl border border-violet-400/40 py-3 text-sm font-black text-violet-200">Open UPI app</a>
+                        <button disabled={premiumBuying} onClick={buyPremium} className="mt-3 w-full rounded-xl bg-violet-500 py-3.5 text-sm font-black text-white hover:bg-violet-400 disabled:opacity-60">{premiumBuying ? 'Opening secure checkout…' : 'Pay and activate securely'}</button>
+                        <p className="mt-2 text-[11px] leading-4 text-gray-500">Automatic activation uses secure checkout and server signature verification. A direct transfer cannot activate Premium automatically.</p>
+                        <button onClick={() => setPremiumPrompt(false)} className="mt-3 text-sm font-semibold text-gray-400">Try another free post tomorrow</button>
                     </div>
                 </div>
             )}

@@ -14,6 +14,7 @@ import './index.css';
 import axios from 'axios';
 import { API_BASE_URL } from './utils/apiBaseUrl';
 import { usableBearerToken } from './utils/authSession';
+import AppLanguage from './components/AppLanguage';
 
 axios.defaults.withCredentials = true;
 axios.interceptors.request.use(config => {
@@ -98,6 +99,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <SplashScreen />
         <BrowserRouter>
             <AuthProvider>
+                <AppLanguage />
                 <SocketProvider>
                     <Routes>
                         <Route path="/login" element={<Login />} />

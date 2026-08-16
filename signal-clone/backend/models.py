@@ -314,6 +314,8 @@ class Status(db.Model):
     caption = db.Column(db.String(300), nullable=True)
     music_url = db.Column(db.String(500), nullable=True)
     music_name = db.Column(db.String(200), nullable=True)
+    music_volume = db.Column(db.Float, default=0.8)
+    music_start = db.Column(db.Float, default=0)
     duration = db.Column(db.Integer, default=15)  # seconds, max 15
     expires_at = db.Column(db.DateTime, nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now)

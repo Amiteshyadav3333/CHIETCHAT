@@ -1054,6 +1054,29 @@ class SecurityTests(unittest.TestCase):
             self.assertEqual(Message.query.filter_by(client_message_id='attachment-message-2').count(), 0)
         payer.disconnect()
 
+    def test_seventh_verified_referral_unlocks_premium(self):
+        with app.app_context():
+            referrer = db.session.get(User, self.payee_id)
+            referrer.referral_code = 'CHPREMIUM7'
+            for index in range(6):
+                db.session.add(User(
+                    username=f'Referral {index}', email=f'referral-{index}@example.com',
+                    phone=f'70000000{index:02d}', password_hash='unused', email_verified=True,
+                    referred_by_id=referrer.id,
+                ))
+            db.session.commit()
+        response = self.client.post(
+            '/api/premium/referral/apply', json={'code': 'chpremium7'}, headers=self.auth_headers(),
+        )
+        self.assertEqual(response.status_code, 200)
+        with app.app_context():
+            referrer = db.session.get(User, self.payee_id)
+            referred = db.session.get(User, self.user_id)
+            self.assertEqual(referred.referred_by_id, referrer.id)
+            self.assertTrue(referrer.is_premium)
+            self.assertTrue(referrer.is_verified)
+            self.assertIsNotNone(referrer.premium_unlocked_at)
+
     def test_call_invites_and_transitions_require_chat_membership(self):
         with app.app_context():
             private_chat = Chat(is_group=True, group_admin_id=self.user_id)

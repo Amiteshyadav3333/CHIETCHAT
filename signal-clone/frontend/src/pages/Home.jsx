@@ -1358,6 +1358,7 @@ const Home = () => {
 
             setUploadProgress(null);
             handleSendMessage(url, type, replyTo, disappearingTtl, res.data.assetId);
+            return { url, type };
         } catch (err) {
             setUploadProgress(null);
             console.error(err);
@@ -1372,11 +1373,21 @@ const Home = () => {
         try {
             setUploadProgress({ fileName: 'Photo sticker', stage: 'Converting picture to sticker…', percent: 10, originalSize: null, compressedSize: null });
             const stickerFile = await photoUrlToStickerFile(sourceUrl);
-            await handleUpload(stickerFile, 'sticker');
+            const uploaded = await handleUpload(stickerFile, 'sticker');
+            if (uploaded?.url) localStorage.setItem('last_photo_sticker', uploaded.url);
         } catch (error) {
             setUploadProgress(null);
             alert(error.message || 'Could not make a sticker from this picture.');
         }
+    };
+
+    const handlePlaceSticker = async (message) => {
+        const stickerUrl = localStorage.getItem('last_photo_sticker');
+        if (!stickerUrl) return alert('Create a sticker from a chat photo first.');
+        try {
+            const res = await axios.post(`/api/messages/${message.id}/react`, { stickerUrl }, { headers: { Authorization: `Bearer ${token}` } });
+            setMessages(items => items.map(item => String(item.id) === String(message.id) ? { ...item, reactions: res.data.reactions } : item));
+        } catch (error) { alert(error.response?.data?.error || 'Could not place sticker'); }
     };
 
     const handleSearchUser = async (e) => {
@@ -1418,7 +1429,7 @@ const Home = () => {
     const openNewChat = () => {
         setShowNotifications(false);
         setShowSettings(false);
-        if (!user?.phone) {
+        if (!user?.hasPhone && !user?.phone) {
             setLinkPhoneError('');
             setShowLinkPhoneModal(true);
             return;
@@ -1972,7 +1983,7 @@ const Home = () => {
         },
         { label: 'Reels', icon: PlayIcon, active: showReels, action: () => { hideAppNavForFeature(); setShowSocial(false); setShowPodlive(false); setShowReels(true); setShowAiChat(false); } },
         { label: 'Social', icon: PhotoIcon, active: showSocial, action: () => { hideAppNavForFeature(); setShowReels(false); setShowPodlive(false); setShowSocial(true); setShowAiChat(false); } },
-        { label: 'PodLive', icon: MicrophoneIcon, active: showPodlive, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(true); setShowAiChat(false); } },
+        { label: 'PodLive', icon: MicrophoneIcon, active: false, action: () => window.open('https://podlive-sigma.vercel.app/', '_blank', 'noopener,noreferrer') },
         { label: 'AI', icon: SparklesIcon, active: showAiChat, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(false); setShowAiChat(true); } },
         { label: 'Notify', icon: BellIcon, active: showNotifications, action: openNotifications, badge: unreadCount },
         { label: 'New', icon: PlusIcon, active: showSearchModal || showLinkPhoneModal, action: openNewChat },
@@ -2103,7 +2114,8 @@ const Home = () => {
                                                 {searchedUser.platformId && (
                                                     <p className="text-xs font-medium text-violet-400">@{searchedUser.platformId}</p>
                                                 )}
-                                                <p className="text-xs text-gray-500">{searchedUser.phone}</p>
+                                                <p className="text-xs text-gray-500">ID: @{searchedUser.platformId || `user_${searchedUser.id}`}</p>
+                                                {searchedUser.phone && <p className="text-xs text-gray-500">📞 {searchedUser.phone}</p>}
                                             </div>
                                         </div>
                                         <button
@@ -2922,8 +2934,9 @@ const Home = () => {
                                             className="w-24 h-24 rounded-full object-cover border-2 border-gray-700"
                                             alt=""
                                         />
-                                        <h3 className="text-white font-bold text-xl">{visibleActiveChat.name}</h3>
-                                        {other && <p className="text-gray-400 text-sm">📞 {other.phone}</p>}
+                                        <h3 className="text-white font-bold text-xl">{other?.username || visibleActiveChat.name}</h3>
+                                        {other && <p className="text-violet-400 text-sm font-semibold">@{other.platformId || `user_${other.id}`}</p>}
+                                        {other?.phone && <p className="text-gray-400 text-sm">📞 {other.phone}</p>}
                                         <p className={`text-xs ${other?.isOnline ? 'text-green-500' : 'text-gray-500'}`}>
                                             {other?.isOnline ? 'Online' : formatLastSeen(other?.lastSeen)}
                                         </p>
@@ -3104,6 +3117,7 @@ const Home = () => {
                                                 setCameraOpenRequest(value => value + 1);
                                             }}
                                             onMakeSticker={handleMessagePhotoSticker}
+                                            onPlaceSticker={handlePlaceSticker}
                                             snapMode={snapMode}
                                         />
                                     </div>

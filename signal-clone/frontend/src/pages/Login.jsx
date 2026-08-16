@@ -15,6 +15,7 @@ const Login = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [phone, setPhone] = useState('');
+    const [referralCode, setReferralCode] = useState('');
     const [otp, setOtp] = useState('');
     const [message, setMessage] = useState('');
     
@@ -147,9 +148,6 @@ const Login = () => {
             sessionStorage.setItem('pending_nav', '/recovery-code');
         } else if (needsProfileSetup) {
             sessionStorage.setItem('pending_nav', '/setup-profile');
-        }
-        if (podliveSession?.accessToken && podliveSession?.user) {
-            sessionStorage.setItem('podlive_session', JSON.stringify(podliveSession));
         }
         login(userData, authToken, csrfToken);
     };
@@ -284,7 +282,8 @@ const Login = () => {
                     password,
                     publicKey: keys.publicKeyString,
                     encryptedPrivateKey,
-                    encryptedRecoveryKey
+                    encryptedRecoveryKey,
+                    referralCode: referralCode.trim().toUpperCase()
                 });
                 setPendingKeys(keys);
                 setPendingRecoveryCode(recoveryCode);
@@ -408,6 +407,7 @@ const Login = () => {
                                 required
                             />
                         )}
+                        {isRegister && !isOtpStep && <input type="text" placeholder="Referral coupon (optional)" value={referralCode} onChange={e => setReferralCode(e.target.value.replace(/[^a-z0-9]/gi, '').toUpperCase().slice(0, 16))} className="w-full rounded-lg border border-violet-400/20 bg-signal-input px-4 py-3 uppercase text-white outline-none transition focus:border-violet-400" />}
                         <div className="relative">
                             <EnvelopeIcon className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-500" />
                             <input

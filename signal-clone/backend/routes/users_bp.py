@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 from werkzeug.utils import secure_filename
+import secrets
 from models import db, User, PendingRegistration, Block, Follow, ProfileAudienceAvatar, Notification
 from extensions import socketio
 from utils import (
@@ -13,6 +14,23 @@ users_bp = Blueprint('users_bp', __name__)
 
 ALLOWED_AVATAR_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
 
+def ensure_referral_code(user):
+    if user.referral_code:
+        return user.referral_code
+    while True:
+        code = f"CH{secrets.token_hex(4).upper()}"
+        if not User.query.filter_by(referral_code=code).first():
+            user.referral_code = code
+            return code
+
+def premium_referral_payload(user):
+    count = User.query.filter_by(referred_by_id=user.id, email_verified=True).count()
+    return {
+        "referralCode": ensure_referral_code(user), "verifiedReferrals": count,
+        "goal": 7, "remaining": max(0, 7 - count), "isPremium": bool(user.is_premium),
+        "unlockedAt": iso_utc(user.premium_unlocked_at),
+    }
+
 
 @users_bp.route('/api/user/link-phone', methods=['POST'])
 def link_phone():
@@ -23,11 +41,13 @@ def link_phone():
     user = db.session.get(User, user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
-    if user.phone and not str(user.phone).startswith('google:'):
-        return jsonify({"error": "A phone number is already linked"}), 409
     phone = normalize_phone(get_json_data().get('phone'))
     if not is_valid_phone(phone):
         return jsonify({"error": "Phone number must be exactly 10 digits"}), 400
+    if user.phone and not str(user.phone).startswith('google:'):
+        if user.phone == phone:
+            return jsonify({"message": "Phone number is already linked", "user": serialize_user(user, viewer_id=user.id)}), 200
+        return jsonify({"error": "A different phone number is already linked to this account"}), 409
     existing = User.query.filter(User.phone == phone, User.id != user_id).first()
     if existing or PendingRegistration.query.filter_by(phone=phone).first():
         return jsonify({"error": "This phone number is unavailable"}), 409
@@ -627,6 +647,44 @@ def update_privacy_settings():
     payload = serialize_user(user, viewer_id=user.id)
     emit_to_user_chat_contacts(user_id, 'user_profile_updated', {"user": payload})
     return jsonify(payload)
+
+
+@users_bp.route('/api/premium/referral', methods=['GET'])
+def premium_referral_status():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    user = db.session.get(User, user_id)
+    payload = premium_referral_payload(user)
+    db.session.commit()
+    return jsonify(payload)
+
+
+@users_bp.route('/api/premium/referral/apply', methods=['POST'])
+def apply_premium_referral():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    user = db.session.get(User, user_id)
+    if user.referred_by_id:
+        return jsonify({"error": "A referral coupon is already linked to this account"}), 409
+    from datetime import timedelta
+    if user.created_at and user.created_at < utc_now() - timedelta(days=7):
+        return jsonify({"error": "Referral coupons can only be applied during the first 7 days"}), 403
+    code = str(get_json_data().get('code') or '').strip().upper()
+    referrer = User.query.filter(db.func.upper(User.referral_code) == code).first() if code else None
+    if not referrer:
+        return jsonify({"error": "Referral coupon is invalid"}), 404
+    if referrer.id == user.id:
+        return jsonify({"error": "You cannot use your own coupon"}), 400
+    user.referred_by_id = referrer.id
+    verified_count = User.query.filter_by(referred_by_id=referrer.id, email_verified=True).count()
+    if verified_count >= 7:
+        referrer.is_premium = True
+        referrer.is_verified = True
+        referrer.premium_unlocked_at = referrer.premium_unlocked_at or utc_now()
+    db.session.commit()
+    return jsonify({"message": "Referral coupon applied", "referrer": serialize_user(referrer, viewer_id=user_id)}), 200
 
 @users_bp.route('/api/user/report', methods=['POST'])
 def report_user():

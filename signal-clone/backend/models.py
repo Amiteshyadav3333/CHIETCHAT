@@ -42,6 +42,9 @@ class User(db.Model):
     is_premium = db.Column(db.Boolean, nullable=False, default=False)
     is_verified = db.Column(db.Boolean, nullable=False, default=False)
     birth_date = db.Column(db.Date, nullable=True)
+    referral_code = db.Column(db.String(16), unique=True, nullable=True, index=True)
+    referred_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True, index=True)
+    premium_unlocked_at = db.Column(db.DateTime, nullable=True)
 
 class PendingRegistration(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -52,6 +55,7 @@ class PendingRegistration(db.Model):
     public_key = db.Column(db.Text, nullable=True)
     encrypted_private_key = db.Column(db.Text, nullable=True)
     encrypted_recovery_key = db.Column(db.Text, nullable=True)
+    referral_code = db.Column(db.String(16), nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now)
 
 class Chat(db.Model):

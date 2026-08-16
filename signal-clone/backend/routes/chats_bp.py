@@ -4,6 +4,7 @@ import json
 import hashlib
 import hmac
 import datetime
+import urllib.parse
 from werkzeug.utils import secure_filename
 from sqlalchemy import or_
 from models import db, Chat, ChatParticipant, Message, User, MessageDeletion, PaymentOrder, ScheduledMessage, CallRecord
@@ -502,6 +503,19 @@ def react_message(message_id):
     if chat and chat.is_group and getattr(chat, 'reactions_enabled', True) is False:
         return jsonify({"error": "Reactions are disabled in this group"}), 403
     data = get_json_data()
+    sticker_url = str(data.get('stickerUrl') or '').strip()
+    if sticker_url:
+        parsed_sticker = urllib.parse.urlparse(sticker_url)
+        allowed_hosts = {'res.cloudinary.com', request.host.split(':', 1)[0]}
+        if parsed_sticker.scheme != 'https' or parsed_sticker.hostname not in allowed_hosts:
+            return jsonify({"error": "Sticker URL is not allowed"}), 400
+        reactions = message.reactions_dict()
+        reactions[str(user_id)] = f'sticker:{sticker_url}'[:1200]
+        message.reactions = json.dumps(reactions)
+        db.session.commit()
+        payload = {"id": message.id, "chatId": message.chat_id, "reactions": json.dumps(reactions)}
+        emit_message_update(message.chat_id, 'message_reaction_update', payload)
+        return jsonify(payload)
     raw_emoji = data.get('emoji')
     if not isinstance(raw_emoji, str):
         return jsonify({"error": "Reaction must be text"}), 400

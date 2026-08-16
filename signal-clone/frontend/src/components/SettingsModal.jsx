@@ -19,7 +19,7 @@ const TITLES = {
     chats: 'Chats', notifications: 'Notifications', storage: 'Storage and data',
     business: 'Business tools', help: 'Help center', password: 'Change password',
     delete: 'Delete account', activity: 'Your Activity', sessions: 'Active Sessions',
-    twofactor_setup: 'Enable 2FA', twofactor_disable: 'Disable 2FA'
+    twofactor_setup: 'Enable 2FA', twofactor_disable: 'Disable 2FA', premium: 'CHEETCHAT Premium'
 };
 
 const timeAgo = (dateStr) => {
@@ -59,6 +59,8 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     const [message, setMessage] = useState(null);
     const [busy, setBusy] = useState(false);
     const [businessTitle, setBusinessTitle] = useState('Business tools');
+    const [referralStatus, setReferralStatus] = useState(null);
+    const [referralInput, setReferralInput] = useState('');
     const [profile, setProfile] = useState({ username: user?.username || '', bio: user?.bio || '', websiteUrl: user?.websiteUrl || '', platformId: user?.platformId || '', gender: user?.gender || '', birthDate: user?.birthDate || '' });
     const [passwords, setPasswords] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
     
@@ -408,6 +410,22 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
 
     const openLegal = (path) => window.open(path, '_blank', 'noopener,noreferrer');
 
+    const openPremium = async () => {
+        go('premium');
+        try { const { data } = await axios.get('/api/premium/referral', { headers: { Authorization: `Bearer ${token}` } }); setReferralStatus(data); }
+        catch (error) { setMessage({ type: 'error', text: error.response?.data?.error || 'Could not load Premium progress.' }); }
+    };
+
+    const applyReferral = async () => {
+        if (!referralInput.trim()) return;
+        setBusy(true); setMessage(null);
+        try {
+            const { data } = await axios.post('/api/premium/referral/apply', { code: referralInput.trim() }, { headers: { Authorization: `Bearer ${token}` } });
+            setReferralInput(''); setMessage({ type: 'success', text: data.message });
+        } catch (error) { setMessage({ type: 'error', text: error.response?.data?.error || 'Could not apply coupon.' }); }
+        finally { setBusy(false); }
+    };
+
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-0 backdrop-blur-sm sm:p-4">
             <div className="flex h-[100dvh] w-full max-w-3xl flex-col overflow-hidden bg-[#111b21] shadow-2xl sm:h-[88vh] sm:rounded-xl sm:border sm:border-gray-800">
@@ -448,7 +466,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-2">
                                         <h3 className="truncate text-lg font-semibold text-white">{user?.username}</h3>
-                                        <CheckBadgeIcon className="h-5 w-5 text-[#53bdeb]" />
+                                        {user?.isVerified && <CheckBadgeIcon className="h-5 w-5 text-[#53bdeb]" />}
                                     </div>
                                     {user?.platformId && (
                                         <p className="text-xs font-medium text-violet-400">@{user.platformId}</p>
@@ -458,6 +476,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 <ChevronRightIcon className="h-5 w-5 text-gray-500" />
                             </button>
                             <SettingsGroup>
+                                <SettingsRow icon={<SparklesIcon />} title="CHEETCHAT Premium" subtitle={user?.isPremium ? 'Active — all creator features unlocked' : 'Invite 7 verified users to unlock every creator feature'} onClick={openPremium} />
                                 <SettingsRow icon={<KeyIcon />} title="Account" subtitle="Password, security and account controls" onClick={() => go('account')} />
                                 <SettingsRow icon={<LockClosedIcon />} title="Privacy" subtitle="Last seen and privacy controls" onClick={() => go('privacy')} />
                                 <SettingsRow icon={<ChatBubbleBottomCenterTextIcon />} title="Chats" subtitle="Theme and wallpapers" onClick={() => go('chats')} />
@@ -525,6 +544,8 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                             <PrimaryButton busy={busy}>Save profile</PrimaryButton>
                         </SettingsForm>
                     )}
+
+                    {screen === 'premium' && <div className="space-y-4 p-5"><div className="rounded-3xl border border-violet-400/30 bg-gradient-to-br from-violet-500/20 to-blue-500/10 p-6"><div className="flex items-center gap-3"><SparklesIcon className="h-9 w-9 text-violet-300" /><div><h3 className="text-xl font-black text-white">Premium creator tools</h3><p className={`text-sm font-bold ${user?.isPremium || referralStatus?.isPremium ? 'text-emerald-300' : 'text-amber-300'}`}>{user?.isPremium || referralStatus?.isPremium ? 'Active on your account' : `${referralStatus?.verifiedReferrals || 0} of 7 verified referrals`}</p></div></div>{!user?.isPremium && referralStatus && <><div className="mt-5 h-3 overflow-hidden rounded-full bg-black/30"><div className="h-full rounded-full bg-gradient-to-r from-violet-400 to-blue-400" style={{ width: `${Math.min(100, referralStatus.verifiedReferrals / 7 * 100)}%` }} /></div><div className="mt-4 rounded-2xl bg-black/25 p-4"><p className="text-xs font-bold uppercase tracking-wider text-gray-400">Your coupon</p><div className="mt-2 flex gap-2"><code className="flex-1 rounded-xl bg-black/40 px-4 py-3 text-lg font-black tracking-widest text-white">{referralStatus.referralCode}</code><button onClick={() => navigator.clipboard?.writeText(referralStatus.referralCode)} className="rounded-xl bg-white px-4 text-sm font-black text-black">Copy</button></div><p className="mt-2 text-xs text-gray-400">Share this coupon. Premium unlocks automatically after 7 referred accounts verify their email.</p></div></>}<div className="mt-6 grid gap-3 sm:grid-cols-2">{['Verified checkmark','Advanced Social analytics','Advanced Reels analytics','Boosted replies','Write long-form articles','Paid posts and Reels'].map(feature => <div key={feature} className="flex items-center gap-2 rounded-xl bg-black/20 p-3 text-sm font-semibold text-white"><span className="text-emerald-400">✓</span>{feature}</div>)}</div></div>{!user?.isPremium && <div className="rounded-2xl border border-white/10 bg-[#182229] p-4"><p className="text-sm font-bold text-white">Have a friend’s coupon?</p><div className="mt-3 flex gap-2"><input value={referralInput} onChange={e => setReferralInput(e.target.value.replace(/[^a-z0-9]/gi, '').toUpperCase().slice(0, 16))} placeholder="Enter coupon" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/25 px-3 py-2 uppercase text-white outline-none focus:border-violet-400" /><button onClick={applyReferral} disabled={busy || !referralInput} className="rounded-xl bg-violet-500 px-4 text-sm font-black text-white disabled:opacity-50">Apply</button></div><p className="mt-2 text-xs text-gray-500">A coupon can be linked once during your account’s first 7 days.</p></div>}</div>}
 
                     {screen === 'account' && (
                         <>

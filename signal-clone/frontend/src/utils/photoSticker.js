@@ -42,21 +42,39 @@ export const photoBlobToStickerFile = async (blob) => {
     const queue = new Int32Array(pixelCount);
     let head = 0;
     let tail = 0;
-    const samples = [
-        [offsetX + 2, offsetY + 2], [offsetX + width - 3, offsetY + 2],
-        [offsetX + 2, offsetY + height - 3], [offsetX + width - 3, offsetY + height - 3],
-    ];
-    const background = samples.reduce((sum, [x, y]) => {
-        const offset = (y * 512 + x) * 4;
-        sum[0] += pixels[offset]; sum[1] += pixels[offset + 1]; sum[2] += pixels[offset + 2];
-        return sum;
-    }, [0, 0, 0]).map(value => value / samples.length);
-    const distance = index => {
+    // Learn several dominant colours from the whole picture boundary instead
+    // of assuming all four corners share one flat colour.
+    const clusters = new Map();
+    const sampleEdge = (x, y) => {
+        const pixelOffset = (y * 512 + x) * 4;
+        const red = pixels[pixelOffset];
+        const green = pixels[pixelOffset + 1];
+        const blue = pixels[pixelOffset + 2];
+        const key = `${red >> 4},${green >> 4},${blue >> 4}`;
+        const cluster = clusters.get(key) || { count: 0, red: 0, green: 0, blue: 0 };
+        cluster.count += 1; cluster.red += red; cluster.green += green; cluster.blue += blue;
+        clusters.set(key, cluster);
+    };
+    for (let x = offsetX; x < offsetX + width; x += 3) {
+        sampleEdge(x, offsetY); sampleEdge(x, offsetY + height - 1);
+    }
+    for (let y = offsetY; y < offsetY + height; y += 3) {
+        sampleEdge(offsetX, y); sampleEdge(offsetX + width - 1, y);
+    }
+    const palette = [...clusters.values()].sort((a, b) => b.count - a.count).slice(0, 6)
+        .map(cluster => [cluster.red / cluster.count, cluster.green / cluster.count, cluster.blue / cluster.count]);
+    const distance = (index) => {
         const offset = index * 4;
-        return Math.hypot(pixels[offset] - background[0], pixels[offset + 1] - background[1], pixels[offset + 2] - background[2]);
+        let closest = Infinity;
+        for (const colour of palette) {
+            closest = Math.min(closest, Math.hypot(
+                pixels[offset] - colour[0], pixels[offset + 1] - colour[1], pixels[offset + 2] - colour[2]
+            ));
+        }
+        return closest;
     };
     const enqueue = index => {
-        if (!visited[index] && distance(index) < 92) { visited[index] = 1; queue[tail++] = index; }
+        if (!visited[index] && distance(index) < 82) { visited[index] = 1; queue[tail++] = index; }
     };
     for (let x = offsetX; x < offsetX + width; x += 1) {
         enqueue(offsetY * 512 + x); enqueue((offsetY + height - 1) * 512 + x);
@@ -76,9 +94,26 @@ export const photoBlobToStickerFile = async (blob) => {
     for (let index = 0; index < pixelCount; index += 1) {
         if (!visited[index]) continue;
         const colorDistance = distance(index);
-        pixels[index * 4 + 3] = colorDistance < 58 ? 0 : Math.round(255 * Math.min(1, (colorDistance - 58) / 34));
+        pixels[index * 4 + 3] = colorDistance < 48 ? 0 : Math.round(255 * Math.min(1, (colorDistance - 48) / 34));
     }
     context.putImageData(frame, 0, 0);
+    // Apple-style finish: a clean white contour separates the cut-out from
+    // light and dark chat wallpapers without restoring the removed background.
+    const cutout = document.createElement('canvas');
+    cutout.width = 512; cutout.height = 512;
+    cutout.getContext('2d').drawImage(canvas, 0, 0);
+    const silhouette = document.createElement('canvas');
+    silhouette.width = 512; silhouette.height = 512;
+    const silhouetteContext = silhouette.getContext('2d');
+    silhouetteContext.drawImage(cutout, 0, 0);
+    silhouetteContext.globalCompositeOperation = 'source-in';
+    silhouetteContext.fillStyle = '#ffffff';
+    silhouetteContext.fillRect(0, 0, 512, 512);
+    context.clearRect(0, 0, 512, 512);
+    for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 16) {
+        context.drawImage(silhouette, Math.cos(angle) * 8, Math.sin(angle) * 8);
+    }
+    context.drawImage(cutout, 0, 0);
     const output = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.9));
     if (!output) throw new Error('Your browser could not create the sticker.');
     return new File([output], `sticker-${Date.now()}.webp`, { type: 'image/webp' });

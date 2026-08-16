@@ -32,6 +32,25 @@ from utils import (
 auth_bp = Blueprint('auth_bp', __name__)
 MAX_PASSWORD_ATTEMPTS = 3
 
+def new_referral_code():
+    while True:
+        code = f"CH{secrets.token_hex(4).upper()}"
+        if not User.query.filter_by(referral_code=code).first():
+            return code
+
+def referrer_for_code(value):
+    code = str(value or '').strip().upper()
+    return User.query.filter(db.func.upper(User.referral_code) == code).first() if code else None
+
+def refresh_referrer_premium(referrer_id):
+    if not referrer_id:
+        return
+    referrer = db.session.get(User, referrer_id)
+    if referrer and User.query.filter_by(referred_by_id=referrer_id, email_verified=True).count() >= 7:
+        referrer.is_premium = True
+        referrer.is_verified = True
+        referrer.premium_unlocked_at = referrer.premium_unlocked_at or utc_now()
+
 def create_token(user, session_id=None):
     payload = {
         'user_id': user.id,
@@ -228,7 +247,6 @@ def finalize_login(user):
         "user": serialize_user(user, viewer_id=user.id),
         "keyBackup": user.encrypted_private_key,
         "recoveryKeyBackup": user.encrypted_recovery_key,
-        "podliveSession": provision_podlive_session(user),
     })
     response.set_cookie(
         current_app.config['AUTH_COOKIE_NAME'], token, httponly=True,
@@ -440,6 +458,7 @@ def complete_google_registration():
             platform_id=available_platform_id(display_name),
             profile_setup_done=True,
             last_seen=utc_now(),
+            referral_code=new_referral_code(),
         )
         db.session.add(user)
         db.session.flush()
@@ -463,6 +482,9 @@ def register():
         email = str(data.get('email') or '').strip().lower()
         phone = normalize_phone(data.get('phone'))
         password = data.get('password') or ''
+        referral_code = str(data.get('referralCode') or '').strip().upper()
+        if referral_code and not referrer_for_code(referral_code):
+            return jsonify({"error": "Referral coupon is invalid"}), 400
 
         if not email or not phone or not password:
             return jsonify({"error": "Email, phone, and password are required"}), 400
@@ -490,6 +512,7 @@ def register():
             pending.encrypted_private_key = data.get('encryptedPrivateKey')
             pending.encrypted_recovery_key = data.get('encryptedRecoveryKey')
             pending.created_at = utc_now()
+            pending.referral_code = referral_code or None
         else:
             pending = PendingRegistration(
                 username=username,
@@ -499,6 +522,7 @@ def register():
                 public_key=data.get('publicKey'),
                 encrypted_private_key=data.get('encryptedPrivateKey')
                 , encrypted_recovery_key=data.get('encryptedRecoveryKey')
+                , referral_code=referral_code or None
             )
             db.session.add(pending)
         db.session.commit()
@@ -527,6 +551,7 @@ def verify_registration_otp():
             return jsonify({"error": "Email already registered"}), 400
 
         verify_email_otp(email, otp)
+        referrer = referrer_for_code(pending.referral_code)
         user = User(
             username=pending.username,
             email=pending.email,
@@ -540,6 +565,8 @@ def verify_registration_otp():
             password_login_locked=False,
             profile_setup_done=False,
             last_seen=utc_now()
+            , referral_code=new_referral_code()
+            , referred_by_id=referrer.id if referrer else None
         )
         db.session.add(user)
         db.session.delete(pending)
@@ -558,6 +585,7 @@ def verify_registration_otp():
             user_agent=request.headers.get('User-Agent')
         )
         db.session.add(session)
+        refresh_referrer_premium(user.referred_by_id)
         db.session.commit()
         token = create_token(user, session_id=session.id)
         csrf_token = secrets.token_urlsafe(32)
@@ -568,7 +596,6 @@ def verify_registration_otp():
             "keyBackup": user.encrypted_private_key,
             "recoveryKeyBackup": user.encrypted_recovery_key,
             "needsProfileSetup": True
-            ,"podliveSession": provision_podlive_session(user)
         })
         response.set_cookie(
             current_app.config['AUTH_COOKIE_NAME'], token, httponly=True,

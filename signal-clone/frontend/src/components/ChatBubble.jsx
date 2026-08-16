@@ -478,7 +478,7 @@ const getDocIcon = (filename) => {
 };
 
 // WhatsApp-style action menu overlay
-const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, onReply, onEdit, onCopy, onForward, onReact, onPin, onDelete, onInfo, onTranslate, onDownload, onPhotoReply, onMakeSticker, onAnnotateMessage, isLastMessage, showTranslateBtn = true, protectedMode = false }) => {
+const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, onReply, onEdit, onCopy, onForward, onReact, onPin, onDelete, onInfo, onTranslate, onDownload, onPhotoReply, onMakeSticker, onPlaceSticker, onAnnotateMessage, isLastMessage, showTranslateBtn = true, protectedMode = false }) => {
     const menuRef = useRef(null);
     const [showFullPicker, setShowFullPicker] = useState(false);
 
@@ -497,6 +497,7 @@ const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, 
         ...(!isDeleted && !protectedMode ? [{ icon: '✎', label: 'Draw / point on message', onClick: () => { onAnnotateMessage?.(); onClose(); } }] : []),
         ...(!isDeleted && !protectedMode && message.type === 'image' ? [{ icon: '📷', label: 'Reply with photo', onClick: () => { onPhotoReply?.(); onClose(); } }] : []),
         ...(!isDeleted && !protectedMode && message.type === 'image' ? [{ icon: '✨', label: 'Make sticker', onClick: () => { onMakeSticker?.(); onClose(); } }] : []),
+        ...(!isDeleted && !protectedMode && localStorage.getItem('last_photo_sticker') ? [{ icon: '📍', label: 'Place last sticker', onClick: () => { onPlaceSticker?.(); onClose(); } }] : []),
         ...(!isDeleted && !protectedMode && message.type === 'image' ? [{ icon: '⬇️', label: 'Download photo', onClick: () => { onDownload?.(); onClose(); } }] : []),
         ...(!isDeleted && isTextMessage && showTranslateBtn ? [{ icon: '🌐', label: 'Translate', onClick: () => { onTranslate?.(); onClose(); } }] : []),
         { icon: 'ℹ️', label: 'Info', onClick: () => { onInfo?.(); onClose(); } },
@@ -603,7 +604,7 @@ const ChatBubble = ({
     message, isOwn, senderName, onDelete, senderAvatar, showAvatar,
     onReply, replyTo, onTranslate, chatId, chatTranslationLang,
     onEdit, onCopy, onForward, onReact, onPin, isLastMessage,
-    socket, token, showTranslateBtn = true, onAnnotate, onPhotoReply, onMakeSticker, snapMode = false
+    socket, token, showTranslateBtn = true, onAnnotate, onPhotoReply, onMakeSticker, onPlaceSticker, snapMode = false
 }) => {
     const [, forceColourRefresh] = useState(0);
     useEffect(() => { const refresh = () => forceColourRefresh(value => value + 1); window.addEventListener('cheetchat-colour-updated', refresh); return () => window.removeEventListener('cheetchat-colour-updated', refresh); }, []);
@@ -674,12 +675,14 @@ const ChatBubble = ({
 
     // Group reactions by emoji
     const groupedReactions = {};
+    const stickerReactions = [];
 
        Object.values(reactionsObj).forEach((emoji) => {
-          groupedReactions[emoji] = (groupedReactions[emoji] || 0) + 1;
+          if (String(emoji).startsWith('sticker:')) stickerReactions.push(String(emoji).slice(8));
+          else groupedReactions[emoji] = (groupedReactions[emoji] || 0) + 1;
     });
 
-    const hasReactions = Object.keys(groupedReactions).length > 0;
+    const hasReactions = Object.keys(groupedReactions).length > 0 || stickerReactions.length > 0;
     const [swipeX, setSwipeX] = useState(0);
     const [swiping, setSwiping] = useState(false);
     const [zoomedMedia, setZoomedMedia] = useState(null);
@@ -1574,7 +1577,8 @@ const ChatBubble = ({
                     </span>
                 )}
                  </span>
-                ))}
+                                ))}
+                                {stickerReactions.map((url, index) => <img key={`${url}-${index}`} src={url} alt="Placed sticker" className="-my-4 h-14 w-14 object-contain drop-shadow-xl" />)}
                </div>
                 )}
             
@@ -1615,6 +1619,7 @@ const ChatBubble = ({
                     onDownload={() => handleDownload(message.content)}
                     onPhotoReply={() => onPhotoReply?.(message)}
                     onMakeSticker={() => onMakeSticker?.(message)}
+                    onPlaceSticker={() => onPlaceSticker?.(message)}
                     onAnnotateMessage={() => onAnnotate?.({
                         type: 'chat',
                         messageType: message.type || 'text',

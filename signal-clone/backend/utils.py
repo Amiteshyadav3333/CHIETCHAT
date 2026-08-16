@@ -275,7 +275,7 @@ def add_missing_columns(inspector, table_name, columns):
 # Bump this marker whenever models gain columns or tables. Production runs
 # ensure_database_schema() in the pre-deploy step and skips versions it has
 # already applied.
-SCHEMA_VERSION = '20260816_20_contact_birthdays'
+SCHEMA_VERSION = '20260816_21_premium_referrals'
 
 def ensure_runtime_compat_schema():
     """Repair columns required by the currently deployed models.
@@ -313,7 +313,11 @@ def ensure_runtime_compat_schema():
         'phone_number_privacy': db.String(20),
         'is_premium': db.Boolean(), 'is_verified': db.Boolean(),
         'birth_date': db.Date(),
+        'referral_code': db.String(16), 'referred_by_id': db.Integer(),
+        'premium_unlocked_at': db.DateTime(),
     })
+    inspector = inspect(db.engine)
+    add_missing_columns(inspector, 'pending_registration', {'referral_code': db.String(16)})
     inspector = inspect(db.engine)
     add_missing_columns(inspector, 'chat', {
         'avatar': db.String(500), 'description': db.String(500),
@@ -807,6 +811,7 @@ def serialize_user(user, viewer_id=None):
         "id": user.id,
         "username": user.username,
         "phone": public_phone,
+        "hasPhone": bool(user.phone and not str(user.phone).startswith('google:')),
         "avatar": avatar,
         "hasCustomAudienceAvatar": bool(viewer_id and viewer_id != user.id and avatar != user.avatar),
         "publicKey": user.public_key,
@@ -822,6 +827,9 @@ def serialize_user(user, viewer_id=None):
         "isPremium": bool(user.is_premium),
         "isVerified": bool(user.is_verified or user.is_premium),
         "birthDate": user.birth_date.isoformat() if user.birth_date and viewer_id == user.id else "",
+        "referralCode": user.referral_code or "" if viewer_id == user.id else "",
+        "premiumReferralCount": User.query.filter_by(referred_by_id=user.id, email_verified=True).count() if viewer_id == user.id else 0,
+        "premiumReferralGoal": 7 if viewer_id == user.id else 0,
         "profilePhotoPrivacy": user.profile_photo_privacy,
         "phoneNumberPrivacy": user.phone_number_privacy,
         "twoFactorEnabled": bool(user.two_factor_enabled),

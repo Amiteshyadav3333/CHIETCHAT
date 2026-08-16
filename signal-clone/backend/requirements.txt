@@ -32,3 +32,4 @@ pywebpush==2.3.0
 sentry-sdk[flask]==2.66.0
 redis==8.0.1
 requests==2.33.0
+googletrans==4.0.2

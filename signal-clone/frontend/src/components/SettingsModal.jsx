@@ -60,10 +60,10 @@ const normalizeBusinessData = (data, user) => {
 const PremiumUpiCard = ({ token }) => {
     const [qr, setQr] = useState('');
     const [price, setPrice] = useState(199);
-    const uri = `upi://pay?pa=yadavamitesh569%40oksbi&pn=CHEETCHAT%20Premium&am=${price}&cu=INR&tn=Lifetime%20Premium`;
+    const uri = `upi://pay?pa=yadavamitesh569%40oksbi&pn=CHEETCHAT%20Premium&am=${price}&cu=INR&tn=Three%20Month%20Premium`;
     useEffect(() => { axios.get('/api/payments/config', { headers: { Authorization: `Bearer ${token}` } }).then(({ data }) => setPrice(data.premiumPrice || 199)).catch(() => {}); }, [token]);
     useEffect(() => { QRCode.toDataURL(uri, { width: 320, margin: 2 }).then(setQr).catch(() => setQr('')); }, [uri]);
-    return <div className="rounded-2xl border border-violet-400/25 bg-violet-500/10 p-4 text-center"><p className="font-black text-white">Pay ₹{price} with UPI</p>{qr && <div className="mx-auto mt-3 w-fit rounded-xl bg-white p-2"><img src={qr} alt="CHEETCHAT Premium UPI QR code" className="h-44 w-44" /></div>}<p className="mt-2 text-xs text-gray-300">UPI ID: <strong className="text-white">yadavamitesh569@oksbi</strong></p><a href={uri} className="mt-3 block rounded-xl bg-violet-500 py-3 text-sm font-black text-white">Open UPI app</a><p className="mt-2 text-[10px] leading-4 text-gray-500">Use secure provider checkout in Social for automatic server-verified activation.</p></div>;
+    return <div className="rounded-2xl border border-violet-400/25 bg-violet-500/10 p-4 text-center"><p className="font-black text-white">₹{price}: one month + two months free</p><p className="mt-1 text-xs text-violet-200">Three months of Premium access</p>{qr && <div className="mx-auto mt-3 w-fit rounded-xl bg-white p-2"><img src={qr} alt="CHEETCHAT Premium UPI QR code" className="h-44 w-44" /></div>}<p className="mt-2 text-xs text-gray-300">UPI ID: <strong className="text-white">yadavamitesh569@oksbi</strong></p><a href={uri} className="mt-3 block rounded-xl bg-violet-500 py-3 text-sm font-black text-white">Open UPI app</a><p className="mt-2 text-[10px] leading-4 text-gray-500">Use secure provider checkout in Social for automatic server-verified activation.</p></div>;
 };
 
 const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wallpaper, onThemeChange, onWallpaperChange, onOpenSmartSpace, smartSpaceButtonEnabled, onSmartSpaceButtonChange }) => {
@@ -832,7 +832,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                     <span className="text-xs text-gray-400">New messages pop colourfully, then settle into this colour.</span>
                                 </div>
                             </div>
-                            <div className="m-5 h-44 overflow-hidden rounded-xl border border-gray-700 bg-white p-3"><div className="ml-auto mt-5 max-w-[70%] rounded-lg rounded-tr-none bg-[#d9fdd3] px-3 py-2 text-sm text-[#111b21] shadow">Wallpaper preview <span className="ml-2 text-[10px] text-gray-500">10:30</span></div></div>
+                            <div className="m-5 h-44 overflow-hidden rounded-xl border border-gray-700 bg-[#0b141a] bg-contain bg-center bg-no-repeat p-3" style={wallpaper === 'custom' ? { backgroundImage: `url("${localStorage.getItem('custom_chat_wallpaper') || ''}")` } : undefined}><div className="ml-auto mt-5 max-w-[70%] rounded-lg rounded-tr-none bg-[#d9fdd3] px-3 py-2 text-sm text-[#111b21] shadow">Wallpaper preview <span className="ml-2 text-[10px] text-gray-500">10:30</span></div></div>
                         </>
                     )}
 

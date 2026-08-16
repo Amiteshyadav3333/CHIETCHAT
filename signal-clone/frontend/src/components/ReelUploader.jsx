@@ -353,7 +353,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                 )}
 
                 <input ref={fileInputRef} type="file" accept="video/*" onChange={handleFileChange} className="hidden" />
-                <p className="text-center text-xs text-gray-400">Upload or record a Reel up to 60 seconds.</p>
+                <p className="text-center text-xs text-gray-400">Up to 60 seconds · Free: 3 Reels/day · Premium: 10 Reels/day</p>
 
                 {/* Caption */}
                 <textarea

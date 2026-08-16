@@ -231,7 +231,7 @@ const MessageInput = ({
     const videoNoteTimerRef = useRef(null);
     const inputRef = useRef(null);
     const galleryInputRef = useRef(null);
-    const cameraInputRef = useRef(null);
+    const videoCameraInputRef = useRef(null);
     const documentInputRef = useRef(null);
     const audioInputRef = useRef(null);
     const typingTimerRef = useRef(null);
@@ -855,7 +855,7 @@ const MessageInput = ({
                             label="Camera"
                             color="bg-rose-500"
                             icon={<CameraIcon className="w-6 h-6 text-white" />}
-                            onClick={() => setShowCameraModal(true)}
+                            onClick={() => { setShowAttachMenu(false); setShowCameraModal(true); }}
                         />
                         <AttachOption
                             label="Schedule"
@@ -1008,13 +1008,7 @@ const MessageInput = ({
                             </>
                         ) : (
                             <>
-                        <button
-                            onClick={() => { cameraInputRef.current?.click(); setShowCameraModal(false); }}
-                            className="p-3 rounded-full bg-black/50 text-white"
-                            title="Upload from gallery"
-                        >
-                            <PhotoIcon className="w-7 h-7" />
-                        </button>
+                        <button onClick={() => { galleryInputRef.current?.click(); closeCamera(); }} className="flex w-14 flex-col items-center gap-1 text-white" title="Choose photo or video"><span className="rounded-full bg-black/55 p-3"><PhotoIcon className="h-6 w-6" /></span><span className="text-[10px] font-bold">Gallery</span></button>
                         {/* Shutter */}
                         <button
                             onClick={capturePhoto}
@@ -1022,7 +1016,8 @@ const MessageInput = ({
                         >
                             <div className="w-14 h-14 rounded-full bg-white" />
                         </button>
-                        <div className="w-14" />
+                        <button onClick={() => { videoCameraInputRef.current?.click(); closeCamera(); }} className="flex w-14 flex-col items-center gap-1 text-white" title="Record video"><span className="rounded-full bg-red-500/85 p-3"><VideoCameraIcon className="h-6 w-6" /></span><span className="text-[10px] font-bold">Video</span></button>
+                        <button onClick={() => { closeCamera(); openVideoNote(); }} className="flex w-14 flex-col items-center gap-1 text-white" title="Record video note"><span className="rounded-full bg-[#25d366] p-3"><span className="block h-6 w-6 rounded-full border-2 border-white" /></span><span className="text-[10px] font-bold">Note</span></button>
                             </>
                         )}
                     </div>
@@ -1132,7 +1127,7 @@ const MessageInput = ({
 
                 {/* Hidden file inputs */}
                 <input ref={galleryInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="image/*,video/*" />
-                <input ref={cameraInputRef} type="file" className="hidden" onChange={handleFileChange} accept="image/*,video/*" capture="environment" />
+                <input ref={videoCameraInputRef} type="file" className="hidden" onChange={handleFileChange} accept="video/*" capture="environment" />
                 <input ref={documentInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="*/*" />
                 <input ref={audioInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="audio/*" />
 
@@ -1199,16 +1194,6 @@ const MessageInput = ({
                         </button>
                     ) : (
                         <div className="flex items-center gap-1">
-                            {!isRecording && (
-                                <button
-                                    type="button"
-                                    onClick={openVideoNote}
-                                    className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 transition-all active:scale-90 shadow-lg bg-[#2a3942] hover:bg-[#34434c] text-[#25d366]"
-                                    title="Video note"
-                                >
-                                    <VideoCameraIcon className="w-5 h-5" />
-                                </button>
-                            )}
                             <button
                                 type="button"
                                 onClick={isRecording ? stopRecording : startRecording}

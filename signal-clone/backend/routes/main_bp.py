@@ -4,7 +4,7 @@ import json
 import re
 import urllib.parse
 import urllib.request
-import html
+import asyncio
 from flask import Blueprint, jsonify, request, send_from_directory, current_app
 from models import db, UploadAsset
 from utils import (
@@ -13,9 +13,12 @@ from utils import (
 )
 from observability import report_safe_exception
 from content_moderation import ModerationUnavailable, reject_adult_content
+from googletrans import LANGUAGES, Translator
 
 main_bp = Blueprint('main_bp', __name__)
 SUPPORTED_UI_LANGUAGES = {'as','bn','brx','doi','gu','hi','kn','ks','kok','mai','ml','mni','mr','ne','or','pa','sa','sat','sd','ta','te','ur'}
+GOOGLETRANS_LANGUAGE_ALIASES = {'kok': 'gom', 'mni': 'mni-mtei'}
+LANGUAGES.update({'ks': 'kashmiri', 'brx': 'bodo'})
 
 @main_bp.route('/api/ui/translate', methods=['POST'])
 def translate_ui_batch():
@@ -27,18 +30,13 @@ def translate_ui_batch():
     if language not in SUPPORTED_UI_LANGUAGES or not isinstance(texts, list) or not 1 <= len(texts) <= 75:
         return jsonify({"error": "Unsupported language or translation batch"}), 400
     clean = [str(value)[:500] for value in texts]
-    api_key = os.environ.get('GOOGLE_TRANSLATE_API_KEY', '').strip()
-    if not api_key:
-        return jsonify({"error": "App translation is not configured"}), 503
     try:
-        body = json.dumps({'q': clean, 'source': 'en', 'target': language, 'format': 'text'}).encode('utf-8')
-        upstream = urllib.request.Request(
-            f'https://translation.googleapis.com/language/translate/v2?key={urllib.parse.quote(api_key)}',
-            data=body, headers={'Content-Type': 'application/json'}, method='POST'
-        )
-        with urllib.request.urlopen(upstream, timeout=20) as response:
-            payload = json.loads(response.read(512 * 1024))
-        translated = [html.unescape(item.get('translatedText', '')) for item in payload.get('data', {}).get('translations', [])]
+        async def run_translation():
+            async with Translator() as translator:
+                result = await translator.translate(clean, src='en', dest=GOOGLETRANS_LANGUAGE_ALIASES.get(language, language))
+                rows = result if isinstance(result, list) else [result]
+                return [row.text for row in rows]
+        translated = asyncio.run(run_translation())
         if len(translated) != len(clean):
             raise ValueError('Translation count mismatch')
         return jsonify({'translations': translated})

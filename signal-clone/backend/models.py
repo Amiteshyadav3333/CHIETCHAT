@@ -50,6 +50,7 @@ class User(db.Model):
     referral_code = db.Column(db.String(16), unique=True, nullable=True, index=True)
     referred_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True, index=True)
     premium_unlocked_at = db.Column(db.DateTime, nullable=True)
+    premium_expires_at = db.Column(db.DateTime, nullable=True)
 
 class PendingRegistration(db.Model):
     id = db.Column(db.Integer, primary_key=True)

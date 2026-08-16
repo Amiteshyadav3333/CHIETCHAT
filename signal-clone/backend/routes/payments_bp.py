@@ -6,6 +6,7 @@ import os
 import re
 import urllib.error
 import urllib.request
+import datetime
 from decimal import Decimal, InvalidOperation
 
 from flask import Blueprint, jsonify, request
@@ -96,6 +97,7 @@ def exact_amount_paise(value):
 
 
 def reconcile_captured_entity(payment, entity):
+    was_captured = payment.status == 'captured'
     provider_payment_id = str(entity.get('id') or '')
     if (
         payment.status in CAPTURE_TERMINAL_STATUSES
@@ -117,7 +119,8 @@ def reconcile_captured_entity(payment, entity):
     payment.provider_payment_id = provider_payment_id
     payment.status = 'captured'
     payment.paid_at = payment.paid_at or utc_now()
-    activate_premium_if_paid(payment)
+    if not was_captured:
+        activate_premium_if_paid(payment)
     return True
 
 
@@ -127,7 +130,10 @@ def activate_premium_if_paid(payment):
     user = db.session.get(User, payment.payer_id)
     if user:
         user.is_premium = True
-        user.premium_unlocked_at = user.premium_unlocked_at or utc_now()
+        now = utc_now()
+        user.premium_unlocked_at = user.premium_unlocked_at or now
+        base = user.premium_expires_at if user.premium_expires_at and user.premium_expires_at > now else now
+        user.premium_expires_at = base + datetime.timedelta(days=90)
 
 
 @payments_bp.route('/api/payments/config', methods=['GET'])
@@ -154,7 +160,7 @@ def create_premium_order():
     if not payer_id:
         return jsonify({'error': 'Unauthorized'}), 401
     user = db.session.get(User, payer_id)
-    if user.is_premium:
+    if user.is_premium and (not user.premium_expires_at or user.premium_expires_at > utc_now()):
         return jsonify({'error': 'Premium is already active'}), 409
     if not os.environ.get('RAZORPAY_WEBHOOK_SECRET'):
         return jsonify({'error': 'Premium checkout is not configured yet'}), 503
@@ -332,11 +338,13 @@ def verify_payment(payment_id):
     provider_status = str(provider_payment.get('status') or '').lower()
     if provider_status not in ('authorized', 'captured'):
         return jsonify({'error': 'Payment has not been authorized by the provider'}), 409
+    was_captured = payment.status == 'captured'
     payment.provider_payment_id = provider_payment_id
     payment.status = provider_status
     if provider_status == 'captured':
         payment.paid_at = payment.paid_at or utc_now()
-        activate_premium_if_paid(payment)
+        if not was_captured:
+            activate_premium_if_paid(payment)
     db.session.commit()
     payload = payment_payload(payment)
     if payment.purpose == 'premium' and provider_status == 'captured':

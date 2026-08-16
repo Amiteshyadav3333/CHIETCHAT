@@ -113,8 +113,6 @@ services:
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
-      - key: GOOGLE_TRANSLATE_API_KEY
-        sync: false
       - key: PYTHON_VERSION
         value: 3.11.9
   - type: cron

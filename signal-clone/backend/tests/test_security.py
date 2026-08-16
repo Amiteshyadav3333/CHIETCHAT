@@ -1877,6 +1877,32 @@ class SecurityTests(unittest.TestCase):
         deleted = self.client.delete(f'/api/reels/{reel_id}', headers=self.auth_headers())
         self.assertEqual(deleted.status_code, 200)
 
+    @patch('routes.reels_bp.upload_to_cloudinary', return_value='https://media.example/reel.mp4')
+    def test_reel_daily_limits_for_free_and_premium_accounts(self, _upload):
+        def create_reel(index):
+            return self.client.post('/api/reels', data={
+                'video': (io.BytesIO(f'video-{index}'.encode()), f'reel-{index}.mp4'),
+                'caption': f'Reel {index}', 'mediaDuration': '30',
+            }, headers=self.auth_headers(), content_type='multipart/form-data')
+
+        for index in range(3):
+            self.assertEqual(create_reel(index).status_code, 201)
+        blocked = create_reel(3)
+        self.assertEqual(blocked.status_code, 429)
+        self.assertEqual(blocked.json['code'], 'DAILY_REEL_LIMIT_REACHED')
+        self.assertEqual(blocked.json['limit'], 3)
+
+        with app.app_context():
+            user = db.session.get(User, self.user_id)
+            user.is_premium = True
+            user.premium_expires_at = utc_now() + timedelta(days=90)
+            db.session.commit()
+        for index in range(3, 10):
+            self.assertEqual(create_reel(index).status_code, 201)
+        premium_blocked = create_reel(10)
+        self.assertEqual(premium_blocked.status_code, 429)
+        self.assertEqual(premium_blocked.json['limit'], 10)
+
     def test_ai_routes_require_auth_and_expose_provider_state(self):
         self.assertEqual(self.client.get('/api/ai/info').status_code, 401)
         info = self.client.get('/api/ai/info', headers=self.auth_headers())

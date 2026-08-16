@@ -16,6 +16,8 @@ COMMENT_MAX_LIMIT = 100
 MAX_REEL_CAPTION_LENGTH = 500
 MAX_COMMENT_LENGTH = 1000
 MAX_REPOST_NOTE_LENGTH = 280
+FREE_DAILY_REEL_LIMIT = 3
+PREMIUM_DAILY_REEL_LIMIT = 10
 
 @reels_bp.route('/api/reels/<int:reel_id>/report', methods=['POST'])
 def report_reel(reel_id):
@@ -137,9 +139,17 @@ def create_reel():
     
     file = request.files['video']
     caption = request.form.get('caption', '').strip()
-    user = db.session.get(User, user_id)
+    user = User.query.filter_by(id=user_id).with_for_update().one()
+    today = utc_now().date()
+    day_start = datetime.datetime.combine(today, datetime.time.min)
+    day_end = day_start + datetime.timedelta(days=1)
+    premium_active = bool(user.is_premium and (not user.premium_expires_at or user.premium_expires_at > utc_now()))
+    daily_limit = PREMIUM_DAILY_REEL_LIMIT if premium_active else FREE_DAILY_REEL_LIMIT
+    daily_count = Reel.query.filter(Reel.user_id == user_id, Reel.created_at >= day_start, Reel.created_at < day_end).count()
+    if daily_count >= daily_limit:
+        return jsonify({"error": f"Your daily Reel limit is {daily_limit}", "code": "DAILY_REEL_LIMIT_REACHED", "limit": daily_limit}), 429
     is_monetized = request.form.get('isMonetized', 'false').lower() == 'true'
-    if is_monetized and not user.is_premium:
+    if is_monetized and not premium_active:
         return jsonify({"error": "Premium membership is required for paid reels"}), 403
     if len(caption) > MAX_REEL_CAPTION_LENGTH:
         return jsonify({"error": f"Caption must be {MAX_REEL_CAPTION_LENGTH} characters or less"}), 400

@@ -2034,7 +2034,7 @@ const Home = () => {
     const appNavHidden = featureOverlayOpen || Boolean(activeChat);
     const customWallpaper = localStorage.getItem('custom_chat_wallpaper');
     const chatBackground = wallpaper === 'custom' && customWallpaper
-        ? `center / cover fixed no-repeat url("${customWallpaper}")`
+        ? `#0b141a center / contain no-repeat url("${customWallpaper}")`
         : wallpaper === 'dots'
         ? 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.12) 1px, transparent 0), #0b141a'
         : wallpaper === 'emerald'

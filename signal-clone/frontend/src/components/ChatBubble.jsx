@@ -1458,11 +1458,11 @@ const ChatBubble = ({
                                     ? 'bg-[#005c4b] text-white rounded-tr-sm'
                                     : 'bg-[#202c33] text-gray-100 rounded-tl-sm'
                                 }`}
-                            style={isOwn ? {
-                                backgroundColor: localStorage.getItem(`chat_bubble_color_${chatId}`) || localStorage.getItem('chat_bubble_color') || '#005c4b',
+                            style={{
+                                backgroundColor: isOwn ? (localStorage.getItem(`chat_bubble_color_${chatId}`) || localStorage.getItem('chat_bubble_color') || '#005c4b') : (localStorage.getItem(`chat_received_bubble_color_${chatId}`) || '#202c33'),
                                 fontSize: localStorage.getItem('chat_font_size') === 'large' ? '17px' : localStorage.getItem('chat_font_size') === 'small' ? '13px' : '15px',
                                 fontFamily: localStorage.getItem('chat_custom_font') === 'serif' ? 'Georgia, serif' : localStorage.getItem('chat_custom_font') === 'mono' ? 'ui-monospace, monospace' : localStorage.getItem('chat_custom_font') === 'rounded' ? 'Nunito, system-ui, sans-serif' : 'inherit'
-                            } : undefined}
+                            }}
                         >
                             {protectedSnapMode && <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center overflow-hidden rounded-2xl opacity-25"><span className="-rotate-12 whitespace-nowrap text-xs font-black tracking-[0.35em] text-white">SNAP MODE · {currentUser?.username || 'PRIVATE'}</span></div>}
                             {/* Reply preview */}

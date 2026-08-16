@@ -275,7 +275,7 @@ def add_missing_columns(inspector, table_name, columns):
 # Bump this marker whenever models gain columns or tables. Production runs
 # ensure_database_schema() in the pre-deploy step and skips versions it has
 # already applied.
-SCHEMA_VERSION = '20260817_25_language_wallpaper_music'
+SCHEMA_VERSION = '20260817_26_reel_quota_premium_expiry'
 
 def ensure_runtime_compat_schema():
     """Repair columns required by the currently deployed models.
@@ -319,6 +319,7 @@ def ensure_runtime_compat_schema():
         'birth_date': db.Date(),
         'referral_code': db.String(16), 'referred_by_id': db.Integer(),
         'premium_unlocked_at': db.DateTime(),
+        'premium_expires_at': db.DateTime(),
         'cover_url': db.String(500),
     })
     inspector = inspect(db.engine)
@@ -849,6 +850,7 @@ def serialize_user(user, viewer_id=None):
         show_phone = has_contact(user.id, viewer_id)
     public_phone = user.phone if show_phone and not str(user.phone or '').startswith('google:') else ''
 
+    premium_active = bool(user.is_premium and (not user.premium_expires_at or user.premium_expires_at > utc_now()))
     return {
         "id": user.id,
         "username": user.username,
@@ -867,8 +869,9 @@ def serialize_user(user, viewer_id=None):
         "hideLastSeen": bool(user.hide_last_seen),
         "hideOnlineStatus": bool(user.hide_online_status),
         "readReceipts": bool(user.read_receipts),
-        "isPremium": bool(user.is_premium),
-        "isVerified": bool(user.is_verified or user.is_premium),
+        "isPremium": premium_active,
+        "isVerified": bool(user.is_verified or premium_active),
+        "premiumExpiresAt": iso_utc(user.premium_expires_at) if premium_active else None,
         "birthDate": user.birth_date.isoformat() if user.birth_date and viewer_id == user.id else "",
         "referralCode": user.referral_code or "" if viewer_id == user.id else "",
         "premiumReferralCount": User.query.filter_by(referred_by_id=user.id, email_verified=True).count() if viewer_id == user.id else 0,

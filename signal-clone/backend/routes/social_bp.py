@@ -212,9 +212,10 @@ def create_social_post():
         return jsonify({"error": "Invalid post type"}), 400
     poll_options = []
     user = db.session.get(User, user_id)
+    premium_active = bool(user.is_premium and (not user.premium_expires_at or user.premium_expires_at > utc_now()))
     is_monetized = request.form.get('isMonetized', 'false').lower() == 'true'
     article_title = request.form.get('articleTitle', '').strip()[:200]
-    if (post_kind == 'article' or is_monetized) and not user.is_premium:
+    if (post_kind == 'article' or is_monetized) and not premium_active:
         return jsonify({"error": "Premium membership is required for articles and paid posts"}), 403
     if post_kind == 'article' and not article_title:
         return jsonify({"error": "Article title is required"}), 400
@@ -237,7 +238,7 @@ def create_social_post():
         if role not in {'owner', 'approved'}:
             return jsonify({"error": "Channel approval required before posting"}), 403
 
-    if not user.is_premium:
+    if not premium_active:
         # Serialize quota checks per user in PostgreSQL so parallel requests
         # cannot both pass the count and create a fourth free post.
         user = User.query.filter_by(id=user_id).with_for_update().one()

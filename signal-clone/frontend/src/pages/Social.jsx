@@ -810,7 +810,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
 
     useEffect(() => {
         if (!premiumPrompt) return;
-        const uri = `upi://pay?pa=yadavamitesh569%40oksbi&pn=CHEETCHAT%20Premium&am=${premiumPrice}&cu=INR&tn=Lifetime%20Premium`;
+        const uri = `upi://pay?pa=yadavamitesh569%40oksbi&pn=CHEETCHAT%20Premium&am=${premiumPrice}&cu=INR&tn=Three%20Month%20Premium`;
         QRCode.toDataURL(uri, { width: 320, margin: 2 }).then(setUpiQr).catch(() => setUpiQr(''));
     }, [premiumPrompt, premiumPrice]);
 
@@ -1101,10 +1101,10 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                         <SparklesIcon className="mx-auto h-12 w-12 text-violet-300" />
                         <h2 className="mt-3 text-2xl font-black text-white">Your three free posts are used</h2>
                         <p className="mt-2 text-sm leading-6 text-gray-300">Upgrade for unlimited posts, articles, analytics and creator tools.</p>
-                        <div className="mt-5 rounded-2xl bg-white/5 p-4"><p className="text-xs font-bold uppercase tracking-wider text-violet-300">Lifetime Premium</p><p className="mt-1 text-3xl font-black text-white">₹{premiumPrice}</p></div>
+                        <div className="mt-5 rounded-2xl bg-white/5 p-4"><p className="text-xs font-bold uppercase tracking-wider text-violet-300">One month + two months free</p><p className="mt-1 text-3xl font-black text-white">₹{premiumPrice}</p><p className="mt-1 text-xs text-gray-400">Three months total access</p></div>
                         {upiQr && <div className="mx-auto mt-4 w-fit rounded-2xl bg-white p-3"><img src={upiQr} alt="UPI payment QR code" className="h-48 w-48" /></div>}
                         <p className="mt-2 text-xs text-gray-300">Scan using any UPI app or pay to <strong className="text-white">yadavamitesh569@oksbi</strong>.</p>
-                        <a href={`upi://pay?pa=yadavamitesh569%40oksbi&pn=CHEETCHAT%20Premium&am=${premiumPrice}&cu=INR&tn=Lifetime%20Premium`} className="mt-3 block w-full rounded-xl border border-violet-400/40 py-3 text-sm font-black text-violet-200">Open UPI app</a>
+                        <a href={`upi://pay?pa=yadavamitesh569%40oksbi&pn=CHEETCHAT%20Premium&am=${premiumPrice}&cu=INR&tn=Three%20Month%20Premium`} className="mt-3 block w-full rounded-xl border border-violet-400/40 py-3 text-sm font-black text-violet-200">Open UPI app</a>
                         <button disabled={premiumBuying} onClick={buyPremium} className="mt-3 w-full rounded-xl bg-violet-500 py-3.5 text-sm font-black text-white hover:bg-violet-400 disabled:opacity-60">{premiumBuying ? 'Opening secure checkout…' : 'Pay and activate securely'}</button>
                         <p className="mt-2 text-[11px] leading-4 text-gray-500">Automatic activation uses secure checkout and server signature verification. A direct transfer cannot activate Premium automatically.</p>
                         <button onClick={() => setPremiumPrompt(false)} className="mt-3 text-sm font-semibold text-gray-400">Try another free post tomorrow</button>

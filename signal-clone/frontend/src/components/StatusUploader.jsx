@@ -218,13 +218,13 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
     };
 
     return (
-        <div className="fixed inset-0 bg-black/90 z-[150] flex items-center justify-center p-4">
-            <div className="bg-gray-900 w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl border border-gray-800 flex flex-col">
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/95 p-0 backdrop-blur-md sm:p-4">
+            <div className="flex h-[100dvh] w-full max-w-md flex-col overflow-hidden bg-[#101820] shadow-2xl sm:h-auto sm:max-h-[94dvh] sm:rounded-3xl sm:border sm:border-white/10">
 
                 {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+                <div className="flex items-center justify-between border-b border-white/10 px-4 py-4">
                     <h2 className="text-white font-bold text-base flex items-center gap-2">
-                        <span className="text-green-500">🟢</span> Status / Story
+                        <span className="text-green-500">●</span> Create story
                     </h2>
                     <button onClick={onClose} className="text-gray-400 hover:text-white">
                         <XMarkIcon className="w-5 h-5" />
@@ -240,7 +240,7 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
                             activeTab === 'media' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'
                         }`}
                     >
-                        📷 Media Status
+                        📷 Photo or video
                     </button>
                     <button
                         type="button"
@@ -249,12 +249,12 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
                             activeTab === 'text' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'
                         }`}
                     >
-                        ✍️ Text Status
+                        ✍️ Text
                     </button>
                 </div>
 
                 {/* Preview Box */}
-                <div className="relative bg-black flex items-center justify-center" style={{ height: '300px' }}>
+                <div className="relative mx-auto flex aspect-[9/16] max-h-[52dvh] w-full max-w-[292px] items-center justify-center overflow-hidden bg-black shadow-2xl sm:my-3 sm:rounded-3xl">
                     {activeTab === 'media' ? (
                         preview ? (
                             mediaType === 'video' ? (
@@ -269,7 +269,7 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
                             >
                                 <PhotoIcon className="w-16 h-16 text-blue-500" />
                                 <p className="text-sm font-semibold text-white">Tap to add photo or video</p>
-                                <p className="text-xs text-gray-400">Max 15 seconds for video (Max 100MB)</p>
+                                <p className="text-xs text-gray-400">Photos or videos up to 15 seconds</p>
                             </div>
                         )
                     ) : (
@@ -294,7 +294,7 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
                 <input ref={fileRef} type="file" accept="image/*,video/*" className="hidden" onChange={handleMediaSelect} />
 
                 {/* Controls Area */}
-                <div className="p-4 space-y-3 flex-1 overflow-y-auto max-h-[360px]">
+                <div className="flex-1 space-y-3 overflow-y-auto p-4">
                     {error && <p className="text-red-400 text-xs text-center">{error}</p>}
 
                     {activeTab === 'media' ? (
@@ -444,6 +444,7 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
                     </div>
                     <input ref={musicRef} type="file" accept="audio/*" className="hidden" onChange={handleMusicSelect} />
 
+                    <div className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-2 text-xs"><span className="font-semibold text-white">Audience</span><span className="text-[#25d366]">Your story privacy settings</span></div>
                     {/* Post Button */}
                     <button
                         onClick={handleSubmit}

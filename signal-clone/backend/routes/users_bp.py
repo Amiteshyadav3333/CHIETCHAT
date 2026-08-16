@@ -10,6 +10,7 @@ from utils import (
     emit_to_user_chat_contacts, has_contact, create_notification, iso_utc, utc_now,
     queue_media_deletion, process_media_deletion_task
 )
+from content_moderation import ModerationUnavailable, reject_adult_content
 
 users_bp = Blueprint('users_bp', __name__)
 
@@ -255,7 +256,12 @@ def update_avatar():
         return jsonify({"error": "Please upload an image file"}), 400
 
     try:
+        blocked, adult_score = reject_adult_content(file, 'image')
+        if blocked:
+            return jsonify({"error": "Adult profile photos are not allowed", "adultScore": adult_score}), 422
         url = upload_to_cloudinary(file, folder='chietchat/avatars', resource_type='image')
+    except ModerationUnavailable:
+        return jsonify({"error": "Media safety check is temporarily unavailable"}), 503
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
@@ -274,6 +280,35 @@ def update_avatar():
     payload = {"user": serialize_user(user)}
     emit_to_user_chat_contacts(user_id, 'user_profile_updated', payload)
     return jsonify(payload)
+
+@users_bp.route('/api/user/cover', methods=['POST'])
+def update_cover():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    file = request.files.get('cover')
+    if not file or not file.filename:
+        return jsonify({"error": "No cover photo selected"}), 400
+    extension = secure_filename(file.filename).rsplit('.', 1)[-1].lower()
+    if extension not in ALLOWED_AVATAR_EXTENSIONS:
+        return jsonify({"error": "Please upload an image file"}), 400
+    try:
+        blocked, adult_score = reject_adult_content(file, 'image')
+        if blocked:
+            return jsonify({"error": "Adult cover photos are not allowed", "adultScore": adult_score}), 422
+        url = upload_to_cloudinary(file, folder='chietchat/covers', resource_type='image')
+    except ModerationUnavailable:
+        return jsonify({"error": "Media safety check is temporarily unavailable"}), 503
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    user = db.session.get(User, user_id)
+    deletion_task = queue_media_deletion(user.cover_url, 'image')
+    user.cover_url = url
+    db.session.commit()
+    if deletion_task:
+        process_media_deletion_task(deletion_task.id)
+    payload = serialize_user(user, viewer_id=user_id)
+    return jsonify({"user": payload}), 200
 
 @users_bp.route('/api/user/avatar', methods=['DELETE'])
 def delete_avatar():
@@ -669,7 +704,10 @@ def update_ui_preferences():
         'theme', 'wallpaper', 'fontSize', 'customFont', 'bubbleColor',
         'animatedTheme', 'snapModeDefault', 'messageSounds', 'desktopAlerts',
         'callSounds', 'mediaAutoDownload', 'dataSaver', 'hdMedia',
-        'screenshotAlerts', 'spamDetection', 'incognitoKeyboard'
+        'screenshotAlerts', 'spamDetection', 'incognitoKeyboard',
+        'reelsDefaultFeed', 'reelsAutoplay', 'reelsMuted', 'reelsDataSaver',
+        'socialDefaultFeed', 'socialAutoplayVideos', 'socialMutedVideos',
+        'podliveAllowCamera', 'podliveAllowMicrophone', 'podliveAutoplay',
     }
     try:
         current = json.loads(user.ui_preferences or '{}')

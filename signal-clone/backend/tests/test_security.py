@@ -1690,6 +1690,37 @@ class SecurityTests(unittest.TestCase):
         deleted = self.client.delete(f'/api/social/posts/{post_id}', headers=self.auth_headers())
         self.assertEqual(deleted.status_code, 200)
 
+    def test_free_social_posts_are_limited_to_three_per_utc_day(self):
+        for index in range(3):
+            response = self.client.post(
+                '/api/social/posts', data={'caption': f'free post {index}'}, headers=self.auth_headers(),
+            )
+            self.assertEqual(response.status_code, 201)
+        blocked = self.client.post(
+            '/api/social/posts', data={'caption': 'fourth free post'}, headers=self.auth_headers(),
+        )
+        self.assertEqual(blocked.status_code, 429)
+        self.assertEqual(blocked.json['code'], 'DAILY_POST_LIMIT_REACHED')
+        with app.app_context():
+            user = db.session.get(User, self.user_id)
+            user.is_premium = True
+            db.session.commit()
+        unlimited = self.client.post(
+            '/api/social/posts', data={'caption': 'premium post'}, headers=self.auth_headers(),
+        )
+        self.assertEqual(unlimited.status_code, 201)
+
+    @patch('routes.social_bp.upload_to_cloudinary')
+    def test_social_post_accepts_up_to_four_photos(self, upload):
+        upload.side_effect = [f'https://media.example/photo-{index}.png' for index in range(4)]
+        response = self.client.post('/api/social/posts', data={
+            'caption': 'four photo carousel',
+            'media': [(io.BytesIO(b'photo'), f'photo-{index}.png') for index in range(4)],
+        }, headers=self.auth_headers())
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(len(response.json['mediaItems']), 4)
+        self.assertEqual(response.json['mediaUrl'], 'https://media.example/photo-0.png')
+
     def test_social_feeds_are_bounded_and_text_inputs_reject_oversized_content(self):
         with app.app_context():
             db.session.add_all([

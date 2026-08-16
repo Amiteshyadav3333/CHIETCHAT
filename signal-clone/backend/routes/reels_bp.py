@@ -1,6 +1,6 @@
 import datetime
 from flask import Blueprint, jsonify, request
-from models import db, Reel, ReelLike, ReelView, ReelShare, ReelRepost, ReelComment, Follow, User, Status
+from models import db, Reel, ReelLike, ReelView, ReelShare, ReelRepost, ReelComment, Follow, User, Status, UserReport
 from utils import (
     get_current_user_id, iso_utc, serialize_user, upload_to_cloudinary,
     get_json_data, create_notification, queue_media_deletion, process_media_deletion_task, utc_now
@@ -17,9 +17,25 @@ MAX_REEL_CAPTION_LENGTH = 500
 MAX_COMMENT_LENGTH = 1000
 MAX_REPOST_NOTE_LENGTH = 280
 
+@reels_bp.route('/api/reels/<int:reel_id>/report', methods=['POST'])
+def report_reel(reel_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    reel = db.get_or_404(Reel, reel_id)
+    if reel.user_id == user_id:
+        return jsonify({"error": "You cannot report your own Reel"}), 400
+    reason = str(get_json_data().get('reason') or 'Adult or inappropriate video').strip()[:255]
+    existing = UserReport.query.filter_by(reporter_id=user_id, content_type='reel', content_id=reel.id).first()
+    if existing:
+        return jsonify({"message": "This Reel is already reported"})
+    db.session.add(UserReport(reporter_id=user_id, reported_id=reel.user_id, reason=reason, content_type='reel', content_id=reel.id))
+    db.session.commit()
+    return jsonify({"message": "Report submitted for review"}), 201
+
 
 def serialize_reel(reel, current_user_id, is_following=None):
-    user_data = serialize_user(reel.user)
+    user_data = serialize_user(reel.user, viewer_id=current_user_id)
     if is_following is None:
         is_following = Follow.query.filter_by(
             follower_id=current_user_id, followed_id=reel.user_id
@@ -101,7 +117,7 @@ def get_user_reels(uid):
     
     return jsonify({
         "user": {
-            **serialize_user(user),
+            **serialize_user(user, viewer_id=user_id),
             "followerCount": follower_count,
             "followingCount": following_count,
             "isFollowing": is_following
@@ -182,7 +198,7 @@ def get_public_reel(reel_id):
     if not reel:
         return jsonify({"error": "Reel not found"}), 404
 
-    user_data = serialize_user(reel.user)
+    user_data = serialize_user(reel.user, viewer_id=-1)
     reactions_count = Reel.query.filter_by(parent_reel_id=reel.id).count()
 
     return jsonify({
@@ -238,7 +254,7 @@ def serialize_reel_comment(comment, current_user_id):
         "id": comment.id,
         "content": comment.content,
         "createdAt": iso_utc(comment.created_at),
-        "user": serialize_user(comment.user),
+        "user": serialize_user(comment.user, viewer_id=current_user_id),
         "parentId": comment.parent_id,
         "replies": [serialize_reel_comment(r, current_user_id) for r in sorted_replies]
         ,"isBoosted": bool(comment.user.is_premium)

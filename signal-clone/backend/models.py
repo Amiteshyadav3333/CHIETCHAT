@@ -27,6 +27,7 @@ class User(db.Model):
     last_seen = db.Column(db.DateTime, default=utc_now)
     bio = db.Column(db.String(200), nullable=True)
     website_url = db.Column(db.String(200), nullable=True)
+    cover_url = db.Column(db.String(500), nullable=True)
     platform_id = db.Column(db.String(30), unique=True, nullable=True)  # unique @handle, e.g. 'amitesh_123'
     profile_setup_done = db.Column(db.Boolean, default=False)  # True once user completes profile setup
     hide_last_seen = db.Column(db.Boolean, default=False)
@@ -188,6 +189,7 @@ class PaymentOrder(db.Model):
     amount_paise = db.Column(db.Integer, nullable=False)
     currency = db.Column(db.String(3), default='INR', nullable=False)
     description = db.Column(db.String(160), default='')
+    purpose = db.Column(db.String(30), nullable=False, default='business')
     provider = db.Column(db.String(30), default='razorpay', nullable=False)
     provider_order_id = db.Column(db.String(100), unique=True, nullable=False)
     provider_payment_id = db.Column(db.String(100), unique=True, nullable=True)
@@ -434,6 +436,7 @@ class SocialPost(db.Model):
     caption = db.Column(db.String(1000), nullable=True)
     media_url = db.Column(db.String(500), nullable=True)
     media_type = db.Column(db.String(20), nullable=True)  # image | video
+    media_items = db.Column(db.Text, nullable=True)  # JSON [{url, type}], up to 4 images
     retweet_of_id = db.Column(db.Integer, db.ForeignKey('social_post.id'), nullable=True)
     share_count = db.Column(db.Integer, default=0)
     post_kind = db.Column(db.String(20), nullable=False, default='standard')  # standard | community
@@ -532,6 +535,8 @@ class UserReport(db.Model):
     reporter_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     reported_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     reason = db.Column(db.String(255), nullable=False)
+    content_type = db.Column(db.String(30), nullable=True)
+    content_id = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now)
     reporter = db.relationship('User', foreign_keys=[reporter_id])
     reported = db.relationship('User', foreign_keys=[reported_id])

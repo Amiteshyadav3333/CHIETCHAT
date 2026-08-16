@@ -16,7 +16,12 @@ const Reels = ({ active, onBack, onShareToChat }) => {
     const [loading, setLoading] = useState(() => {
         return !loadReelCache(user?.id).length;
     });
-    const [filter, setFilter] = useState('foryou'); // 'foryou' | 'following'
+    const [filter, setFilter] = useState(() => user?.uiPreferences?.reelsDefaultFeed || localStorage.getItem('reels_default_feed') || 'foryou'); // 'foryou' | 'following'
+    const [playbackPrefs, setPlaybackPrefs] = useState(() => ({
+        autoplay: user?.uiPreferences?.reelsAutoplay ?? localStorage.getItem('reels_autoplay') !== '0',
+        muted: user?.uiPreferences?.reelsMuted ?? localStorage.getItem('reels_muted') === '1',
+        dataSaver: user?.uiPreferences?.reelsDataSaver ?? localStorage.getItem('reels_data_saver') === '1',
+    }));
     const [showUploader, setShowUploader] = useState(false);
     const [selectedProfileUserId, setSelectedProfileUserId] = useState(null);
     const [selectedProfileReel, setSelectedProfileReel] = useState(null);
@@ -25,6 +30,16 @@ const Reels = ({ active, onBack, onShareToChat }) => {
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [followingIds, setFollowingIds] = useState({});
     const hasFetched = useRef(false);
+
+    useEffect(() => {
+        const updatePreferences = (event) => setPlaybackPrefs(current => ({
+            autoplay: event.detail?.reelsAutoplay ?? current.autoplay,
+            muted: event.detail?.reelsMuted ?? current.muted,
+            dataSaver: event.detail?.reelsDataSaver ?? current.dataSaver,
+        }));
+        window.addEventListener('cheetchat-preferences-updated', updatePreferences);
+        return () => window.removeEventListener('cheetchat-preferences-updated', updatePreferences);
+    }, []);
 
     const fetchReels = async (f = filter, silent = false) => {
         if (!silent) setLoading(true);
@@ -226,6 +241,9 @@ const Reels = ({ active, onBack, onShareToChat }) => {
                             onReact={(r) => setReactingToReel(r)}
                             onDelete={(id) => setReels(prev => prev.filter(r => r.id !== id))}
                             active={active}
+                            autoplay={playbackPrefs.autoplay}
+                            startMuted={playbackPrefs.muted}
+                            dataSaver={playbackPrefs.dataSaver}
                         />
                     ))
                 ) : (

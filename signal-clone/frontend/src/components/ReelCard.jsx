@@ -9,7 +9,7 @@ import ReelShareSheet from './ReelShareSheet';
 
 const REPOST_REACTIONS = ['🔥', '❤️', '😂', '😮', '👏'];
 
-const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelete, active }) => {
+const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelete, active, autoplay = true, startMuted = false, dataSaver = false }) => {
     const { token } = useContext(AuthContext);
     const reelOwner = reel?.user || {};
     const currentUserId = currentUser?.id;
@@ -37,6 +37,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
     const [floatingEmojis, setFloatingEmojis] = useState([]);
     const [videoError, setVideoError] = useState(false);
     const [showAnalytics, setShowAnalytics] = useState(false);
+    const [playbackMuted, setPlaybackMuted] = useState(startMuted);
     const [analytics, setAnalytics] = useState(null);
     const videoRef = useRef(null);
     const audioRef = useRef(null);
@@ -107,6 +108,15 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
         } catch (err) { console.error(err); }
     };
 
+    const handleReport = async () => {
+        const reason = window.prompt('Report reason', 'Adult or inappropriate video');
+        if (!reason) return;
+        try {
+            const { data } = await axios.post(`/api/reels/${reel.id}/report`, { reason }, { headers: { Authorization: `Bearer ${token}` } });
+            alert(data.message || 'Report submitted'); setShowMenu(false);
+        } catch (err) { alert(err.response?.data?.error || 'Could not submit report'); }
+    };
+
     useEffect(() => {
         const observer = new IntersectionObserver(
             ([entry]) => {
@@ -125,14 +135,16 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
     }, []);
 
     useEffect(() => {
-        if (active && isIntersecting) {
+        if (autoplay && active && isIntersecting) {
             videoRef.current?.play().catch(() => {});
             if (audioRef.current) audioRef.current.play().catch(() => {});
         } else {
             videoRef.current?.pause();
             if (audioRef.current) audioRef.current.pause();
         }
-    }, [active, isIntersecting]);
+    }, [active, autoplay, isIntersecting]);
+
+    useEffect(() => setPlaybackMuted(startMuted), [startMuted]);
 
     useEffect(() => {
         if (audioRef.current) {
@@ -277,11 +289,19 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
                     className="h-full w-full object-contain cursor-pointer"
                     loop
                     playsInline
-                    preload="auto"
-                    muted={!!safeMusicUrl}
+                    preload={dataSaver ? 'metadata' : 'auto'}
+                    muted={playbackMuted || !!safeMusicUrl}
                     style={{ filter: filters[reel.filterName] || '' }}
                     onError={() => setVideoError(true)}
                     onClick={() => {
+                        if (playbackMuted) {
+                            setPlaybackMuted(false);
+                            videoRef.current.muted = Boolean(safeMusicUrl);
+                            if (audioRef.current) audioRef.current.muted = false;
+                            videoRef.current.play().catch(() => {});
+                            audioRef.current?.play().catch(() => {});
+                            return;
+                        }
                         if (videoRef.current.paused) {
                             videoRef.current.play();
                             audioRef.current?.play();
@@ -295,7 +315,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
             )}
 
             {safeMusicUrl && (
-                <audio ref={audioRef} src={safeMusicUrl} loop />
+                <audio ref={audioRef} src={safeMusicUrl} loop muted={playbackMuted} preload={dataSaver ? 'metadata' : 'auto'} />
             )}
 
             {/* Floating Emojis */}
@@ -327,9 +347,14 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
                                 </button>
                             </>
                         ) : (
-                            <button onClick={handleBlock} className="w-full flex items-center gap-3 p-3 text-red-500 hover:bg-white/10 rounded-lg text-sm font-bold">
-                                <NoSymbolIcon className="w-5 h-5" /> Block User
-                            </button>
+                            <>
+                                <button onClick={handleBlock} className="w-full flex items-center gap-3 p-3 text-red-500 hover:bg-white/10 rounded-lg text-sm font-bold">
+                                    <NoSymbolIcon className="w-5 h-5" /> Block User
+                                </button>
+                                <button onClick={handleReport} className="w-full flex items-center gap-3 p-3 text-red-500 hover:bg-white/10 rounded-lg text-sm font-bold">
+                                    <span className="text-lg">⚑</span> Report Video
+                                </button>
+                            </>
                         )}
                     </div>
                 )}

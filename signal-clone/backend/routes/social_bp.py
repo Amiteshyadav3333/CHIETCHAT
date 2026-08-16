@@ -6,7 +6,7 @@ from werkzeug.utils import secure_filename
 
 from models import (
     db, User, Follow, SocialPost, SocialPostLike, SocialPostShare, SocialPostComment, SocialPollVote,
-    Channel, ChannelMembership, CommentReply, Status
+    Channel, ChannelMembership, CommentReply, Status, UserReport
 )
 from utils import (
     get_current_user_id, get_json_data, iso_utc, serialize_user,
@@ -26,6 +26,19 @@ MAX_POST_CAPTION_LENGTH = 1000
 MAX_ARTICLE_LENGTH = 10000
 MAX_COMMENT_LENGTH = 1000
 MAX_CHANNEL_QUERY_LENGTH = 100
+FREE_DAILY_POST_LIMIT = 3
+MAX_POST_IMAGES = 4
+
+
+def post_media_items(post):
+    try:
+        items = json.loads(post.media_items or '[]')
+    except (TypeError, ValueError):
+        items = []
+    valid = [item for item in items if isinstance(item, dict) and item.get('url') and item.get('type') in {'image', 'video'}]
+    if not valid and post.media_url:
+        valid = [{'url': post.media_url, 'type': post.media_type or 'image'}]
+    return valid[:MAX_POST_IMAGES]
 
 
 def bounded_limit(default, maximum):
@@ -41,7 +54,7 @@ def serialize_post(post, current_user_id):
     is_liked = SocialPostLike.query.filter_by(post_id=post.id, user_id=current_user_id).first() is not None
     is_following = Follow.query.filter_by(follower_id=current_user_id, followed_id=post.user_id).first() is not None
     is_retweeted = SocialPost.query.filter_by(retweet_of_id=post.id, user_id=current_user_id).first() is not None
-    user_data = serialize_user(post.user)
+    user_data = serialize_user(post.user, viewer_id=current_user_id)
     user_data["isFollowing"] = is_following
     channel_data = None
     if post.channel:
@@ -54,12 +67,13 @@ def serialize_post(post, current_user_id):
     original_post = None
     if post.retweet_of_id and post.retweet_of:
         orig = post.retweet_of
-        orig_user = serialize_user(orig.user)
+        orig_user = serialize_user(orig.user, viewer_id=current_user_id)
         original_post = {
             "id": orig.id,
             "caption": orig.caption or "",
             "mediaUrl": orig.media_url,
             "mediaType": orig.media_type,
+            "mediaItems": post_media_items(orig),
             "createdAt": iso_utc(orig.created_at),
             "user": orig_user,
             "likesCount": len(orig.likes),
@@ -84,6 +98,7 @@ def serialize_post(post, current_user_id):
         "caption": post.caption or "",
         "mediaUrl": post.media_url,
         "mediaType": post.media_type,
+        "mediaItems": post_media_items(post),
         "createdAt": iso_utc(post.created_at),
         "user": user_data,
         "channel": channel_data,
@@ -111,19 +126,19 @@ def serialize_comment(comment, current_user_id):
         "id": comment.id,
         "content": comment.content,
         "createdAt": iso_utc(comment.created_at),
-        "user": serialize_user(comment.user),
+        "user": serialize_user(comment.user, viewer_id=current_user_id),
         "parentId": comment.parent_id,
         "replies": [serialize_comment(r, current_user_id) for r in sorted_replies]
         ,"isBoosted": bool(comment.user.is_premium)
     }
 
 
-def serialize_reply(reply):
+def serialize_reply(reply, current_user_id=None):
     return {
         "id": reply.id,
         "content": reply.content,
         "createdAt": iso_utc(reply.created_at),
-        "user": serialize_user(reply.user)
+        "user": serialize_user(reply.user, viewer_id=current_user_id)
     }
 
 def get_channel_role(channel, user_id):
@@ -143,7 +158,7 @@ def serialize_channel(channel, current_user_id, include_pending=False):
         "description": channel.description or "",
         "coverUrl": channel.cover_url,
         "createdAt": iso_utc(channel.created_at),
-        "owner": serialize_user(channel.owner),
+        "owner": serialize_user(channel.owner, viewer_id=current_user_id),
         "subscriberCount": approved_count,
         "pendingCount": pending_count if channel.owner_id == current_user_id else 0,
         "role": get_channel_role(channel, current_user_id),
@@ -156,7 +171,7 @@ def serialize_channel(channel, current_user_id, include_pending=False):
         payload["pendingRequests"] = [{
             "id": item.id,
             "createdAt": iso_utc(item.created_at),
-            "user": serialize_user(item.user)
+            "user": serialize_user(item.user, viewer_id=current_user_id)
         } for item in pending]
     return payload
 
@@ -222,29 +237,59 @@ def create_social_post():
         if role not in {'owner', 'approved'}:
             return jsonify({"error": "Channel approval required before posting"}), 403
 
+    if not user.is_premium:
+        # Serialize quota checks per user in PostgreSQL so parallel requests
+        # cannot both pass the count and create a fourth free post.
+        user = User.query.filter_by(id=user_id).with_for_update().one()
+        today_start = utc_now().replace(hour=0, minute=0, second=0, microsecond=0)
+        posts_today = SocialPost.query.filter(
+            SocialPost.user_id == user_id,
+            SocialPost.retweet_of_id.is_(None),
+            SocialPost.created_at >= today_start,
+        ).count()
+        if posts_today >= FREE_DAILY_POST_LIMIT:
+            return jsonify({
+                "error": "Free accounts can publish 3 posts per day. Upgrade to Premium for unlimited posts.",
+                "code": "DAILY_POST_LIMIT_REACHED",
+                "limit": FREE_DAILY_POST_LIMIT,
+                "used": posts_today,
+                "upgradeAvailable": True,
+            }), 429
+
     media_url = None
     media_type = None
-    if 'media' in request.files:
-        file = request.files['media']
-        if file.filename:
-            filename = secure_filename(file.filename)
-            media_type = media_type_for(filename)
-            if not media_type:
-                return jsonify({"error": "Upload image or video only"}), 400
-            resource_type = 'image' if media_type == 'image' else 'video'
-            try:
-                blocked, adult_score = reject_adult_content(file, media_type)
-                if blocked:
-                    return jsonify({
-                        'error': 'Upload blocked: adult content is not allowed',
-                        'code': 'ADULT_CONTENT_BLOCKED',
-                        'adultScore': round(adult_score, 3),
-                    }), 422
-                media_url = upload_to_cloudinary(file, folder='chietchat/social', resource_type=resource_type)
-            except ModerationUnavailable as error:
-                return jsonify({'error': str(error), 'code': 'MODERATION_UNAVAILABLE'}), 503
-            except ValueError as error:
-                return jsonify({'error': str(error)}), 400
+    uploaded_items = []
+    files = [file for file in request.files.getlist('media') if file and file.filename]
+    if len(files) > MAX_POST_IMAGES:
+        return jsonify({"error": "Select up to 4 photos per post"}), 400
+    typed_files = []
+    for file in files:
+        detected_type = media_type_for(secure_filename(file.filename))
+        if not detected_type:
+            return jsonify({"error": "Upload image or video only"}), 400
+        typed_files.append((file, detected_type))
+    if len(typed_files) > 1 and any(kind != 'image' for _, kind in typed_files):
+        return jsonify({"error": "Multiple selection supports photos only; upload a video by itself"}), 400
+    try:
+        for file, detected_type in typed_files:
+            blocked, adult_score = reject_adult_content(file, detected_type)
+            if blocked:
+                return jsonify({
+                    'error': 'Upload blocked: adult content is not allowed',
+                    'code': 'ADULT_CONTENT_BLOCKED',
+                    'adultScore': round(adult_score, 3),
+                }), 422
+        for file, detected_type in typed_files:
+            resource_type = 'image' if detected_type == 'image' else 'video'
+            url = upload_to_cloudinary(file, folder='chietchat/social', resource_type=resource_type)
+            uploaded_items.append({'url': url, 'type': detected_type})
+    except ModerationUnavailable as error:
+        return jsonify({'error': str(error), 'code': 'MODERATION_UNAVAILABLE'}), 503
+    except ValueError as error:
+        return jsonify({'error': str(error)}), 400
+    if uploaded_items:
+        media_url = uploaded_items[0]['url']
+        media_type = uploaded_items[0]['type']
 
     if not caption and not media_url:
         return jsonify({"error": "Write something or choose a photo/video"}), 400
@@ -255,6 +300,7 @@ def create_social_post():
         caption=caption,
         media_url=media_url,
         media_type=media_type,
+        media_items=json.dumps(uploaded_items) if uploaded_items else None,
         post_kind=post_kind,
         poll_options=json.dumps(poll_options) if poll_options else None,
         article_title=article_title or None,
@@ -486,11 +532,12 @@ def delete_social_post(post_id):
     post = db.get_or_404(SocialPost, post_id)
     if post.user_id != user_id and not (post.channel and post.channel.owner_id == user_id):
         return jsonify({"error": "Forbidden"}), 403
-    deletion_task = queue_media_deletion(post.media_url, post.media_type or 'image')
+    deletion_tasks = [queue_media_deletion(item['url'], item['type']) for item in post_media_items(post)]
     db.session.delete(post)
     db.session.commit()
-    if deletion_task:
-        process_media_deletion_task(deletion_task.id)
+    for task in deletion_tasks:
+        if task:
+            process_media_deletion_task(task.id)
     return jsonify({"message": "Post deleted"})
 
 # ─── USER PROFILE ─────────────────────────────────────────────────────────────
@@ -507,7 +554,7 @@ def get_user_profile(profile_user_id):
     posts_count = SocialPost.query.filter_by(user_id=profile_user_id, channel_id=None, retweet_of_id=None).count()
     is_following = Follow.query.filter_by(follower_id=current_user_id, followed_id=profile_user_id).first() is not None
 
-    user_data = serialize_user(profile_user)
+    user_data = serialize_user(profile_user, viewer_id=current_user_id)
     user_data["followersCount"] = followers_count
     user_data["followingCount"] = following_count
     user_data["postsCount"] = posts_count
@@ -521,6 +568,23 @@ def get_user_profile(profile_user_id):
         "user": user_data,
         "posts": [serialize_post(p, current_user_id) for p in posts]
     })
+
+@social_bp.route('/api/social/posts/<int:post_id>/report', methods=['POST'])
+def report_social_post(post_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    post = db.get_or_404(SocialPost, post_id)
+    if post.user_id == user_id:
+        return jsonify({"error": "You cannot report your own post"}), 400
+    data = get_json_data()
+    reason = str(data.get('reason') or 'Adult or inappropriate photo/video').strip()[:255]
+    existing = UserReport.query.filter_by(reporter_id=user_id, content_type='social_post', content_id=post.id).first()
+    if existing:
+        return jsonify({"message": "This post is already reported"}), 200
+    db.session.add(UserReport(reporter_id=user_id, reported_id=post.user_id, reason=reason, content_type='social_post', content_id=post.id))
+    db.session.commit()
+    return jsonify({"message": "Report submitted for review"}), 201
 
 # ─── CHANNELS ─────────────────────────────────────────────────────────────────
 

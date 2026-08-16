@@ -21,6 +21,16 @@ import SocialShareSheet from '../components/SocialShareSheet';
 
 const authHeaders = (token) => ({ Authorization: `Bearer ${token}` });
 
+const newPaymentRequestId = () => crypto.randomUUID?.() || Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, '0')).join('');
+const loadRazorpayCheckout = () => new Promise((resolve, reject) => {
+    if (window.Razorpay) return resolve();
+    const existing = document.querySelector('script[data-cheetchat-razorpay]');
+    if (existing) { existing.addEventListener('load', resolve, { once: true }); existing.addEventListener('error', reject, { once: true }); return; }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js'; script.async = true; script.dataset.cheetchatRazorpay = '1';
+    script.onload = resolve; script.onerror = () => reject(new Error('Premium checkout failed to load')); document.head.appendChild(script);
+});
+
 const VerifiedBadge = ({ premium }) => premium ? <span title="Premium verified" className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#1d9bf0] text-[10px] font-black text-white">✓</span> : null;
 
 const CheetChatLogo = ({ className, style, hideTextOnMobile = true }) => (
@@ -92,7 +102,7 @@ const TweetAction = ({ icon, count, onClick, active, activeColor, hoverColor, ho
     </button>
 );
 
-const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, preview, fileRef, posting, onSubmit, isPremium }) => {
+const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, preview, fileRef, posting, onSubmit, isPremium, onUpgrade }) => {
     const [articleMode, setArticleMode] = useState(false);
     const [articleTitle, setArticleTitle] = useState('');
     const [monetized, setMonetized] = useState(false);
@@ -100,7 +110,7 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
     const remaining = maxChars - caption.length;
     const progress = Math.min((caption.length / maxChars) * 100, 100);
     const isOverLimit = remaining < 0;
-    const canPost = (caption.trim() || media) && !isOverLimit;
+    const canPost = (caption.trim() || media.length > 0) && !isOverLimit;
     const circumference = 2 * Math.PI * 9;
     const dashOffset = circumference - (progress / 100) * circumference;
 
@@ -117,22 +127,23 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
                     rows={caption ? Math.max(3, Math.ceil(caption.length / 50)) : 2}
                     style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', resize: 'none', fontSize: 20, color: '#e7e9ea', lineHeight: 1.6, fontFamily: 'inherit' }}
                 />
-                {preview && (
-                    <div style={{ marginTop: 12, borderRadius: 16, overflow: 'hidden', border: '1px solid #2f3336', position: 'relative' }}>
-                        {media && media.type.startsWith('video/') ? (
-                            <video src={preview} controls style={{ width: '100%', maxHeight: 288, objectFit: 'contain', background: '#000' }} />
-                        ) : (
-                            <img src={preview} alt="" style={{ width: '100%', maxHeight: 288, objectFit: 'contain', background: '#000' }} />
-                        )}
-                        <button onClick={() => { setMedia(null); if (fileRef.current) fileRef.current.value = ''; }}
-                            style={{ position: 'absolute', top: 8, right: 8, width: 32, height: 32, borderRadius: '50%', background: 'rgba(15,20,25,0.75)', border: 'none', cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <XMarkIcon style={{ width: 16, height: 16 }} />
-                        </button>
+                {preview.length > 0 && (
+                    <div className={`mt-3 grid gap-1 overflow-hidden rounded-2xl border border-[#2f3336] ${preview.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                        {preview.map((src, index) => <div key={src} className="relative min-h-32 bg-black">
+                            {media[index]?.type.startsWith('video/') ? <video src={src} controls className="h-full max-h-72 w-full object-contain" /> : <img src={src} alt={`Selected ${index + 1}`} className="h-full max-h-72 w-full object-cover" />}
+                            <button type="button" onClick={() => { setMedia(items => items.filter((_, itemIndex) => itemIndex !== index)); if (fileRef.current) fileRef.current.value = ''; }} className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/75 text-white"><XMarkIcon className="h-4 w-4" /></button>
+                            {preview.length > 1 && <span className="absolute bottom-2 left-2 rounded-full bg-black/70 px-2 py-1 text-[10px] font-bold text-white">{index + 1}/{preview.length}</span>}
+                        </div>)}
                     </div>
                 )}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, paddingTop: 12, borderTop: '1px solid #2f3336' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <input ref={fileRef} type="file" accept="image/*,video/*" style={{ display: 'none' }} onChange={e => setMedia(e.target.files && e.target.files[0] ? e.target.files[0] : null)} />
+                        <input ref={fileRef} type="file" accept="image/*,video/*" multiple style={{ display: 'none' }} onChange={e => {
+                            const selected = Array.from(e.target.files || []);
+                            if (selected.length > 4) { alert('एक post में अधिकतम 4 photos चुन सकते हैं।'); e.target.value = ''; return; }
+                            if (selected.length > 1 && selected.some(file => !file.type.startsWith('image/'))) { alert('Multiple selection में केवल photos चुनें; video अकेले upload करें।'); e.target.value = ''; return; }
+                            setMedia(selected);
+                        }} />
                         <button onClick={() => fileRef.current && fileRef.current.click()} title="Photo/Video"
                             style={{ padding: 8, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', color: '#1d9bf0' }}
                             onMouseEnter={e => e.currentTarget.style.background = 'rgba(29,155,240,0.1)'}
@@ -141,6 +152,7 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
                         </button>
                         <button type="button" onClick={() => isPremium ? setArticleMode(v => !v) : alert('Articles are available with Premium')} className={`rounded-full px-3 py-2 text-xs font-bold ${articleMode ? 'bg-blue-500/20 text-blue-400' : 'text-[#1d9bf0]'}`}>Article</button>
                         <button type="button" onClick={() => isPremium ? setMonetized(v => !v) : alert('Paid posts are available with Premium')} className={`rounded-full px-3 py-2 text-xs font-bold ${monetized ? 'bg-amber-500/20 text-amber-300' : 'text-[#1d9bf0]'}`}>₹ Earn</button>
+                        {!isPremium && <button type="button" onClick={onUpgrade} className="rounded-full bg-violet-500/15 px-3 py-2 text-xs font-black text-violet-300">Premium</button>}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         {caption.length > 0 && (
@@ -184,6 +196,8 @@ const CommunityComposer = ({ avatar, caption, setCaption, pollOptions, setPollOp
 };
 
 const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onShareToChat, onDelete, onFollow, onOpenProfile, onPollVote }) => {
+    const autoplayVideos = currentUser?.uiPreferences?.socialAutoplayVideos ?? localStorage.getItem('social_autoplay_videos') === '1';
+    const mutedVideos = currentUser?.uiPreferences?.socialMutedVideos ?? localStorage.getItem('social_muted_videos') !== '0';
     const [commentsOpen, setCommentsOpen] = useState(false);
     const [comments, setComments] = useState([]);
     const [comment, setComment] = useState('');
@@ -197,6 +211,15 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
     const menuRef = useRef(null);
     const rtMenuRef = useRef(null);
     const displayPost = post.isRetweet && post.originalPost ? post.originalPost : post;
+    const reportPost = async () => {
+        const reason = window.prompt('Report reason', 'Adult or inappropriate photo/video');
+        if (!reason) return;
+        try {
+            const { data } = await axios.post(`/api/social/posts/${displayPost.id}/report`, { reason }, { headers: authHeaders(token) });
+            alert(data.message || 'Report submitted');
+        } catch (error) { alert(error.response?.data?.error || 'Could not submit report'); }
+        setShowMenu(false);
+    };
 
     const fetchComments = async () => {
         try { const res = await axios.get('/api/social/posts/' + post.id + '/comments'); setComments(res.data); } catch { }
@@ -234,6 +257,7 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
     const postCaption = displayPost.caption || post.caption;
     const postMedia = displayPost.mediaUrl || post.mediaUrl;
     const postMediaType = displayPost.mediaType || post.mediaType;
+    const postMediaItems = displayPost.mediaItems?.length ? displayPost.mediaItems : (postMedia ? [{ url: postMedia, type: postMediaType }] : []);
     const postDate = displayPost.createdAt || post.createdAt;
 
     return (
@@ -284,6 +308,11 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
                                         <TrashIcon style={{ width: 20, height: 20 }} />Delete post
                                     </button>
                                 )}
+                                {authorId !== currentUser?.id && postMediaItems.length > 0 && (
+                                    <button onClick={reportPost} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#f4212e', fontSize: 14, fontWeight: 700, textAlign: 'left' }}>
+                                        <span aria-hidden="true">⚑</span> Report photo/video
+                                    </button>
+                                )}
                                 <button onClick={() => { navigator.clipboard && navigator.clipboard.writeText(window.location.origin + '/?post=' + post.id); setShowMenu(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#e7e9ea', fontSize: 14, textAlign: 'left' }}
                                     onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
                                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
@@ -304,11 +333,11 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
                     <p className="px-1 text-xs text-[#71767b]">{displayPost.poll.totalVotes} vote{displayPost.poll.totalVotes === 1 ? '' : 's'} · vote can be changed</p>
                 </div>}
 
-                {postMedia && (
-                    <div style={{ marginTop: 12, borderRadius: 16, overflow: 'hidden', border: '1px solid #2f3336', maxHeight: 500 }}>
-                        {postMediaType === 'video' ? (
-                            <div style={{ position: 'relative', cursor: 'pointer' }} onClick={() => setZoomedMedia({ src: postMedia, type: 'video' })}>
-                                <video src={postMedia} style={{ width: '100%', maxHeight: 500, objectFit: 'contain', background: '#000', display: 'block' }} preload="metadata" muted />
+                {postMediaItems.length > 0 && (
+                    <div className={`mt-3 grid max-h-[520px] gap-0.5 overflow-hidden rounded-2xl border border-[#2f3336] ${postMediaItems.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                        {postMediaItems.map((item, index) => item.type === 'video' ? (
+                            <div key={`${item.url}-${index}`} style={{ position: 'relative', cursor: 'pointer' }} onClick={() => setZoomedMedia({ src: item.url, type: 'video' })}>
+                                <video src={item.url} style={{ width: '100%', height: postMediaItems.length > 1 ? 255 : 'auto', maxHeight: 500, objectFit: 'contain', background: '#000', display: 'block' }} preload="metadata" muted={mutedVideos} autoPlay={autoplayVideos} loop={autoplayVideos} controls playsInline />
                                 <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.2)' }}>
                                     <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(15,20,25,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                         <svg viewBox="0 0 24 24" fill="white" style={{ width: 28, height: 28, marginLeft: 4 }}><path d="M8 5v14l11-7z" /></svg>
@@ -316,8 +345,8 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
                                 </div>
                             </div>
                         ) : (
-                            <img src={postMedia} alt="" style={{ width: '100%', maxHeight: 500, objectFit: 'cover', cursor: 'pointer', display: 'block' }} onClick={() => setZoomedMedia({ src: postMedia, type: 'image' })} />
-                        )}
+                            <img key={`${item.url}-${index}`} src={item.url} alt={`Post media ${index + 1}`} style={{ width: '100%', height: postMediaItems.length > 1 ? 255 : 'auto', maxHeight: 500, objectFit: 'cover', cursor: 'pointer', display: 'block' }} onClick={() => setZoomedMedia({ src: item.url, type: 'image' })} />
+                        ))}
                     </div>
                 )}
 
@@ -390,7 +419,7 @@ const WhoToFollow = ({ token, onOpenProfile, onFollow }) => {
     return (
         <div style={{ borderRadius: 16, overflow: 'hidden', background: '#16181c' }}>
             <h2 style={{ padding: '12px 16px', fontWeight: 800, fontSize: 20 }}>Who to follow</h2>
-            {suggestions.map(u => (
+            <div style={{ maxHeight: 300, overflowY: 'auto', overscrollBehavior: 'contain' }}>{suggestions.map(u => (
                 <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderTop: '1px solid #2f3336' }}
                     onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
@@ -412,7 +441,7 @@ const WhoToFollow = ({ token, onOpenProfile, onFollow }) => {
                         {busyIds[u.id] ? '…' : 'Follow'}
                     </button>
                 </div>
-            ))}
+            ))}</div>
         </div>
     );
 };
@@ -455,7 +484,7 @@ const ChannelsList = ({ channels, loading, onOpen, onSubscribe, onCreateNew }) =
     </div>
 );
 
-const ChannelView = ({ channel, posts, user, token, preview, media, caption, posting, fileRef, setCaption, setMedia, submitPost, likePost, retweetPost, sharePost, onShareToChat, deletePost, toggleFollow, requestSubscribe, reviewRequest, openProfile, currentUser }) => (
+const ChannelView = ({ channel, posts, user, token, preview, media, caption, posting, fileRef, setCaption, setMedia, submitPost, likePost, retweetPost, sharePost, onShareToChat, deletePost, toggleFollow, requestSubscribe, reviewRequest, openProfile, currentUser, onUpgrade }) => (
     <div style={{ maxWidth: 600, margin: '0 auto', width: '100%' }}>
         <div style={{ borderBottom: '1px solid #2f3336' }}>
             <div style={{ height: 112, background: 'linear-gradient(135deg, #1d9bf0 0%, #764ba2 100%)', position: 'relative' }}>
@@ -490,7 +519,7 @@ const ChannelView = ({ channel, posts, user, token, preview, media, caption, pos
         )}
         {channel.canPost && (
             <div style={{ padding: '12px 16px', borderBottom: '1px solid #2f3336' }}>
-                <CheetChatComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} media={media} setMedia={setMedia} preview={preview} fileRef={fileRef} posting={posting} onSubmit={submitPost} />
+                <CheetChatComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} media={media} setMedia={setMedia} preview={preview} fileRef={fileRef} posting={posting} onSubmit={submitPost} isPremium={user?.isPremium} onUpgrade={onUpgrade} />
             </div>
         )}
         {posts.length ? posts.map(post => (
@@ -502,16 +531,19 @@ const ChannelView = ({ channel, posts, user, token, preview, media, caption, pos
     </div>
 );
 
-const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpenProfile, onShareToChat }) => {
+const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpenProfile, onShareToChat, onDirectMessage }) => {
     const [profileData, setProfileData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [editMode, setEditMode] = useState(false);
     const [editForm, setEditForm] = useState({ username: '', bio: '', websiteUrl: '' });
     const [saving, setSaving] = useState(false);
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
+    const [uploadingCover, setUploadingCover] = useState(false);
+    const [zoomedAvatar, setZoomedAvatar] = useState(false);
     const [profileTab, setProfileTab] = useState('posts');
     const [avatarHover, setAvatarHover] = useState(false);
     const avatarInputRef = useRef(null);
+    const coverInputRef = useRef(null);
     const isOwnProfile = userId === (currentUser && currentUser.id);
 
     const fetchProfile = useCallback(async () => {
@@ -545,6 +577,17 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
             setProfileData(prev => ({ ...prev, user: { ...prev.user, avatar: res.data.user.avatar } }));
             if (updateUser) updateUser(res.data.user);
         } catch { alert('Avatar upload failed'); } finally { setUploadingAvatar(false); }
+    };
+    const uploadCover = async (e) => {
+        const file = e.target.files?.[0]; if (!file) return;
+        setUploadingCover(true);
+        const fd = new FormData(); fd.append('cover', file);
+        try {
+            const { data } = await axios.post('/api/user/cover', fd, { headers: { ...authHeaders(token), 'Content-Type': 'multipart/form-data' } });
+            setProfileData(prev => ({ ...prev, user: { ...prev.user, coverUrl: data.user.coverUrl } }));
+            updateUser?.(data.user);
+        } catch (error) { alert(error.response?.data?.error || 'Cover photo upload failed'); }
+        finally { setUploadingCover(false); }
     };
 
     const handleFollowToggle = async () => {
@@ -596,16 +639,18 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
                 </div>
             </header>
             <div className="flex-1 overflow-y-auto scrollbar-hide">
-                <div className="h-32 sm:h-44 relative flex-shrink-0" style={{ background: 'linear-gradient(135deg, #1d9bf0 0%, #0747a6 50%, #764ba2 100%)' }}>
+                <div className="h-32 sm:h-44 relative flex-shrink-0 overflow-hidden" style={{ background: 'linear-gradient(135deg, #1d9bf0 0%, #0747a6 50%, #764ba2 100%)' }}>
+                    {u?.coverUrl && <img src={u.coverUrl} alt="Profile background" className="absolute inset-0 h-full w-full object-cover" />}
                     <div className="absolute inset-0 opacity-20" style={{ background: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.05) 10px, rgba(255,255,255,0.05) 20px)' }} />
+                    {isOwnProfile && <><button onClick={() => coverInputRef.current?.click()} className="absolute bottom-3 right-3 rounded-full bg-black/65 px-3 py-2 text-xs font-bold text-white">{uploadingCover ? 'Uploading…' : 'Change background'}</button><input ref={coverInputRef} type="file" accept="image/*" hidden onChange={uploadCover} /></>}
                 </div>
 
                 <div className="px-4 pb-4">
                     <div className="flex items-start justify-between -mt-12 sm:-mt-16 mb-3">
                         <div className="relative" onMouseEnter={() => setAvatarHover(true)} onMouseLeave={() => setAvatarHover(false)}>
-                            <div className="w-20 h-20 sm:w-28 sm:h-28 rounded-full overflow-hidden border-4" style={{ borderColor: '#000' }}>
+                            <button onClick={() => setZoomedAvatar(true)} className="block w-20 h-20 sm:w-28 sm:h-28 rounded-full overflow-hidden border-4 bg-black" style={{ borderColor: '#000' }} aria-label="View profile photo">
                                 <img src={u?.avatar} alt={u?.username} className="w-full h-full object-cover" />
-                            </div>
+                            </button>
                             {isOwnProfile && (
                                 <>
                                     <button onClick={() => avatarInputRef.current && avatarInputRef.current.click()} disabled={uploadingAvatar}
@@ -626,9 +671,9 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
                                 <button onClick={() => setEditMode(true)} style={{ marginTop: 56, padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, border: '1px solid #536471', background: 'transparent', color: '#e7e9ea', cursor: 'pointer' }}>Edit profile</button>
                             )
                         ) : (
-                            <button onClick={handleFollowToggle} style={{ marginTop: 56, padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, background: u && u.isFollowing ? 'transparent' : '#e7e9ea', color: u && u.isFollowing ? '#e7e9ea' : '#0f1419', border: u && u.isFollowing ? '1px solid #536471' : 'none', cursor: 'pointer' }}>
+                            <div style={{ marginTop: 56, display: 'flex', gap: 8 }}><button onClick={() => onDirectMessage?.(u)} className="rounded-full border border-[#536471] px-4 py-1.5 text-sm font-bold text-white">Message</button><button onClick={handleFollowToggle} style={{ padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, background: u && u.isFollowing ? 'transparent' : '#e7e9ea', color: u && u.isFollowing ? '#e7e9ea' : '#0f1419', border: u && u.isFollowing ? '1px solid #536471' : 'none', cursor: 'pointer' }}>
                                 {u && u.isFollowing ? 'Following' : 'Follow'}
-                            </button>
+                            </button></div>
                         )}
                     </div>
 
@@ -647,7 +692,7 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
                     ) : (
                         <>
                             <h2 style={{ fontSize: 20, fontWeight: 800, lineHeight: 1.2 }}>{u && u.username}</h2>
-                            <p style={{ fontSize: 14, color: '#71767b', marginBottom: 8 }}>@{u && (u.username || '').toLowerCase().replace(/\s+/g, '_')}</p>
+                            <p style={{ fontSize: 14, color: '#71767b', marginBottom: 8 }}>Unique ID: @{u?.platformId || `user_${u?.id}`}</p>
                             {u && u.bio && <p style={{ fontSize: 15, lineHeight: 1.6, marginBottom: 8 }}>{u.bio}</p>}
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', marginBottom: 12 }}>
                                 {safeProfileWebsite && (
@@ -687,22 +732,26 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
                         onFollow={() => {}} onOpenProfile={onOpenProfile} />
                 )) : <CheetChatEmptyState text={isOwnProfile ? "You haven't posted yet." : "No posts yet."} />}
             </div>
+            {zoomedAvatar && <FullscreenMediaModal src={u?.avatar} type="image" onClose={() => setZoomedAvatar(false)} />}
         </div>
     );
 };
 
-const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat }) => {
+const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectMessage }) => {
     const { user, token, updateUser } = useContext(AuthContext);
-    const [activeTab, setActiveTab] = useState('for-you');
+    const [activeTab, setActiveTab] = useState(() => user?.uiPreferences?.socialDefaultFeed || localStorage.getItem('social_default_feed') || 'for-you');
     const [posts, setPosts] = useState([]);
     const [channels, setChannels] = useState([]);
     const [selectedChannel, setSelectedChannel] = useState(null);
     const [channelPosts, setChannelPosts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [caption, setCaption] = useState('');
-    const [media, setMedia] = useState(null);
+    const [media, setMedia] = useState([]);
     const [pollOptions, setPollOptions] = useState(['', '']);
-    const [preview, setPreview] = useState(null);
+    const [preview, setPreview] = useState([]);
+    const [premiumPrompt, setPremiumPrompt] = useState(false);
+    const [premiumPrice, setPremiumPrice] = useState(199);
+    const [premiumBuying, setPremiumBuying] = useState(false);
     const [posting, setPosting] = useState(false);
     const [showChannelForm, setShowChannelForm] = useState(false);
     const [channelForm, setChannelForm] = useState({ name: '', description: '', cover: null });
@@ -751,15 +800,15 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat }) => {
     }, [deepLink]);
 
     useEffect(() => {
-        if (!media) { setPreview(null); return; }
-        const url = URL.createObjectURL(media);
-        setPreview(url);
-        return () => URL.revokeObjectURL(url);
+        if (!media.length) { setPreview([]); return; }
+        const urls = media.map(file => URL.createObjectURL(file));
+        setPreview(urls);
+        return () => urls.forEach(url => URL.revokeObjectURL(url));
     }, [media]);
 
     const submitPost = async (channelId, postKind = 'standard', premiumOptions = {}) => {
         if (typeof postKind === 'object') { premiumOptions = postKind; postKind = premiumOptions.postKind || 'standard'; }
-        if (!caption.trim() && !media) return;
+        if (!caption.trim() && media.length === 0) return;
         setPosting(true);
         const fd = new FormData();
         fd.append('caption', caption);
@@ -768,12 +817,47 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat }) => {
         if (premiumOptions.isMonetized) fd.append('isMonetized', 'true');
         if (postKind === 'community' && pollOptions.filter(item => item.trim()).length >= 2) fd.append('pollOptions', JSON.stringify(pollOptions.filter(item => item.trim())));
         if (channelId) fd.append('channelId', channelId);
-        if (media) fd.append('media', media);
+        media.forEach(file => fd.append('media', file));
         try {
             const res = await axios.post('/api/social/posts', fd, { headers: { ...authHeaders(token), 'Content-Type': 'multipart/form-data' } });
             channelId ? setChannelPosts(p => [res.data, ...p]) : setPosts(p => [res.data, ...p]);
-            setCaption(''); setMedia(null); setPollOptions(['', '']); if (fileRef.current) fileRef.current.value = '';
-        } catch (err) { alert((err.response && err.response.data && err.response.data.error) || 'Could not post'); } finally { setPosting(false); }
+            setCaption(''); setMedia([]); setPollOptions(['', '']); if (fileRef.current) fileRef.current.value = '';
+        } catch (err) {
+            if (err.response?.data?.code === 'DAILY_POST_LIMIT_REACHED') {
+                axios.get('/api/payments/config', { headers: authHeaders(token) }).then(({ data }) => setPremiumPrice(data.premiumPrice || 199)).catch(() => {});
+                setPremiumPrompt(true);
+            } else alert(err.response?.data?.error || 'Could not post');
+        } finally { setPosting(false); }
+    };
+
+    const buyPremium = async () => {
+        setPremiumBuying(true);
+        try {
+            const headers = authHeaders(token);
+            const config = await axios.get('/api/payments/config', { headers });
+            if (!config.data.enabled) throw new Error('Premium checkout is not configured yet.');
+            const order = await axios.post('/api/premium/order', { clientRequestId: newPaymentRequestId() }, { headers });
+            await loadRazorpayCheckout();
+            const { payment, checkout } = order.data;
+            const instance = new window.Razorpay({
+                key: checkout.keyId, amount: Math.round(payment.amount * 100), currency: payment.currency,
+                name: 'CHEETCHAT Premium', description: 'Unlimited Social posts', order_id: payment.providerOrderId,
+                handler: async result => {
+                    const verified = await axios.post(`/api/payments/orders/${payment.id}/verify`, result, { headers });
+                    if (verified.data.user) updateUser(verified.data.user);
+                    setPremiumPrompt(false); alert('Premium active हो गया है। अब आप unlimited posts कर सकते हैं।');
+                },
+                modal: { ondismiss: () => setPremiumBuying(false) }, theme: { color: '#8b5cf6' },
+            });
+            instance.on('payment.failed', response => alert(response.error?.description || 'Payment failed'));
+            instance.open();
+        } catch (error) { alert(error.response?.data?.error || error.message || 'Premium checkout शुरू नहीं हो सका'); }
+        finally { setPremiumBuying(false); }
+    };
+
+    const showPremiumUpgrade = () => {
+        axios.get('/api/payments/config', { headers: authHeaders(token) }).then(({ data }) => setPremiumPrice(data.premiumPrice || 199)).catch(() => {});
+        setPremiumPrompt(true);
     };
 
     const createChannel = async (e) => {
@@ -828,7 +912,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat }) => {
 
     if (profileView) return (
         <UserProfileView userId={profileView.userId} currentUser={user} token={token} updateUser={updateUser}
-            onBack={() => setProfileView(null)} onOpenProfile={openProfile} onShareToChat={onShareToChat} />
+            onBack={() => setProfileView(null)} onOpenProfile={openProfile} onShareToChat={onShareToChat} onDirectMessage={onDirectMessage} />
     );
     const currentPosts = selectedChannel ? channelPosts : posts;
     const TABS = [{ key: 'for-you', label: 'For You' }, { key: 'community', label: 'Community' }, { key: 'following', label: 'Following' }, { key: 'channels', label: 'Spaces' }];
@@ -935,13 +1019,13 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat }) => {
                         {selectedChannel ? (
                             <ChannelView channel={selectedChannel} posts={currentPosts} user={user} token={token} preview={preview} media={media} caption={caption} posting={posting} fileRef={fileRef} setCaption={setCaption} setMedia={setMedia}
                                 submitPost={() => submitPost(selectedChannel.id)} likePost={id => likePost(id, true)} retweetPost={id => retweetPost(id, true)} sharePost={(id, count) => sharePost(id, true, count)} onShareToChat={onShareToChat} deletePost={id => deletePost(id, true)}
-                                toggleFollow={toggleFollow} requestSubscribe={() => requestSubscribe(selectedChannel.id)} reviewRequest={reviewRequest} openProfile={openProfile} currentUser={user} />
+                                toggleFollow={toggleFollow} requestSubscribe={() => requestSubscribe(selectedChannel.id)} reviewRequest={reviewRequest} openProfile={openProfile} currentUser={user} onUpgrade={showPremiumUpgrade} />
                         ) : activeTab === 'channels' ? (
                             <ChannelsList channels={displayedChannels} loading={loading} onOpen={fetchChannel} onSubscribe={requestSubscribe} onCreateNew={() => setShowChannelForm(true)} />
                         ) : (
                             <div>
                                 {activeTab === 'community' ? <CommunityComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} pollOptions={pollOptions} setPollOptions={setPollOptions} posting={posting} onSubmit={() => submitPost(null, 'community')} /> : <div className="padding-4 px-4 py-3 border-b border-[#2f3336]">
-                                    <CheetChatComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} media={media} setMedia={setMedia} preview={preview} fileRef={fileRef} posting={posting} isPremium={user?.isPremium} onSubmit={options => submitPost(null, options)} />
+                                    <CheetChatComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} media={media} setMedia={setMedia} preview={preview} fileRef={fileRef} posting={posting} isPremium={user?.isPremium} onUpgrade={showPremiumUpgrade} onSubmit={options => submitPost(null, options)} />
                                 </div>}
                                 {loading ? <CheetChatLoading /> : displayedPosts.length ? displayedPosts.map(post => (
                                     <div key={post.id} ref={post.id === highlightedPostId ? highlightedRef : null} style={post.id === highlightedPostId ? { outline: '2px solid #1d9bf0' } : {}}>
@@ -980,7 +1064,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat }) => {
 
                     <div className="rounded-2xl bg-[#16181c] overflow-hidden border border-[#2f3336]/40">
                         <h2 className="px-4 py-3 font-extrabold text-lg text-[#e7e9ea]">Trends for you</h2>
-                        {TRENDING.map((t, i) => (
+                        <div className="max-h-[330px] overflow-y-auto overscroll-contain">{TRENDING.map((t, i) => (
                             <button key={i} className="w-full px-4 py-3 bg-transparent border-none cursor-pointer text-left border-t border-[#2f3336] hover:bg-white/5 transition-colors"
                                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
                                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
@@ -988,7 +1072,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat }) => {
                                 <p style={{ fontWeight: 700, fontSize: 15, color: '#e7e9ea', margin: '2px 0' }}>{t.tag}</p>
                                 <p style={{ fontSize: 13, color: '#71767b' }}>{t.posts} posts</p>
                             </button>
-                        ))}
+                        ))}</div>
                     </div>
 
                     <WhoToFollow token={token} onOpenProfile={openProfile} onFollow={toggleFollow} />
@@ -1003,6 +1087,19 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat }) => {
             </button>
 
             {/* Space Creation Modal */}
+            {premiumPrompt && (
+                <div className="fixed inset-0 z-[180] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={() => setPremiumPrompt(false)}>
+                    <div onClick={event => event.stopPropagation()} className="w-full max-w-md rounded-3xl border border-violet-400/25 bg-gradient-to-br from-[#1b1230] to-[#10131d] p-6 text-center shadow-2xl">
+                        <SparklesIcon className="mx-auto h-12 w-12 text-violet-300" />
+                        <h2 className="mt-3 text-2xl font-black text-white">आज की 3 free posts पूरी हुईं</h2>
+                        <p className="mt-2 text-sm leading-6 text-gray-300">Premium के साथ unlimited Social posts, articles, analytics और creator tools unlock करें।</p>
+                        <div className="mt-5 rounded-2xl bg-white/5 p-4"><p className="text-xs font-bold uppercase tracking-wider text-violet-300">Lifetime Premium</p><p className="mt-1 text-3xl font-black text-white">₹{premiumPrice}</p></div>
+                        <button disabled={premiumBuying} onClick={buyPremium} className="mt-5 w-full rounded-xl bg-violet-500 py-3.5 text-sm font-black text-white hover:bg-violet-400 disabled:opacity-60">{premiumBuying ? 'Checkout खोल रहे हैं…' : 'Buy Premium'}</button>
+                        <button onClick={() => setPremiumPrompt(false)} className="mt-3 text-sm font-semibold text-gray-400">कल फिर free post करें</button>
+                    </div>
+                </div>
+            )}
+
             {showChannelForm && (
                 <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}>
                     <form onSubmit={createChannel} style={{ width: '100%', maxWidth: 480, background: '#000', border: '1px solid #2f3336', borderRadius: 16, padding: 24, boxShadow: '0 16px 64px rgba(0,0,0,0.8)' }}>

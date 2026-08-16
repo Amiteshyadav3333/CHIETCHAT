@@ -19,7 +19,8 @@ const TITLES = {
     chats: 'Chats', notifications: 'Notifications', storage: 'Storage and data',
     business: 'Business tools', help: 'Help center', password: 'Change password',
     delete: 'Delete account', activity: 'Your Activity', sessions: 'Active Sessions',
-    twofactor_setup: 'Enable 2FA', twofactor_disable: 'Disable 2FA', premium: 'CHEETCHAT Premium'
+    twofactor_setup: 'Enable 2FA', twofactor_disable: 'Disable 2FA', premium: 'CHEETCHAT Premium',
+    reels: 'Reels settings', social: 'Social settings', podlive: 'PodLive settings'
 };
 
 const timeAgo = (dateStr) => {
@@ -96,7 +97,17 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
         autoReply: localStorage.getItem('business_auto_reply') === '1',
         showCatalog: localStorage.getItem('business_catalog') === '1',
         snapModeDefault: serverUi.snapModeDefault ?? localStorage.getItem('snap_mode_default') === '1',
+        reelsAutoplay: serverUi.reelsAutoplay ?? localStorage.getItem('reels_autoplay') !== '0',
+        reelsMuted: serverUi.reelsMuted ?? localStorage.getItem('reels_muted') === '1',
+        reelsDataSaver: serverUi.reelsDataSaver ?? localStorage.getItem('reels_data_saver') === '1',
+        socialAutoplayVideos: serverUi.socialAutoplayVideos ?? localStorage.getItem('social_autoplay_videos') === '1',
+        socialMutedVideos: serverUi.socialMutedVideos ?? localStorage.getItem('social_muted_videos') !== '0',
+        podliveAllowCamera: serverUi.podliveAllowCamera ?? localStorage.getItem('podlive_allow_camera') !== '0',
+        podliveAllowMicrophone: serverUi.podliveAllowMicrophone ?? localStorage.getItem('podlive_allow_microphone') !== '0',
+        podliveAutoplay: serverUi.podliveAutoplay ?? localStorage.getItem('podlive_autoplay') !== '0',
     }));
+    const [reelsDefaultFeed, setReelsDefaultFeed] = useState(() => serverUi.reelsDefaultFeed || localStorage.getItem('reels_default_feed') || 'foryou');
+    const [socialDefaultFeed, setSocialDefaultFeed] = useState(() => serverUi.socialDefaultFeed || localStorage.getItem('social_default_feed') || 'for-you');
     const [fontSize, setFontSize] = useState(() => serverUi.fontSize || localStorage.getItem('chat_font_size') || 'medium');
     const [bubbleColor, setBubbleColor] = useState(() => serverUi.bubbleColor || localStorage.getItem('chat_bubble_color') || '#00a884');
     const [storyPrivacy, setStoryPrivacy] = useState(() => user?.storyPrivacy || localStorage.getItem('story_privacy') || 'contacts');
@@ -117,9 +128,12 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
 
     const persistUi = async (change) => {
         try {
-            await axios.put('/api/user/preferences', change, { headers: { Authorization: `Bearer ${token}` } });
+            const res = await axios.put('/api/user/preferences', change, { headers: { Authorization: `Bearer ${token}` } });
+            onUserUpdate?.({ ...user, uiPreferences: res.data.uiPreferences });
+            window.dispatchEvent(new CustomEvent('cheetchat-preferences-updated', { detail: res.data.uiPreferences }));
         } catch (error) {
             console.error('Could not sync customization', error);
+            setMessage({ type: 'error', text: 'Setting save नहीं हो सकी। दोबारा कोशिश करें।' });
         }
     };
 
@@ -148,6 +162,12 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
             persistUi({ [name]: next });
             return { ...current, [name]: next };
         });
+    };
+
+    const choosePreference = (stateSetter, storageKey, apiKey, value) => {
+        stateSetter(value);
+        localStorage.setItem(storageKey, value);
+        persistUi({ [apiKey]: value });
     };
 
     const toggleAppLock = async () => {
@@ -498,7 +518,10 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 <SettingsRow icon={<SparklesIcon />} title="CHEETCHAT Premium" subtitle={user?.isPremium ? 'Active — all creator features unlocked' : 'Invite 7 verified users to unlock every creator feature'} onClick={openPremium} />
                                 <SettingsRow icon={<KeyIcon />} title="Account" subtitle="Password, security and account controls" onClick={() => go('account')} />
                                 <SettingsRow icon={<LockClosedIcon />} title="Privacy" subtitle="Story, profile photo, last seen and online visibility" onClick={() => go('privacy')} />
-                                <SettingsRow icon={<ChatBubbleBottomCenterTextIcon />} title="Chats" subtitle="Theme and wallpapers" onClick={() => go('chats')} />
+                                <SettingsRow icon={<ChatBubbleBottomCenterTextIcon />} title="Chats" subtitle="Appearance, media, privacy, sounds and message behaviour" onClick={() => go('chats')} />
+                                <SettingsRow icon={<FilmIcon />} title="Reels" subtitle="Feed, autoplay, sound and data usage" onClick={() => go('reels')} />
+                                <SettingsRow icon={<UserCircleIcon />} title="Social" subtitle="Default feed and video playback" onClick={() => go('social')} />
+                                <SettingsRow icon={<SparklesIcon />} title="PodLive" subtitle="Camera, microphone and playback permissions" onClick={() => go('podlive')} />
                                 <SettingsRow icon={<BellIcon />} title="Notifications" subtitle="Messages, calls and desktop alerts" onClick={() => go('notifications')} />
                                 <SettingsRow icon={<ComputerDesktopIcon />} title="Storage and data" subtitle="Auto-download and data saver" onClick={() => go('storage')} />
                                 <SettingsRow icon={<ChartBarIcon />} title="Your Activity" subtitle="Likes, comments, blocked accounts" onClick={() => { go('activity'); fetchActivity(); }} />
@@ -600,10 +623,12 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
 
                     {screen === 'privacy' && (
                         <>
-                            <SectionLabel>WhatsApp-style visibility</SectionLabel>
+                            <SectionLabel>Profile and story visibility</SectionLabel>
                             <SettingsGroup>
-                                <InfoRow title="Profile photo (DP)" text="Choose Everyone, My Contacts, Contacts except…, Only share with…, or Nobody below." />
-                                <InfoRow title="Story" text="Choose exactly which contacts can see each new story by default." />
+                                <ChoiceRow title="Who can see my profile photo (DP)" value={profilePrivacy} onChange={val => { setProfilePrivacy(val); localStorage.setItem('profile_photo_privacy_mode', val); persistPrivacy({ profilePhotoPrivacy: val, profilePhotoExceptions: profileExceptions }); }} options={[["everyone", "Everyone"], ["contacts", "My Contacts"], ["contacts_except", "Contacts except…"], ["only", "Only share with…"], ["nobody", "Nobody"]]} />
+                                {(profilePrivacy === 'contacts_except' || profilePrivacy === 'only') && <AudienceInput value={profileExceptions} onChange={value => { setProfileExceptions(value); localStorage.setItem('profile_privacy_exceptions', value); persistPrivacy({ profilePhotoExceptions: value }); }} mode={profilePrivacy} />}
+                                <ChoiceRow title="Who can see my story" value={storyPrivacy} onChange={val => { setStoryPrivacy(val); localStorage.setItem('story_privacy', val); persistPrivacy({ storyPrivacy: val, storyPrivacyExceptions: storyExceptions }); }} options={[["contacts", "My Contacts"], ["contacts_except", "Contacts except…"], ["only", "Only share with…"], ["nobody", "Nobody"]]} />
+                                {(storyPrivacy === 'contacts_except' || storyPrivacy === 'only') && <AudienceInput value={storyExceptions} onChange={value => { setStoryExceptions(value); localStorage.setItem('story_privacy_exceptions', value); persistPrivacy({ storyPrivacyExceptions: value }); }} mode={storyPrivacy} />}
                             </SettingsGroup>
                             <SectionLabel>Who can see my personal info</SectionLabel>
                             <SettingsGroup>
@@ -630,20 +655,6 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 />
                             </SettingsGroup>
                             
-                            <SectionLabel>Profile photo visibility</SectionLabel>
-                            <SettingsGroup>
-                                <ChoiceRow 
-                                    title="Who can see my profile photo" 
-                                    value={profilePrivacy}
-                                    onChange={async (val) => {
-                                        setProfilePrivacy(val);
-                                        localStorage.setItem('profile_photo_privacy_mode', val);
-                                        persistPrivacy({ profilePhotoPrivacy: val, profilePhotoExceptions: profileExceptions });
-                                    }}
-                                    options={[['everyone', 'Everyone'], ['contacts', 'My Contacts'], ['contacts_except', 'Contacts except…'], ['only', 'Only share with…'], ['nobody', 'Nobody']]}
-                                />
-                                {(profilePrivacy === 'contacts_except' || profilePrivacy === 'only') && <AudienceInput value={profileExceptions} onChange={value => { setProfileExceptions(value); localStorage.setItem('profile_privacy_exceptions', value); persistPrivacy({ profilePhotoExceptions: value }); }} mode={profilePrivacy} />}
-                            </SettingsGroup>
                             <SectionLabel>Phone number visibility</SectionLabel>
                             <SettingsGroup>
                                 <ChoiceRow
@@ -659,12 +670,6 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 />
                                 <InfoRow title="Groups stay private" text="Your phone number is never displayed in group member lists. Members see only your username and unique CHEETCHAT ID." />
                                 <SettingsRow icon={<ShieldCheckIcon />} title="Read Privacy Policy" subtitle="Scrollable details about your data and privacy controls" onClick={() => window.open('/privacy', '_blank', 'noopener,noreferrer')} />
-                            </SettingsGroup>
-                            <SectionLabel>Story visibility</SectionLabel>
-                            <SettingsGroup>
-                                <ChoiceRow title="Who can see my story" value={storyPrivacy} onChange={val => { setStoryPrivacy(val); localStorage.setItem('story_privacy', val); persistPrivacy({ storyPrivacy: val, storyPrivacyExceptions: storyExceptions }); }} options={[['contacts', 'My Contacts'], ['contacts_except', 'Contacts except…'], ['only', 'Only share with…'], ['nobody', 'Nobody']]} />
-                                {(storyPrivacy === 'contacts_except' || storyPrivacy === 'only') && <AudienceInput value={storyExceptions} onChange={value => { setStoryExceptions(value); localStorage.setItem('story_privacy_exceptions', value); persistPrivacy({ storyPrivacyExceptions: value }); }} mode={storyPrivacy} />}
-                                <InfoRow title="Private by default" text="These choices are used whenever you create a new story." />
                             </SettingsGroup>
                             
                             <SectionLabel>Security</SectionLabel>
@@ -767,6 +772,13 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 <ChoiceRow title="Chat font" value={customFont} onChange={val => { setCustomFont(val); localStorage.setItem('chat_custom_font', val); persistUi({ customFont: val }); }} options={[['system', 'System'], ['rounded', 'Rounded'], ['serif', 'Classic Serif'], ['mono', 'Mono']]} />
                                 <SettingsToggle icon={<FilmIcon />} title="Animated theme" subtitle="Subtle moving wallpaper effects" value={prefs.animatedTheme} onClick={() => togglePref('animatedTheme', 'animated_theme')} />
                                 <SettingsToggle icon={<EyeSlashIcon />} title="Snap Mode by default" subtitle="New contact chats use a 10-minute timer and restrict saving/forwarding" value={prefs.snapModeDefault} onClick={() => togglePref('snapModeDefault', 'snap_mode_default')} />
+                                <SettingsToggle icon={<ShieldCheckIcon />} title="Spam link detection" subtitle="Warn before sending suspicious links or repeated spam" value={prefs.spamDetection} onClick={() => togglePref('spamDetection', 'spam_detection')} />
+                                <SettingsToggle icon={<EyeSlashIcon />} title="Incognito keyboard" subtitle="Ask supported keyboards not to learn what you type" value={prefs.incognitoKeyboard} onClick={() => togglePref('incognitoKeyboard', 'incognito_keyboard')} />
+                            </SettingsGroup>
+                            <SectionLabel>Chat media and alerts</SectionLabel>
+                            <SettingsGroup>
+                                <SettingsRow icon={<BellIcon />} title="Message and call notifications" subtitle="Sounds, desktop alerts and personal notification sound" onClick={() => go('notifications')} />
+                                <SettingsRow icon={<ComputerDesktopIcon />} title="Media and storage" subtitle="Auto-download, data saver and HD uploads" onClick={() => go('storage')} />
                             </SettingsGroup>
                             <div className="mx-5 mt-4 rounded-xl border border-gray-800 bg-[#202c33] p-4">
                                 <label className="text-sm font-medium text-white">Sent bubble colour</label>
@@ -776,6 +788,49 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 </div>
                             </div>
                             <div className="m-5 h-44 overflow-hidden rounded-xl border border-gray-700 bg-white p-3"><div className="ml-auto mt-5 max-w-[70%] rounded-lg rounded-tr-none bg-[#d9fdd3] px-3 py-2 text-sm text-[#111b21] shadow">Wallpaper preview <span className="ml-2 text-[10px] text-gray-500">10:30</span></div></div>
+                        </>
+                    )}
+
+                    {screen === 'reels' && (
+                        <>
+                            <SectionLabel>Feed</SectionLabel>
+                            <SettingsGroup>
+                                <ChoiceRow title="Open Reels on" value={reelsDefaultFeed} onChange={val => choosePreference(setReelsDefaultFeed, 'reels_default_feed', 'reelsDefaultFeed', val)} options={[["foryou", "For You"], ["following", "Following"]]} />
+                            </SettingsGroup>
+                            <SectionLabel>Playback</SectionLabel>
+                            <SettingsGroup>
+                                <SettingsToggle icon={<FilmIcon />} title="Autoplay reels" subtitle="Play the visible reel automatically" value={prefs.reelsAutoplay} onClick={() => togglePref('reelsAutoplay', 'reels_autoplay')} />
+                                <SettingsToggle icon={<BellIcon />} title="Start reels muted" subtitle="Keep reel video and attached music muted until you tap" value={prefs.reelsMuted} onClick={() => togglePref('reelsMuted', 'reels_muted')} />
+                                <SettingsToggle icon={<ChartBarIcon />} title="Reels data saver" subtitle="Load video metadata first and reduce background downloading" value={prefs.reelsDataSaver} onClick={() => togglePref('reelsDataSaver', 'reels_data_saver')} />
+                            </SettingsGroup>
+                            <InfoRow title="Content safety" text="Every uploaded reel is checked server-side and explicit adult content scoring 90% or higher is blocked." />
+                        </>
+                    )}
+
+                    {screen === 'social' && (
+                        <>
+                            <SectionLabel>Feed</SectionLabel>
+                            <SettingsGroup>
+                                <ChoiceRow title="Open Social on" value={socialDefaultFeed} onChange={val => choosePreference(setSocialDefaultFeed, 'social_default_feed', 'socialDefaultFeed', val)} options={[["for-you", "For You"], ["following", "Following"], ["community", "Community"]]} />
+                            </SettingsGroup>
+                            <SectionLabel>Videos</SectionLabel>
+                            <SettingsGroup>
+                                <SettingsToggle icon={<FilmIcon />} title="Autoplay social videos" subtitle="Start post videos automatically when the feed opens" value={prefs.socialAutoplayVideos} onClick={() => togglePref('socialAutoplayVideos', 'social_autoplay_videos')} />
+                                <SettingsToggle icon={<BellIcon />} title="Start social videos muted" subtitle="Video sound stays off until you enable it in the player" value={prefs.socialMutedVideos} onClick={() => togglePref('socialMutedVideos', 'social_muted_videos')} />
+                            </SettingsGroup>
+                            <InfoRow title="Content safety" text="Social photo and video uploads are checked before publishing; explicit adult content scoring 90% or higher is rejected." />
+                        </>
+                    )}
+
+                    {screen === 'podlive' && (
+                        <>
+                            <SectionLabel>Live permissions</SectionLabel>
+                            <SettingsGroup>
+                                <SettingsToggle icon={<PhotoIcon />} title="Allow camera in PodLive" subtitle="Required when you want to join with video" value={prefs.podliveAllowCamera} onClick={() => togglePref('podliveAllowCamera', 'podlive_allow_camera')} />
+                                <SettingsToggle icon={<BellIcon />} title="Allow microphone in PodLive" subtitle="Required when you want to speak on a live stage" value={prefs.podliveAllowMicrophone} onClick={() => togglePref('podliveAllowMicrophone', 'podlive_allow_microphone')} />
+                                <SettingsToggle icon={<FilmIcon />} title="Allow live autoplay" subtitle="Permit PodLive streams to begin playback automatically" value={prefs.podliveAutoplay} onClick={() => togglePref('podliveAutoplay', 'podlive_autoplay')} />
+                            </SettingsGroup>
+                            <InfoRow title="Permission changes" text="Close and reopen PodLive after changing camera or microphone access. Your browser may also ask for device permission." />
                         </>
                     )}
 

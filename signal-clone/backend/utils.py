@@ -275,7 +275,7 @@ def add_missing_columns(inspector, table_name, columns):
 # Bump this marker whenever models gain columns or tables. Production runs
 # ensure_database_schema() in the pre-deploy step and skips versions it has
 # already applied.
-SCHEMA_VERSION = '20260816_22_privacy_customization'
+SCHEMA_VERSION = '20260817_24_social_safety_profile_cover'
 
 def ensure_runtime_compat_schema():
     """Repair columns required by the currently deployed models.
@@ -319,6 +319,7 @@ def ensure_runtime_compat_schema():
         'birth_date': db.Date(),
         'referral_code': db.String(16), 'referred_by_id': db.Integer(),
         'premium_unlocked_at': db.DateTime(),
+        'cover_url': db.String(500),
     })
     inspector = inspect(db.engine)
     add_missing_columns(inspector, 'pending_registration', {'referral_code': db.String(16)})
@@ -333,10 +334,16 @@ def ensure_runtime_compat_schema():
     add_missing_columns(inspector, 'social_post', {
         'post_kind': db.String(20), 'poll_options': db.Text(),
         'article_title': db.String(200), 'is_monetized': db.Boolean(),
-        'views_count': db.Integer(), 'earnings_paise': db.Integer(),
+        'views_count': db.Integer(), 'earnings_paise': db.Integer(), 'media_items': db.Text(),
     })
     inspector = inspect(db.engine)
+    add_missing_columns(inspector, 'payment_order', {'purpose': db.String(30)})
+    if 'payment_order' in inspector.get_table_names():
+        db.session.execute(text("UPDATE payment_order SET purpose = COALESCE(purpose, 'business')"))
+    inspector = inspect(db.engine)
     add_missing_columns(inspector, 'reel', {'is_monetized': db.Boolean(), 'earnings_paise': db.Integer()})
+    inspector = inspect(db.engine)
+    add_missing_columns(inspector, 'user_report', {'content_type': db.String(30), 'content_id': db.Integer()})
     if 'user' in inspector.get_table_names():
         db.session.execute(text(
             "UPDATE \"user\" SET phone_number_privacy = COALESCE(phone_number_privacy, 'nobody'), "
@@ -419,6 +426,7 @@ def ensure_database_schema(force=False):
             'failed_login_attempts': db.Integer(),
             'password_login_locked': db.Boolean(),
             'platform_id': db.String(30),
+            'cover_url': db.String(500),
             'profile_setup_done': db.Boolean(),
             'hide_last_seen': db.Boolean(),
             'hide_online_status': db.Boolean(),
@@ -530,7 +538,10 @@ def ensure_database_schema(force=False):
             'retention_until': db.DateTime(),
             'chat_ref': db.String(64),
             'client_request_id': db.String(100),
+            'purpose': db.String(30),
         })
+        if 'payment_order' in inspector.get_table_names():
+            db.session.execute(text("UPDATE payment_order SET purpose = COALESCE(purpose, 'business')"))
         if db.engine.dialect.name == 'postgresql' and 'payment_order' in inspector.get_table_names():
             db.session.execute(text('ALTER TABLE payment_order ALTER COLUMN payer_id DROP NOT NULL'))
             db.session.execute(text('ALTER TABLE payment_order ALTER COLUMN payee_id DROP NOT NULL'))
@@ -582,6 +593,7 @@ def ensure_database_schema(force=False):
             'share_count': db.Integer(),
             'post_kind': db.String(20),
             'poll_options': db.Text(),
+            'media_items': db.Text(),
         })
         add_missing_columns(inspector, 'social_post_comment', {
             'parent_id': db.Integer(),
@@ -841,6 +853,7 @@ def serialize_user(user, viewer_id=None):
         "phone": public_phone,
         "hasPhone": bool(user.phone and not str(user.phone).startswith('google:')),
         "avatar": avatar,
+        "coverUrl": user.cover_url or "",
         "hasCustomAudienceAvatar": bool(viewer_id and viewer_id != user.id and avatar != user.avatar),
         "publicKey": user.public_key,
         "bio": user_bio or "",

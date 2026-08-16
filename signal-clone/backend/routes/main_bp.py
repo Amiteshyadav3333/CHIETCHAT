@@ -11,6 +11,7 @@ from utils import (
     queue_media_deletion, process_media_deletion_task,
 )
 from observability import report_safe_exception
+from content_moderation import ModerationUnavailable, reject_adult_content
 
 main_bp = Blueprint('main_bp', __name__)
 
@@ -36,6 +37,14 @@ def upload_file():
         media_kind = validate_upload(
             file, {'image', 'video', 'audio', 'document'}, 100 * 1024 * 1024
         )
+        if media_kind in {'image', 'video'}:
+            blocked, adult_score = reject_adult_content(file, media_kind)
+            if blocked:
+                return jsonify({
+                    "error": "Adult content cannot be shared in chat.",
+                    "code": "ADULT_CONTENT_BLOCKED",
+                    "adultScore": adult_score,
+                }), 422
         resource_type = {
             'image': 'image', 'video': 'video', 'audio': 'video', 'document': 'raw',
         }[media_kind]
@@ -52,6 +61,8 @@ def upload_file():
         return jsonify({"url": url, "assetId": asset.id, "expiresAt": asset.expires_at.isoformat() + 'Z'})
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    except ModerationUnavailable:
+        return jsonify({"error": "Media safety check is temporarily unavailable. Please try again.", "code": "MODERATION_UNAVAILABLE"}), 503
     except Exception as e:
         db.session.rollback()
         if url and resource_type:

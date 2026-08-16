@@ -275,7 +275,11 @@ const Home = () => {
             animatedTheme: 'animated_theme', snapModeDefault: 'snap_mode_default', messageSounds: 'message_sounds',
             callSounds: 'call_sounds', mediaAutoDownload: 'media_auto_download', dataSaver: 'data_saver',
             hdMedia: 'hd_media', screenshotAlerts: 'screenshot_alerts', spamDetection: 'spam_detection',
-            incognitoKeyboard: 'incognito_keyboard'
+            incognitoKeyboard: 'incognito_keyboard', reelsDefaultFeed: 'reels_default_feed',
+            reelsAutoplay: 'reels_autoplay', reelsMuted: 'reels_muted', reelsDataSaver: 'reels_data_saver',
+            socialDefaultFeed: 'social_default_feed', socialAutoplayVideos: 'social_autoplay_videos',
+            socialMutedVideos: 'social_muted_videos', podliveAllowCamera: 'podlive_allow_camera',
+            podliveAllowMicrophone: 'podlive_allow_microphone', podliveAutoplay: 'podlive_autoplay'
         };
         Object.entries(storageMap).forEach(([key, storageKey]) => {
             if (saved[key] !== undefined) localStorage.setItem(storageKey, typeof saved[key] === 'boolean' ? (saved[key] ? '1' : '0') : String(saved[key]));
@@ -1731,6 +1735,25 @@ const Home = () => {
             type: 'text',
             _shareSource: 'social',
         });
+    };
+
+    const openSocialDirectMessage = async (socialUser) => {
+        if (!socialUser?.id || socialUser.id === user?.id) return;
+        try {
+            const existing = chats.find(chat => !chat.isGroup && chat.participants?.some(participant => participant.id === socialUser.id));
+            let chatId = existing?.id;
+            if (!chatId) {
+                if (!socialUser.platformId) throw new Error('This user has not created a unique ID yet.');
+                await axios.post('/api/user/search', { query: `@${socialUser.platformId}` }, { headers: { Authorization: `Bearer ${token}` } });
+                const created = await axios.post('/api/chats/create', { participants: [user.id, socialUser.id], isGroup: false }, { headers: { Authorization: `Bearer ${token}` } });
+                chatId = created.data.id;
+            }
+            const updatedChats = await fetchChats();
+            const target = updatedChats.find(chat => chat.id === chatId) || existing;
+            if (!target) throw new Error('Could not open direct message.');
+            setActiveChat(target);
+            setShowSocial(false);
+        } catch (error) { alert(error.response?.data?.error || error.message || 'Could not start direct message'); }
     };
 
     const handleTyping = (isTyping) => {
@@ -3211,6 +3234,7 @@ const Home = () => {
                     deepLink={socialDeepLink}
                     onDeepLinkConsumed={() => setSocialDeepLink(null)}
                     onShareToChat={shareSocialPostToChat}
+                    onDirectMessage={openSocialDirectMessage}
                 />
                 </React.Suspense>
             </div>}

@@ -12,11 +12,12 @@ from flask import Blueprint, jsonify, request
 from sqlalchemy.exc import IntegrityError
 
 from models import db, User, ChatParticipant, BusinessProfile, PaymentOrder
-from utils import get_current_user_id, get_json_data, iso_utc, utc_now
+from utils import get_current_user_id, get_json_data, iso_utc, serialize_user, utc_now
 from observability import report_safe_exception
 
 payments_bp = Blueprint('payments_bp', __name__)
 CAPTURE_TERMINAL_STATUSES = {'refunding', 'refunded'}
+PREMIUM_PRICE_PAISE = int(os.environ.get('PREMIUM_PRICE_PAISE', '19900'))
 
 
 def payment_payload(payment):
@@ -28,6 +29,7 @@ def payment_payload(payment):
         'amount': payment.amount_paise / 100,
         'currency': payment.currency,
         'description': payment.description or '',
+        'purpose': payment.purpose or 'business',
         'provider': payment.provider,
         'providerOrderId': payment.provider_order_id,
         'providerPaymentId': payment.provider_payment_id,
@@ -115,7 +117,17 @@ def reconcile_captured_entity(payment, entity):
     payment.provider_payment_id = provider_payment_id
     payment.status = 'captured'
     payment.paid_at = payment.paid_at or utc_now()
+    activate_premium_if_paid(payment)
     return True
+
+
+def activate_premium_if_paid(payment):
+    if payment.purpose != 'premium' or payment.status != 'captured' or not payment.payer_id:
+        return
+    user = db.session.get(User, payment.payer_id)
+    if user:
+        user.is_premium = True
+        user.premium_unlocked_at = user.premium_unlocked_at or utc_now()
 
 
 @payments_bp.route('/api/payments/config', methods=['GET'])
@@ -132,7 +144,58 @@ def payment_config():
         'currency': 'INR',
         'minAmount': 1,
         'maxAmount': 100000,
+        'premiumPrice': PREMIUM_PRICE_PAISE / 100,
     })
+
+
+@payments_bp.route('/api/premium/order', methods=['POST'])
+def create_premium_order():
+    payer_id = get_current_user_id()
+    if not payer_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    user = db.session.get(User, payer_id)
+    if user.is_premium:
+        return jsonify({'error': 'Premium is already active'}), 409
+    if not os.environ.get('RAZORPAY_WEBHOOK_SECRET'):
+        return jsonify({'error': 'Premium checkout is not configured yet'}), 503
+    data = get_json_data()
+    client_request_id = str(data.get('clientRequestId') or '').strip()
+    if not re.fullmatch(r'[A-Za-z0-9_-]{16,100}', client_request_id):
+        return jsonify({'error': 'A valid payment request ID is required'}), 400
+    existing = PaymentOrder.query.filter_by(payer_id=payer_id, client_request_id=client_request_id).first()
+    if existing:
+        if existing.purpose != 'premium' or existing.amount_paise != PREMIUM_PRICE_PAISE:
+            return jsonify({'error': 'Payment request ID is already in use'}), 409
+        key_id, _ = razorpay_credentials()
+        return jsonify({'payment': payment_payload(existing), 'checkout': {'keyId': key_id}})
+    pending = PaymentOrder(
+        payer_id=payer_id, amount_paise=PREMIUM_PRICE_PAISE, currency='INR',
+        description='CHEETCHAT Premium lifetime access', purpose='premium',
+        provider_order_id=f'pending-{os.urandom(12).hex()}', status='creating',
+        client_request_id=client_request_id,
+    )
+    db.session.add(pending)
+    db.session.commit()
+    try:
+        provider = create_provider_order(
+            PREMIUM_PRICE_PAISE, 'INR', f'premium-{pending.id}',
+            {'payment_order_id': str(pending.id), 'purpose': 'premium', 'payer_id': str(payer_id)},
+        )
+        if not provider.get('id') or provider.get('amount') != PREMIUM_PRICE_PAISE:
+            raise RuntimeError('Payment provider returned inconsistent order details')
+        pending.provider_order_id = provider['id']
+        pending.status = provider.get('status', 'created')
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        pending = db.session.get(PaymentOrder, pending.id)
+        if pending:
+            pending.status = 'creation_unknown'
+            db.session.commit()
+        report_safe_exception('premium_order_creation_failed', exc)
+        return jsonify({'error': 'Premium checkout is temporarily unavailable'}), 503
+    key_id, _ = razorpay_credentials()
+    return jsonify({'payment': payment_payload(pending), 'checkout': {'keyId': key_id}}), 201
 
 
 @payments_bp.route('/api/payments/orders', methods=['POST'])
@@ -273,8 +336,12 @@ def verify_payment(payment_id):
     payment.status = provider_status
     if provider_status == 'captured':
         payment.paid_at = payment.paid_at or utc_now()
+        activate_premium_if_paid(payment)
     db.session.commit()
-    return jsonify(payment_payload(payment)), 200 if provider_status == 'captured' else 202
+    payload = payment_payload(payment)
+    if payment.purpose == 'premium' and provider_status == 'captured':
+        payload['user'] = serialize_user(db.session.get(User, payer_id), viewer_id=payer_id)
+    return jsonify(payload), 200 if provider_status == 'captured' else 202
 
 
 @payments_bp.route('/api/payments/orders/<int:payment_id>', methods=['GET'])

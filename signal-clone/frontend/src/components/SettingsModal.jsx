@@ -497,7 +497,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                             <SettingsGroup>
                                 <SettingsRow icon={<SparklesIcon />} title="CHEETCHAT Premium" subtitle={user?.isPremium ? 'Active — all creator features unlocked' : 'Invite 7 verified users to unlock every creator feature'} onClick={openPremium} />
                                 <SettingsRow icon={<KeyIcon />} title="Account" subtitle="Password, security and account controls" onClick={() => go('account')} />
-                                <SettingsRow icon={<LockClosedIcon />} title="Privacy" subtitle="Last seen and privacy controls" onClick={() => go('privacy')} />
+                                <SettingsRow icon={<LockClosedIcon />} title="Privacy" subtitle="Story, profile photo, last seen and online visibility" onClick={() => go('privacy')} />
                                 <SettingsRow icon={<ChatBubbleBottomCenterTextIcon />} title="Chats" subtitle="Theme and wallpapers" onClick={() => go('chats')} />
                                 <SettingsRow icon={<BellIcon />} title="Notifications" subtitle="Messages, calls and desktop alerts" onClick={() => go('notifications')} />
                                 <SettingsRow icon={<ComputerDesktopIcon />} title="Storage and data" subtitle="Auto-download and data saver" onClick={() => go('storage')} />
@@ -600,6 +600,11 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
 
                     {screen === 'privacy' && (
                         <>
+                            <SectionLabel>WhatsApp-style visibility</SectionLabel>
+                            <SettingsGroup>
+                                <InfoRow title="Profile photo (DP)" text="Choose Everyone, My Contacts, Contacts except…, Only share with…, or Nobody below." />
+                                <InfoRow title="Story" text="Choose exactly which contacts can see each new story by default." />
+                            </SettingsGroup>
                             <SectionLabel>Who can see my personal info</SectionLabel>
                             <SettingsGroup>
                                 <SettingsToggle 

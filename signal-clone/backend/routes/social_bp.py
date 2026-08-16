@@ -12,6 +12,7 @@ from utils import (
     get_current_user_id, get_json_data, iso_utc, serialize_user,
     upload_to_cloudinary, create_notification, queue_media_deletion, process_media_deletion_task, utc_now
 )
+from content_moderation import ModerationUnavailable, reject_adult_content
 
 social_bp = Blueprint('social_bp', __name__)
 
@@ -232,7 +233,16 @@ def create_social_post():
                 return jsonify({"error": "Upload image or video only"}), 400
             resource_type = 'image' if media_type == 'image' else 'video'
             try:
+                blocked, adult_score = reject_adult_content(file, media_type)
+                if blocked:
+                    return jsonify({
+                        'error': 'Upload blocked: adult content is not allowed',
+                        'code': 'ADULT_CONTENT_BLOCKED',
+                        'adultScore': round(adult_score, 3),
+                    }), 422
                 media_url = upload_to_cloudinary(file, folder='chietchat/social', resource_type=resource_type)
+            except ModerationUnavailable as error:
+                return jsonify({'error': str(error), 'code': 'MODERATION_UNAVAILABLE'}), 503
             except ValueError as error:
                 return jsonify({'error': str(error)}), 400
 

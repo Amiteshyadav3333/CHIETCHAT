@@ -5,6 +5,7 @@ from utils import (
     get_current_user_id, iso_utc, serialize_user, upload_to_cloudinary,
     get_json_data, create_notification, queue_media_deletion, process_media_deletion_task, utc_now
 )
+from content_moderation import ModerationUnavailable, reject_adult_content
 
 reels_bp = Blueprint('reels_bp', __name__)
 
@@ -135,6 +136,13 @@ def create_reel():
         music_volume = 0.8
     
     try:
+        blocked, adult_score = reject_adult_content(file, 'video')
+        if blocked:
+            return jsonify({
+                "error": "Upload blocked: adult content is not allowed",
+                "code": "ADULT_CONTENT_BLOCKED",
+                "adultScore": round(adult_score, 3),
+            }), 422
         video_url = upload_to_cloudinary(file, folder='chietchat/reels', resource_type='video')
         parent_reel_id = request.form.get('parentReelId')
         filter_name = request.form.get('filterName', '')
@@ -162,6 +170,8 @@ def create_reel():
         return jsonify({"message": "Reel posted", "id": new_reel.id}), 201
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    except ModerationUnavailable as e:
+        return jsonify({"error": str(e), "code": "MODERATION_UNAVAILABLE"}), 503
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

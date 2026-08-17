@@ -15,6 +15,7 @@ import PollCreatorModal from './PollCreatorModal';
 import ScheduleMessageModal from './ScheduleMessageModal';
 import VerifiedPaymentComposer from './VerifiedPaymentComposer';
 import DrawStudio from './DrawStudio';
+import ProCameraStudio from './ProCameraStudio';
 import { API_BASE_URL } from '../utils/apiBaseUrl';
 
 const LANGUAGES = [
@@ -297,7 +298,7 @@ const MessageInput = ({
     }, []);
 
     React.useEffect(() => {
-        if (showCameraModal) {
+        if (showCameraModal && photoReactionSource) {
             startCamera(cameraFacing);
         } else {
             if (streamRef.current) {
@@ -311,7 +312,7 @@ const MessageInput = ({
                 streamRef.current = null;
             }
         };
-    }, [showCameraModal]);
+    }, [showCameraModal, photoReactionSource, cameraFacing, startCamera]);
 
     const flipCamera = () => {
         const next = cameraFacing === 'user' ? 'environment' : 'user';
@@ -933,7 +934,12 @@ const MessageInput = ({
             )}
 
 
-            {showCameraModal && (
+            {showCameraModal && !photoReactionSource && <ProCameraStudio
+                onClose={() => setShowCameraModal(false)}
+                onCapture={file => onUpload(file)}
+            />}
+
+            {showCameraModal && photoReactionSource && (
                 <div className="fixed inset-0 z-[110] bg-black flex flex-col animate-fade-in">
                     {capturedSnap ? (
                         <img src={capturedSnap.url} alt="Snap preview" className="absolute inset-0 w-full h-full object-cover" />

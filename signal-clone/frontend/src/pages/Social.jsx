@@ -7,7 +7,7 @@ import {
     TrashIcon, UsersIcon, ArrowPathRoundedSquareIcon, ShareIcon,
     PencilIcon, LinkIcon, CalendarIcon, ArrowUpTrayIcon, UserCircleIcon,
     EllipsisHorizontalIcon, MagnifyingGlassIcon, BookmarkIcon,
-    HomeIcon, SparklesIcon, ChartBarIcon
+    HomeIcon, SparklesIcon, ChartBarIcon, CameraIcon
 } from '@heroicons/react/24/outline';
 import {
     HeartIcon as HeartSolidIcon,
@@ -18,6 +18,7 @@ import FullscreenMediaModal from '../components/FullscreenMediaModal';
 import NestedComment from '../components/NestedComment';
 import { getSafeWebsiteUrl } from '../utils/safeUrl';
 import SocialShareSheet from '../components/SocialShareSheet';
+import ProCameraStudio from '../components/ProCameraStudio';
 import QRCode from 'qrcode';
 
 const authHeaders = (token) => ({ Authorization: `Bearer ${token}` });
@@ -158,6 +159,7 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
     const [articleMode, setArticleMode] = useState(false);
     const [articleTitle, setArticleTitle] = useState('');
     const [monetized, setMonetized] = useState(false);
+    const [showProCamera, setShowProCamera] = useState(false);
     const maxChars = articleMode && isPremium ? 10000 : 280;
     const remaining = maxChars - caption.length;
     const progress = Math.min((caption.length / maxChars) * 100, 100);
@@ -202,6 +204,9 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                             <PhotoIcon style={{ width: 20, height: 20 }} />
                         </button>
+                        <button type="button" onClick={() => setShowProCamera(true)} title="Pro Camera" className="rounded-full p-2 text-[#1d9bf0] hover:bg-blue-500/10">
+                            <CameraIcon className="h-5 w-5" />
+                        </button>
                         <button type="button" onClick={() => isPremium ? setArticleMode(v => !v) : alert('Articles are available with Premium')} className={`rounded-full px-3 py-2 text-xs font-bold ${articleMode ? 'bg-blue-500/20 text-blue-400' : 'text-[#1d9bf0]'}`}>Article</button>
                         <button type="button" onClick={() => isPremium ? setMonetized(v => !v) : alert('Paid posts are available with Premium')} className={`rounded-full px-3 py-2 text-xs font-bold ${monetized ? 'bg-amber-500/20 text-amber-300' : 'text-[#1d9bf0]'}`}>₹ Earn</button>
                         {!isPremium && <button type="button" onClick={onUpgrade} className="rounded-full bg-violet-500/15 px-3 py-2 text-xs font-black text-violet-300">Premium</button>}
@@ -224,6 +229,7 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
                         </button>
                     </div>
                 </div>
+                {showProCamera && <ProCameraStudio onClose={() => setShowProCamera(false)} onCapture={file => setMedia([file])} />}
             </div>
         </div>
     );

@@ -2,6 +2,7 @@ import React, { useState, useRef, useContext, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import axios from 'axios';
 import { XMarkIcon, VideoCameraIcon, MusicalNoteIcon, MagnifyingGlassIcon, PlayIcon, PauseIcon, ArrowPathIcon, PlusIcon } from '@heroicons/react/24/outline';
+import ProCameraStudio from './ProCameraStudio';
 
 const MAX_DURATION = 60;
 
@@ -16,6 +17,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
     const [mediaStream, setMediaStream] = useState(null);
     const [facingMode, setFacingMode] = useState('user');
     const [monetized, setMonetized] = useState(false);
+    const [showProCamera, setShowProCamera] = useState(false);
     
     // Music States
     const [musicName, setMusicName] = useState('');
@@ -310,7 +312,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                         <div className="h-full flex flex-col items-center justify-center gap-6">
                             <div className="flex flex-col items-center gap-4">
                                 <button 
-                                    onClick={startCamera}
+                                    onClick={() => setShowProCamera(true)}
                                     className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-blue-600/30"
                                 >
                                     <VideoCameraIcon className="w-8 h-8" />
@@ -353,6 +355,20 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                 )}
 
                 <input ref={fileInputRef} type="file" accept="video/*" onChange={handleFileChange} className="hidden" />
+                {showProCamera && <ProCameraStudio
+                    initialMode="video"
+                    maxDuration={60}
+                    onClose={() => setShowProCamera(false)}
+                    onCapture={capturedFile => {
+                        if (!capturedFile.type.startsWith('video/')) {
+                            alert('Reels require a video. Switch Pro Camera to VIDEO mode.');
+                            return;
+                        }
+                        if (preview) URL.revokeObjectURL(preview);
+                        setFile(capturedFile);
+                        setPreview(URL.createObjectURL(capturedFile));
+                    }}
+                />}
                 <p className="text-center text-xs text-gray-400">Up to 60 seconds · Free: 3 Reels/day · Premium: 10 Reels/day</p>
 
                 {/* Caption */}

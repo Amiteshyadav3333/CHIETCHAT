@@ -31,6 +31,19 @@ import SidebarEmojiPicker from '../components/SidebarEmojiPicker';
 import { AppLockOverlay, EditMessageModal, ForwardMessageModal, OfflineBanner } from '../components/HomeOverlays';
 
 const Reels = React.lazy(() => import('./Reels'));
+
+const readVideoDuration = (file) => new Promise(resolve => {
+    const video = document.createElement('video');
+    const url = URL.createObjectURL(file);
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => {
+        const duration = Number.isFinite(video.duration) ? video.duration : 0;
+        URL.revokeObjectURL(url);
+        resolve(duration);
+    };
+    video.onerror = () => { URL.revokeObjectURL(url); resolve(0); };
+    video.src = url;
+});
 // Social is the launch surface, so begin downloading its chunk as soon as the
 // authenticated Home module evaluates instead of waiting for the first paint.
 const socialModulePromise = import('./Social');
@@ -1289,10 +1302,9 @@ const Home = () => {
         if (!token) { logout(); return; }
 
         const maxSize = 100 * 1024 * 1024;
-        if (file.size > maxSize) {
-            alert('File is too large (Max 100MB)');
-            return;
-        }
+        // Keep the network copy small enough for moderation + Cloudinary to
+        // finish within the hosting proxy window. The gallery original stays untouched.
+        const safeTransportSize = 24 * 1024 * 1024;
 
         const category = getFileCategory(file);
         const originalSize = file.size;
@@ -1302,13 +1314,14 @@ const Home = () => {
 
         // ── COMPRESSION STEP ──
         try {
-            if (sendHd && (category === 'image' || category === 'video')) {
+            const oversizedHdMedia = sendHd && ((category === 'video' && file.size > 24 * 1024 * 1024) || (category === 'image' && file.size > 9 * 1024 * 1024));
+            if (sendHd && !oversizedHdMedia && (category === 'image' || category === 'video')) {
                 setUploadProgress({ fileName: file.name, stage: 'HD original selected. Uploading…', percent: 5, originalSize, compressedSize: originalSize });
             } else if (category === 'image') {
-                setUploadProgress({ fileName: file.name, stage: 'Compressing image...', percent: 10, originalSize, compressedSize: null });
+                setUploadProgress({ fileName: file.name, stage: oversizedHdMedia ? 'Creating HD upload copy…' : 'Compressing image...', percent: 10, originalSize, compressedSize: null });
                 fileToUpload = await compressImage(file, dataSaver
                     ? { maxWidth: 960, maxHeight: 960, quality: 0.62 }
-                    : undefined);
+                    : oversizedHdMedia ? { maxWidth: 3840, maxHeight: 3840, quality: 0.9 } : undefined);
                 setUploadProgress(prev => ({
                     ...prev,
                     stage: 'Image compressed! Uploading...',
@@ -1316,9 +1329,12 @@ const Home = () => {
                     compressedSize: fileToUpload.size
                 }));
             } else if (category === 'video') {
-                setUploadProgress({ fileName: file.name, stage: 'Compressing video...', percent: 5, originalSize, compressedSize: null });
+                const duration = await readVideoDuration(file);
+                const sizeBoundBitrate = duration > 0 ? Math.floor((safeTransportSize * 8) / duration) : 8_000_000;
+                const transportBitrate = dataSaver ? 650_000 : Math.max(150_000, Math.min(oversizedHdMedia ? 12_000_000 : 1_200_000, sizeBoundBitrate));
+                setUploadProgress({ fileName: file.name, stage: oversizedHdMedia ? 'Creating high-quality upload copy…' : 'Compressing video...', percent: 5, originalSize, compressedSize: null });
                 fileToUpload = await compressVideo(file, {
-                    videoBitsPerSecond: dataSaver ? 650000 : 1200000,
+                    videoBitsPerSecond: transportBitrate,
                     onProgress: (p) => setUploadProgress(prev => ({
                         ...prev,
                         stage: `Compressing video... ${Math.round(p)}%`,
@@ -1338,6 +1354,12 @@ const Home = () => {
         } catch (compressErr) {
             console.warn('Compression failed, using original:', compressErr);
             fileToUpload = file;
+        }
+
+        if (fileToUpload.size > maxSize) {
+            setUploadProgress(null);
+            alert('The original recording is saved in your gallery, but its upload copy is still over 100 MB. Try sharing a shorter clip.');
+            return;
         }
 
         // ── UPLOAD STEP ──
@@ -1383,7 +1405,12 @@ const Home = () => {
         } catch (err) {
             setUploadProgress(null);
             console.error(err);
-            const msg = err.response?.data?.error || err.response?.statusText || err.message;
+            const status = err.response?.status;
+            const msg = status === 503
+                ? 'Media safety service is temporarily unavailable. Your original is safe in Gallery—please retry shortly.'
+                : status === 502
+                    ? 'Upload server restarted or timed out. Please retry; the app will reuse an optimized upload copy.'
+                    : err.response?.data?.error || err.response?.statusText || err.message;
             alert('Upload failed: ' + msg);
         }
     };

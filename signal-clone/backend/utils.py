@@ -76,10 +76,10 @@ def upload_to_cloudinary(file, folder='chietchat', resource_type='auto'):
     if not all([cloud_name, api_key, api_secret]):
         return _save_locally(file)
 
-    if not isinstance(file, (bytes, bytearray)):
-        file_data = file.read()
-    else:
-        file_data = file
+    is_buffer = isinstance(file, (bytes, bytearray))
+    file_data = file if is_buffer else file.stream
+    if not is_buffer:
+        file.stream.seek(0)
 
     try:
         result = cloudinary.uploader.upload(
@@ -93,7 +93,10 @@ def upload_to_cloudinary(file, folder='chietchat', resource_type='auto'):
         # If uploading disabled or quota exceeded, fallback to local
         if 'disabled' in err_str or 'quota' in err_str or 'limit' in err_str or 'upgrade' in err_str:
             report_safe_exception('cloudinary_fallback_used', e)
-            return _save_locally(file_data, getattr(file, 'filename', 'upload'))
+            if not is_buffer:
+                file.stream.seek(0)
+                return _save_locally(file, getattr(file, 'filename', 'upload'))
+            return _save_locally(file_data, 'upload')
         raise
 
 

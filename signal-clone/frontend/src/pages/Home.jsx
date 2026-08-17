@@ -29,6 +29,10 @@ import UserAvatar from '../components/UserAvatar';
 import TelegramGroupInfo from '../components/TelegramGroupInfo';
 import SidebarEmojiPicker from '../components/SidebarEmojiPicker';
 import { AppLockOverlay, EditMessageModal, ForwardMessageModal, OfflineBanner } from '../components/HomeOverlays';
+import { useScheduledMessageSender } from '../features/chat';
+import { applyLiveLocationUpdate, useLiveLocationSharing } from '../features/location';
+import { useRealtimeNotifications } from '../features/notifications';
+import { applyPollVoteUpdate } from '../features/polls';
 
 const Reels = React.lazy(() => import('./Reels'));
 
@@ -138,9 +142,6 @@ const Home = () => {
     const [notifications, setNotifications] = useState([]);
     const [showNotifications, setShowNotifications] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
-    const [liveLocationSharing, setLiveLocationSharing] = useState(null);
-    const liveLocationRef = useRef(null);
-    const [timeLeft, setTimeLeft] = useState(null);
     const [chatTranslationLang, setChatTranslationLang] = useState('');
     const [typingUsers, setTypingUsers] = useState({});
     const [editingMessage, setEditingMessage] = useState(null);
@@ -258,21 +259,12 @@ const Home = () => {
     const messageRefsMap = useRef({});
     const sidebarEmojiPickerRef = useRef(null);
 
-    const scheduleMessage = async (content, sendAt) => {
-        const chat = visibleActiveChat;
-        if (!chat || !publicKey) throw new Error('Encryption keys are not ready');
-        const recipientPublicKeys = {};
-        for (const participant of chat.participants) {
-            const participantPublicKey = participant.id === user.id ? publicKey : participant.publicKey;
-            if (!participantPublicKey) throw new Error('A participant encryption key is unavailable');
-            recipientPublicKeys[participant.id] = participantPublicKey;
-        }
-        const encryptedContent = await encryptForRecipients(recipientPublicKeys, content);
-        const clientMessageId = `scheduled_${crypto.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`}`;
-        await axios.post(`/api/chats/${chat.id}/scheduled-messages`, {
-            content: encryptedContent, scheduledFor: sendAt, clientMessageId,
-        }, { headers: { Authorization: `Bearer ${token}` } });
-    };
+    const scheduleMessage = useScheduledMessageSender({ chat: visibleActiveChat, userId: user?.id, publicKey, token });
+    const receiveNotification = useCallback(notification => {
+        setNotifications(previous => [notification, ...previous]);
+        setUnreadCount(count => count + 1);
+    }, []);
+    useRealtimeNotifications({ socket, onNotification: receiveNotification });
 
     useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
     useEffect(() => { chatsRef.current = chats; }, [chats]);
@@ -985,9 +977,8 @@ const Home = () => {
             }
         });
 
-        socket.on('poll_vote_update', ({ id, messageId, votes }) => {
-            const targetId = id ?? messageId;
-            setMessages(prev => prev.map(m => String(m.id) === String(targetId) ? { ...m, votes } : m));
+        socket.on('poll_vote_update', update => {
+            setMessages(prev => applyPollVoteUpdate(prev, update));
         });
 
         socket.on('typing_update', ({ chatId, userId, username, isTyping }) => {
@@ -1069,34 +1060,10 @@ const Home = () => {
         });
 
 
-        socket.on('new_notification', (data) => {
-            // Normalize the payload into the same shape as the REST API returns
-            const normalized = {
-                id: data.id,
-                type: data.type,
-                content: data.content,
-                targetId: data.targetId,
-                postPreview: data.postPreview || null,
-                isRead: false,
-                createdAt: data.createdAt,
-                sender: data.sender || {
-                    id: null,
-                    username: data.senderName || 'Someone',
-                    avatar: data.senderAvatar || null,
-                }
-            };
-            setNotifications(prev => [normalized, ...prev]);
-            setUnreadCount(count => count + 1);
-        });
-
         socket.on('live_location_update', ({ chatId, userId, lat, lng }) => {
             if (activeChatRef.current?.id === chatId) {
                 // Update specific message or show on map
-                setMessages(prev => prev.map(m => 
-                    m.type === 'live_location' && m.senderId === userId 
-                    ? { ...m, content: JSON.stringify({ lat, lng }) } 
-                    : m
-                ));
+                setMessages(prev => applyLiveLocationUpdate(prev, { userId, lat, lng }));
             }
         });
 
@@ -1833,47 +1800,16 @@ const Home = () => {
         setIncomingCall(null);
     };
 
-    const startLiveLocation = (chatId) => {
-        if (liveLocationRef.current) stopLiveLocation();
-        const expiry = Date.now() + 30 * 60 * 1000;
-        let initialMessageSent = false;
-        const watchId = navigator.geolocation.watchPosition((pos) => {
-            if (Date.now() >= expiry) return stopLiveLocation();
-            const payload = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-            socket.emit('live_location_update', { chatId, ...payload });
-            if (!initialMessageSent) {
-                initialMessageSent = true;
-                handleSendMessage(JSON.stringify(payload), 'live_location');
-            }
-        }, error => {
-            console.error('Live location error', error);
-            if (!initialMessageSent) alert('Live location needs precise location permission.');
-        }, { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 });
-        const timerId = window.setInterval(() => {
-            const remaining = Math.max(0, Math.ceil((expiry - Date.now()) / 1000));
-            setTimeLeft(remaining);
-            if (!remaining) stopLiveLocation();
-        }, 1000);
-        const sharing = { chatId, expiry, watchId, timerId };
-        liveLocationRef.current = sharing;
-        setLiveLocationSharing(sharing);
-        setTimeLeft(30 * 60);
-    };
-
-    const stopLiveLocation = () => {
-        const sharing = liveLocationRef.current;
-        if (sharing?.watchId != null) navigator.geolocation.clearWatch(sharing.watchId);
-        if (sharing?.timerId) clearInterval(sharing.timerId);
-        liveLocationRef.current = null;
-        setLiveLocationSharing(null);
-        setTimeLeft(null);
-    };
-
-    useEffect(() => () => {
-        const sharing = liveLocationRef.current;
-        if (sharing?.watchId != null) navigator.geolocation.clearWatch(sharing.watchId);
-        if (sharing?.timerId) clearInterval(sharing.timerId);
+    const sendLiveLocationMessage = useCallback(payload => {
+        handleSendMessage(JSON.stringify(payload), 'live_location');
+    }, [handleSendMessage]);
+    const reportLiveLocationError = useCallback(error => {
+        console.error('Live location error', error);
+        alert('Live location needs precise location permission.');
     }, []);
+    const { liveLocationSharing, timeLeft, startLiveLocation, stopLiveLocation } = useLiveLocationSharing({
+        socket, sendLocationMessage: sendLiveLocationMessage, onError: reportLiveLocationError,
+    });
 
     const handleTranslate = useCallback(async (text, targetLang, sourceLang = 'auto') => {
         if (!token) return '';
@@ -3228,7 +3164,7 @@ const Home = () => {
                     <MessageInput
                         onSend={(text, type, ttl) => handleSendMessage(text, type, replyTo, ttl)}
                         onUpload={handleUpload}
-                        onStartLiveLocation={() => startLiveLocation(visibleActiveChat.id)}
+                        onStartLiveLocation={durationMinutes => startLiveLocation(visibleActiveChat.id, durationMinutes)}
                         replyTo={replyTo}
                         onCancelReply={() => setReplyTo(null)}
                         onTranslate={handleTranslate}

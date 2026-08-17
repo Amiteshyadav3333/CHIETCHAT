@@ -17,6 +17,7 @@ from utils import (
 )
 from scheduled_messages import valid_encrypted_envelope
 from observability import report_safe_exception
+from features.polls import normalize_poll_option, serialize_votes
 
 chats_bp = Blueprint('chats_bp', __name__)
 
@@ -1170,11 +1171,8 @@ def vote_poll(message_id):
     option_idx = data.get('optionIdx', data.get('option_idx'))
     if option_idx is None:
         return jsonify({"error": "Option index is required"}), 400
-    try:
-        option_idx = int(option_idx)
-    except (TypeError, ValueError):
-        return jsonify({"error": "Invalid poll option"}), 400
-    if option_idx < 0 or option_idx >= 4:
+    option_idx = normalize_poll_option(option_idx)
+    if option_idx is None:
         return jsonify({"error": "Invalid poll option"}), 400
         
     from models import PollVote
@@ -1191,7 +1189,7 @@ def vote_poll(message_id):
     db.session.commit()
     
     votes = PollVote.query.filter_by(message_id=message_id).all()
-    vote_data = [{"userId": v.user_id, "optionIdx": v.option_idx} for v in votes]
+    vote_data = serialize_votes(votes)
     
     payload = {"id": message_id, "messageId": message_id, "chatId": msg.chat_id, "votes": vote_data}
     from sockets import emit_message_update

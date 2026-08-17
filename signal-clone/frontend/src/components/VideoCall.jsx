@@ -9,38 +9,14 @@ import {
 } from '@heroicons/react/24/solid';
 import axios from 'axios';
 import UserAvatar from './UserAvatar';
-
-const MAX_PARTICIPANTS = 10;
+import {
+    MAX_CALL_PARTICIPANTS, callGridColumns, callMediaConstraints, optimizeCallSdp,
+    shouldUseEqualCallGrid, useCallInvitations,
+} from '../features/calls';
 
 // WebRTC requires DTLS-SRTP for every audio/video stream. CHEETCHAT does not
 // claim identity-verifying media E2EE until authenticated insertable-stream
 // key exchange is implemented across all supported browsers.
-
-// ── SDP Codec Preference Helpers (VP9 > H264 > VP8, Opus with FEC) ──
-const _preferCodec = (sdp, kind, name) => {
-    const lines = sdp.split('\r\n');
-    const mi = lines.findIndex(l => l.startsWith(`m=${kind}`));
-    if (mi < 0) return sdp;
-    const pts = [];
-    lines.forEach(l => { const m = l.match(/^a=rtpmap:(\d+) ([^/]+)\//); if (m && m[2].toLowerCase() === name.toLowerCase()) pts.push(m[1]); });
-    if (!pts.length) return sdp;
-    const mp = lines[mi].split(' ');
-    const head = mp.slice(0, 3), cur = mp.slice(3);
-    lines[mi] = [...head, ...pts.filter(p => cur.includes(p)), ...cur.filter(p => !pts.includes(p))].join(' ');
-    return lines.join('\r\n');
-};
-
-const _addOpusParams = (sdp) => sdp.replace(
-    /a=fmtp:(\d+) (.*opus.*)/gi,
-    (_, pt, p) => {
-        if (!p.includes('stereo=')) p += ';stereo=0';             // mono = half bandwidth
-        if (!p.includes('useinbandfec=')) p += ';useinbandfec=1'; // FEC = recover without re-request
-        if (!p.includes('maxaveragebitrate=')) p += ';maxaveragebitrate=64000'; // 64kbps Opus = crystal clear
-        return `a=fmtp:${pt} ${p}`;
-    }
-);
-
-const optimizeSDP = (sdp) => _addOpusParams(_preferCodec(_preferCodec(sdp, 'video', 'VP9'), 'audio', 'opus'));
 
 const VideoCallModal = ({ 
     activeChat, onClose, callType = 'video', initialRingStatus = 'calling',
@@ -86,10 +62,10 @@ const VideoCallModal = ({
     const [localStream, setLocalStream] = useState(null);
     const [facingMode, setFacingMode] = useState('user');
     const [ringStatus, setRingStatus] = useState(initialRingStatus);
-    const [showAddModal, setShowAddModal] = useState(false);
-    const [contacts, setContacts] = useState([]);
-    const [loadingContacts, setLoadingContacts] = useState(false);
-    const [addingStates, setAddingStates] = useState({}); // userId -> 'adding' | 'added' | null
+    const {
+        isOpen: showAddModal, setIsOpen: setShowAddModal, contacts,
+        loading: loadingContacts, states: addingStates, invite: handleAddParticipant,
+    } = useCallInvitations({ socket, token, chatId: activeChat.id, callType: currentCallType });
     const cameraTrackRef = useRef(null);
     const [isRecording, setIsRecording] = useState(false);
     const mediaRecorderRef = useRef(null);
@@ -174,62 +150,11 @@ const VideoCallModal = ({
     }, [showControls]);
 
     useEffect(() => {
-        if (showAddModal && contacts.length === 0) {
-            const fetchContactsList = async () => {
-                setLoadingContacts(true);
-                try {
-                    const res = await axios.get('/api/users', {
-                        headers: { Authorization: `Bearer ${token}` }
-                    });
-                    setContacts(res.data);
-                } catch (e) {
-                    console.error("Error fetching contacts", e);
-                } finally {
-                    setLoadingContacts(false);
-                }
-            };
-            fetchContactsList();
-        }
-    }, [showAddModal, contacts.length, token]);
-
-    const handleAddParticipant = async (contact) => {
-        setAddingStates(prev => ({ ...prev, [contact.id]: 'adding' }));
-        try {
-            socket.emit('invite_to_call', {
-                chatId: activeChat.id,
-                userId: contact.id,
-                callType: currentCallType
-            });
-            setAddingStates(prev => ({ ...prev, [contact.id]: 'added' }));
-            setShowAddModal(false);
-        } catch (err) {
-            console.error("Error adding participant", err);
-            alert("Failed to add participant to call");
-            setAddingStates(prev => ({ ...prev, [contact.id]: null }));
-        }
-    };
-
-    useEffect(() => {
         const initCall = async () => {
             try {
                 // Audio: standard constraints to avoid device-specific driver/hardware latency
-                const audioConstraints = {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
-                };
-                // Video: 720p ideal (balance of HD quality vs. network efficiency)
-                const constraints = callType === 'voice'
-                    ? { audio: audioConstraints, video: false }
-                    : {
-                        audio: audioConstraints,
-                        video: {
-                            width: { ideal: 960, max: 1280 },
-                            height: { ideal: 540, max: 720 },
-                            frameRate: { ideal: 24, max: 24 },
-                            facingMode: facingModeRef.current
-                        }
-                    };
+                const constraints = callMediaConstraints(callType, facingModeRef.current);
+                const audioConstraints = constraints.audio;
 
                 let stream = preparedStream?.active ? preparedStream : null;
                 if (stream) onPreparedStreamConsumed?.();
@@ -257,7 +182,7 @@ const VideoCallModal = ({
                 setLocalStream(stream);
 
                 socket.on('user_joined_call', (data) => {
-                    if (Object.keys(peersRef.current).length >= MAX_PARTICIPANTS - 1) return;
+                    if (Object.keys(peersRef.current).length >= MAX_CALL_PARTICIPANTS - 1) return;
                     createPeer(data.socketId, data.userId, stream, true);
                 });
 
@@ -271,7 +196,7 @@ const VideoCallModal = ({
                 });
 
                 socket.on('offer', async (data) => {
-                    if (Object.keys(peersRef.current).length >= MAX_PARTICIPANTS - 1) return;
+                    if (Object.keys(peersRef.current).length >= MAX_CALL_PARTICIPANTS - 1) return;
                     const pc = createPeer(data.fromSocket, data.from, stream, false);
                     await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
 
@@ -290,7 +215,7 @@ const VideoCallModal = ({
 
                     const answer = await pc.createAnswer();
                     // Apply VP9 + Opus SDP preferences before setting local description
-                    const optimizedAnswer = new RTCSessionDescription({ type: answer.type, sdp: optimizeSDP(answer.sdp) });
+                    const optimizedAnswer = new RTCSessionDescription({ type: answer.type, sdp: optimizeCallSdp(answer.sdp) });
                     await pc.setLocalDescription(optimizedAnswer);
                     socket.emit('answer', { chatId: activeChat.id, to: data.fromSocket, answer: pc.localDescription, from: user.id, fromSocket: socket.id });
                 });
@@ -586,7 +511,7 @@ const VideoCallModal = ({
             pc._makingOffer = true;
             try {
                 const offer = await pc.createOffer(iceRestart ? { iceRestart: true } : undefined);
-                const optimizedOffer = new RTCSessionDescription({ type: offer.type, sdp: optimizeSDP(offer.sdp) });
+                const optimizedOffer = new RTCSessionDescription({ type: offer.type, sdp: optimizeCallSdp(offer.sdp) });
                 await pc.setLocalDescription(optimizedOffer);
                 socket.emit('offer', {
                     chatId: activeChat.id, to: remoteSocketId, offer: pc.localDescription,
@@ -926,7 +851,7 @@ const VideoCallModal = ({
         { id: 'me', type: 'me', name: 'You', avatar: user?.avatar, stream: localStream, isVideoOff },
         ...peerList.map(([id, peer]) => ({ id, type: 'peer', name: peer.user?.username || 'Participant', avatar: peer.user?.avatar, stream: peer.stream, isVideoOff: false }))
     ];
-    const useEqualGrid = callTiles.length >= 3 && !isMinimized;
+    const useEqualGrid = shouldUseEqualCallGrid({ participantCount: callTiles.length, minimized: isMinimized });
 
     const selectMainView = (viewId) => {
         setMainView(viewId);
@@ -1103,7 +1028,7 @@ const VideoCallModal = ({
             {/* ── MAIN VIDEO (full screen) ── */}
             <div className="absolute inset-0">
                 {useEqualGrid ? (
-                    <div className={`grid h-full w-full gap-1 bg-[#05080b] p-1 ${callTiles.length <= 4 ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-3'}`}>
+                    <div className={`grid h-full w-full gap-1 bg-[#05080b] p-1 ${callGridColumns(callTiles.length)}`}>
                         {callTiles.map(tile => <div key={tile.id} className="relative min-h-0 overflow-hidden rounded-xl bg-[#111b21]">
                             {tile.type === 'me'
                                 ? <LocalVideo stream={tile.stream} muted className={`h-full w-full object-cover ${tile.isVideoOff ? 'hidden' : ''}`} />

@@ -17,6 +17,8 @@ import VerifiedPaymentComposer from './VerifiedPaymentComposer';
 import DrawStudio from './DrawStudio';
 import ProCameraStudio from './ProCameraStudio';
 import { API_BASE_URL } from '../utils/apiBaseUrl';
+import { useVideoNoteRecorder } from '../features/media';
+import { LIVE_LOCATION_DURATIONS } from '../features/location';
 
 const LANGUAGES = [
     { code: 'hi', name: 'Hindi (हिंदी)' },
@@ -89,11 +91,9 @@ const MessageInput = ({
     const [grammarLoading, setGrammarLoading] = useState(false);
     const [showAttachMenu, setShowAttachMenu] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
-    const [showVideoNote, setShowVideoNote] = useState(false);
-    const [isVideoNoteRecording, setIsVideoNoteRecording] = useState(false);
-    const [videoNoteSeconds, setVideoNoteSeconds] = useState(0);
-    const [videoNoteFacing, setVideoNoteFacing] = useState('user');
     const [showPollCreator, setShowPollCreator] = useState(false);
+    const [showLiveLocationModal, setShowLiveLocationModal] = useState(false);
+    const [liveLocationDuration, setLiveLocationDuration] = useState(30);
     const [smartReplies, setSmartReplies] = useState([]);
     const [showScheduleModal, setShowScheduleModal] = useState(false);
     const [showShoppingModal, setShowShoppingModal] = useState(false);
@@ -104,6 +104,12 @@ const MessageInput = ({
     const [cameraFacing, setCameraFacing] = useState('user');
     const [cameraFilter, setCameraFilter] = useState('normal');
     const [capturedSnap, setCapturedSnap] = useState(null);
+    const {
+        isOpen: showVideoNote, isRecording: isVideoNoteRecording, seconds: videoNoteSeconds,
+        facing: videoNoteFacing, previewRef: videoNotePreviewRef, canvasRef: videoNoteCanvasRef,
+        open: openVideoNote, close: closeVideoNote, start: startVideoNoteRecording,
+        stop: stopVideoNoteRecording, flipCamera: flipVideoNoteCamera,
+    } = useVideoNoteRecorder({ onUpload });
     const streamRef = useRef(null);
     const FILTERS = [
         { id: 'normal', label: 'Normal', css: 'none' },
@@ -226,13 +232,6 @@ const MessageInput = ({
     
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
-    const videoNoteRecorderRef = useRef(null);
-    const videoNoteStreamRef = useRef(null);
-    const videoNoteChunksRef = useRef([]);
-    const videoNotePreviewRef = useRef(null);
-    const videoNoteTimerRef = useRef(null);
-    const videoNoteCanvasRef = useRef(null);
-    const videoNoteFrameRef = useRef(null);
     const inputRef = useRef(null);
     const galleryInputRef = useRef(null);
     const documentInputRef = useRef(null);
@@ -246,8 +245,6 @@ const MessageInput = ({
     React.useEffect(() => {
         return () => {
             clearTimeout(typingTimerRef.current);
-            clearInterval(videoNoteTimerRef.current);
-            videoNoteStreamRef.current?.getTracks().forEach(track => track.stop());
         };
     }, []);
 
@@ -526,122 +523,6 @@ const MessageInput = ({
         if (recorder?.state === 'recording') {
             recorder.requestData?.();
             recorder.stop();
-        }
-    };
-
-    const openVideoNote = async () => {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: { echoCancellation: true, noiseSuppression: true },
-                video: {
-                    facingMode: videoNoteFacing,
-                    width: { ideal: 480 },
-                    height: { ideal: 480 },
-                    frameRate: { ideal: 24, max: 30 }
-                }
-            });
-            videoNoteStreamRef.current = stream;
-            setShowVideoNote(true);
-            requestAnimationFrame(() => {
-                if (videoNotePreviewRef.current) {
-                    videoNotePreviewRef.current.srcObject = stream;
-                    videoNotePreviewRef.current.play().catch(() => {});
-                }
-            });
-        } catch {
-            alert('Allow camera and microphone access to record a video note.');
-        }
-    };
-
-    const flipVideoNoteCamera = async () => {
-        const nextFacing = videoNoteFacing === 'user' ? 'environment' : 'user';
-        try {
-            const replacement = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: { ideal: nextFacing }, width: { ideal: 480 }, height: { ideal: 480 } },
-                audio: false
-            });
-            const current = videoNoteStreamRef.current;
-            current?.getVideoTracks().forEach(track => { current.removeTrack(track); track.stop(); });
-            replacement.getVideoTracks().forEach(track => current?.addTrack(track));
-            setVideoNoteFacing(nextFacing);
-            if (videoNotePreviewRef.current) {
-                videoNotePreviewRef.current.srcObject = current;
-                await videoNotePreviewRef.current.play();
-            }
-        } catch {
-            alert('Another camera is not available on this device.');
-        }
-    };
-
-    const closeVideoNote = () => {
-        clearInterval(videoNoteTimerRef.current);
-        cancelAnimationFrame(videoNoteFrameRef.current);
-        if (videoNoteRecorderRef.current?.state === 'recording') {
-            videoNoteRecorderRef.current.onstop = null;
-            videoNoteRecorderRef.current.stop();
-        }
-        videoNoteStreamRef.current?.getTracks().forEach(track => track.stop());
-        videoNoteStreamRef.current = null;
-        setIsVideoNoteRecording(false);
-        setVideoNoteSeconds(0);
-        setShowVideoNote(false);
-    };
-
-    const startVideoNoteRecording = () => {
-        const sourceStream = videoNoteStreamRef.current;
-        const canvas = videoNoteCanvasRef.current;
-        const preview = videoNotePreviewRef.current;
-        if (!sourceStream || !canvas || !preview) return;
-        const ctx = canvas.getContext('2d');
-        const drawFrame = () => {
-            if (preview.readyState >= 2) {
-                ctx.save();
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
-                ctx.restore();
-            }
-            videoNoteFrameRef.current = requestAnimationFrame(drawFrame);
-        };
-        drawFrame();
-        const stream = canvas.captureStream(24);
-        sourceStream.getAudioTracks().forEach(track => stream.addTrack(track));
-        const preferredType = ['video/webm;codecs=vp8,opus', 'video/webm']
-            .find(type => MediaRecorder.isTypeSupported?.(type));
-        const recorder = new MediaRecorder(stream, preferredType ? { mimeType: preferredType } : undefined);
-        videoNoteChunksRef.current = [];
-        videoNoteRecorderRef.current = recorder;
-        recorder.ondataavailable = event => {
-            if (event.data.size) videoNoteChunksRef.current.push(event.data);
-        };
-        recorder.onstop = () => {
-            clearInterval(videoNoteTimerRef.current);
-            cancelAnimationFrame(videoNoteFrameRef.current);
-            const blob = new Blob(videoNoteChunksRef.current, { type: recorder.mimeType || 'video/webm' });
-            const file = new File([blob], `video-note-${Date.now()}.webm`, { type: blob.type });
-            videoNoteStreamRef.current?.getTracks().forEach(track => track.stop());
-            videoNoteStreamRef.current = null;
-            setShowVideoNote(false);
-            setIsVideoNoteRecording(false);
-            setVideoNoteSeconds(0);
-            if (blob.size > 0) onUpload(file);
-        };
-        recorder.start(250);
-        setIsVideoNoteRecording(true);
-        setVideoNoteSeconds(0);
-        videoNoteTimerRef.current = setInterval(() => {
-            setVideoNoteSeconds(seconds => {
-                if (seconds >= 59) {
-                    setTimeout(() => recorder.state === 'recording' && recorder.stop(), 0);
-                    return 60;
-                }
-                return seconds + 1;
-            });
-        }, 1000);
-    };
-
-    const stopVideoNoteRecording = () => {
-        if (videoNoteRecorderRef.current?.state === 'recording') {
-            videoNoteRecorderRef.current.stop();
         }
     };
 
@@ -931,7 +812,7 @@ const MessageInput = ({
                             label="Live"
                             color="bg-red-500"
                             icon={<MapPinIcon className="w-6 h-6 text-white" />}
-                            onClick={() => { onStartLiveLocation(); setShowAttachMenu(false); }}
+                            onClick={() => { setShowLiveLocationModal(true); setShowAttachMenu(false); }}
                         />
                         <AttachOption
                             label="Poll"
@@ -1286,6 +1167,19 @@ const MessageInput = ({
                         >
                             {isVideoNoteRecording ? <StopIcon className="w-7 h-7 text-white" /> : <span className="w-6 h-6 rounded-full bg-white" />}
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {showLiveLocationModal && (
+                <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+                    <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#111b21] p-5 text-white shadow-2xl">
+                        <div className="mb-4 flex items-center justify-between"><h3 className="font-bold">Share live location</h3><button onClick={() => setShowLiveLocationModal(false)}><XMarkIcon className="h-5 w-5" /></button></div>
+                        <p className="mb-4 text-sm text-gray-400">Choose how long your location should update. Sharing stops automatically.</p>
+                        <div className="grid grid-cols-2 gap-2">
+                            {LIVE_LOCATION_DURATIONS.map(minutes => <button key={minutes} onClick={() => setLiveLocationDuration(minutes)} className={`rounded-xl border px-3 py-3 text-sm font-bold ${liveLocationDuration === minutes ? 'border-[#00a884] bg-[#00a884]/20 text-[#5ee6c4]' : 'border-white/10 bg-white/5 text-gray-300'}`}>{minutes === 480 ? '8 hours' : `${minutes} minutes`}</button>)}
+                        </div>
+                        <button onClick={() => { onStartLiveLocation(liveLocationDuration); setShowLiveLocationModal(false); }} className="mt-5 w-full rounded-xl bg-[#00a884] py-3 font-bold">Start sharing</button>
                     </div>
                 </div>
             )}

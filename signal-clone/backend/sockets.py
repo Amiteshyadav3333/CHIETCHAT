@@ -13,6 +13,8 @@ import datetime
 import time
 import threading
 from collections import defaultdict, deque
+from features.calls import CallInviteRegistry
+from features.location import register_location_socket_handlers
 
 ALLOWED_MESSAGE_TYPES = {
     'text', 'image', 'video', 'video_note', 'audio', 'file', 'gif', 'sticker',
@@ -24,19 +26,14 @@ MIN_MESSAGE_TTL = 1
 MAX_MESSAGE_TTL = 315360000
 _call_signal_windows = defaultdict(deque)
 _call_signal_windows_lock = threading.Lock()
-_call_invites = {}
-_call_invites_lock = threading.Lock()
+_call_invites = CallInviteRegistry()
 
 def register_socket_events(socketio):
+    register_location_socket_handlers(socketio)
     def has_call_access(user_id, chat_id):
         if user_can_access_chat(user_id, chat_id):
             return True
-        with _call_invites_lock:
-            expires_at = _call_invites.get((chat_id, user_id), 0)
-            if expires_at <= time.monotonic():
-                _call_invites.pop((chat_id, user_id), None)
-                return False
-            return True
+        return _call_invites.allows(chat_id, user_id)
 
     def allow_call_signal(user_id):
         redis_client = current_app.extensions.get('cheetchat_redis')
@@ -605,8 +602,7 @@ def register_socket_events(socketio):
         if not target:
             emit('call_error', {"error": "User not found"})
             return
-        with _call_invites_lock:
-            _call_invites[(chat_id, target_uid)] = time.monotonic() + 3600
+        _call_invites.grant(chat_id, target_uid)
         call_type = data.get('callType') if data.get('callType') in ('voice', 'video') else 'video'
         caller = db.session.get(User, user_id)
         call_users = [db.session.get(User, uid) for uid in get_chat_participant_ids(chat_id)]
@@ -766,31 +762,6 @@ def register_socket_events(socketio):
             "chatId": chat_id, "peerId": peer_id, "callId": recent_call.id,
         }, room=f"user_{caller_id}")
 
-
-    @socketio.on('live_location_update')
-    def on_live_location_update(data):
-        user_id = get_socket_user_id()
-        chat_id = data.get('chatId')
-        if not user_id or not chat_id or not user_can_access_chat(user_id, chat_id):
-            return
-        
-        try:
-            lat = float(data.get('lat'))
-            lng = float(data.get('lng'))
-        except (TypeError, ValueError):
-            return
-        if not (-90 <= lat <= 90 and -180 <= lng <= 180):
-            return
-        payload = {
-            "chatId": chat_id,
-            "userId": user_id,
-            "lat": lat,
-            "lng": lng
-        }
-        # User rooms keep location realtime even when recipients have not opened
-        # the chat room yet or have multiple connected devices.
-        for participant_id in get_chat_participant_ids(chat_id):
-            socketio.emit('live_location_update', payload, room=f"user_{participant_id}")
 
     @socketio.on('game_move')
     def on_game_move(data):

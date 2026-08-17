@@ -10,6 +10,7 @@ import { MiniGameCard } from './ChatGames';
 import { buildMapUrl, normalizeCoordinates } from '../utils/locationPrivacy';
 import { getSafeHttpUrl, getSafeMediaUrl, openSafeExternal } from '../utils/safeUrl';
 import { saveMediaToDevice } from '../utils/mediaDownload';
+import { castPollVote } from '../features/polls';
 
 const getPlatformLabel = (url) => {
     const lowercase = url.toLowerCase();
@@ -696,7 +697,7 @@ const ChatBubble = ({
 
     const handleVote = async (optionIdx) => {
         try {
-            await axios.post(`/api/messages/${message.id}/poll-vote`, { optionIdx });
+            await castPollVote(message.id, optionIdx);
         } catch (err) {
             console.error("Error casting poll vote", err);
         }

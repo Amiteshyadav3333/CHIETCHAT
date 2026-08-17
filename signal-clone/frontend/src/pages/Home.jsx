@@ -2033,9 +2033,8 @@ const Home = () => {
     const featureOverlayOpen = showSearchModal || showLinkPhoneModal || showNotifications || showSettings || showCallModal || incomingCall;
     const appNavHidden = featureOverlayOpen || Boolean(activeChat);
     const customWallpaper = localStorage.getItem('custom_chat_wallpaper');
-    const chatBackground = wallpaper === 'custom' && customWallpaper
-        ? `#0b141a center / contain no-repeat url("${customWallpaper}")`
-        : wallpaper === 'dots'
+    const hasCustomWallpaper = wallpaper === 'custom' && Boolean(customWallpaper);
+    const chatBackground = wallpaper === 'dots'
         ? 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.12) 1px, transparent 0), #0b141a'
         : wallpaper === 'emerald'
             ? 'linear-gradient(135deg, #06251f, #111b21 55%, #17212b)'
@@ -3077,8 +3076,17 @@ const Home = () => {
                             const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
                             userScrolledUpRef.current = distanceFromBottom > 120;
                         }}
-                        className={`min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 space-y-0.5 ${localStorage.getItem('animated_theme') === '1' ? 'animated-chat-wallpaper' : ''}`}
-                        style={{ background: chatBackground, backgroundSize: wallpaper === 'dots' ? '18px 18px' : undefined }}
+                        className={`min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 space-y-0.5 ${localStorage.getItem('animated_theme') === '1' && !hasCustomWallpaper ? 'animated-chat-wallpaper' : ''}`}
+                        style={hasCustomWallpaper ? {
+                            backgroundColor: '#0b141a',
+                            backgroundImage: `url("${customWallpaper}")`,
+                            backgroundPosition: 'center',
+                            backgroundRepeat: 'no-repeat',
+                            backgroundSize: 'cover'
+                        } : {
+                            background: chatBackground,
+                            backgroundSize: wallpaper === 'dots' ? '18px 18px' : undefined
+                        }}
                     >
                         {(() => {
                             const other = getOtherParticipant(visibleActiveChat);

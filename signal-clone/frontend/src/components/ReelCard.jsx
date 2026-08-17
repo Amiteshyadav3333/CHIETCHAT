@@ -287,6 +287,18 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
         }
     };
 
+    const handleEditComment = async (commentId, content) => {
+        try {
+            await axios.patch(`/api/reels/comments/${commentId}`, { content }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            await fetchComments();
+        } catch (err) {
+            alert(err.response?.data?.error || "Could not edit comment");
+            throw err;
+        }
+    };
+
     return (
         <div ref={cardRef} className="relative h-full w-full bg-black snap-start flex items-center justify-center overflow-hidden">
             {videoError ? (
@@ -481,6 +493,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
                                 key={c.id}
                                 comment={c}
                                 onReply={handleReplyToComment}
+                                onEdit={handleEditComment}
                                 onDelete={handleDeleteComment}
                                 currentUser={currentUser}
                                 onProfileClick={onProfileClick}

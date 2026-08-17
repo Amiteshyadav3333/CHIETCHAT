@@ -832,7 +832,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                     <span className="text-xs text-gray-400">New messages pop colourfully, then settle into this colour.</span>
                                 </div>
                             </div>
-                            <div className="m-5 h-44 overflow-hidden rounded-xl border border-gray-700 bg-[#0b141a] bg-contain bg-center bg-no-repeat p-3" style={wallpaper === 'custom' ? { backgroundImage: `url("${localStorage.getItem('custom_chat_wallpaper') || ''}")` } : undefined}><div className="ml-auto mt-5 max-w-[70%] rounded-lg rounded-tr-none bg-[#d9fdd3] px-3 py-2 text-sm text-[#111b21] shadow">Wallpaper preview <span className="ml-2 text-[10px] text-gray-500">10:30</span></div></div>
+                            <div className="m-5 h-44 overflow-hidden rounded-xl border border-gray-700 bg-[#0b141a] bg-cover bg-center bg-no-repeat p-3" style={wallpaper === 'custom' ? { backgroundImage: `url("${localStorage.getItem('custom_chat_wallpaper') || ''}")` } : undefined}><div className="ml-auto mt-5 max-w-[70%] rounded-lg rounded-tr-none bg-[#d9fdd3] px-3 py-2 text-sm text-[#111b21] shadow">Wallpaper preview <span className="ml-2 text-[10px] text-gray-500">10:30</span></div></div>
                         </>
                     )}
 

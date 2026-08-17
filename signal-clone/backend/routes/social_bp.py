@@ -521,6 +521,26 @@ def delete_social_comment(comment_id):
     db.session.commit()
     return jsonify({"message": "Comment deleted"})
 
+@social_bp.route('/api/social/comments/<int:comment_id>', methods=['PATCH'])
+def edit_social_comment(comment_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    comment = db.get_or_404(SocialPostComment, comment_id)
+    if comment.user_id != user_id:
+        return jsonify({"error": "You can only edit your own comment"}), 403
+    raw_content = get_json_data().get('content')
+    if not isinstance(raw_content, str):
+        return jsonify({"error": "Comment must be text"}), 400
+    content = raw_content.strip()
+    if not content:
+        return jsonify({"error": "Comment cannot be empty"}), 400
+    if len(content) > MAX_COMMENT_LENGTH:
+        return jsonify({"error": f"Comment must be {MAX_COMMENT_LENGTH} characters or less"}), 400
+    comment.content = content
+    db.session.commit()
+    return jsonify(serialize_comment(comment, user_id))
+
 
 
 # ─── DELETE POST ──────────────────────────────────────────────────────────────

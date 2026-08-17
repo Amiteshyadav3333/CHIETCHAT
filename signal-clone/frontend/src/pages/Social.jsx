@@ -292,6 +292,15 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
         if (!window.confirm('Delete this comment?')) return;
         try { await axios.delete('/api/social/comments/' + commentId, { headers: authHeaders(token) }); fetchComments(); } catch { }
     };
+    const handleEditComment = async (commentId, content) => {
+        try {
+            await axios.patch('/api/social/comments/' + commentId, { content }, { headers: authHeaders(token) });
+            await fetchComments();
+        } catch (error) {
+            alert(error.response?.data?.error || 'Could not edit comment');
+            throw error;
+        }
+    };
 
     useEffect(() => {
         const handle = (e) => {
@@ -431,7 +440,7 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
                     <div style={{ marginTop: 12, borderTop: '1px solid #2f3336', paddingTop: 12 }}>
                         {comments.length === 0 && <p style={{ fontSize: 14, textAlign: 'center', padding: '12px 0', color: '#71767b' }}>No replies yet.</p>}
                         {comments.map(item => (
-                            <NestedComment key={item.id} comment={item} onReply={handleReplyToComment} onDelete={handleDeleteComment} currentUser={currentUser} onProfileClick={onOpenProfile} />
+                            <NestedComment key={item.id} comment={item} onReply={handleReplyToComment} onEdit={handleEditComment} onDelete={handleDeleteComment} currentUser={currentUser} onProfileClick={onOpenProfile} />
                         ))}
                         <form onSubmit={submitComment} style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
                             <img src={currentUser && currentUser.avatar} alt="" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />

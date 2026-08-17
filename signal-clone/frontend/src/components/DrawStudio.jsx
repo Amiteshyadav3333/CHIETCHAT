@@ -194,13 +194,13 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, initialSource = null, inli
         image.src = URL.createObjectURL(file);
     };
     const send = () => {
-        if (onSendDrawing && actionsRef.current.length) {
+        if (onSendDrawing) {
             onSendDrawing({ version: 2, width: 1000, height: 1000, background: backgroundSource ? { ...backgroundSource } : null, actions: actionsRef.current, caption: caption.trim() });
             return;
         }
         canvasRef.current.toBlob(blob => {
         if (!blob) return;
-        onSend(new File([blob], `drawing-${Date.now()}.png`, { type: 'image/png' }), caption.trim());
+        onSend?.(new File([blob], `drawing-${Date.now()}.png`, { type: 'image/png' }), caption.trim());
         }, 'image/png');
     };
 

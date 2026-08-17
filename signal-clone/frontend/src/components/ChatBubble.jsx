@@ -696,9 +696,7 @@ const ChatBubble = ({
 
     const handleVote = async (optionIdx) => {
         try {
-            await axios.post(`/api/messages/${message.id}/poll-vote`, { option_idx: optionIdx }, {
-                headers: { Authorization: 'Bearer cookie-session' }
-            });
+            await axios.post(`/api/messages/${message.id}/poll-vote`, { optionIdx });
         } catch (err) {
             console.error("Error casting poll vote", err);
         }
@@ -1339,18 +1337,7 @@ const ChatBubble = ({
                         )}
                         <div className="text-center relative z-10">
                             <h4 className="text-white font-bold text-sm">{data.message || "Here's a gift for you!"}</h4>
-                            {data.myntraLink && (
-                                <a
-                                    href="https://www.myntra.com"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    referrerPolicy="no-referrer"
-                                    onClick={e => e.stopPropagation()}
-                                    className="mt-2 inline-flex items-center gap-1 text-xs bg-pink-500/30 text-pink-300 px-3 py-1 rounded-full font-bold hover:bg-pink-500/50 transition-colors"
-                                >
-                                    🛍️ View on Myntra
-                                </a>
-                            )}
+                            {data.provider === 'myntra' && data.couponCode && <div className="mt-2 rounded-lg border border-dashed border-white/40 bg-black/20 px-4 py-2 font-mono text-base font-black tracking-widest text-white">{data.couponCode}</div>}
                         </div>
                     </div>
                 </div>

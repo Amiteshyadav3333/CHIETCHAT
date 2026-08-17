@@ -1167,9 +1167,15 @@ def vote_poll(message_id):
         return jsonify({"error": "Forbidden"}), 403
         
     data = get_json_data()
-    option_idx = data.get('optionIdx')
+    option_idx = data.get('optionIdx', data.get('option_idx'))
     if option_idx is None:
         return jsonify({"error": "Option index is required"}), 400
+    try:
+        option_idx = int(option_idx)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid poll option"}), 400
+    if option_idx < 0 or option_idx >= 4:
+        return jsonify({"error": "Invalid poll option"}), 400
         
     from models import PollVote
     existing = PollVote.query.filter_by(message_id=message_id, user_id=user_id).first()
@@ -1187,7 +1193,7 @@ def vote_poll(message_id):
     votes = PollVote.query.filter_by(message_id=message_id).all()
     vote_data = [{"userId": v.user_id, "optionIdx": v.option_idx} for v in votes]
     
-    payload = {"messageId": message_id, "chatId": msg.chat_id, "votes": vote_data}
+    payload = {"id": message_id, "messageId": message_id, "chatId": msg.chat_id, "votes": vote_data}
     from sockets import emit_message_update
     emit_message_update(msg.chat_id, 'poll_vote_update', payload)
     

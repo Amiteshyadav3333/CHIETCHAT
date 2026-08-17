@@ -138,7 +138,8 @@ const Home = () => {
     const [notifications, setNotifications] = useState([]);
     const [showNotifications, setShowNotifications] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
-    const [liveLocationSharing, setLiveLocationSharing] = useState(null); // { chatId, expiry, intervalId }
+    const [liveLocationSharing, setLiveLocationSharing] = useState(null);
+    const liveLocationRef = useRef(null);
     const [timeLeft, setTimeLeft] = useState(null);
     const [chatTranslationLang, setChatTranslationLang] = useState('');
     const [typingUsers, setTypingUsers] = useState({});
@@ -984,8 +985,9 @@ const Home = () => {
             }
         });
 
-        socket.on('poll_vote_update', ({ id, votes }) => {
-            setMessages(prev => prev.map(m => m.id === id ? { ...m, votes } : m));
+        socket.on('poll_vote_update', ({ id, messageId, votes }) => {
+            const targetId = id ?? messageId;
+            setMessages(prev => prev.map(m => String(m.id) === String(targetId) ? { ...m, votes } : m));
         });
 
         socket.on('typing_update', ({ chatId, userId, username, isTyping }) => {
@@ -1811,7 +1813,7 @@ const Home = () => {
             if (!preparedStream) return;
             preparedCallStreamRef.current?.getTracks().forEach(track => track.stop());
             preparedCallStreamRef.current = preparedStream;
-            let chat = chats.find(c => c.id === incomingCall.chatId);
+            let chat = incomingCall.callChat || chats.find(c => c.id === incomingCall.chatId);
             if (!chat) {
                 const updatedChats = await fetchChats();
                 chat = updatedChats.find(c => c.id === incomingCall.chatId);
@@ -1832,39 +1834,46 @@ const Home = () => {
     };
 
     const startLiveLocation = (chatId) => {
-        if (liveLocationSharing) stopLiveLocation();
-
+        if (liveLocationRef.current) stopLiveLocation();
         const expiry = Date.now() + 30 * 60 * 1000;
-        const intervalId = setInterval(() => {
-            if (Date.now() > expiry) {
-                stopLiveLocation();
-                return;
+        let initialMessageSent = false;
+        const watchId = navigator.geolocation.watchPosition((pos) => {
+            if (Date.now() >= expiry) return stopLiveLocation();
+            const payload = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            socket.emit('live_location_update', { chatId, ...payload });
+            if (!initialMessageSent) {
+                initialMessageSent = true;
+                handleSendMessage(JSON.stringify(payload), 'live_location');
             }
-            navigator.geolocation.getCurrentPosition((pos) => {
-                socket.emit('live_location_update', {
-                    chatId,
-                    userId: user.id,
-                    lat: pos.coords.latitude,
-                    lng: pos.coords.longitude
-                });
-                setTimeLeft(Math.max(0, Math.round((expiry - Date.now()) / 1000)));
-            });
-        }, 10000);
-
-        setLiveLocationSharing({ chatId, expiry, intervalId });
-        // Initial send
-        navigator.geolocation.getCurrentPosition((pos) => {
-            handleSendMessage(JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude }), 'live_location');
-        });
+        }, error => {
+            console.error('Live location error', error);
+            if (!initialMessageSent) alert('Live location needs precise location permission.');
+        }, { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 });
+        const timerId = window.setInterval(() => {
+            const remaining = Math.max(0, Math.ceil((expiry - Date.now()) / 1000));
+            setTimeLeft(remaining);
+            if (!remaining) stopLiveLocation();
+        }, 1000);
+        const sharing = { chatId, expiry, watchId, timerId };
+        liveLocationRef.current = sharing;
+        setLiveLocationSharing(sharing);
+        setTimeLeft(30 * 60);
     };
 
     const stopLiveLocation = () => {
-        if (liveLocationSharing?.intervalId) {
-            clearInterval(liveLocationSharing.intervalId);
-        }
+        const sharing = liveLocationRef.current;
+        if (sharing?.watchId != null) navigator.geolocation.clearWatch(sharing.watchId);
+        if (sharing?.timerId) clearInterval(sharing.timerId);
+        liveLocationRef.current = null;
         setLiveLocationSharing(null);
         setTimeLeft(null);
     };
+
+    useEffect(() => () => {
+        const sharing = liveLocationRef.current;
+        if (sharing?.watchId != null) navigator.geolocation.clearWatch(sharing.watchId);
+        if (sharing?.timerId) clearInterval(sharing.timerId);
+    }, []);
 
     const handleTranslate = useCallback(async (text, targetLang, sourceLang = 'auto') => {
         if (!token) return '';

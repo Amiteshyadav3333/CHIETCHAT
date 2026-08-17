@@ -5,7 +5,7 @@ import json
 from utils import (
     decode_socket_user_id, utc_now, iso_utc, get_socket_user_id,
     user_can_access_chat, is_user_online, emit_to_user_chat_contacts,
-    get_chat_participant_ids, is_blocked, send_push_notification, claim_upload_asset
+    get_chat_participant_ids, is_blocked, has_contact, send_push_notification, claim_upload_asset
 )
 from extensions import socket_users, user_connection_counts, socket_presence_lock
 from scheduled_messages import valid_encrypted_envelope
@@ -24,8 +24,20 @@ MIN_MESSAGE_TTL = 1
 MAX_MESSAGE_TTL = 315360000
 _call_signal_windows = defaultdict(deque)
 _call_signal_windows_lock = threading.Lock()
+_call_invites = {}
+_call_invites_lock = threading.Lock()
 
 def register_socket_events(socketio):
+    def has_call_access(user_id, chat_id):
+        if user_can_access_chat(user_id, chat_id):
+            return True
+        with _call_invites_lock:
+            expires_at = _call_invites.get((chat_id, user_id), 0)
+            if expires_at <= time.monotonic():
+                _call_invites.pop((chat_id, user_id), None)
+                return False
+            return True
+
     def allow_call_signal(user_id):
         redis_client = current_app.extensions.get('cheetchat_redis')
         if redis_client is not None:
@@ -101,7 +113,7 @@ def register_socket_events(socketio):
             chat_id = int(data.get('chatId'))
         except (TypeError, ValueError):
             return False
-        if not user_id or not target_sid or not user_can_access_chat(user_id, chat_id):
+        if not user_id or not target_sid or not has_call_access(user_id, chat_id):
             return False
         room = f"call_{chat_id}"
         members = socketio.server.manager.get_participants('/', room)
@@ -459,7 +471,7 @@ def register_socket_events(socketio):
             chat_id = int(data.get('chatId'))
         except (TypeError, ValueError, AttributeError):
             return {"ok": False, "error": "Invalid chat"}
-        if not user_id or not user_can_access_chat(user_id, chat_id):
+        if not user_id or not has_call_access(user_id, chat_id):
             return {"ok": False, "error": "Forbidden"}
         chat = db.session.get(Chat, chat_id)
         if not chat:
@@ -497,7 +509,7 @@ def register_socket_events(socketio):
             emit('call_error', {"error": "Invalid call data"})
             return
 
-        if not user_id or not user_can_access_chat(user_id, chat_id):
+        if not user_id or not has_call_access(user_id, chat_id):
             emit('call_error', {"error": "Forbidden"})
             return
 
@@ -583,18 +595,33 @@ def register_socket_events(socketio):
         except (KeyError, TypeError, ValueError):
             emit('call_error', {"error": "Invalid call invitation"})
             return
-        participant_ids = get_chat_participant_ids(chat_id)
-        if not user_id or user_id not in participant_ids or target_uid not in participant_ids or target_uid == user_id:
+        room = f"call_{chat_id}"
+        members = socketio.server.manager.get_participants('/', room)
+        member_sids = {item[0] if isinstance(item, tuple) else item for item in members}
+        if not user_id or request.sid not in member_sids or target_uid == user_id or is_blocked(user_id, target_uid) or not has_contact(user_id, target_uid):
             emit('call_error', {"error": "Forbidden call invitation"})
             return
+        target = db.session.get(User, target_uid)
+        if not target:
+            emit('call_error', {"error": "User not found"})
+            return
+        with _call_invites_lock:
+            _call_invites[(chat_id, target_uid)] = time.monotonic() + 3600
         call_type = data.get('callType') if data.get('callType') in ('voice', 'video') else 'video'
         caller = db.session.get(User, user_id)
+        call_users = [db.session.get(User, uid) for uid in get_chat_participant_ids(chat_id)]
+        if not any(item and item.id == target_uid for item in call_users):
+            call_users.append(target)
         socketio.emit('incoming_call', {
             "chatId": chat_id,
             "callerName": caller.username if caller else 'Unknown',
             "callerId": user_id,
             "callType": call_type,
-            "isGroupCall": True
+            "isGroupCall": True,
+            "callChat": {
+                "id": chat_id, "name": "Group call", "isGroup": True,
+                "participants": [{"id": item.id, "username": item.username, "avatar": item.avatar} for item in call_users if item]
+            }
         }, room=f"user_{target_uid}")
 
     @socketio.on('offer')
@@ -747,13 +774,23 @@ def register_socket_events(socketio):
         if not user_id or not chat_id or not user_can_access_chat(user_id, chat_id):
             return
         
-        # Broadcast the update to all participants in the chat
-        socketio.emit('live_location_update', {
+        try:
+            lat = float(data.get('lat'))
+            lng = float(data.get('lng'))
+        except (TypeError, ValueError):
+            return
+        if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+            return
+        payload = {
             "chatId": chat_id,
             "userId": user_id,
-            "lat": data.get('lat'),
-            "lng": data.get('lng')
-        }, room=str(chat_id))
+            "lat": lat,
+            "lng": lng
+        }
+        # User rooms keep location realtime even when recipients have not opened
+        # the chat room yet or have multiple connected devices.
+        for participant_id in get_chat_participant_ids(chat_id):
+            socketio.emit('live_location_update', payload, room=f"user_{participant_id}")
 
     @socketio.on('game_move')
     def on_game_move(data):

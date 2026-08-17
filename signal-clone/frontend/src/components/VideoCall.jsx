@@ -195,43 +195,13 @@ const VideoCallModal = ({
     const handleAddParticipant = async (contact) => {
         setAddingStates(prev => ({ ...prev, [contact.id]: 'adding' }));
         try {
-            if (activeChat.isGroup) {
-                await axios.post(`/api/chats/${activeChat.id}/participants`, { userId: contact.id }, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                socket.emit('invite_to_call', {
-                    chatId: activeChat.id,
-                    userId: contact.id,
-                    callType: currentCallType
-                });
-                setAddingStates(prev => ({ ...prev, [contact.id]: 'added' }));
-            } else {
-                const otherParticipant = activeChat.participants.find(p => p.id !== user.id);
-                if (!otherParticipant) return;
-                const groupName = `Group Call - ${user.username}, ${otherParticipant.username}, ${contact.username}`;
-                const res = await axios.post('/api/chats/create', {
-                    participants: [user.id, otherParticipant.id, contact.id],
-                    isGroup: true,
-                    name: groupName
-                }, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                const newChatId = res.data.id;
-                socket.emit('transition_call', {
-                    chatId: activeChat.id,
-                    newChatId: newChatId
-                });
-                socket.emit('invite_to_call', {
-                    chatId: newChatId,
-                    userId: contact.id,
-                    callType: currentCallType
-                });
-                setAddingStates(prev => ({ ...prev, [contact.id]: 'added' }));
-                if (onTransitionCall) {
-                    await onTransitionCall(newChatId);
-                }
-                setShowAddModal(false);
-            }
+            socket.emit('invite_to_call', {
+                chatId: activeChat.id,
+                userId: contact.id,
+                callType: currentCallType
+            });
+            setAddingStates(prev => ({ ...prev, [contact.id]: 'added' }));
+            setShowAddModal(false);
         } catch (err) {
             console.error("Error adding participant", err);
             alert("Failed to add participant to call");
@@ -952,6 +922,11 @@ const VideoCallModal = ({
             isVideoOff: false
         }))
     ].filter(item => item.id !== (mainIsMe ? 'me' : selectedPeer?.[0]));
+    const callTiles = [
+        { id: 'me', type: 'me', name: 'You', avatar: user?.avatar, stream: localStream, isVideoOff },
+        ...peerList.map(([id, peer]) => ({ id, type: 'peer', name: peer.user?.username || 'Participant', avatar: peer.user?.avatar, stream: peer.stream, isVideoOff: false }))
+    ];
+    const useEqualGrid = callTiles.length >= 3 && !isMinimized;
 
     const selectMainView = (viewId) => {
         setMainView(viewId);
@@ -1127,7 +1102,17 @@ const VideoCallModal = ({
             )}
             {/* ── MAIN VIDEO (full screen) ── */}
             <div className="absolute inset-0">
-                {mainIsMe ? (
+                {useEqualGrid ? (
+                    <div className={`grid h-full w-full gap-1 bg-[#05080b] p-1 ${callTiles.length <= 4 ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-3'}`}>
+                        {callTiles.map(tile => <div key={tile.id} className="relative min-h-0 overflow-hidden rounded-xl bg-[#111b21]">
+                            {tile.type === 'me'
+                                ? <LocalVideo stream={tile.stream} muted className={`h-full w-full object-cover ${tile.isVideoOff ? 'hidden' : ''}`} />
+                                : <RemoteVideo stream={tile.stream} className="h-full w-full object-cover" />}
+                            {(tile.isVideoOff || !tile.stream) && <AvatarPlaceholder avatar={tile.avatar} name={tile.name} />}
+                            <div className="absolute bottom-3 left-3 rounded-full bg-black/60 px-3 py-1 text-xs font-semibold text-white">{tile.name}{tile.id === 'me' && isMuted ? ' · Muted' : ''}</div>
+                        </div>)}
+                    </div>
+                ) : mainIsMe ? (
                     // My video is main
                     <>
                         <LocalVideo stream={localStream} muted className={`w-full h-full object-cover ${isVideoOff ? 'hidden' : ''}`} />
@@ -1164,7 +1149,7 @@ const VideoCallModal = ({
             </div>
 
             {/* ── PIP thumbnails (Draggable) ── */}
-            <div 
+            {!useEqualGrid && <div
                 className="absolute z-20 flex flex-col gap-2 cursor-move touch-none"
                 style={{ left: pipPos.x, top: pipPos.y }}
                 onPointerDown={handlePipPointerDown}
@@ -1205,7 +1190,7 @@ const VideoCallModal = ({
                         <span className="text-gray-400 text-xs text-center px-3">Waiting...</span>
                     </div>
                 )}
-            </div>
+            </div>}
 
             {/* ── TOP BAR (name + end call) ── */}
             <div className={`absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-4 pt-${isMinimized ? '4' : '10'} pb-4 transition-opacity duration-300 ${showControls || isMinimized ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}

@@ -15,6 +15,7 @@ const GiftModal = ({ onClose, onSend }) => {
     const [wishText, setWishText] = useState('');
     const [uploadedPhoto, setUploadedPhoto] = useState(null);
     const [isSending, setIsSending] = useState(false);
+    const [couponCode, setCouponCode] = useState('');
     const photoInputRef = useRef(null);
 
     const handlePhotoUpload = (e) => {
@@ -39,11 +40,12 @@ const GiftModal = ({ onClose, onSend }) => {
     };
 
     const handleMyntraSelect = () => {
+        const normalizedCode = couponCode.trim().toUpperCase();
+        if (!/^[A-Z0-9-]{4,32}$/.test(normalizedCode)) return;
         onSend({
-            template: selectedTemplate,
-            message: wishText || '🛍️ A gift from Myntra for you!',
-            photo: uploadedPhoto,
-            myntraLink: 'https://www.myntra.com',
+            provider: 'myntra',
+            message: 'Myntra coupon for you',
+            couponCode: normalizedCode,
             status: 'Sent'
         });
         onClose();
@@ -141,8 +143,9 @@ const GiftModal = ({ onClose, onSend }) => {
                             <span className="text-xs text-gray-400">Myntra opens as a separate service. CHEETCHAT cannot verify purchases made there.</span>
                         </div>
                         <div className="text-6xl">🛍️</div>
-                        <a href="https://www.myntra.com" target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" className="w-full rounded-xl bg-pink-500 px-4 py-3 text-sm font-bold text-white hover:bg-pink-400">Open Myntra safely</a>
-                        <button type="button" onClick={handleMyntraSelect} className="w-full rounded-xl border border-pink-500/40 px-4 py-3 text-sm font-bold text-pink-300 hover:bg-pink-500/10">Share Myntra gift link</button>
+                        <input value={couponCode} onChange={event => setCouponCode(event.target.value.replace(/[^a-z0-9-]/gi, '').slice(0, 32))} placeholder="Enter Myntra coupon code" autoCapitalize="characters" className="w-full rounded-xl border border-pink-500/30 bg-[#202c33] px-4 py-3 text-center font-mono text-base uppercase tracking-widest text-white outline-none focus:border-pink-400" />
+                        <p className="text-xs text-gray-400">Only the coupon code is shared. Payment or purchase details are never included.</p>
+                        <button disabled={!/^[a-z0-9-]{4,32}$/i.test(couponCode.trim())} type="button" onClick={handleMyntraSelect} className="w-full rounded-xl bg-pink-500 px-4 py-3 text-sm font-bold text-white hover:bg-pink-400 disabled:opacity-40">Send Myntra coupon</button>
                     </div>
                 )}
 

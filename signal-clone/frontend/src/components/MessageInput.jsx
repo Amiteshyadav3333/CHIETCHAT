@@ -92,6 +92,7 @@ const MessageInput = ({
     const [showVideoNote, setShowVideoNote] = useState(false);
     const [isVideoNoteRecording, setIsVideoNoteRecording] = useState(false);
     const [videoNoteSeconds, setVideoNoteSeconds] = useState(0);
+    const [videoNoteFacing, setVideoNoteFacing] = useState('user');
     const [showPollCreator, setShowPollCreator] = useState(false);
     const [smartReplies, setSmartReplies] = useState([]);
     const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -230,6 +231,8 @@ const MessageInput = ({
     const videoNoteChunksRef = useRef([]);
     const videoNotePreviewRef = useRef(null);
     const videoNoteTimerRef = useRef(null);
+    const videoNoteCanvasRef = useRef(null);
+    const videoNoteFrameRef = useRef(null);
     const inputRef = useRef(null);
     const galleryInputRef = useRef(null);
     const documentInputRef = useRef(null);
@@ -531,7 +534,7 @@ const MessageInput = ({
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio: { echoCancellation: true, noiseSuppression: true },
                 video: {
-                    facingMode: 'user',
+                    facingMode: videoNoteFacing,
                     width: { ideal: 480 },
                     height: { ideal: 480 },
                     frameRate: { ideal: 24, max: 30 }
@@ -550,8 +553,29 @@ const MessageInput = ({
         }
     };
 
+    const flipVideoNoteCamera = async () => {
+        const nextFacing = videoNoteFacing === 'user' ? 'environment' : 'user';
+        try {
+            const replacement = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: nextFacing }, width: { ideal: 480 }, height: { ideal: 480 } },
+                audio: false
+            });
+            const current = videoNoteStreamRef.current;
+            current?.getVideoTracks().forEach(track => { current.removeTrack(track); track.stop(); });
+            replacement.getVideoTracks().forEach(track => current?.addTrack(track));
+            setVideoNoteFacing(nextFacing);
+            if (videoNotePreviewRef.current) {
+                videoNotePreviewRef.current.srcObject = current;
+                await videoNotePreviewRef.current.play();
+            }
+        } catch {
+            alert('Another camera is not available on this device.');
+        }
+    };
+
     const closeVideoNote = () => {
         clearInterval(videoNoteTimerRef.current);
+        cancelAnimationFrame(videoNoteFrameRef.current);
         if (videoNoteRecorderRef.current?.state === 'recording') {
             videoNoteRecorderRef.current.onstop = null;
             videoNoteRecorderRef.current.stop();
@@ -564,8 +588,23 @@ const MessageInput = ({
     };
 
     const startVideoNoteRecording = () => {
-        const stream = videoNoteStreamRef.current;
-        if (!stream) return;
+        const sourceStream = videoNoteStreamRef.current;
+        const canvas = videoNoteCanvasRef.current;
+        const preview = videoNotePreviewRef.current;
+        if (!sourceStream || !canvas || !preview) return;
+        const ctx = canvas.getContext('2d');
+        const drawFrame = () => {
+            if (preview.readyState >= 2) {
+                ctx.save();
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
+                ctx.restore();
+            }
+            videoNoteFrameRef.current = requestAnimationFrame(drawFrame);
+        };
+        drawFrame();
+        const stream = canvas.captureStream(24);
+        sourceStream.getAudioTracks().forEach(track => stream.addTrack(track));
         const preferredType = ['video/webm;codecs=vp8,opus', 'video/webm']
             .find(type => MediaRecorder.isTypeSupported?.(type));
         const recorder = new MediaRecorder(stream, preferredType ? { mimeType: preferredType } : undefined);
@@ -576,6 +615,7 @@ const MessageInput = ({
         };
         recorder.onstop = () => {
             clearInterval(videoNoteTimerRef.current);
+            cancelAnimationFrame(videoNoteFrameRef.current);
             const blob = new Blob(videoNoteChunksRef.current, { type: recorder.mimeType || 'video/webm' });
             const file = new File([blob], `video-note-${Date.now()}.webm`, { type: blob.type });
             videoNoteStreamRef.current?.getTracks().forEach(track => track.stop());
@@ -1233,10 +1273,12 @@ const MessageInput = ({
                             </span>
                         </div>
                         <div className={`relative w-64 h-64 rounded-full overflow-hidden bg-black border-4 ${isVideoNoteRecording ? 'border-red-500' : 'border-[#25d366]'}`}>
-                            <video ref={videoNotePreviewRef} autoPlay muted playsInline className="w-full h-full object-cover -scale-x-100" />
+                            <video ref={videoNotePreviewRef} autoPlay muted playsInline className={`w-full h-full object-cover ${videoNoteFacing === 'user' ? '-scale-x-100' : ''}`} />
+                            <canvas ref={videoNoteCanvasRef} width="480" height="480" className="hidden" />
                             {isVideoNoteRecording && <div className="absolute top-4 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-red-500 animate-pulse" />}
                         </div>
                         <p className="text-white/50 text-xs mt-4">Maximum 60 seconds</p>
+                        <button type="button" onClick={flipVideoNoteCamera} className="mt-3 rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white hover:bg-white/20">↻ {videoNoteFacing === 'user' ? 'Switch to back camera' : 'Switch to front camera'}</button>
                         <button
                             type="button"
                             onClick={isVideoNoteRecording ? stopVideoNoteRecording : startVideoNoteRecording}

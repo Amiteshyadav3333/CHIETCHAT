@@ -1,5 +1,6 @@
 from flask import request, current_app
 from flask_socketio import emit, join_room, leave_room
+from sqlalchemy.exc import IntegrityError
 from models import db, User, Chat, ChatParticipant, Message, CallRecord
 import json
 from utils import (
@@ -371,6 +372,20 @@ def register_socket_events(socketio):
             if asset_id:
                 claim_upload_asset(asset_id, socket_user_id, 'message', new_msg.id, allowed_asset_kinds)
             db.session.commit()
+        except IntegrityError:
+            # The client can retry through two transports at nearly the same
+            # time. The unique key is the final idempotency guard; after the
+            # winning transaction commits, acknowledge its message instead of
+            # turning the harmless duplicate into a production 500.
+            db.session.rollback()
+            existing = Message.query.filter_by(
+                sender_id=socket_user_id,
+                client_message_id=client_message_id,
+            ).first()
+            if existing:
+                return {"ok": True, "messageId": existing.id, "duplicate": True}
+            current_app.logger.exception('Message idempotency insert failed without a stored duplicate')
+            return {"ok": False, "error": "Message could not be saved", "retryable": True}
         except ValueError as error:
             db.session.rollback()
             return {"ok": False, "error": str(error), "retryable": False}

@@ -858,6 +858,12 @@ const MessageInput = ({
                             onClick={() => { setShowAttachMenu(false); setShowCameraModal(true); }}
                         />
                         <AttachOption
+                            label="Video Note"
+                            color="bg-[#25d366]"
+                            icon={<VideoCameraIcon className="w-6 h-6 text-white" />}
+                            onClick={() => { setShowAttachMenu(false); openVideoNote(); }}
+                        />
+                        <AttachOption
                             label="Schedule"
                             color="bg-sky-600"
                             icon={<span className="text-2xl text-white">◷</span>}

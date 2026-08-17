@@ -38,8 +38,10 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
     const [videoError, setVideoError] = useState(false);
     const [showAnalytics, setShowAnalytics] = useState(false);
     const [playbackMuted, setPlaybackMuted] = useState(startMuted);
+    const [mediaNearby, setMediaNearby] = useState(false);
     const [analytics, setAnalytics] = useState(null);
     const videoRef = useRef(null);
+    const cardRef = useRef(null);
     const audioRef = useRef(null);
     const viewedRef = useRef(false);
     const mediaBaseUrl = typeof window === 'undefined' ? 'https://cheetchat.invalid' : window.location.href;
@@ -128,10 +130,21 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
             { threshold: 0.6 }
         );
 
-        if (videoRef.current) observer.observe(videoRef.current);
+        if (cardRef.current) observer.observe(cardRef.current);
         return () => {
             observer.disconnect();
         };
+    }, []);
+
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) setMediaNearby(true);
+            },
+            { threshold: 0.01, rootMargin: '100% 0px' }
+        );
+        if (cardRef.current) observer.observe(cardRef.current);
+        return () => observer.disconnect();
     }, []);
 
     useEffect(() => {
@@ -142,7 +155,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
             videoRef.current?.pause();
             if (audioRef.current) audioRef.current.pause();
         }
-    }, [active, autoplay, isIntersecting]);
+    }, [active, autoplay, isIntersecting, mediaNearby]);
 
     useEffect(() => setPlaybackMuted(startMuted), [startMuted]);
 
@@ -275,7 +288,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
     };
 
     return (
-        <div className="relative h-full w-full bg-black snap-start flex items-center justify-center overflow-hidden">
+        <div ref={cardRef} className="relative h-full w-full bg-black snap-start flex items-center justify-center overflow-hidden">
             {videoError ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-950 text-gray-400 gap-2 p-4 text-center select-none">
                     <span className="text-5xl">⚠️</span>
@@ -285,14 +298,17 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
             ) : (
                 safeVideoUrl ? <video
                     ref={videoRef}
-                    src={safeVideoUrl}
+                    src={mediaNearby ? safeVideoUrl : undefined}
                     className="h-full w-full object-contain cursor-pointer"
                     loop
                     playsInline
-                    preload={dataSaver ? 'metadata' : 'auto'}
+                    preload={mediaNearby && !dataSaver ? 'auto' : 'metadata'}
                     muted={playbackMuted || !!safeMusicUrl}
                     style={{ filter: filters[reel.filterName] || '' }}
                     onError={() => setVideoError(true)}
+                    onCanPlay={() => {
+                        if (autoplay && active && isIntersecting) videoRef.current?.play().catch(() => {});
+                    }}
                     onClick={() => {
                         if (playbackMuted) {
                             setPlaybackMuted(false);
@@ -315,7 +331,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
             )}
 
             {safeMusicUrl && (
-                <audio ref={audioRef} src={safeMusicUrl} loop muted={playbackMuted} preload={dataSaver ? 'metadata' : 'auto'} />
+                <audio ref={audioRef} src={mediaNearby ? safeMusicUrl : undefined} loop muted={playbackMuted} preload={mediaNearby && !dataSaver ? 'auto' : 'metadata'} />
             )}
 
             {/* Floating Emojis */}

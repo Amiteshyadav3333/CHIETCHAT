@@ -231,7 +231,6 @@ const MessageInput = ({
     const videoNoteTimerRef = useRef(null);
     const inputRef = useRef(null);
     const galleryInputRef = useRef(null);
-    const videoCameraInputRef = useRef(null);
     const documentInputRef = useRef(null);
     const audioInputRef = useRef(null);
     const typingTimerRef = useRef(null);
@@ -1016,7 +1015,7 @@ const MessageInput = ({
                         >
                             <div className="w-14 h-14 rounded-full bg-white" />
                         </button>
-                        <button onClick={() => { videoCameraInputRef.current?.click(); closeCamera(); }} className="flex w-14 flex-col items-center gap-1 text-white" title="Record video"><span className="rounded-full bg-red-500/85 p-3"><VideoCameraIcon className="h-6 w-6" /></span><span className="text-[10px] font-bold">Video</span></button>
+                        <button onClick={() => { closeCamera(); openVideoNote(); }} className="flex w-14 flex-col items-center gap-1 text-white" title="Record video"><span className="rounded-full bg-red-500/85 p-3"><VideoCameraIcon className="h-6 w-6" /></span><span className="text-[10px] font-bold">Video</span></button>
                         <button onClick={() => { closeCamera(); openVideoNote(); }} className="flex w-14 flex-col items-center gap-1 text-white" title="Record video note"><span className="rounded-full bg-[#25d366] p-3"><span className="block h-6 w-6 rounded-full border-2 border-white" /></span><span className="text-[10px] font-bold">Note</span></button>
                             </>
                         )}
@@ -1127,7 +1126,6 @@ const MessageInput = ({
 
                 {/* Hidden file inputs */}
                 <input ref={galleryInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="image/*,video/*" />
-                <input ref={videoCameraInputRef} type="file" className="hidden" onChange={handleFileChange} accept="video/*" capture="environment" />
                 <input ref={documentInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="*/*" />
                 <input ref={audioInputRef} type="file" className="hidden" onChange={handleFileChange} multiple accept="audio/*" />
 

@@ -3130,7 +3130,7 @@ const Home = () => {
                             return (
                                 <React.Fragment key={msg.id || idx}>
                                     {showDate && <DateSeparator date={msg.timestamp} />}
-                                    <div ref={el => { if (msg.id) messageRefsMap.current[msg.id] = el; }}>
+                                    <div data-user-content ref={el => { if (msg.id) messageRefsMap.current[msg.id] = el; }}>
                                         <ChatBubble
                                             message={{ ...msg, senderName: sender?.username }}
                                             isOwn={msg.senderId === user.id}

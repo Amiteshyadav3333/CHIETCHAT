@@ -31,7 +31,9 @@ export default function AppLanguage() {
             while (walker.nextNode()) {
                 const node = walker.currentNode;
                 const parent = node.parentElement;
-                if (!parent || ignoredTags.has(parent.tagName) || parent.closest('[data-no-translate], [contenteditable="true"]')) continue;
+                // App language is for interface chrome only. User-authored content
+                // (messages, captions, comments, bios, etc.) must stay untouched.
+                if (!parent || ignoredTags.has(parent.tagName) || parent.closest('[data-no-translate], [data-user-content], [contenteditable="true"]')) continue;
                 const current = node.nodeValue;
                 const record = records.current.get(node);
                 if (record && current !== record.translated && current !== record.original) records.current.set(node, { original: current, translated: null });

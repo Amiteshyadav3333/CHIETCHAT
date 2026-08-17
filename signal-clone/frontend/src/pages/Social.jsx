@@ -69,6 +69,57 @@ const fmtCount = (n) => {
     return n;
 };
 
+const FeedVideo = ({ src, multi, muted, autoplay, onOpen }) => {
+    const containerRef = useRef(null);
+    const videoRef = useRef(null);
+    const [nearViewport, setNearViewport] = useState(false);
+    const [visible, setVisible] = useState(false);
+
+    useEffect(() => {
+        const preloadObserver = new IntersectionObserver(([entry]) => {
+            if (entry.isIntersecting) setNearViewport(true);
+        }, { threshold: 0.01, rootMargin: '500px 0px' });
+        const playbackObserver = new IntersectionObserver(([entry]) => {
+            setVisible(entry.isIntersecting && entry.intersectionRatio >= 0.55);
+        }, { threshold: [0, 0.55] });
+        if (containerRef.current) {
+            preloadObserver.observe(containerRef.current);
+            playbackObserver.observe(containerRef.current);
+        }
+        return () => {
+            preloadObserver.disconnect();
+            playbackObserver.disconnect();
+        };
+    }, []);
+
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video) return;
+        if (autoplay && visible) video.play().catch(() => {});
+        else video.pause();
+    }, [autoplay, visible, nearViewport]);
+
+    return (
+        <div ref={containerRef} style={{ position: 'relative', cursor: 'pointer' }} onClick={onOpen}>
+            <video
+                ref={videoRef}
+                src={nearViewport ? src : undefined}
+                style={{ width: '100%', height: multi ? 255 : 'auto', maxHeight: 500, objectFit: 'contain', background: '#000', display: 'block' }}
+                preload={nearViewport ? 'metadata' : 'none'}
+                muted={muted}
+                loop={autoplay}
+                controls
+                playsInline
+            />
+            {!visible && <div style={{ pointerEvents: 'none', position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.12)' }}>
+                <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(15,20,25,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg viewBox="0 0 24 24" fill="white" style={{ width: 28, height: 28, marginLeft: 4 }}><path d="M8 5v14l11-7z" /></svg>
+                </div>
+            </div>}
+        </div>
+    );
+};
+
 const TRENDING = [
     { tag: '#ChietChat', posts: '12.4K', category: 'Technology' },
     { tag: '#WebRTC', posts: '8.1K', category: 'Technology' },
@@ -326,7 +377,7 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
 
                 {displayPost.articleTitle && <div className="mt-3 rounded-2xl border border-blue-500/20 bg-blue-500/10 p-4"><span className="text-[10px] font-black uppercase tracking-widest text-blue-400">Premium article</span><h2 className="mt-1 text-xl font-black text-white">{displayPost.articleTitle}</h2></div>}
                 {displayPost.isMonetized && <span className="mt-2 inline-flex rounded-full bg-amber-400/15 px-2 py-1 text-[10px] font-bold text-amber-300">Creator earnings enabled</span>}
-                {postCaption && <p style={{ marginTop: 4, fontSize: 15, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#e7e9ea' }}>{postCaption}</p>}
+                {postCaption && <p data-user-content style={{ marginTop: 4, fontSize: 15, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#e7e9ea' }}>{postCaption}</p>}
                 {authorId === currentUser?.id && currentUser?.isPremium && <button onClick={async e => { e.stopPropagation(); try { const { data } = await axios.get(`/api/social/posts/${post.id}/analytics`, { headers: authHeaders(token) }); alert(`Views: ${data.views}\nEngagement: ${data.engagement}\nEarnings: ₹${(data.earningsPaise / 100).toFixed(2)}`); } catch (err) { alert(err.response?.data?.error || 'Analytics unavailable'); } }} className="mt-3 inline-flex items-center gap-1 rounded-full bg-white/5 px-3 py-1.5 text-xs font-bold text-blue-400"><ChartBarIcon className="h-4 w-4" />Advanced analytics</button>}
 
                 {displayPost.poll && <div className="mt-3 space-y-2 rounded-2xl border border-[#2f3336] bg-[#0b1117] p-3">
@@ -337,14 +388,7 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
                 {postMediaItems.length > 0 && (
                     <div className={`mt-3 grid max-h-[520px] gap-0.5 overflow-hidden rounded-2xl border border-[#2f3336] ${postMediaItems.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                         {postMediaItems.map((item, index) => item.type === 'video' ? (
-                            <div key={`${item.url}-${index}`} style={{ position: 'relative', cursor: 'pointer' }} onClick={() => setZoomedMedia({ src: item.url, type: 'video' })}>
-                                <video src={item.url} style={{ width: '100%', height: postMediaItems.length > 1 ? 255 : 'auto', maxHeight: 500, objectFit: 'contain', background: '#000', display: 'block' }} preload="metadata" muted={mutedVideos} autoPlay={autoplayVideos} loop={autoplayVideos} controls playsInline />
-                                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.2)' }}>
-                                    <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(15,20,25,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <svg viewBox="0 0 24 24" fill="white" style={{ width: 28, height: 28, marginLeft: 4 }}><path d="M8 5v14l11-7z" /></svg>
-                                    </div>
-                                </div>
-                            </div>
+                            <FeedVideo key={`${item.url}-${index}`} src={item.url} multi={postMediaItems.length > 1} muted={mutedVideos} autoplay={autoplayVideos} onOpen={() => setZoomedMedia({ src: item.url, type: 'video' })} />
                         ) : (
                             <img key={`${item.url}-${index}`} src={item.url} alt={`Post media ${index + 1}`} style={{ width: '100%', height: postMediaItems.length > 1 ? 255 : 'auto', maxHeight: 500, objectFit: 'cover', cursor: 'pointer', display: 'block' }} onClick={() => setZoomedMedia({ src: item.url, type: 'image' })} />
                         ))}

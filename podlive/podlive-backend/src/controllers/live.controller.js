@@ -5,6 +5,7 @@ const { AccessToken } = require('livekit-server-sdk');
 const fs = require('fs');
 const path = require('path');
 const livekitEgressService = require('../services/livekit-egress.service');
+const s3Service = require('../services/s3.service');
 const publicLivekitUrl = () => process.env.LIVEKIT_URL;
 
 const createToken = async (roomName, participantName, isHost = false) => {
@@ -21,7 +22,7 @@ const createToken = async (roomName, participantName, isHost = false) => {
 
 exports.createLiveSession = async (req, res) => {
     try {
-        const { title, description, category } = req.body;
+        const { title, description, category, visibility = 'public' } = req.body;
         const host_user_id = req.user.id;
 
         if (!title) {
@@ -30,17 +31,31 @@ exports.createLiveSession = async (req, res) => {
 
         const livekit_room_name = `room-${crypto.randomBytes(8).toString('hex')}`;
 
+        let thumbnailUrl = null;
+        if (req.file) {
+            try {
+                thumbnailUrl = await s3Service.uploadFileToS3(req.file.path, `thumbnails/live-${Date.now()}-${req.file.filename}`, req.file.mimetype || 'image/jpeg');
+                fs.unlink(req.file.path, () => {});
+            } catch {
+                thumbnailUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+            }
+        }
+
         let newSession = await prisma.liveSession.create({
             data: {
                 host_user_id,
                 title,
                 description,
                 category,
+                thumbnail_url: thumbnailUrl,
                 status: 'live',
                 livekit_room_name,
                 started_at: new Date(),
             }
         });
+
+        res.set('Cache-Control', 'no-store');
+        req.io?.emit('live_started', newSession);
 
         res.status(201).json({
             message: 'Live session created successfully',
@@ -217,6 +232,7 @@ exports.getActiveLives = async (req, res) => {
             include: { host: true },
             orderBy: { started_at: 'desc' }
         });
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
         res.json(sessions);
     } catch (error) {
         console.error('Get Active Lives Error:', error);

@@ -23,12 +23,14 @@ export default function usePodLiveSocket(sessionId, user) {
         const onInvite = (data) => setInvite(data);
         const onInviteStatus = (data) => setInviteStatus(data);
         const onEnded = () => window.dispatchEvent(new CustomEvent('podlive:ended', { detail: { sessionId } }));
+        const onLiveStarted = (live) => window.dispatchEvent(new CustomEvent('podlive:started', { detail: live }));
         socket.on('connect', join);
         socket.on('viewer_count_update', onCount);
         socket.on('receive_chat_message', onMessage);
         socket.on('receive_invite', onInvite);
         socket.on('invite_status', onInviteStatus);
         socket.on('podcast_ended', onEnded);
+        socket.on('live_started', onLiveStarted);
         return () => {
             if (sessionId) socket.emit('leave_chat_room', sessionId);
             socket.off('connect', join);
@@ -37,6 +39,7 @@ export default function usePodLiveSocket(sessionId, user) {
             socket.off('receive_invite', onInvite);
             socket.off('invite_status', onInviteStatus);
             socket.off('podcast_ended', onEnded);
+            socket.off('live_started', onLiveStarted);
             socket.disconnect();
             if (socketRef.current === socket) socketRef.current = null;
         };

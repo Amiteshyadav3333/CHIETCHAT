@@ -20,8 +20,13 @@ const upload = multer({
     storage,
     limits: { fileSize: 500 * 1024 * 1024 } // 500MB
 });
+const thumbnailUpload = multer({
+    storage,
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => file.mimetype?.startsWith('image/') ? cb(null, true) : cb(new Error('Thumbnail must be an image'))
+});
 
-router.post('/create', authMiddleware, liveController.createLiveSession);
+router.post('/create', authMiddleware, thumbnailUpload.single('thumbnail'), liveController.createLiveSession);
 router.post('/:id/start', authMiddleware, liveController.startLiveSession);
 router.post('/:id/hls/start', authMiddleware, liveController.startHlsEgress);
 router.post('/:id/end', authMiddleware, upload.single('video'), liveController.endLiveSession);

@@ -28,8 +28,9 @@ module.exports = (io) => {
                 let handle = (inviteeHandle || '').trim();
                 if (!handle.startsWith('@')) handle = '@' + handle;
 
+                const withoutAt = handle.replace(/^@+/, '');
                 const [invitee, host] = await Promise.all([
-                    prisma.user.findUnique({ where: { unique_handle: handle } }),
+                    prisma.user.findFirst({ where: { OR: [{ unique_handle: handle }, { unique_handle: withoutAt }, { unique_handle: `@${withoutAt}` }] } }),
                     prisma.user.findUnique({ where: { id: hostId } })
                 ]);
 
@@ -77,23 +78,38 @@ module.exports = (io) => {
         });
 
         // ── Live chat ──────────────────────────────────────────
-        socket.on('join_chat_room', (sessionId) => {
-            if (sessionId) socket.join(sessionId);
+        socket.on('join_chat_room', async (sessionId) => {
+            if (!sessionId) return;
+            await socket.join(sessionId);
+            io.to(sessionId).emit('viewer_count_update', { viewerCount: io.sockets.adapter.rooms.get(sessionId)?.size || 0 });
         });
 
-        socket.on('leave_chat_room', (sessionId) => {
-            if (sessionId) socket.leave(sessionId);
+        socket.on('leave_chat_room', async (sessionId) => {
+            if (!sessionId) return;
+            await socket.leave(sessionId);
+            io.to(sessionId).emit('viewer_count_update', { viewerCount: io.sockets.adapter.rooms.get(sessionId)?.size || 0 });
         });
 
-        socket.on('send_chat_message', async ({ sessionId, senderHandle, message }) => {
+        socket.on('disconnecting', () => {
+            for (const room of socket.rooms) {
+                if (room !== socket.id) io.to(room).emit('viewer_count_update', { viewerCount: Math.max(0, (io.sockets.adapter.rooms.get(room)?.size || 1) - 1) });
+            }
+        });
+
+        socket.on('send_chat_message', async ({ sessionId, message }) => {
             if (!sessionId || !message?.trim()) return;
 
-            const payload = { senderHandle, message: message.trim(), created_at: new Date() };
+            const senderId = [...activeUsers.entries()].find(([, socketId]) => socketId === socket.id)?.[0];
+            if (!senderId) return;
+            const sender = await prisma.user.findUnique({ where: { id: senderId }, select: { unique_handle: true } });
+            if (!sender) return;
+
+            const payload = { senderHandle: sender.unique_handle, message: message.trim(), created_at: new Date() };
             io.to(sessionId).emit('receive_chat_message', payload);
 
             // Persist to DB asynchronously
             prisma.chatMessage.create({
-                data: { session_id: sessionId, sender_handle: senderHandle, message: message.trim() }
+                data: { session_id: sessionId, sender_handle: sender.unique_handle, message: message.trim() }
             }).catch(err => console.error('[Socket] Chat save error:', err.message));
         });
 

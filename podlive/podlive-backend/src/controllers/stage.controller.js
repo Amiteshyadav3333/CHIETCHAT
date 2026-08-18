@@ -5,6 +5,15 @@ const { AccessToken, RoomServiceClient, TrackSource } = require('livekit-server-
 const livekitHost = process.env.LIVEKIT_URL || 'http://127.0.0.1:7880';
 const roomService = new RoomServiceClient(livekitHost, process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET);
 
+const findUserByHandle = async (rawHandle) => {
+    const clean = String(rawHandle || '').trim();
+    if (!clean) return null;
+    const withoutAt = clean.replace(/^@+/, '');
+    return prisma.user.findFirst({
+        where: { OR: [{ unique_handle: clean }, { unique_handle: withoutAt }, { unique_handle: `@${withoutAt}` }] }
+    });
+};
+
 const createToken = async (roomName, participantName) => {
     const apiKey = process.env.LIVEKIT_API_KEY;
     const apiSecret = process.env.LIVEKIT_API_SECRET;
@@ -27,7 +36,7 @@ exports.inviteUser = async (req, res) => {
             return res.status(403).json({ error: 'Unauthorized' });
         }
 
-        const invitee = await prisma.user.findUnique({ where: { unique_handle: handle } });
+        const invitee = await findUserByHandle(handle);
         if (!invitee) {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -41,7 +50,13 @@ exports.inviteUser = async (req, res) => {
             }
         });
 
-        // The real-time notification will be handled by Socket.IO separately in the route or frontend
+        const host = await prisma.user.findUnique({ where: { id: host_id } });
+        req.io?.to(invitee.id).emit('receive_invite', {
+            sessionId,
+            inviteId: newInvite.id,
+            invite: newInvite,
+            host: host && { id: host.id, display_name: host.display_name, unique_handle: host.unique_handle, avatar_url: host.avatar_url }
+        });
         res.status(201).json({ message: 'Invite sent', invite: newInvite, invitee });
     } catch (error) {
         console.error('Invite Error:', error);
@@ -66,7 +81,7 @@ exports.acceptInvite = async (req, res) => {
         // Generate token for the stage participant
         const token = await createToken(invite.session.livekit_room_name, invite.invitee.unique_handle);
 
-        res.json({ message: 'Invite accepted', token, roomName: invite.session.livekit_room_name });
+        res.json({ message: 'Invite accepted', token, roomName: invite.session.livekit_room_name, livekitUrl: process.env.LIVEKIT_URL });
     } catch (error) {
         console.error('Accept Invite Error:', error);
         res.status(500).json({ error: 'Internal Server Error' });

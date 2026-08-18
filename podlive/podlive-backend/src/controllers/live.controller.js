@@ -5,6 +5,7 @@ const { AccessToken } = require('livekit-server-sdk');
 const fs = require('fs');
 const path = require('path');
 const livekitEgressService = require('../services/livekit-egress.service');
+const publicLivekitUrl = () => process.env.LIVEKIT_URL;
 
 const createToken = async (roomName, participantName, isHost = false) => {
     const apiKey = process.env.LIVEKIT_API_KEY;
@@ -115,7 +116,7 @@ exports.startLiveSession = async (req, res) => {
 
         const token = await createToken(session.livekit_room_name, session.host.unique_handle, true);
 
-        res.json({ token, roomName: session.livekit_room_name });
+        res.json({ token, roomName: session.livekit_room_name, livekitUrl: publicLivekitUrl() });
     } catch (error) {
         console.error('Start Live Session Error:', error);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -143,14 +144,19 @@ exports.endLiveSession = async (req, res) => {
             });
         }
 
+        // Ending is intentionally idempotent. Double clicks, reconnect cleanup and
+        // delayed clients can all reach this endpoint for the same session.
+        if (session.status === 'ended') {
+            return res.json({ message: 'Live session already ended', session });
+        }
+
         const updatedSession = await prisma.liveSession.update({
             where: { id },
             data: {
                 status: 'ended',
                 ended_at: new Date(),
                 ...(recording_url && { recording_url }),
-                livekit_egress_id: null,
-                viewer_count_peak: Math.floor(Math.random() * 50) + 12
+                livekit_egress_id: null
             }
         });
 
@@ -178,7 +184,7 @@ exports.getViewerToken = async (req, res) => {
         const isHost = session.host_user_id === req.user.id;
         const token = await createToken(session.livekit_room_name, user.unique_handle, isHost);
 
-        res.json({ token, roomName: session.livekit_room_name, isHost });
+        res.json({ token, roomName: session.livekit_room_name, livekitUrl: publicLivekitUrl(), isHost });
     } catch (error) {
         console.error('Get Viewer Token Error:', error);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -197,7 +203,7 @@ exports.upgradeViewerToken = async (req, res) => {
         const user = await prisma.user.findUnique({ where: { id: req.user.id } });
         const token = await createToken(session.livekit_room_name, user.unique_handle, true);
 
-        res.json({ token, roomName: session.livekit_room_name });
+        res.json({ token, roomName: session.livekit_room_name, livekitUrl: publicLivekitUrl() });
     } catch (error) {
         console.error('Upgrade Viewer Token Error:', error);
         res.status(500).json({ error: 'Internal Server Error' });

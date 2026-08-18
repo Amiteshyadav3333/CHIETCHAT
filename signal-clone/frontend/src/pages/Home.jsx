@@ -120,6 +120,11 @@ const Home = () => {
     const [showSmartSpace, setShowSmartSpace] = useState(false);
     const [smartSpaceButtonEnabled, setSmartSpaceButtonEnabled] = useState(() => localStorage.getItem('smart_space_button_enabled') === '1');
     const [showPodlive, setShowPodlive] = useState(false);
+    useEffect(() => {
+        if (new URLSearchParams(window.location.search).has('podlive')) {
+            setShowPodlive(true);
+        }
+    }, []);
     const [socialDeepLink, setSocialDeepLink] = useState(null); // { type: 'post'|'profile', id }
     const [showSettings, setShowSettings] = useState(false);
     const [navPeekOpen, setNavPeekOpen] = useState(false);

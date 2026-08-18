@@ -3,8 +3,23 @@ const prisma = new PrismaClient();
 
 // In-memory store — works for single-instance.
 // For multi-instance scale, replace with Redis adapter: socket.io/redis-adapter
-const activeUsers = new Map();    // userId -> socketId
+const activeUsers = new Map();    // userId -> Set<socketId>
 const pendingDisconnects = new Map(); // userId -> timeoutId
+
+const addActiveSocket = (userId, socketId) => {
+    const sockets = activeUsers.get(userId) || new Set();
+    sockets.add(socketId);
+    activeUsers.set(userId, sockets);
+};
+
+const removeActiveSocket = (userId, socketId) => {
+    const sockets = activeUsers.get(userId);
+    if (!sockets) return false;
+    sockets.delete(socketId);
+    if (sockets.size) return false;
+    activeUsers.delete(userId);
+    return true;
+};
 
 module.exports = (io) => {
     io.on('connection', (socket) => {
@@ -13,7 +28,7 @@ module.exports = (io) => {
         socket.on('register_user', () => {
             const userId = socket.data.userId;
             if (!userId) return;
-            activeUsers.set(userId, socket.id);
+            addActiveSocket(userId, socket.id);
             socket.join(userId);
 
             if (pendingDisconnects.has(userId)) {
@@ -56,29 +71,24 @@ module.exports = (io) => {
         });
 
         socket.on('accept_invite', ({ sessionId, hostId, inviteeHandle }) => {
-            const hostSocket = activeUsers.get(hostId);
-            if (hostSocket) io.to(hostSocket).emit('invite_accepted', { sessionId, inviteeHandle });
+            if (hostId) io.to(hostId).emit('invite_accepted', { sessionId, inviteeHandle });
         });
 
         socket.on('reject_invite', ({ sessionId, hostId, inviteeHandle }) => {
-            const hostSocket = activeUsers.get(hostId);
-            if (hostSocket) io.to(hostSocket).emit('invite_rejected', { sessionId, inviteeHandle });
+            if (hostId) io.to(hostId).emit('invite_rejected', { sessionId, inviteeHandle });
         });
 
         // ── Host controls (mic / camera / kick) ────────────────
         socket.on('mute_guest', ({ guestId }) => {
-            const guestSocket = activeUsers.get(guestId);
-            if (guestSocket) io.to(guestSocket).emit('guest_muted');
+            if (guestId) io.to(guestId).emit('guest_muted');
         });
 
         socket.on('disable_camera_guest', ({ guestId }) => {
-            const guestSocket = activeUsers.get(guestId);
-            if (guestSocket) io.to(guestSocket).emit('guest_camera_disabled');
+            if (guestId) io.to(guestId).emit('guest_camera_disabled');
         });
 
         socket.on('remove_guest', ({ guestId }) => {
-            const guestSocket = activeUsers.get(guestId);
-            if (guestSocket) io.to(guestSocket).emit('guest_removed');
+            if (guestId) io.to(guestId).emit('guest_removed');
         });
 
         // ── Live chat ──────────────────────────────────────────
@@ -124,16 +134,8 @@ module.exports = (io) => {
 
         // ── Disconnect ─────────────────────────────────────────
         socket.on('disconnect', async () => {
-            let disconnectedUserId = null;
-            for (const [userId, socketId] of activeUsers.entries()) {
-                if (socketId === socket.id) {
-                    disconnectedUserId = userId;
-                    activeUsers.delete(userId);
-                    break;
-                }
-            }
-
-            if (!disconnectedUserId) return;
+            const disconnectedUserId = socket.data.userId;
+            if (!disconnectedUserId || !removeActiveSocket(disconnectedUserId, socket.id)) return;
 
             // Auto-end session if host disconnects and doesn't reconnect in 20s
             try {
@@ -145,6 +147,12 @@ module.exports = (io) => {
                     console.log(`[Socket] Host ${disconnectedUserId} disconnected — 20s grace timer started`);
 
                     const timeoutId = setTimeout(async () => {
+                        // A route change, reconnect, second tab or second device must not
+                        // end the host's live session while any authenticated socket remains.
+                        if (activeUsers.has(disconnectedUserId)) {
+                            pendingDisconnects.delete(disconnectedUserId);
+                            return;
+                        }
                         for (const session of activeSessions) {
                             try {
                                 await prisma.liveSession.update({
@@ -152,6 +160,7 @@ module.exports = (io) => {
                                     data: { status: 'ended', ended_at: new Date(), livekit_egress_id: null }
                                 });
                                 io.to(session.id).emit('podcast_ended');
+                                io.emit('live_ended', { sessionId: session.id });
                                 console.log(`[Socket] Auto-ended session ${session.id}`);
                             } catch (err) {
                                 console.error(`[Socket] Auto-end failed for ${session.id}:`, err.message);

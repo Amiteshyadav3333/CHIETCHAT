@@ -122,6 +122,10 @@ const Home = () => {
     const [smartSpaceButtonEnabled, setSmartSpaceButtonEnabled] = useState(() => localStorage.getItem('smart_space_button_enabled') === '1');
     const [showPodlive, setShowPodlive] = useState(false);
     const [podliveInvite, setPodliveInvite] = useState(null);
+    const [podliveLiveCount, setPodliveLiveCount] = useState(0);
+    const updatePodliveLiveCount = useCallback((count) => {
+        setPodliveLiveCount(Math.max(0, Number(count) || 0));
+    }, []);
     const receivePodliveInvite = useCallback((invite) => {
         setPodliveInvite(invite);
         setShowPodlive(true);
@@ -2020,7 +2024,7 @@ const Home = () => {
         },
         { label: 'Reels', icon: PlayIcon, active: showReels, action: () => { hideAppNavForFeature(); setShowSocial(false); setShowPodlive(false); setShowReels(true); setShowAiChat(false); } },
         { label: 'Social', icon: PhotoIcon, active: showSocial, action: () => { hideAppNavForFeature(); setShowReels(false); setShowPodlive(false); setShowSocial(true); setShowAiChat(false); } },
-        { label: 'PodLive', icon: MicrophoneIcon, active: showPodlive, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(true); setShowAiChat(false); } },
+        { label: 'PodLive', icon: MicrophoneIcon, active: showPodlive, live: podliveLiveCount > 0, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(true); setShowAiChat(false); } },
         { label: 'AI', icon: SparklesIcon, active: showAiChat, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(false); setShowAiChat(true); } },
         { label: 'Notify', icon: BellIcon, active: showNotifications, action: openNotifications, badge: unreadCount },
         { label: 'New', icon: PlusIcon, active: showSearchModal || showLinkPhoneModal, action: openNewChat },
@@ -2303,6 +2307,11 @@ const Home = () => {
                                     {item.badge > 0 && (
                                         <span className="absolute -top-1 -right-1 min-w-4 h-4 rounded-full bg-red-500 px-1 text-[10px] leading-4 text-center font-bold text-white">
                                             {item.badge > 9 ? '9+' : item.badge}
+                                        </span>
+                                    )}
+                                    {item.live && (
+                                        <span className="absolute -right-6 -top-2 rounded-full bg-red-600 px-1.5 py-0.5 text-[8px] font-black leading-none text-white shadow-[0_0_10px_rgba(220,38,38,0.75)]">
+                                            LIVE
                                         </span>
                                     )}
                                 </span>
@@ -3247,7 +3256,7 @@ const Home = () => {
                 </React.Suspense>
             </div>}
 
-            <PodLiveInviteBridge active={Boolean(token) && !showPodlive} onInvite={receivePodliveInvite} />
+            <PodLiveInviteBridge active={Boolean(token) && !showPodlive} onInvite={receivePodliveInvite} onLiveStatus={updatePodliveLiveCount} />
 
             {/* PodLive Overlay */}
             {showPodlive && <div className="fixed inset-0 z-50 bg-[#0b0f19]">

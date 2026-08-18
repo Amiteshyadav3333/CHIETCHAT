@@ -177,6 +177,7 @@ exports.endLiveSession = async (req, res) => {
 
         if (req.io) {
             req.io.to(id).emit('podcast_ended');
+            req.io.emit('live_ended', { sessionId: id });
         }
 
         res.json({ message: 'Live session ended successfully', session: updatedSession });

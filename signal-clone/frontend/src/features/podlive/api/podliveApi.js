@@ -24,6 +24,7 @@ export const podlive = {
     end: (id) => podliveApi.post(`/api/live/${id}/end`).then(({ data }) => data),
     participants: (id) => podliveApi.get(`/api/live/${id}/participants`).then(({ data }) => data),
     invite: (sessionId, handle) => podliveApi.post('/api/stage/invite', { sessionId, handle }).then(({ data }) => data),
+    pendingInvite: () => podliveApi.get('/api/stage/invites/pending', { params: { _fresh: Date.now() } }).then(({ data }) => data.invite),
     acceptInvite: (id) => podliveApi.post(`/api/stage/invite/${id}/accept`).then(({ data }) => data),
     rejectInvite: (id) => podliveApi.post(`/api/stage/invite/${id}/reject`).then(({ data }) => data),
     guests: (id) => podliveApi.get(`/api/stage/${id}/guests`).then(({ data }) => data),

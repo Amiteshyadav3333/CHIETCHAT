@@ -32,7 +32,7 @@ exports.inviteUser = async (req, res) => {
         const host_id = req.user.id;
 
         const session = await prisma.liveSession.findUnique({ where: { id: sessionId } });
-        if (!session || session.host_user_id !== host_id) {
+        if (!session || session.host_user_id !== host_id || session.status !== 'live') {
             return res.status(403).json({ error: 'Unauthorized' });
         }
 
@@ -60,6 +60,38 @@ exports.inviteUser = async (req, res) => {
         res.status(201).json({ message: 'Invite sent', invite: newInvite, invitee });
     } catch (error) {
         console.error('Invite Error:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+exports.getPendingInvite = async (req, res) => {
+    try {
+        const invite = await prisma.stageInvite.findFirst({
+            where: {
+                invitee_id: req.user.id,
+                status: 'pending',
+                session: { status: 'live' }
+            },
+            include: { host: true, session: true },
+            orderBy: { invited_at: 'desc' }
+        });
+
+        res.set('Cache-Control', 'no-store');
+        if (!invite) return res.json({ invite: null });
+        return res.json({
+            invite: {
+                inviteId: invite.id,
+                sessionId: invite.session_id,
+                host: {
+                    id: invite.host.id,
+                    display_name: invite.host.display_name,
+                    unique_handle: invite.host.unique_handle,
+                    avatar_url: invite.host.avatar_url
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Pending Invite Error:', error);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };

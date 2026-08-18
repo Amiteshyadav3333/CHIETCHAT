@@ -52,7 +52,10 @@ const readVideoDuration = (file) => new Promise(resolve => {
 // authenticated Home module evaluates instead of waiting for the first paint.
 const socialModulePromise = import('./Social');
 const Social = React.lazy(() => socialModulePromise);
-const PodLiveView = React.lazy(() => import('./PodLiveView'));
+// Download and authenticate PodLive while the signed-in shell is idle so the
+// feature opens like a native CHEETCHAT surface instead of a separate app.
+const podLiveModulePromise = import('./PodLiveView');
+const PodLiveView = React.lazy(() => podLiveModulePromise);
 const AiChat = React.lazy(() => import('../components/AiChat'));
 const AiSmartSpace = React.lazy(() => import('../components/AiSmartSpace'));
 const SettingsModal = React.lazy(() => import('../components/SettingsModal'));
@@ -73,6 +76,17 @@ const Home = () => {
     const { socket } = useContext(SocketContext);
     const { privateKey, publicKey } = useEncryption(user, token);
     const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+    useEffect(() => {
+        if (!token) return undefined;
+        const prime = () => import('../features/podlive/auth/usePodLiveSession').then(({ primePodLiveSession }) => primePodLiveSession());
+        if ('requestIdleCallback' in window) {
+            const idleId = window.requestIdleCallback(prime, { timeout: 2500 });
+            return () => window.cancelIdleCallback(idleId);
+        }
+        const timer = setTimeout(prime, 800);
+        return () => clearTimeout(timer);
+    }, [token]);
 
     const [chats, setChats] = useState(() => {
         return loadChatMetadata(user?.id);

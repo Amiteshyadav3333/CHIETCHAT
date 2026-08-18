@@ -132,9 +132,39 @@ app.get('/api/config', (req, res) => {
   });
 });
 
-// Real-time socket connection
+// Real-time socket connection. With REDIS_URL configured, broadcasts, user
+// rooms, invites and chat work across all Render instances instead of being
+// limited to one Node process.
 const socketHandler = require('./sockets/socket');
-socketHandler(io);
+
+const configureRealtime = async () => {
+  if (process.env.REDIS_URL) {
+    const { createAdapter } = require('@socket.io/redis-adapter');
+    const { createClient } = require('redis');
+    const pubClient = createClient({ url: process.env.REDIS_URL });
+    const subClient = pubClient.duplicate();
+    pubClient.on('error', (error) => console.error('[Redis pub]', error.message));
+    subClient.on('error', (error) => console.error('[Redis sub]', error.message));
+    await Promise.all([pubClient.connect(), subClient.connect()]);
+    io.adapter(createAdapter(pubClient, subClient));
+    console.log('[Socket] Redis adapter connected');
+  } else {
+    console.warn('[Socket] REDIS_URL is not set; realtime events are limited to one server instance.');
+  }
+  const jwt = require('jsonwebtoken');
+  io.use((socket, next) => {
+    try {
+      const token = socket.handshake.auth?.token;
+      if (!token) return next(new Error('Authentication required'));
+      const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+      socket.data.userId = decoded.id;
+      next();
+    } catch {
+      next(new Error('Invalid authentication token'));
+    }
+  });
+  socketHandler(io);
+};
 
 // Global Error Handler Middleware (Ensure all errors return JSON, not HTML)
 app.use((err, req, res, next) => {
@@ -155,6 +185,9 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5005;
-server.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+configureRealtime().then(() => {
+  server.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+}).catch((error) => {
+  console.error('[Socket] Realtime startup failed:', error);
+  process.exitCode = 1;
 });

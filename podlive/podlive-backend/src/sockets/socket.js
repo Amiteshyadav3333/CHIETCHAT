@@ -10,7 +10,8 @@ module.exports = (io) => {
     io.on('connection', (socket) => {
 
         // ── Register user ──────────────────────────────────────
-        socket.on('register_user', (userId) => {
+        socket.on('register_user', () => {
+            const userId = socket.data.userId;
             if (!userId) return;
             activeUsers.set(userId, socket.id);
             socket.join(userId);
@@ -25,26 +26,29 @@ module.exports = (io) => {
         // ── Stage invites ──────────────────────────────────────
         socket.on('send_invite', async ({ sessionId, inviteeHandle, hostId }) => {
             try {
-                let handle = (inviteeHandle || '').trim();
+                let handle = (inviteeHandle || '').trim().toLowerCase();
                 if (!handle.startsWith('@')) handle = '@' + handle;
 
                 const withoutAt = handle.replace(/^@+/, '');
-                const [invitee, host] = await Promise.all([
+                const authenticatedHostId = socket.data.userId;
+                const [invitee, host, session] = await Promise.all([
                     prisma.user.findFirst({ where: { OR: [{ unique_handle: handle }, { unique_handle: withoutAt }, { unique_handle: `@${withoutAt}` }] } }),
-                    prisma.user.findUnique({ where: { id: hostId } })
+                    prisma.user.findUnique({ where: { id: authenticatedHostId } }),
+                    prisma.liveSession.findUnique({ where: { id: sessionId }, select: { host_user_id: true, status: true } })
                 ]);
+
+                if (!session || session.host_user_id !== authenticatedHostId || session.status !== 'live') {
+                    return socket.emit('invite_status', { success: false, message: 'Only the active host can send stage invites.' });
+                }
 
                 if (!invitee) {
                     return socket.emit('invite_status', { success: false, message: `User ${handle} not found.` });
                 }
 
-                const targetSocketId = activeUsers.get(invitee.id);
-                if (targetSocketId) {
-                    io.to(targetSocketId).emit('receive_invite', { sessionId, host });
-                    socket.emit('invite_status', { success: true, message: `Invite sent to ${handle}!` });
-                } else {
-                    socket.emit('invite_status', { success: false, message: `${handle} is currently offline.` });
-                }
+                // Emitting to a user room works locally and across the optional
+                // Redis adapter; no process-local socket lookup is required.
+                io.to(invitee.id).emit('receive_invite', { sessionId, host });
+                socket.emit('invite_status', { success: true, message: `Invite sent to ${handle}!` });
             } catch (err) {
                 console.error('[Socket] send_invite error:', err.message);
                 socket.emit('invite_status', { success: false, message: 'Server error sending invite.' });
@@ -99,7 +103,7 @@ module.exports = (io) => {
         socket.on('send_chat_message', async ({ sessionId, message }) => {
             if (!sessionId || !message?.trim()) return;
 
-            const senderId = [...activeUsers.entries()].find(([, socketId]) => socketId === socket.id)?.[0];
+            const senderId = socket.data.userId;
             if (!senderId) return;
             const sender = await prisma.user.findUnique({ where: { id: senderId }, select: { unique_handle: true } });
             if (!sender) return;

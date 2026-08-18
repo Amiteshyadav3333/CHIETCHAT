@@ -22,7 +22,7 @@ export default function SocketProvider({ children }: { children: React.ReactNode
         const token = localStorage.getItem('accessToken');
         const userData = localStorage.getItem('user');
 
-        const newSocket = io(getSocketUrl());
+        const newSocket = io(getSocketUrl(), { auth: { token } });
 
         newSocket.on('connect', () => {
             const currentUserData = localStorage.getItem('user');

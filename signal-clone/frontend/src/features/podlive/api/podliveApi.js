@@ -18,6 +18,7 @@ export const podlive = {
     videos: () => podliveApi.get('/api/live/videos').then(({ data }) => data),
     details: (id) => podliveApi.get(`/api/live/${id}/recording`).then(({ data }) => data),
     viewerToken: (id) => podliveApi.get(`/api/live/${id}/token`).then(({ data }) => data),
+    upgradeToken: (id) => podliveApi.get(`/api/live/${id}/upgrade`).then(({ data }) => data),
     create: (values) => podliveApi.post('/api/live/create', values).then(({ data }) => data),
     start: (id) => podliveApi.post(`/api/live/${id}/start`).then(({ data }) => data),
     end: (id) => podliveApi.post(`/api/live/${id}/end`).then(({ data }) => data),

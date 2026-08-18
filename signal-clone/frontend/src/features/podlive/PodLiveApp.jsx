@@ -36,7 +36,21 @@ function ChatPanel({ realtime, overlay = false, onClose }) {
     return <aside className={`flex min-h-0 flex-col border-white/10 ${overlay ? 'absolute inset-x-3 bottom-3 z-30 max-h-[52%] rounded-2xl border bg-black/55 shadow-2xl backdrop-blur-md md:left-auto md:w-96' : 'w-full border-t bg-zinc-950 md:w-80 md:border-l md:border-t-0'}`}><div className="flex items-center justify-between border-b border-white/10 p-3 text-sm font-black"><span>Live chat</span>{onClose&&<button onClick={onClose} aria-label="Hide live chat" className="rounded-full p-1 hover:bg-white/10"><XMarkIcon className="h-4 w-4"/></button>}</div><div className="min-h-20 flex-1 space-y-3 overflow-y-auto p-3">{realtime.messages.length ? realtime.messages.map((item, index) => <div key={`${item.created_at}-${index}`} className="text-sm drop-shadow"><span className="mr-2 font-bold text-indigo-300">{item.senderHandle}</span><span className="text-white">{item.message}</span></div>) : <p className="text-xs text-zinc-500">Chat messages will appear here.</p>}</div><form onSubmit={send} className="flex gap-2 border-t border-white/10 p-3"><input value={message} maxLength="500" onChange={(e) => setMessage(e.target.value)} placeholder="Say something" className="min-w-0 flex-1 rounded-full bg-zinc-900/90 px-3 py-2 text-sm outline-none"/><button className="rounded-full bg-indigo-600 px-3 text-xs font-bold">Send</button></form></aside>;
 }
 
-const shareLive = async (id, title) => { const url = `${window.location.origin}${window.location.pathname}?podlive=${id}`; if (navigator.share) await navigator.share({ title, text: `Join ${title} live on PodLive`, url }); else { await navigator.clipboard.writeText(url); window.alert('Live link copied'); } };
+let shareInProgress = false;
+const shareLive = async (id, title) => {
+    if (shareInProgress) return;
+    const url = `${window.location.origin}${window.location.pathname}?podlive=${id}`;
+    shareInProgress = true;
+    try {
+        if (navigator.share) await navigator.share({ title, text: `Join ${title} live on PodLive`, url });
+        else { await navigator.clipboard.writeText(url); window.alert('Live link copied'); }
+    } catch (error) {
+        // Closing the native share sheet is a normal user action, not an app error.
+        if (!['AbortError', 'InvalidStateError'].includes(error?.name)) console.warn('Unable to share PodLive link', error);
+    } finally {
+        shareInProgress = false;
+    }
+};
 
 function Viewer({ id, back, realtime }) {
     const [state, setState] = useState({ loading: true, room: null, details: null, error: '' });

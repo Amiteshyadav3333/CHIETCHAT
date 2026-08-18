@@ -15,7 +15,7 @@ export const unwrapApiError = (error, fallback = 'Something went wrong.') =>
 export const podlive = {
     config: () => podliveApi.get('/api/config').then(({ data }) => data),
     active: () => podliveApi.get('/api/live/active').then(({ data }) => data),
-    videos: () => podliveApi.get('/api/live/vods').then(({ data }) => data),
+    videos: () => podliveApi.get('/api/live/videos').then(({ data }) => data),
     details: (id) => podliveApi.get(`/api/live/${id}/recording`).then(({ data }) => data),
     viewerToken: (id) => podliveApi.get(`/api/live/${id}/token`).then(({ data }) => data),
     create: (values) => podliveApi.post('/api/live/create', values).then(({ data }) => data),

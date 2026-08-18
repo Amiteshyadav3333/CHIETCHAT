@@ -22,7 +22,7 @@ const createToken = async (roomName, participantName, isHost = false) => {
 
 exports.createLiveSession = async (req, res) => {
     try {
-        const { title, description, category, visibility = 'public' } = req.body;
+        const { title, description, category, visibility = 'public', thumbnail_url } = req.body;
         const host_user_id = req.user.id;
 
         if (!title) {
@@ -31,7 +31,7 @@ exports.createLiveSession = async (req, res) => {
 
         const livekit_room_name = `room-${crypto.randomBytes(8).toString('hex')}`;
 
-        let thumbnailUrl = null;
+        let thumbnailUrl = /^https:\/\//i.test(String(thumbnail_url || '')) ? String(thumbnail_url).slice(0, 2000) : null;
         if (req.file) {
             try {
                 thumbnailUrl = await s3Service.uploadFileToS3(req.file.path, `thumbnails/live-${Date.now()}-${req.file.filename}`, req.file.mimetype || 'image/jpeg');

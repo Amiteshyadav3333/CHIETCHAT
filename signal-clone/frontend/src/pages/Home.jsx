@@ -33,6 +33,7 @@ import { useScheduledMessageSender } from '../features/chat';
 import { applyLiveLocationUpdate, useLiveLocationSharing } from '../features/location';
 import { useRealtimeNotifications } from '../features/notifications';
 import { applyPollVoteUpdate } from '../features/polls';
+import PodLiveInviteBridge from '../features/podlive/PodLiveInviteBridge';
 
 const Reels = React.lazy(() => import('./Reels'));
 
@@ -120,6 +121,11 @@ const Home = () => {
     const [showSmartSpace, setShowSmartSpace] = useState(false);
     const [smartSpaceButtonEnabled, setSmartSpaceButtonEnabled] = useState(() => localStorage.getItem('smart_space_button_enabled') === '1');
     const [showPodlive, setShowPodlive] = useState(false);
+    const [podliveInvite, setPodliveInvite] = useState(null);
+    const receivePodliveInvite = useCallback((invite) => {
+        setPodliveInvite(invite);
+        setShowPodlive(true);
+    }, []);
     useEffect(() => {
         if (new URLSearchParams(window.location.search).has('podlive')) {
             setShowPodlive(true);
@@ -3241,6 +3247,8 @@ const Home = () => {
                 </React.Suspense>
             </div>}
 
+            <PodLiveInviteBridge active={Boolean(token) && !showPodlive} onInvite={receivePodliveInvite} />
+
             {/* PodLive Overlay */}
             {showPodlive && <div className="fixed inset-0 z-50 bg-[#0b0f19]">
                 <React.Suspense fallback={<FeatureLoader />}>
@@ -3248,6 +3256,8 @@ const Home = () => {
                     active={showPodlive && !incomingCall && !showCallModal}
                     onBack={() => setShowPodlive(false)}
                     token={token}
+                    incomingInvite={podliveInvite}
+                    onInviteConsumed={() => setPodliveInvite(null)}
                 />
                 </React.Suspense>
             </div>}

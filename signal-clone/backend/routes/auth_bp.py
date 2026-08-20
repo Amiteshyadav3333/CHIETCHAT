@@ -128,6 +128,33 @@ def get_supabase_user(access_token):
     return supabase_auth_request('user', None, method='GET', bearer_token=access_token)
 
 def verified_google_identity(access_token):
+    # 1. Try verifying as Google ID Token (Native Android Google Sign-In)
+    try:
+        req = urllib.request.Request(
+            f"https://oauth2.googleapis.com/tokeninfo?id_token={access_token}",
+            headers={'User-Agent': 'CHEETCHAT-Android/1.0'}
+        )
+        with urllib.request.urlopen(req, timeout=10) as response:
+            google_info = json.loads(response.read().decode('utf-8'))
+            email = str(google_info.get('email') or '').strip().lower()
+            subject = str(google_info.get('sub') or '').strip()
+            if email and subject and google_info.get('email_verified') in ('true', True):
+                fake_supabase_user = {
+                    'id': subject,
+                    'email': email,
+                    'email_confirmed_at': utc_now().isoformat(),
+                    'user_metadata': {
+                        'full_name': google_info.get('name') or email.split('@')[0],
+                        'name': google_info.get('name'),
+                        'picture': google_info.get('picture'),
+                        'avatar_url': google_info.get('picture')
+                    }
+                }
+                return fake_supabase_user, subject, email
+    except Exception:
+        pass
+
+    # 2. Fallback to Supabase access token verification (Web client)
     supabase_user = get_supabase_user(access_token)
     app_metadata = supabase_user.get('app_metadata') or {}
     providers = set(app_metadata.get('providers') or [])
@@ -378,30 +405,49 @@ def logout_current_session():
 def exchange_google_session():
     try:
         data = get_json_data()
-        supabase_user, subject, email = verified_google_identity(data.get('accessToken') or '')
+        token_input = data.get('accessToken') or data.get('idToken') or ''
+        supabase_user, subject, email = verified_google_identity(token_input)
         user = User.query.filter_by(supabase_user_id=subject).first()
         if user:
             return finalize_login(user)
+
+        # Never silently link a Google identity to an existing password account.
         if User.query.filter(db.func.lower(User.email) == email).first():
             return jsonify({
                 'error': 'This email already uses email/password login. Sign in with your existing method.',
                 'code': 'EXISTING_EMAIL_ACCOUNT',
             }), 409
+
+        # Auto-create user and log them directly in
         metadata = supabase_user.get('user_metadata') or {}
-        display_name = str(metadata.get('full_name') or metadata.get('name') or email.split('@')[0]).strip()[:80]
+        display_name = str(metadata.get('full_name') or metadata.get('name') or email.split('@')[0]).strip()[:80] or 'CHEETCHAT user'
         avatar_url = str(metadata.get('avatar_url') or metadata.get('picture') or '').strip()
-        return jsonify({
-            'onboardingRequired': True,
-            'email': email,
-            'displayName': display_name or 'CHEETCHAT user',
-            'suggestedPlatformId': available_platform_id(display_name),
-            'googleAvatarUrl': avatar_url if avatar_url.startswith('https://') else '',
-        }), 200
+        phone = f"google:{hashlib.sha256(subject.encode()).hexdigest()[:12]}"
+        
+        user = User(
+            username=display_name,
+            email=email,
+            phone=phone,
+            password_hash=None,
+            auth_provider='google',
+            supabase_user_id=subject,
+            phone_verified=False,
+            email_verified=True,
+            avatar=avatar_url if (avatar_url.startswith('https://') and len(avatar_url) <= 200) else f'https://api.dicebear.com/7.x/initials/svg?seed={urllib.parse.quote(display_name)}',
+            platform_id=available_platform_id(display_name),
+            profile_setup_done=True,
+            last_seen=utc_now(),
+            referral_code=new_referral_code(),
+        )
+        db.session.add(user)
+        db.session.flush()
+        return finalize_login(user)
     except ValueError as exc:
         return jsonify({'error': str(exc)}), 401
     except Exception as exc:
         report_safe_exception('google_exchange_failed', exc)
         return jsonify({'error': 'Google sign-in could not be verified'}), 401
+
 
 @auth_bp.route('/api/auth/google/config', methods=['GET'])
 def google_auth_config():

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import QRCode from 'qrcode';
 import {
-    ArrowLeftIcon, ArrowRightOnRectangleIcon, BellIcon, ChartBarIcon,
+    ArrowDownTrayIcon, ArrowLeftIcon, ArrowRightOnRectangleIcon, BellIcon, ChartBarIcon,
     ChatBubbleBottomCenterTextIcon, CheckBadgeIcon, ChevronRightIcon,
     ComputerDesktopIcon, ExclamationTriangleIcon, EyeSlashIcon, KeyIcon,
     LifebuoyIcon, LockClosedIcon, QuestionMarkCircleIcon, ShieldCheckIcon,
@@ -132,6 +132,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     const [newProduct, setNewProduct] = useState({ name: '', description: '', price: '', imageUrl: '', inStock: true });
     const [keywordRulesText, setKeywordRulesText] = useState('');
     const [appLanguage, setAppLanguage] = useState(() => localStorage.getItem('app_language') || 'en');
+    const [showDownloadPopup, setShowDownloadPopup] = useState(false);
 
     const changeLanguage = value => {
         setAppLanguage(value);
@@ -579,9 +580,14 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 <SettingsRow icon={<ShieldCheckIcon />} title="Terms and Conditions" subtitle="Open in a new tab" onClick={() => openLegal('/terms')} />
                                 <SettingsRow icon={<ShieldCheckIcon />} title="Privacy Policy" subtitle="Open in a new tab" onClick={() => openLegal('/privacy')} />
                             </SettingsGroup>
-                            <button onClick={onLogout} className="mx-5 my-6 flex w-[calc(100%-2.5rem)] items-center justify-center gap-3 rounded-lg border border-red-500/25 py-3 text-sm font-semibold text-red-400 hover:bg-red-500/10">
+                            <div className="mx-5 my-6 grid gap-3 sm:grid-cols-2">
+                                <button onClick={() => setShowDownloadPopup(true)} className="flex items-center justify-center gap-3 rounded-lg border border-[#00a884]/35 bg-[#00a884]/10 py-3 text-sm font-semibold text-[#53d8b3] transition hover:bg-[#00a884]/20">
+                                    <ArrowDownTrayIcon className="h-5 w-5" /> Download CheetChat
+                                </button>
+                                <button onClick={onLogout} className="flex items-center justify-center gap-3 rounded-lg border border-red-500/25 py-3 text-sm font-semibold text-red-400 transition hover:bg-red-500/10">
                                 <ArrowRightOnRectangleIcon className="h-5 w-5" /> Log out
-                            </button>
+                                </button>
+                            </div>
                         </>
                     )}
 
@@ -1032,6 +1038,38 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                     )}
                 </div>
             </div>
+
+            {showDownloadPopup && (
+                <div
+                    className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="download-cheetchat-title"
+                    onClick={() => setShowDownloadPopup(false)}
+                >
+                    <div className="w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-[#17232a] shadow-2xl" onClick={event => event.stopPropagation()}>
+                        <div className="relative bg-gradient-to-br from-[#00a884]/25 via-[#17232a] to-violet-500/20 px-6 pb-5 pt-7 text-center">
+                            <button onClick={() => setShowDownloadPopup(false)} title="Close download popup" className="absolute right-3 top-3 rounded-full p-2 text-gray-300 hover:bg-white/10">
+                                <XMarkIcon className="h-5 w-5" />
+                            </button>
+                            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#00a884] text-white shadow-lg shadow-[#00a884]/20">
+                                <ArrowDownTrayIcon className="h-8 w-8" />
+                            </div>
+                            <h3 id="download-cheetchat-title" className="mt-4 text-2xl font-black text-white">Get CheetChat</h3>
+                            <p className="mt-2 text-sm leading-6 text-gray-300">Download the latest Android app and stay connected with chat, calls, reels, games and more.</p>
+                        </div>
+                        <div className="space-y-3 p-5">
+                            <a href="https://docs.google.com/uc?export=download&id=1Ljn280n5VmWfD1kEl7u_AAyZ-2S6L1s9" target="_blank" rel="noopener noreferrer" className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#00a884] px-4 py-3.5 text-sm font-black text-white transition hover:bg-[#06bd96]">
+                                <ArrowDownTrayIcon className="h-5 w-5" /> Download APK
+                            </a>
+                            <a href="https://dashing-stroopwafel-898bd9.netlify.app/#app" target="_blank" rel="noopener noreferrer" className="block w-full rounded-xl border border-white/10 px-4 py-3 text-center text-sm font-semibold text-gray-200 transition hover:bg-white/5">
+                                Open CheetChat download page
+                            </a>
+                            <p className="text-center text-[11px] leading-4 text-gray-500">Android may ask you to allow installation from your browser. Install only if you trust the source.</p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

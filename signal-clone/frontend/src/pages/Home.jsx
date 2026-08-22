@@ -2647,9 +2647,14 @@ const Home = () => {
                             />
                             <div className="min-w-0">
                                 <h3 className="font-bold text-sm md:text-base truncate">{getChatDisplayName(visibleActiveChat)}</h3>
-                                <button type="button" onClick={(event) => { event.stopPropagation(); setShowEncryptionInfo(true); }} className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300" title="View encryption information">
-                                    <LockClosedIcon className="h-3.5 w-3.5" /> End-to-end encrypted
-                                </button>
+                                {visibleActiveChat.isGroup ? (
+                                    <p className="truncate text-xs text-gray-500">{visibleActiveChat.participants?.length || 0} members</p>
+                                ) : (() => {
+                                    const other = getOtherParticipant(visibleActiveChat);
+                                    return <p className={`truncate text-xs ${other?.isOnline ? 'text-emerald-400' : 'text-gray-500'}`}>
+                                        {other?.isOnline ? 'Online' : formatLastSeen(other?.lastSeen)}
+                                    </p>;
+                                })()}
                             </div>
                         </div>
                         <div className="flex gap-3 text-signal-accent items-center relative">
@@ -2731,6 +2736,13 @@ const Home = () => {
                                             >
                                                 <span>📌</span>
                                                 <span>{pinnedChats.includes(visibleActiveChat.id) ? 'Unpin Chat' : 'Pin Chat'}</span>
+                                            </button>
+                                            <button
+                                                onClick={() => { setShowEncryptionInfo(true); setShowTopDropdown(false); }}
+                                                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-gray-200 hover:bg-white/10"
+                                            >
+                                                <LockClosedIcon className="h-4 w-4 text-emerald-400" />
+                                                <span>Verify end-to-end encryption</span>
                                             </button>
                                             {/* Archive chat */}
                                             <button
@@ -3147,6 +3159,15 @@ const Home = () => {
                                 </div>
                             );
                         })()}
+                        <button
+                            type="button"
+                            onClick={() => setShowEncryptionInfo(true)}
+                            className="mx-auto mb-3 flex max-w-sm items-start gap-2 rounded-xl bg-[#182229]/90 px-4 py-2.5 text-left text-[11px] leading-4 text-amber-200 shadow-sm hover:bg-[#202c33]"
+                            title="View encryption information"
+                        >
+                            <LockClosedIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" />
+                            <span>Messages and calls are end-to-end encrypted. Only people in this chat can read, listen to or share them. Tap to verify.</span>
+                        </button>
                         {messages.filter(msg => (!snapMode || msg.snapMode) && (!messageSearchQuery || `${msg.content || ''} ${msg.type || ''}`.toLowerCase().includes(messageSearchQuery.toLowerCase()))).map((msg, idx, shownMessages) => {
                             if (msg.type === 'drawing' && isChatOverlayDrawing(msg.content)) {
                                 return <ChatDrawingOverlay key={msg.id || idx} content={msg.content} messageId={msg.id} isOwn={msg.senderId === user.id} onDelete={() => handleDeleteMessage(msg)} />;

@@ -5,7 +5,7 @@ import {
     ArrowDownTrayIcon, ArrowLeftIcon, ArrowRightOnRectangleIcon, BellIcon, ChartBarIcon,
     ChatBubbleBottomCenterTextIcon, CheckBadgeIcon, ChevronRightIcon,
     ComputerDesktopIcon, ExclamationTriangleIcon, EyeSlashIcon, KeyIcon,
-    LifebuoyIcon, LockClosedIcon, QuestionMarkCircleIcon, ShieldCheckIcon,
+    LifebuoyIcon, LockClosedIcon, QuestionMarkCircleIcon, ShieldCheckIcon, InformationCircleIcon,
     ShoppingBagIcon, TrashIcon, UserCircleIcon, XMarkIcon, NoSymbolIcon,
     HeartIcon, ChatBubbleOvalLeftIcon, FilmIcon, PhotoIcon, SparklesIcon
 } from '@heroicons/react/24/outline';
@@ -15,6 +15,7 @@ import { disablePushNotifications, enablePushNotifications } from '../utils/push
 import { deleteDevicePrivateKey, loadDevicePrivateKey } from '../utils/secureKeyStore';
 import AvatarCreator from './AvatarCreator';
 import { INDIAN_LANGUAGES } from './AppLanguage';
+import AboutCheetChat from './AboutCheetChat';
 
 const TITLES = {
     settings: 'Settings', profile: 'Profile', account: 'Account', privacy: 'Privacy',
@@ -22,7 +23,8 @@ const TITLES = {
     business: 'Business tools', help: 'Help center', password: 'Change password',
     delete: 'Delete account', activity: 'Your Activity', sessions: 'Active Sessions',
     twofactor_setup: 'Enable 2FA', twofactor_disable: 'Disable 2FA', premium: 'CHEETCHAT Premium',
-    reels: 'Reels settings', social: 'Social settings', podlive: 'PodLive settings', language: 'App language'
+    reels: 'Reels settings', social: 'Social settings', podlive: 'PodLive settings', language: 'App language',
+    about: 'About CHEETCHAT'
 };
 
 const timeAgo = (dateStr) => {
@@ -576,6 +578,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                             </SettingsGroup>
                             <SectionLabel>Help</SectionLabel>
                             <SettingsGroup>
+                                <SettingsRow icon={<InformationCircleIcon />} title="About CHEETCHAT" subtitle="Features, technology, community and founder" onClick={() => go('about')} />
                                 <SettingsRow icon={<QuestionMarkCircleIcon />} title="Help center" subtitle="Password, deletion and support" onClick={() => go('help')} />
                                 <SettingsRow icon={<ShieldCheckIcon />} title="Terms and Conditions" subtitle="Open in a new tab" onClick={() => openLegal('/terms')} />
                                 <SettingsRow icon={<ShieldCheckIcon />} title="Privacy Policy" subtitle="Open in a new tab" onClick={() => openLegal('/privacy')} />
@@ -996,6 +999,8 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                             onUnblock={handleUnblockFromActivity}
                         />
                     )}
+
+                    {screen === 'about' && <AboutCheetChat compact />}
 
                     {screen === 'help' && (
                         <>

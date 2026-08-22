@@ -7,6 +7,7 @@ import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
 import Home from './pages/Home';
 import LegalPage from './pages/LegalPage';
+import About from './pages/About';
 import ProfileSetup from './pages/ProfileSetup';
 import PublicReel from './pages/PublicReel';
 import RecoveryCode from './pages/RecoveryCode';
@@ -106,6 +107,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                         <Route path="/reset-password" element={<ResetPassword />} />
                         <Route path="/terms" element={<LegalPage type="terms" />} />
                         <Route path="/privacy" element={<LegalPage type="privacy" />} />
+                        <Route path="/about" element={<About />} />
                         <Route path="/reels/:reelId" element={<PublicReel />} />
                         <Route path="/setup-profile" element={
                             <ProtectedRoute>

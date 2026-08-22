@@ -496,7 +496,7 @@ const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, 
         ...(!isDeleted && !protectedMode ? [{ icon: '📋', label: 'Copy', onClick: () => { onCopy?.(); onClose(); } }] : []),
         ...(!isDeleted && !protectedMode ? [{ icon: '➡️', label: 'Forward', onClick: () => { onForward?.(); onClose(); } }] : []),
         ...(!isDeleted && !protectedMode ? [{ icon: '✎', label: 'Draw / point on message', onClick: () => { onAnnotateMessage?.(); onClose(); } }] : []),
-        ...(!isDeleted && !protectedMode && message.type === 'image' ? [{ icon: '📷', label: 'Reply with photo', onClick: () => { onPhotoReply?.(); onClose(); } }] : []),
+        ...(!isDeleted && !protectedMode && ['image', 'video'].includes(message.type) ? [{ icon: '📷', label: 'React with photo', onClick: () => { onPhotoReply?.(); onClose(); } }] : []),
         ...(!isDeleted && !protectedMode && message.type === 'image' ? [{ icon: '✨', label: 'Make sticker', onClick: () => { onMakeSticker?.(); onClose(); } }] : []),
         ...(!isDeleted && !protectedMode ? [{ icon: '📍', label: 'Place saved sticker here', onClick: () => { onPlaceSticker?.(); onClose(); } }] : []),
         ...(!isDeleted && !protectedMode && message.type === 'image' ? [{ icon: '⬇️', label: 'Download photo', onClick: () => { onDownload?.(); onClose(); } }] : []),
@@ -720,7 +720,7 @@ const ChatBubble = ({
 
     const isMedia = ['image', 'video', 'video_note'].includes(message.type) ||
         content.match(/\.(jpg|jpeg|png|gif|webp|mp4|webm|ogg)$/i);
-    const isPhotoReaction = message.type === 'image' && replyTo?.type === 'image' && Boolean(replyTo.content);
+    const isPhotoReaction = message.type === 'image' && ['image', 'video'].includes(replyTo?.type) && Boolean(replyTo.content);
 
     const isTextMessage = (!message.type || message.type === 'text') && !isMedia;
 
@@ -893,9 +893,7 @@ const ChatBubble = ({
                     onClick={(e) => {
                         e.stopPropagation();
                         if (protectedSnapMode) return;
-                        if (isPhotoReaction) setZoomedMedia({ src: cnt, type: 'image', referenceSrc: replyTo.content });
-                        else if (!isOwn && onPhotoReply) onPhotoReply(message);
-                        else setZoomedMedia({ src: cnt, type: 'image' });
+                        setZoomedMedia({ src: cnt, type: 'image', referenceSrc: isPhotoReaction ? replyTo.content : null });
                     }}
                     onDoubleClick={(e) => { e.stopPropagation(); if (!protectedSnapMode) setZoomedMedia({ src: cnt, type: 'image', referenceSrc: isPhotoReaction ? replyTo.content : null }); }}
                 >
@@ -909,7 +907,9 @@ const ChatBubble = ({
                     />
                     {isPhotoReaction && (
                         <div className="absolute right-2 top-2 z-10 w-[30%] min-w-[64px] max-w-[88px] overflow-hidden rounded-xl border-2 border-white/90 bg-black shadow-xl">
-                            <img src={replyTo.content} alt="Original photo" className="aspect-[4/5] w-full object-cover" draggable={false} />
+                            {replyTo.type === 'video'
+                                ? <video src={replyTo.content} muted playsInline preload="metadata" className="aspect-[4/5] w-full object-cover" />
+                                : <img src={replyTo.content} alt="Original photo" className="aspect-[4/5] w-full object-cover" draggable={false} />}
                             <span className="block truncate bg-black/75 px-1.5 py-1 text-center text-[8px] font-bold uppercase tracking-wide text-white">Reaction to</span>
                         </div>
                     )}
@@ -933,9 +933,9 @@ const ChatBubble = ({
                         type="button"
                         onClick={(e) => { e.stopPropagation(); onPhotoReply?.(message); }}
                         className="absolute bottom-2 left-2 rounded-full border border-white/20 bg-black/65 px-3 py-1.5 text-xs font-bold text-white opacity-100 shadow-lg backdrop-blur-md transition-opacity sm:opacity-0 sm:group-hover/media:opacity-100"
-                        title="Reply with your photo"
+                        title="React with your photo"
                     >
-                        📷 Photo reply
+                        📷 React
                     </button>}
                     {!protectedSnapMode && <button onClick={(e) => { e.stopPropagation(); onAnnotate?.({ src: cnt, type: 'image' }); }} className="absolute left-2 top-2 rounded-full bg-black/55 p-1.5 text-white opacity-0 shadow-lg transition-opacity group-hover/media:opacity-100" title="Draw on photo"><span className="text-lg leading-none">✎</span></button>}
                 </div>
@@ -991,6 +991,14 @@ const ChatBubble = ({
                         title="Download"
                     >
                         <ArrowDownTrayIcon className="w-4 h-4" />
+                    </button>}
+                    {!isOwn && !protectedSnapMode && <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onPhotoReply?.(message); }}
+                        className="absolute bottom-2 right-2 z-10 rounded-full border border-white/20 bg-black/65 px-3 py-1.5 text-xs font-bold text-white shadow-lg backdrop-blur-md sm:opacity-0 sm:group-hover/media:opacity-100"
+                        title="React to this video with your photo"
+                    >
+                        📷 React
                     </button>}
                 </div>
             );

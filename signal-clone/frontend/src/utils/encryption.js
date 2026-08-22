@@ -225,6 +225,95 @@ export const isEncryptedPayload = (payload) => {
     }
 };
 
+// Trust-on-first-use pinning prevents the service from silently replacing a
+// contact's public key later to intercept future messages. A legitimate key
+// reset must be explicitly resolved by the user/device recovery flow.
+export const assertPinnedPublicKey = async (userId, publicKeyString) => {
+    const digest = await window.crypto.subtle.digest("SHA-256", base64ToArrayBuffer(publicKeyString));
+    const fingerprint = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+    const storageKey = `e2ee_key_pin_${userId}`;
+    const pinned = localStorage.getItem(storageKey);
+    if (pinned && pinned !== fingerprint) {
+        throw new Error("This contact's security key changed. Verify the contact before sending.");
+    }
+    if (!pinned) localStorage.setItem(storageKey, fingerprint);
+    return fingerprint;
+};
+
+export const createSafetyNumber = async (firstPublicKey, secondPublicKey) => {
+    if (!firstPublicKey || !secondPublicKey) throw new Error("Both encryption keys are required");
+    const ordered = [firstPublicKey, secondPublicKey].sort();
+    const joined = new TextEncoder().encode(`${ordered[0]}.${ordered[1]}`);
+    const digest = new Uint8Array(await window.crypto.subtle.digest("SHA-256", joined));
+    const digits = Array.from(digest, byte => byte.toString().padStart(3, "0")).join("").slice(0, 60);
+    return {
+        fingerprint: Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join(""),
+        display: digits.match(/.{1,5}/g).join(" ")
+    };
+};
+
+const MEDIA_ENVELOPE_TYPE = "cheetchat/e2ee-media";
+
+// The storage provider receives only AES-GCM ciphertext. The file key is wrapped
+// separately for every chat member and travels inside the already encrypted
+// message envelope, so neither the API nor Cloudinary can render the upload.
+export const encryptMediaForRecipients = async (recipientPublicKeys, file) => {
+    const key = await window.crypto.subtle.generateKey(
+        { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]
+    );
+    const iv = window.crypto.getRandomValues(new Uint8Array(12));
+    const ciphertext = await window.crypto.subtle.encrypt(
+        { name: "AES-GCM", iv }, key, await file.arrayBuffer()
+    );
+    const rawKey = await window.crypto.subtle.exportKey("raw", key);
+    const recipients = {};
+    for (const [userId, publicKeyString] of Object.entries(recipientPublicKeys)) {
+        const publicKey = await importPublicKey(publicKeyString);
+        recipients[userId] = arrayBufferToBase64(await window.crypto.subtle.encrypt(
+            { name: "RSA-OAEP" }, publicKey, rawKey
+        ));
+    }
+    return {
+        ciphertext: new Blob([ciphertext], { type: "application/octet-stream" }),
+        descriptor: {
+            v: 1, type: MEDIA_ENVELOPE_TYPE, algorithm: "RSA-OAEP-256/AES-GCM",
+            iv: arrayBufferToBase64(iv), recipients,
+            name: String(file.name || "attachment").slice(0, 255),
+            mime: String(file.type || "application/octet-stream").slice(0, 150),
+            size: Number(file.size || 0)
+        }
+    };
+};
+
+export const isEncryptedMediaDescriptor = (value) => {
+    try {
+        const parsed = typeof value === "string" ? JSON.parse(value) : value;
+        return parsed?.type === MEDIA_ENVELOPE_TYPE && parsed?.v === 1 &&
+            typeof parsed.url === "string" && parsed.url.length > 0 &&
+            parsed.recipients && typeof parsed.recipients === "object";
+    } catch {
+        return false;
+    }
+};
+
+export const decryptMediaDescriptor = async (privateKey, userId, value) => {
+    const descriptor = typeof value === "string" ? JSON.parse(value) : value;
+    if (!isEncryptedMediaDescriptor(descriptor)) throw new Error("Invalid encrypted media descriptor");
+    const wrappedKey = descriptor.recipients[String(userId)];
+    if (!wrappedKey) throw new Error("Media key is unavailable for this device");
+    const rawKey = await window.crypto.subtle.decrypt(
+        { name: "RSA-OAEP" }, privateKey, base64ToArrayBuffer(wrappedKey)
+    );
+    const key = await window.crypto.subtle.importKey("raw", rawKey, { name: "AES-GCM" }, false, ["decrypt"]);
+    const response = await fetch(descriptor.url, { credentials: "omit", referrerPolicy: "no-referrer" });
+    if (!response.ok) throw new Error("Encrypted media download failed");
+    const ciphertext = await response.arrayBuffer();
+    const plaintext = await window.crypto.subtle.decrypt(
+        { name: "AES-GCM", iv: new Uint8Array(base64ToArrayBuffer(descriptor.iv)) }, key, ciphertext
+    );
+    return URL.createObjectURL(new Blob([plaintext], { type: descriptor.mime || "application/octet-stream" }));
+};
+
 // Helpers
 function arrayBufferToBase64(buffer) {
     let binary = '';

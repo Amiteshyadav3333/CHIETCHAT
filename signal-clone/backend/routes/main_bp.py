@@ -63,10 +63,25 @@ def upload_file():
     url = None
     resource_type = None
     try:
-        media_kind = validate_upload(
-            file, {'image', 'video', 'audio', 'document'}, 100 * 1024 * 1024
-        )
-        if media_kind in {'image', 'video'}:
+        encrypted_upload = request.form.get('encrypted') == '1'
+        if encrypted_upload:
+            media_kind = str(request.form.get('mediaKind') or '')
+            if media_kind not in {'image', 'video', 'audio', 'document'}:
+                return jsonify({"error": "Invalid encrypted media kind"}), 400
+            file.stream.seek(0, os.SEEK_END)
+            encrypted_size = file.stream.tell()
+            file.stream.seek(0)
+            if encrypted_size <= 16 or encrypted_size > 101 * 1024 * 1024:
+                return jsonify({"error": "Encrypted file size is invalid"}), 400
+            # Deliberately raw: Cloudinary stores an opaque AES-GCM blob and
+            # cannot transform, preview, moderate, or otherwise read it.
+            resource_type = 'raw'
+            url = upload_to_cloudinary(file.read(), folder='chietchat/e2ee', resource_type='raw')
+        else:
+            media_kind = validate_upload(
+                file, {'image', 'video', 'audio', 'document'}, 100 * 1024 * 1024
+            )
+        if not encrypted_upload and media_kind in {'image', 'video'}:
             blocked, adult_score = reject_adult_content(file, media_kind)
             if blocked:
                 return jsonify({
@@ -74,10 +89,11 @@ def upload_file():
                     "code": "ADULT_CONTENT_BLOCKED",
                     "adultScore": adult_score,
                 }), 422
-        resource_type = {
-            'image': 'image', 'video': 'video', 'audio': 'video', 'document': 'raw',
-        }[media_kind]
-        url = upload_to_cloudinary(file, folder='chietchat/uploads', resource_type=resource_type)
+        if not encrypted_upload:
+            resource_type = {
+                'image': 'image', 'video': 'video', 'audio': 'video', 'document': 'raw',
+            }[media_kind]
+            url = upload_to_cloudinary(file, folder='chietchat/uploads', resource_type=resource_type)
         asset = UploadAsset(
             owner_id=user_id,
             media_url=url,

@@ -884,7 +884,9 @@ const MessageInput = ({
                     )}
                     {photoReactionSource?.src && (
                         <div className="absolute right-4 top-24 z-20 w-28 overflow-hidden rounded-2xl border-2 border-white/80 bg-black shadow-2xl sm:w-36">
-                            <img src={photoReactionSource.src} alt="Photo being reacted to" className="aspect-[4/5] w-full object-cover" />
+                            {photoReactionSource.type === 'video'
+                                ? <video src={photoReactionSource.src} muted playsInline preload="metadata" className="aspect-[4/5] w-full object-cover" />
+                                : <img src={photoReactionSource.src} alt="Media being reacted to" className="aspect-[4/5] w-full object-cover" />}
                             <p className="truncate bg-black/75 px-2 py-1.5 text-center text-[10px] font-bold text-white">Reacting to {photoReactionSource.senderName}</p>
                         </div>
                     )}

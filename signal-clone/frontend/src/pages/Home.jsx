@@ -10,10 +10,10 @@ import IncomingCallModal from '../components/IncomingCallModal';
 import VideoCallModal from '../components/VideoCall';
 import AvatarZoom from '../components/AvatarZoom';
 import StatusSection from '../components/StatusSection';
-import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon, EllipsisVerticalIcon, XMarkIcon, TrashIcon, NoSymbolIcon, PlayIcon, Cog6ToothIcon, BellIcon, MapPinIcon, PhotoIcon, ChatBubbleLeftRightIcon, InformationCircleIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon, MicrophoneIcon, FaceSmileIcon, SparklesIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, PhoneIcon, VideoCameraIcon, PlusIcon, EllipsisVerticalIcon, XMarkIcon, TrashIcon, NoSymbolIcon, PlayIcon, Cog6ToothIcon, BellIcon, MapPinIcon, PhotoIcon, ChatBubbleLeftRightIcon, InformationCircleIcon, ClipboardDocumentIcon, ForwardIcon, PencilSquareIcon, MicrophoneIcon, FaceSmileIcon, SparklesIcon, MagnifyingGlassIcon, LockClosedIcon } from '@heroicons/react/24/outline';
 import { format } from 'date-fns';
 import { useEncryption } from '../hooks/useEncryption';
-import { decryptEnvelope, encryptForRecipients, isEncryptedPayload } from '../utils/encryption';
+import { assertPinnedPublicKey, decryptEnvelope, decryptMediaDescriptor, encryptForRecipients, encryptMediaForRecipients, isEncryptedMediaDescriptor, isEncryptedPayload } from '../utils/encryption';
 import { compressImage, compressVideo, getFileCategory, formatFileSize } from '../utils/mediaCompressor';
 import { enqueueOfflineMessage, processOfflineQueue } from '../utils/offlineQueue';
 import {
@@ -34,6 +34,7 @@ import { applyLiveLocationUpdate, useLiveLocationSharing } from '../features/loc
 import { useRealtimeNotifications } from '../features/notifications';
 import { applyPollVoteUpdate } from '../features/polls';
 import PodLiveInviteBridge from '../features/podlive/PodLiveInviteBridge';
+import EncryptionInfoModal from '../components/EncryptionInfoModal';
 
 const Reels = React.lazy(() => import('./Reels'));
 
@@ -249,6 +250,7 @@ const Home = () => {
     const [topInfoMessage, setTopInfoMessage] = useState(null);
     // Upload progress state
     const [uploadProgress, setUploadProgress] = useState(null); // null | { fileName, stage, percent, originalSize, compressedSize }
+    const [showEncryptionInfo, setShowEncryptionInfo] = useState(false);
 
     // Group states
     const [searchModalTab, setSearchModalTab] = useState('search_user'); // 'search_user' | 'create_group' | 'discover_groups'
@@ -347,6 +349,7 @@ const Home = () => {
                     ? publicKey
                     : participant.publicKey;
                 if (!participantPublicKey) throw new Error('A participant encryption key is unavailable');
+                if (participant.id !== user.id) await assertPinnedPublicKey(participant.id, participantPublicKey);
                 recipientPublicKeys[participant.id] = participantPublicKey;
             }
 
@@ -453,10 +456,17 @@ const Home = () => {
 
         try {
             const decrypted = await decryptEnvelope(privateKey, user.id, message.content);
+            let readableContent = decrypted;
+            let encryptedMedia = false;
+            if (isEncryptedMediaDescriptor(decrypted)) {
+                readableContent = await decryptMediaDescriptor(privateKey, user.id, decrypted);
+                encryptedMedia = true;
+            }
             return {
                 ...message,
                 encryptedContent: true,
-                content: decrypted
+                encryptedMedia,
+                content: readableContent
             };
         } catch (err) {
             console.error("Failed to decrypt message:", message.id, err);
@@ -860,7 +870,10 @@ const Home = () => {
                         const recipientPublicKeys = {};
                         for (const participant of chat.participants) {
                             const key = participant.id === user.id ? publicKey : participant.publicKey;
-                            if (key) recipientPublicKeys[participant.id] = key;
+                            if (key) {
+                                if (participant.id !== user.id) await assertPinnedPublicKey(participant.id, key);
+                                recipientPublicKeys[participant.id] = key;
+                            }
                         }
                         if (Object.keys(recipientPublicKeys).length === chat.participants.length) {
                             const encryptedContent = await encryptForRecipients(recipientPublicKeys, autoReply);
@@ -1257,6 +1270,7 @@ const Home = () => {
                     ? publicKey
                     : participant.publicKey;
                 if (!participantPublicKey) throw new Error('A participant encryption key is unavailable');
+                if (participant.id !== user.id) await assertPinnedPublicKey(participant.id, participantPublicKey);
                 recipientPublicKeys[participant.id] = participantPublicKey;
             }
 
@@ -1360,10 +1374,36 @@ const Home = () => {
             return;
         }
 
-        // ── UPLOAD STEP ──
-        const formData = new FormData();
-        formData.append('file', fileToUpload);
+        const participants = Array.isArray(activeChat?.participants)
+            ? activeChat.participants.filter(participant => participant?.id)
+            : [];
+        if (!privateKey || !publicKey || participants.length === 0) {
+            setUploadProgress(null);
+            alert('Encryption keys or chat members are still loading. Please try again.');
+            return;
+        }
+        const recipientPublicKeys = {};
         try {
+            for (const participant of participants) {
+                const participantKey = participant.id === user.id ? publicKey : participant.publicKey;
+                if (!participantKey) throw new Error('A participant encryption key is unavailable');
+                if (participant.id !== user.id) await assertPinnedPublicKey(participant.id, participantKey);
+                recipientPublicKeys[participant.id] = participantKey;
+            }
+        } catch (error) {
+            setUploadProgress(null);
+            alert(error.message);
+            return;
+        }
+
+        // ── CLIENT-SIDE ENCRYPTION + OPAQUE UPLOAD ──
+        const formData = new FormData();
+        try {
+            setUploadProgress(prev => ({ ...prev, stage: 'End-to-end encrypting…', percent: Math.max(prev?.percent || 5, 60) }));
+            const encryptedMedia = await encryptMediaForRecipients(recipientPublicKeys, fileToUpload);
+            formData.append('file', encryptedMedia.ciphertext, 'attachment.e2ee');
+            formData.append('encrypted', '1');
+            formData.append('mediaKind', category === 'file' ? 'document' : category);
             const res = await axios.post('/api/upload', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
@@ -1398,7 +1438,8 @@ const Home = () => {
             }
 
             setUploadProgress(null);
-            handleSendMessage(url, type, replyTo, disappearingTtl, res.data.assetId);
+            const descriptor = JSON.stringify({ ...encryptedMedia.descriptor, url });
+            handleSendMessage(descriptor, type, replyTo, disappearingTtl, res.data.assetId);
             return { url, type };
         } catch (err) {
             setUploadProgress(null);
@@ -1701,6 +1742,7 @@ const Home = () => {
             for (const participant of targetChat.participants) {
                 const participantPublicKey = participant.id === user.id ? publicKey : participant.publicKey;
                 if (!participantPublicKey) return alert(`${participant.username} does not have an encryption key yet.`);
+                if (participant.id !== user.id) await assertPinnedPublicKey(participant.id, participantPublicKey);
                 recipientPublicKeys[participant.id] = participantPublicKey;
             }
             encryptedContent = await encryptForRecipients(recipientPublicKeys, forwardMessage.content);
@@ -2618,9 +2660,9 @@ const Home = () => {
                             />
                             <div className="min-w-0">
                                 <h3 className="font-bold text-sm md:text-base truncate">{getChatDisplayName(visibleActiveChat)}</h3>
-                                <p className={`text-xs ${getOtherParticipant(visibleActiveChat)?.isOnline ? 'text-green-500' : 'text-gray-400'}`}>
-                                    {getChatStatus(visibleActiveChat)}
-                                </p>
+                                <button type="button" onClick={(event) => { event.stopPropagation(); setShowEncryptionInfo(true); }} className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300" title="View encryption information">
+                                    <LockClosedIcon className="h-3.5 w-3.5" /> End-to-end encrypted
+                                </button>
                             </div>
                         </div>
                         <div className="flex gap-3 text-signal-accent items-center relative">
@@ -3170,7 +3212,7 @@ const Home = () => {
                                             onAnnotate={(source) => { setDrawSource(source); setShowChatDraw(true); }}
                                             onPhotoReply={(photoMessage) => {
                                                 setReplyTo({ ...photoMessage, senderName: sender?.username || 'Photo' });
-                                                setPhotoReactionSource({ src: photoMessage.content, senderName: sender?.username || 'Photo' });
+                                                setPhotoReactionSource({ src: photoMessage.content, type: photoMessage.type, senderName: sender?.username || 'Media' });
                                                 setCameraOpenRequest(value => value + 1);
                                             }}
                                             onMakeSticker={handleMessagePhotoSticker}
@@ -3555,6 +3597,8 @@ const Home = () => {
                 onClose={() => setChatToDelete(null)}
                 onConfirm={scope => handleDeleteChatConfirm(chatToDelete, scope)}
             />
+
+            {showEncryptionInfo && visibleActiveChat && <EncryptionInfoModal chat={visibleActiveChat} user={user} publicKey={publicKey} onClose={() => setShowEncryptionInfo(false)} />}
 
         </div>
     );

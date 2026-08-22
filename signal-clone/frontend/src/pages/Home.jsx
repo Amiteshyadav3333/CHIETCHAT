@@ -2022,19 +2022,6 @@ const Home = () => {
         return `last seen ${date.toLocaleDateString([], { day: 'numeric', month: 'short' })} at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     };
 
-    const getChatStatus = (chat) => {
-        const typers = Object.values(typingUsers[chat.id] || {});
-        if (typers.length > 0) return `${typers.join(', ')} typing...`;
-        if (chat.isGroup) {
-            return `${chat.participants?.length || 0} members • ${chat.isPublic ? 'Public' : 'Private'}`;
-        }
-        const otherParticipant = getOtherParticipant(chat);
-        if (!otherParticipant) return "Tap to open chat";
-        if (otherParticipant.isOnline) return "Online";
-        if (localStorage.getItem('hide_last_seen') === '1') return "Last seen hidden";
-        return formatLastSeen(otherParticipant.lastSeen);
-    };
-
     const openNotifications = () => {
         setShowNotifications(prev => !prev);
         setShowSearchModal(false);

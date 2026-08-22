@@ -31,3 +31,8 @@ class CallInviteRegistry:
     def revoke(self, chat_id, user_id):
         with self._lock:
             self._entries.pop((int(chat_id), int(user_id)), None)
+
+    def clear(self):
+        """Clear ephemeral grants, primarily for deterministic process resets/tests."""
+        with self._lock:
+            self._entries.clear()

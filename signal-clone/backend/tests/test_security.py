@@ -33,6 +33,8 @@ from observability import report_safe_exception
 from ai_retention import maintain_ai_memory
 from routes.ai_bp import _build_messages, _response_language_instruction, _save_turn
 from routes.auth_bp import create_token, finalize_login
+from extensions import socket_users, user_connection_counts
+from sockets import _call_invites, _call_signal_windows
 from scripts import cleanup_retention
 from utils import (
     utc_now, validate_upload, send_push_notification, delete_managed_media,
@@ -44,6 +46,13 @@ class SecurityTests(unittest.TestCase):
     def setUp(self):
         app.config.update(TESTING=True)
         _rate_windows.clear()
+        _call_signal_windows.clear()
+        _call_invites.clear()
+        socket_users.clear()
+        user_connection_counts.clear()
+        # CI must not inherit or contact a developer/production Redis instance;
+        # rate-limit behavior is tested deterministically through local storage.
+        app.extensions['cheetchat_redis'] = None
         with app.app_context():
             db.drop_all()
             db.create_all()
@@ -233,26 +242,17 @@ class SecurityTests(unittest.TestCase):
         }
         exchange = self.client.post('/api/auth/google/exchange', json={'accessToken': 'supabase-token'})
         self.assertEqual(exchange.status_code, 200)
-        self.assertTrue(exchange.json['onboardingRequired'])
-        completed = self.client.post('/api/auth/google/complete', json={
-            'accessToken': 'supabase-token',
-            'phone': '7777777777',
-            'useGoogleAvatar': True,
-            'publicKey': 'p' * 100,
-            'encryptedRecoveryKey': 'r' * 100,
-            'deviceFingerprint': 'google-browser',
-        })
-        self.assertEqual(completed.status_code, 200)
-        self.assertIn('csrfToken', completed.json)
+        self.assertIn('csrfToken', exchange.json)
         with app.app_context():
             user = User.query.filter_by(supabase_user_id='google-subject-123').one()
             self.assertEqual(user.auth_provider, 'google')
             self.assertIsNone(user.password_hash)
             self.assertFalse(user.phone_verified)
             self.assertTrue(user.platform_id)
+            google_user_id = user.id
         returning = self.client.post('/api/auth/google/exchange', json={'accessToken': 'supabase-token'})
         self.assertEqual(returning.status_code, 200)
-        self.assertEqual(returning.json['user']['phone'], '7777777777')
+        self.assertEqual(returning.json['user']['id'], google_user_id)
 
     @patch('routes.auth_bp.get_supabase_user')
     def test_google_signup_does_not_auto_link_existing_password_email(self, get_supabase_user):

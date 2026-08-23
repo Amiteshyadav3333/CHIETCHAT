@@ -160,6 +160,7 @@ export const LudoGame = ({ gameCode, gameMode, creatorId, currentUserId, socket,
     const initial = useMemo(() => createLudoState(playerCount), [playerCount]);
     const [state, setState] = useLiveState({ socket, chatId, gameCode, enabled: live, initialState: initial, validator: validLudo });
     const [rolling, setRolling] = useState(false);
+    const [dicePreview, setDicePreview] = useState(5);
     const [animating, setAnimating] = useState(false);
     const [showWinner, setShowWinner] = useState(true);
     const [visualTokens, setVisualTokens] = useState(state.tokens);
@@ -181,8 +182,10 @@ export const LudoGame = ({ gameCode, gameMode, creatorId, currentUserId, socket,
     const roll = () => {
         if (!canAct || state.dice) return;
         setRolling(true);
+        const previewTimer = window.setInterval(() => setDicePreview(1 + Math.floor(Math.random() * 6)), 75);
         window.setTimeout(() => {
-            const dice = 1 + Math.floor(Math.random() * 6); setRolling(false);
+            window.clearInterval(previewTimer);
+            const dice = 1 + Math.floor(Math.random() * 6); setDicePreview(dice); setRolling(false);
             if (dice === 6 && state.consecutiveSixes >= 2) { const next = { ...state, turn: nextPlayer(state.turn, state.activePlayers), dice: null, lastRoll: 6, consecutiveSixes: 0 }; setState(next); if (!live && next.turn !== 0) botTurn(next); return; }
             const rolled = { ...state, dice, lastRoll: dice, consecutiveSixes: dice === 6 ? (state.consecutiveSixes || 0) + 1 : 0 };
             if (!rolled.tokens[rolled.turn].some((_, i) => moveLudoToken(rolled, i))) { const next = { ...rolled, dice: null, turn: nextPlayer(rolled.turn, rolled.activePlayers), consecutiveSixes: 0 }; setState(next); if (!live && next.turn !== 0) botTurn(next); } else setState(rolled);
@@ -222,7 +225,7 @@ export const LudoGame = ({ gameCode, gameMode, creatorId, currentUserId, socket,
                 </div>;
             })}
         </div>
-        <div className="mt-3 flex items-center justify-center gap-5 rounded-2xl border border-white/10 bg-gradient-to-b from-white/10 to-black/20 p-4"><div className={`flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-white to-gray-300 text-5xl text-gray-900 shadow-[0_9px_0_#9ca3af,0_14px_18px_rgba(0,0,0,.5)] ${rolling ? 'animate-spin' : ''}`}>{state.dice || state.lastRoll ? ['','⚀','⚁','⚂','⚃','⚄','⚅'][state.dice || state.lastRoll] : '⚄'}</div><div><button onClick={roll} disabled={!canAct || Boolean(state.dice)} className="rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-7 py-3 text-sm font-black shadow-lg disabled:opacity-40">{rolling ? 'Rolling…' : state.dice ? `Move ${state.dice} steps` : 'Roll 3D dice'}</button>{state.lastRoll && <p className="mt-2 text-center text-xs font-bold text-amber-300">Dice rolled: {state.lastRoll}</p>}</div></div>
+        <div className="mt-3 flex items-center justify-center gap-5 rounded-2xl border border-white/10 bg-gradient-to-b from-white/10 to-black/20 p-4"><div className="relative flex h-[82px] w-[82px] shrink-0 items-center justify-center [perspective:500px]"><div className={`absolute bottom-0 h-3 w-14 rounded-full bg-black/60 blur-sm transition-all ${rolling ? 'scale-75 opacity-40' : 'scale-100 opacity-70'}`} /><div className={`relative h-16 w-16 rounded-[18px] border border-white bg-gradient-to-br from-white via-gray-100 to-gray-300 p-2.5 shadow-[inset_3px_3px_5px_rgba(255,255,255,.9),inset_-4px_-5px_7px_rgba(100,116,139,.35),0_8px_0_#9ca3af,0_13px_18px_rgba(0,0,0,.5)] [transform-style:preserve-3d] ${rolling ? 'ludo-dice-rolling' : 'ludo-dice-settle'}`}><DiceFace value={rolling ? dicePreview : state.dice || state.lastRoll || 5} /></div></div><div><button onClick={roll} disabled={!canAct || Boolean(state.dice)} className="min-w-32 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-6 py-3 text-sm font-black shadow-lg disabled:opacity-40">{rolling ? 'Rolling…' : state.dice ? `Move ${state.dice} steps` : 'Roll dice'}</button><p className={`mt-2 min-h-4 text-center text-xs font-bold ${rolling ? 'text-white/50' : 'text-amber-300'}`}>{rolling ? 'Dice is rolling…' : state.lastRoll ? `You rolled ${state.lastRoll}` : 'Tap to roll'}</p></div></div>
         <p className="mt-3 text-center text-xs text-white/50">2–4 players · animated pieces · safe stars · captures · exact finish · three sixes forfeit</p>
         {state.winner !== null && showWinner && <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"><div className="w-full max-w-sm rounded-[2rem] border border-yellow-300/40 bg-gradient-to-b from-amber-900 to-[#111827] p-7 text-center shadow-2xl"><div className="text-7xl animate-bounce">🏆</div><h2 className="mt-3 text-3xl font-black text-yellow-300">Champion!</h2><p className="mt-2 text-lg font-bold">{names[state.winner]} won the match</p><p className="mt-2 text-sm text-white/60">All four tokens reached home. शानदार खेल!</p><div className="mt-6 flex gap-2"><button onClick={() => { const id = String(currentUserId); setState({ ...state, acknowledgements: [...new Set([...(state.acknowledgements || []), id])] }); setShowWinner(false); }} className="flex-1 rounded-xl bg-yellow-400 px-3 py-3 text-sm font-black text-gray-950">👏 Acknowledge</button><button onClick={() => { setState(createLudoState(playerCount)); setShowWinner(false); }} className="flex-1 rounded-xl bg-white/10 px-3 py-3 text-sm font-bold">Rematch</button></div><p className="mt-3 text-[10px] text-white/40">{state.acknowledgements?.length || 0} player acknowledgements</p></div></div>}
     </div>;
@@ -230,3 +233,7 @@ export const LudoGame = ({ gameCode, gameMode, creatorId, currentUserId, socket,
 
 const Header = ({ icon, title, mode, code, detail }) => <div className="rounded-2xl border border-violet-500/25 bg-gradient-to-r from-violet-950/80 to-indigo-950/80 p-3 text-center shadow-lg"><div className="font-black">{icon} {title}</div><div className="mt-1 text-[11px] text-violet-200/70">{mode === 'vs-friend' ? 'Live friend match' : 'Computer match'} · {detail}{mode === 'vs-friend' && code ? ` · Room ${code}` : ''}</div></div>;
 const Toolbar = ({ title, subtitle, onReset }) => <div className="my-3 flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-2.5"><div><p className="text-sm font-bold capitalize">{title}</p><p className="text-[10px] text-white/45">{subtitle}</p></div><button onClick={onReset} className="rounded-lg bg-white/10 px-3 py-2 text-xs font-bold hover:bg-white/20">New match</button></div>;
+const DiceFace = ({ value }) => {
+    const positions = { 1: [4], 2: [0,8], 3: [0,4,8], 4: [0,2,6,8], 5: [0,2,4,6,8], 6: [0,2,3,5,6,8] }[value] || [4];
+    return <div className="grid h-full w-full grid-cols-3 grid-rows-3 gap-1">{Array.from({ length: 9 }, (_, i) => <span key={i} className="flex items-center justify-center">{positions.includes(i) && <i className="block h-2.5 w-2.5 rounded-full bg-gradient-to-br from-gray-700 to-black shadow-[inset_1px_1px_1px_rgba(255,255,255,.35)]" />}</span>)}</div>;
+};

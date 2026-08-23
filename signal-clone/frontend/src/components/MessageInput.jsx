@@ -460,8 +460,8 @@ const MessageInput = ({
                 gameCode: code
             };
             onSend(JSON.stringify(payload), 'game', 0);
-        } else if (type === 'Snake' || type === 'CHARO') {
-            onSend(JSON.stringify({ game: type, mode: 'vs-computer', gameCode: `${type === 'CHARO' ? 'CHR' : 'SNK'}-${Math.floor(100000 + Math.random() * 900000)}`, creatorId: currentUserId }), 'game', 0);
+        } else if (type === 'Snake') {
+            onSend(JSON.stringify({ game: type, mode: 'vs-computer', gameCode: `SNK-${Math.floor(100000 + Math.random() * 900000)}`, creatorId: currentUserId }), 'game', 0);
         } else {
             const isBoardGame = type === 'Chess' || type === 'Ludo' || type === 'Snake';
             if (mode === 'vs-computer') {
@@ -993,12 +993,11 @@ const MessageInput = ({
                                     <option value="Chess">♟️ Chess</option>
                                     <option value="Ludo">🎲 Ludo</option>
                                     <option value="Snake">🐍 Nokia Snake 3D</option>
-                                    <option value="CHARO">🚀 CHARO — Space Stair Run</option>
                                     <option value="Indiasearch Games">Indiasearch Games</option>
                                 </select>
                             </div>
 
-                            {gameType !== 'Indiasearch Games' && !['Snake', 'CHARO'].includes(gameType) && (
+                            {gameType !== 'Indiasearch Games' && gameType !== 'Snake' && (
                                 <>
                                     <div className="space-y-1">
                                         <label className="text-[10px] uppercase font-bold text-gray-400">Game Mode</label>

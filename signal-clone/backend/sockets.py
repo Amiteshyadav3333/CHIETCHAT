@@ -28,6 +28,8 @@ MAX_MESSAGE_TTL = 315360000
 _call_signal_windows = defaultdict(deque)
 _call_signal_windows_lock = threading.Lock()
 _call_invites = CallInviteRegistry()
+_game_presence = defaultdict(dict)
+_game_presence_lock = threading.Lock()
 
 def register_socket_events(socketio):
     register_location_socket_handlers(socketio)
@@ -35,6 +37,25 @@ def register_socket_events(socketio):
         if user_can_access_chat(user_id, chat_id):
             return True
         return _call_invites.allows(chat_id, user_id)
+
+    def game_room(chat_id, game_code):
+        return f"game_{chat_id}_{game_code}"
+
+    def emit_game_presence(room):
+        with _game_presence_lock:
+            users = list({entry['userId']: entry for entry in _game_presence.get(room, {}).values()}.values())
+        socketio.emit('game_presence_update', {'room': room, 'players': users}, room=room)
+
+    def leave_all_game_rooms(sid):
+        affected = []
+        with _game_presence_lock:
+            for room, members in list(_game_presence.items()):
+                if members.pop(sid, None):
+                    affected.append(room)
+                if not members:
+                    _game_presence.pop(room, None)
+        for room in affected:
+            emit_game_presence(room)
 
     def allow_call_signal(user_id):
         redis_client = current_app.extensions.get('cheetchat_redis')
@@ -198,6 +219,8 @@ def register_socket_events(socketio):
             user_id = socket_users.pop(request.sid, None)
         if not user_id:
             return
+
+        leave_all_game_rooms(request.sid)
 
         with socket_presence_lock:
             user_connection_counts[user_id] = max(user_connection_counts.get(user_id, 1) - 1, 0)
@@ -803,3 +826,46 @@ def register_socket_events(socketio):
         participants = ChatParticipant.query.filter_by(chat_id=chat_id).all()
         for participant in participants:
             socketio.emit('game_move_received', data, room=f"user_{participant.user_id}")
+
+    @socketio.on('game_presence_join')
+    def on_game_presence_join(data):
+        user_id = get_socket_user_id()
+        if not isinstance(data, dict) or not user_id:
+            return
+        try:
+            chat_id = int(data.get('chatId'))
+        except (TypeError, ValueError):
+            return
+        game_code = data.get('gameCode')
+        if not isinstance(game_code, str) or not game_code or len(game_code) > 32 or not all(char.isalnum() or char in '-_' for char in game_code):
+            return
+        if not user_can_access_chat(user_id, chat_id):
+            return
+        room = game_room(chat_id, game_code)
+        user = db.session.get(User, user_id)
+        if not user:
+            return
+        join_room(room)
+        with _game_presence_lock:
+            _game_presence[room][request.sid] = {'userId': user_id, 'username': user.username, 'joinedAt': iso_utc(utc_now())}
+        emit_game_presence(room)
+
+    @socketio.on('game_presence_leave')
+    def on_game_presence_leave(data):
+        user_id = get_socket_user_id()
+        if not isinstance(data, dict) or not user_id:
+            return
+        try:
+            chat_id = int(data.get('chatId'))
+        except (TypeError, ValueError):
+            return
+        game_code = data.get('gameCode')
+        if not isinstance(game_code, str) or len(game_code) > 32:
+            return
+        room = game_room(chat_id, game_code)
+        with _game_presence_lock:
+            _game_presence.get(room, {}).pop(request.sid, None)
+            if not _game_presence.get(room):
+                _game_presence.pop(room, None)
+        leave_room(room)
+        emit_game_presence(room)

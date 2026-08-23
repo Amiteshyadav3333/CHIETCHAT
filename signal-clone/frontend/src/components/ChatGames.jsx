@@ -375,6 +375,7 @@ const TicTacToeGame = ({ gameCode, gameMode: initialGameMode, targetWins, creato
 
 export const MiniGameCard = ({ game, isOwn, socket, chatId, currentUserId, gamePlayers = [] }) => {
     const [showModal, setShowModal] = useState(false);
+    const [onlinePlayers, setOnlinePlayers] = useState([]);
     let iframeUrl = 'https://game.indiasearch.site';
 
     let gameName = game;
@@ -412,6 +413,23 @@ export const MiniGameCard = ({ game, isOwn, socket, chatId, currentUserId, gameP
             document.body.style.overflow = '';
         };
     }, [showModal]);
+
+    useEffect(() => {
+        if (!showModal || gameMode !== 'vs-friend' || !socket || !gameCode) {
+            setOnlinePlayers([]);
+            return undefined;
+        }
+        const room = `game_${chatId}_${gameCode}`;
+        const update = data => {
+            if (data?.room === room && Array.isArray(data.players)) setOnlinePlayers(data.players);
+        };
+        socket.on('game_presence_update', update);
+        socket.emit('game_presence_join', { chatId, gameCode });
+        return () => {
+            socket.emit('game_presence_leave', { chatId, gameCode });
+            socket.off('game_presence_update', update);
+        };
+    }, [showModal, gameMode, socket, chatId, gameCode]);
 
     return (
         <div className="min-w-[220px] max-w-[280px] space-y-2">
@@ -520,6 +538,7 @@ export const MiniGameCard = ({ game, isOwn, socket, chatId, currentUserId, gameP
                     </div>
 
                     {/* Game Content Container */}
+                    {gameMode === 'vs-friend' && <div className="border-b border-white/10 bg-[#0a1118] px-4 py-2"><div className="mx-auto flex max-w-3xl items-center gap-2 overflow-x-auto">{(players || []).slice(0, gameName === 'Ludo' ? 4 : 2).map((player, index) => { const online = onlinePlayers.some(item => String(item.userId) === String(player.id)); return <div key={player.id || index} className="flex shrink-0 items-center gap-2 rounded-full bg-white/5 px-3 py-1.5"><span className={`h-2.5 w-2.5 rounded-full ${online ? 'bg-emerald-400 shadow-[0_0_8px_#34d399] animate-pulse' : 'bg-gray-600'}`} /><span className="max-w-24 truncate text-xs font-bold text-white/80">{String(player.id) === String(currentUserId) ? 'You' : player.name || player.username || `Player ${index + 1}`}</span><span className={`text-[9px] font-bold ${online ? 'text-emerald-300' : 'text-gray-500'}`}>{online ? 'IN GAME' : 'OFFLINE'}</span></div>; })}<span className="ml-auto shrink-0 text-[10px] text-white/40">{onlinePlayers.length} playing now</span></div></div>}
                     <div className="flex-1 p-2 sm:p-6 flex justify-center items-center overflow-y-auto">
                         {gameName === 'Tic-Tac-Toe' ? (
                             <div className="w-full max-w-sm rounded-2xl border border-white/10 shadow-2xl bg-[#0b0f19] p-4 sm:p-6 relative">

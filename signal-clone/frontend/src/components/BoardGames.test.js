@@ -28,9 +28,16 @@ describe('Ludo rules', () => {
     });
 
     it('captures a rival on a non-safe square', () => {
-        const state = { ...createLudoState(), tokens: [[4, -1, -1, -1], [31, -1, -1, -1]], dice: 1 };
+        const state = { ...createLudoState(), tokens: [[4, -1, -1, -1], [44, -1, -1, -1], [-1, -1, -1, -1], [-1, -1, -1, -1]], dice: 1 };
         const moved = moveLudoToken(state, 0);
         expect(moved.tokens[0][0]).toBe(5);
         expect(moved.tokens[1][0]).toBe(-1);
+    });
+
+    it('supports four active players and advances turns in order', () => {
+        const state = { ...createLudoState(4), tokens: [[0, -1, -1, -1], ...createLudoState(4).tokens.slice(1)], dice: 2 };
+        const moved = moveLudoToken(state, 0);
+        expect(moved.tokens).toHaveLength(4);
+        expect(moved.turn).toBe(1);
     });
 });

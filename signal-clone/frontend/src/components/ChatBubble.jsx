@@ -605,7 +605,7 @@ const ChatBubble = ({
     message, isOwn, senderName, onDelete, senderAvatar, showAvatar,
     onReply, replyTo, onTranslate, chatId, chatTranslationLang,
     onEdit, onCopy, onForward, onReact, onPin, isLastMessage,
-    socket, token, showTranslateBtn = true, onAnnotate, onPhotoReply, onMakeSticker, onPlaceSticker, snapMode = false
+    socket, token, gamePlayers = [], showTranslateBtn = true, onAnnotate, onPhotoReply, onMakeSticker, onPlaceSticker, snapMode = false
 }) => {
     const [, forceColourRefresh] = useState(0);
     useEffect(() => { const refresh = () => forceColourRefresh(value => value + 1); window.addEventListener('cheetchat-colour-updated', refresh); return () => window.removeEventListener('cheetchat-colour-updated', refresh); }, []);
@@ -1278,6 +1278,7 @@ const ChatBubble = ({
                     socket={socket} 
                     chatId={chatId} 
                     currentUserId={currentUserId} 
+                    gamePlayers={gamePlayers}
                 />
             );
         }

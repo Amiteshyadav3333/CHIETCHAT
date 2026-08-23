@@ -3216,6 +3216,7 @@ const Home = () => {
                                             socket={socket}
                                             token={token}
                                             currentUserId={user.id}
+                                            gamePlayers={visibleActiveChat.participants}
                                             showTranslateBtn={showTranslateEnabled}
                                             onAnnotate={(source) => { setDrawSource(source); setShowChatDraw(true); }}
                                             onPhotoReply={(photoMessage) => {
@@ -3263,6 +3264,7 @@ const Home = () => {
                         showAiFeature={aiEnabled}
                         showSmartReplies={smartRepliesEnabled}
                         currentUserId={user?.id}
+                        gamePlayers={visibleActiveChat.participants}
                         payeeId={getOtherParticipant(visibleActiveChat)?.id}
                         payeeName={getOtherParticipant(visibleActiveChat)?.username || visibleActiveChat.name}
                         onSchedule={scheduleMessage}

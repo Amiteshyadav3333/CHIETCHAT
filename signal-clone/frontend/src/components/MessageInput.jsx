@@ -78,7 +78,7 @@ const MessageInput = ({
     lastMessageText = "",
     showAiFeature = false,
     showSmartReplies = false,
-    currentUserId, payeeId, payeeName,
+    currentUserId, gamePlayers = [], payeeId, payeeName,
     onSchedule, token, drawSource = null, onDrawSourceConsumed, onOpenDraw,
     cameraOpenRequest = 0, photoReactionSource = null, onPhotoReactionComplete
 }) => {
@@ -479,6 +479,7 @@ const MessageInput = ({
                     gameCode: code,
                     creatorId: currentUserId
                 };
+                if (type === 'Ludo') payload.players = gamePlayers.slice(0, 4).map(player => ({ id: player.id, name: player.username || player.name || 'Player' }));
                 onSend(JSON.stringify(payload), 'game', 0);
             }
         }

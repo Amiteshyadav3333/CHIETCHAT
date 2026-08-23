@@ -371,7 +371,7 @@ const TicTacToeGame = ({ gameCode, gameMode: initialGameMode, targetWins, creato
     );
 };
 
-export const MiniGameCard = ({ game, isOwn, socket, chatId, currentUserId }) => {
+export const MiniGameCard = ({ game, isOwn, socket, chatId, currentUserId, gamePlayers = [] }) => {
     const [showModal, setShowModal] = useState(false);
     let iframeUrl = 'https://game.indiasearch.site';
 
@@ -380,6 +380,7 @@ export const MiniGameCard = ({ game, isOwn, socket, chatId, currentUserId }) => 
     let targetWins = 3;
     let gameCode = '';
     let creatorId = '';
+    let players = gamePlayers;
 
     try {
         if (game.startsWith('{')) {
@@ -392,6 +393,7 @@ export const MiniGameCard = ({ game, isOwn, socket, chatId, currentUserId }) => 
                 iframeUrl = `https://game.indiasearch.site?room=${gameCode}`;
             }
             creatorId = data.creatorId || '';
+            players = Array.isArray(data.players) ? data.players : gamePlayers;
         }
     } catch (e) {
         // Fallback for raw text
@@ -532,7 +534,7 @@ export const MiniGameCard = ({ game, isOwn, socket, chatId, currentUserId }) => 
                         ) : gameName === 'Chess' ? (
                             <ChessGame gameCode={gameCode} gameMode={gameMode} creatorId={creatorId} currentUserId={currentUserId} socket={socket} chatId={chatId} />
                         ) : gameName === 'Ludo' ? (
-                            <LudoGame gameCode={gameCode} gameMode={gameMode} creatorId={creatorId} currentUserId={currentUserId} socket={socket} chatId={chatId} />
+                            <LudoGame gameCode={gameCode} gameMode={gameMode} creatorId={creatorId} currentUserId={currentUserId} socket={socket} chatId={chatId} players={players} />
                         ) : (
                             <div className="w-full h-full max-w-4xl max-h-[80vh] sm:max-h-[85vh] rounded-2xl sm:rounded-3xl overflow-hidden border border-gray-800 shadow-2xl bg-black relative">
                                 <iframe

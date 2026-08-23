@@ -114,7 +114,7 @@ export const SnakeGame = () => {
     };
 
     return <div className="w-full max-w-[620px] select-none text-white">
-        <div className="rounded-2xl border border-lime-400/25 bg-gradient-to-r from-emerald-950 to-lime-950 p-3 text-center shadow-lg"><div className="font-black">🐍 Nokia Snake 3D</div><div className="mt-1 text-[11px] text-lime-200/70">Solo arcade · eat, grow and survive</div></div>
+        <div className="rounded-2xl border border-lime-400/25 bg-gradient-to-r from-emerald-950 to-lime-950 p-3 text-center shadow-lg"><div className="font-black">🐍 Snake</div><div className="mt-1 text-[11px] text-lime-200/70">Solo arcade · eat, grow and survive</div></div>
         <div className="my-3 grid grid-cols-4 gap-2 text-center"><Stat label="Score" value={score} /><Stat label="Best" value={highScore} /><Stat label="Level" value={level} /><Stat label="Speed" value={`${Math.round(1000 / speed)}×`} /></div>
         <div className="relative mx-auto w-full max-w-[560px] rounded-[1.4rem] border-[8px] border-[#17210d] bg-[#17210d] p-2 shadow-[0_22px_50px_rgba(0,0,0,.7),inset_0_2px_0_rgba(255,255,255,.2)] [transform:perspective(1100px)_rotateX(3deg)]" onTouchStart={e => { const t = e.touches[0]; touchRef.current = { x: t.clientX, y: t.clientY }; }} onTouchEnd={swipeEnd}>
             <div className="grid grid-cols-[repeat(20,minmax(0,1fr))] overflow-hidden rounded-xl border-2 border-lime-800 bg-[#8fb36a] shadow-[inset_0_8px_20px_rgba(22,60,20,.45)]">

@@ -992,7 +992,7 @@ const MessageInput = ({
                                     <option value="Tic-Tac-Toe">Tic-Tac-Toe</option>
                                     <option value="Chess">♟️ Chess</option>
                                     <option value="Ludo">🎲 Ludo</option>
-                                    <option value="Snake">🐍 Nokia Snake 3D</option>
+                                    <option value="Snake">🐍 Snake</option>
                                     <option value="Indiasearch Games">Indiasearch Games</option>
                                 </select>
                             </div>

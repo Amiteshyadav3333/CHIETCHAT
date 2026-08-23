@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ArrowLeftIcon, ArrowTopRightOnSquareIcon, ClipboardDocumentIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { ChessGame, LudoGame } from './BoardGames';
 import { SnakeGame } from './SnakeGame';
+import { CharoGame } from './CharoGame';
 
 const WIN_PATTERNS = [
     [0, 1, 2], [3, 4, 5], [6, 7, 8],
@@ -482,7 +483,7 @@ export const MiniGameCard = ({ game, isOwn, socket, chatId, currentUserId, gameP
                         </div>
 
                         <div className="flex items-center gap-3">
-                            {!['Tic-Tac-Toe', 'Chess', 'Ludo', 'Snake'].includes(gameName) && (
+                            {!['Tic-Tac-Toe', 'Chess', 'Ludo', 'Snake', 'CHARO'].includes(gameName) && (
                                 <>
                                     <button
                                         onClick={() => {
@@ -538,6 +539,8 @@ export const MiniGameCard = ({ game, isOwn, socket, chatId, currentUserId, gameP
                             <LudoGame gameCode={gameCode} gameMode={gameMode} creatorId={creatorId} currentUserId={currentUserId} socket={socket} chatId={chatId} players={players} />
                         ) : gameName === 'Snake' ? (
                             <SnakeGame />
+                        ) : gameName === 'CHARO' ? (
+                            <CharoGame />
                         ) : (
                             <div className="w-full h-full max-w-4xl max-h-[80vh] sm:max-h-[85vh] rounded-2xl sm:rounded-3xl overflow-hidden border border-gray-800 shadow-2xl bg-black relative">
                                 <iframe

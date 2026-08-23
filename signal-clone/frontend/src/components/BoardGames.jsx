@@ -1,84 +1,34 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Chess } from 'chess.js';
 
-const PIECES = {
-    r: '♜', n: '♞', b: '♝', q: '♛', k: '♚', p: '♟',
-    R: '♖', N: '♘', B: '♗', Q: '♕', K: '♔', P: '♙',
-};
+const ICON = { p: '♟', n: '♞', b: '♝', r: '♜', q: '♛', k: '♚' };
+const FILES = 'abcdefgh';
+const VALUE = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
+const toSquare = i => `${FILES[i % 8]}${8 - Math.floor(i / 8)}`;
 
-export const createChessBoard = () => [
-    ...'rnbqkbnr', ...'pppppppp', ...Array(32).fill(null), ...'PPPPPPPP', ...'RNBQKBNR',
-];
-const isWhite = piece => Boolean(piece && piece === piece.toUpperCase());
-const sameSide = (a, b) => Boolean(a && b && isWhite(a) === isWhite(b));
-const row = index => Math.floor(index / 8);
-const col = index => index % 8;
-const inside = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8;
-
+export const createChessBoard = () => new Chess().board().flat().map(p => p ? (p.color === 'w' ? p.type.toUpperCase() : p.type) : null);
 export const chessMoves = (board, from) => {
     if (!Array.isArray(board) || board.length !== 64 || !board[from]) return [];
-    const piece = board[from];
-    const lower = piece.toLowerCase();
-    const white = isWhite(piece);
-    const moves = [];
-    const add = (r, c) => {
-        if (!inside(r, c)) return false;
-        const at = r * 8 + c;
-        if (!board[at]) { moves.push(at); return true; }
-        if (!sameSide(piece, board[at])) moves.push(at);
-        return false;
-    };
-    if (lower === 'p') {
-        const direction = white ? -1 : 1;
-        const start = white ? 6 : 1;
-        const one = (row(from) + direction) * 8 + col(from);
-        if (inside(row(from) + direction, col(from)) && !board[one]) {
-            moves.push(one);
-            const two = (row(from) + direction * 2) * 8 + col(from);
-            if (row(from) === start && !board[two]) moves.push(two);
-        }
-        [-1, 1].forEach(offset => {
-            const r = row(from) + direction;
-            const c = col(from) + offset;
-            if (inside(r, c) && board[r * 8 + c] && !sameSide(piece, board[r * 8 + c])) moves.push(r * 8 + c);
-        });
-    } else if (lower === 'n') {
-        [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr, dc]) => add(row(from) + dr, col(from) + dc));
-    } else if (lower === 'k') {
-        for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) if (dr || dc) add(row(from) + dr, col(from) + dc);
-    } else {
-        const directions = lower === 'b' ? [[-1,-1],[-1,1],[1,-1],[1,1]]
-            : lower === 'r' ? [[-1,0],[1,0],[0,-1],[0,1]]
-                : [[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]];
-        directions.forEach(([dr, dc]) => {
-            let r = row(from) + dr; let c = col(from) + dc;
-            while (inside(r, c) && add(r, c)) { r += dr; c += dc; }
-        });
-    }
-    return moves;
+    try {
+        const game = new Chess(); game.clear();
+        board.forEach((p, i) => p && game.put({ type: p.toLowerCase(), color: p === p.toUpperCase() ? 'w' : 'b' }, toSquare(i)));
+        game.setTurn(board[from] === board[from].toUpperCase() ? 'w' : 'b');
+        return game.moves({ square: toSquare(from), verbose: true }).map(m => (8 - +m.to[1]) * 8 + FILES.indexOf(m.to[0]));
+    } catch { return []; }
 };
-
 export const applyChessMove = (board, from, to) => {
     if (!chessMoves(board, from).includes(to)) return null;
-    const next = [...board];
-    next[to] = next[from]; next[from] = null;
-    if (next[to] === 'P' && row(to) === 0) next[to] = 'Q';
-    if (next[to] === 'p' && row(to) === 7) next[to] = 'q';
+    const next = [...board]; next[to] = next[from]; next[from] = null;
+    if (next[to] === 'P' && to < 8) next[to] = 'Q';
+    if (next[to] === 'p' && to >= 56) next[to] = 'q';
     return next;
-};
-
-const gameResult = board => {
-    if (!board.includes('K')) return 'Black wins';
-    if (!board.includes('k')) return 'White wins';
-    return null;
 };
 
 const useLiveState = ({ socket, chatId, gameCode, enabled, initialState, validator }) => {
     const [state, setState] = useState(initialState);
     useEffect(() => {
         if (!enabled || !socket) return undefined;
-        const receive = data => {
-            if (data?.gameCode === gameCode && data?.gameState && validator(data.gameState)) setState(data.gameState);
-        };
+        const receive = data => data?.gameCode === gameCode && validator(data?.gameState) && setState(data.gameState);
         socket.on('game_move_received', receive);
         return () => socket.off('game_move_received', receive);
     }, [enabled, socket, gameCode, validator]);
@@ -89,150 +39,157 @@ const useLiveState = ({ socket, chatId, gameCode, enabled, initialState, validat
     return [state, update];
 };
 
-const validChess = state => Array.isArray(state?.board) && state.board.length === 64
-    && state.board.every(piece => piece === null || Object.hasOwn(PIECES, piece))
-    && ['white', 'black'].includes(state.turn);
+const validChess = state => {
+    if (typeof state?.fen !== 'string' || state.fen.length > 100) return false;
+    try { new Chess(state.fen); return true; } catch { return false; }
+};
+const score = game => game.board().flat().reduce((n, p) => n + (p ? VALUE[p.type] * (p.color === 'b' ? 1 : -1) : 0), 0);
+const computerMove = game => {
+    let best = -Infinity; let candidates = [];
+    game.moves({ verbose: true }).forEach(move => {
+        game.move(move);
+        let current = score(game) + (move.captured ? VALUE[move.captured] / 2 : 0) + (game.inCheck() ? 40 : 0);
+        if (game.isCheckmate()) current = 100000;
+        else {
+            let reply = 0;
+            game.moves({ verbose: true }).forEach(m => { game.move(m); reply = Math.max(reply, -score(game)); game.undo(); });
+            current -= reply * 0.55;
+        }
+        game.undo();
+        if (current > best) { best = current; candidates = [move]; } else if (current === best) candidates.push(move);
+    });
+    return candidates[Math.floor(Math.random() * candidates.length)];
+};
+const status = game => {
+    if (game.isCheckmate()) return `Checkmate · ${game.turn() === 'w' ? 'Black' : 'White'} wins`;
+    if (game.isStalemate()) return 'Draw by stalemate';
+    if (game.isThreefoldRepetition()) return 'Draw by repetition';
+    if (game.isInsufficientMaterial()) return 'Draw · insufficient material';
+    if (game.isDraw()) return 'Draw';
+    return `${game.turn() === 'w' ? 'White' : 'Black'} to move${game.inCheck() ? ' · Check!' : ''}`;
+};
 
 export const ChessGame = ({ gameCode, gameMode, creatorId, currentUserId, socket, chatId }) => {
-    const multiplayer = gameMode === 'vs-friend';
-    const initial = useMemo(() => ({ board: createChessBoard(), turn: 'white', lastMove: null }), []);
-    const [state, setState] = useLiveState({ socket, chatId, gameCode, enabled: multiplayer, initialState: initial, validator: validChess });
+    const live = gameMode === 'vs-friend';
+    const initial = useMemo(() => ({ fen: new Chess().fen(), lastMove: null }), []);
+    const [state, setState] = useLiveState({ socket, chatId, gameCode, enabled: live, initialState: initial, validator: validChess });
     const [selected, setSelected] = useState(null);
-    const myColor = multiplayer ? (String(creatorId) === String(currentUserId) ? 'white' : 'black') : 'white';
-    const legal = selected === null ? [] : chessMoves(state.board, selected);
-    const result = gameResult(state.board);
-
-    const computerMove = nextState => {
-        const choices = [];
-        nextState.board.forEach((piece, from) => {
-            if (piece && !isWhite(piece)) chessMoves(nextState.board, from).forEach(to => choices.push({ from, to, value: nextState.board[to] ? 'pnbrqk'.indexOf(nextState.board[to].toLowerCase()) + 1 : 0 }));
-        });
-        if (!choices.length) return;
-        const best = Math.max(...choices.map(move => move.value));
-        const pool = choices.filter(move => move.value === best);
-        const move = pool[Math.floor(Math.random() * pool.length)];
-        const board = applyChessMove(nextState.board, move.from, move.to);
-        window.setTimeout(() => setState({ board, turn: 'white', lastMove: [move.from, move.to] }), 450);
+    const [thinking, setThinking] = useState(false);
+    const game = useMemo(() => new Chess(state.fen), [state.fen]);
+    const myColor = live && String(creatorId) !== String(currentUserId) ? 'b' : 'w';
+    const reversed = myColor === 'b';
+    const squares = useMemo(() => Array.from({ length: 64 }, (_, i) => reversed ? 63 - i : i), [reversed]);
+    const legal = selected ? game.moves({ square: selected, verbose: true }).map(m => m.to) : [];
+    const askComputer = fen => {
+        setThinking(true);
+        window.setTimeout(() => {
+            const bot = new Chess(fen); const move = computerMove(bot);
+            if (move) bot.move(move);
+            setState({ fen: bot.fen(), lastMove: move ? [move.from, move.to] : null }); setThinking(false);
+        }, 500);
     };
-
-    const selectSquare = index => {
-        if (result || state.turn !== myColor) return;
-        const piece = state.board[index];
-        if (selected === null) {
-            if (piece && isWhite(piece) === (state.turn === 'white')) setSelected(index);
-            return;
-        }
-        if (piece && sameSide(state.board[selected], piece)) { setSelected(index); return; }
-        const board = applyChessMove(state.board, selected, index);
-        setSelected(null);
-        if (!board) return;
-        const next = { board, turn: state.turn === 'white' ? 'black' : 'white', lastMove: [selected, index] };
-        setState(next);
-        if (!multiplayer && !gameResult(board)) computerMove(next);
+    const play = square => {
+        if (game.isGameOver() || thinking || game.turn() !== myColor) return;
+        const piece = game.get(square);
+        if (!selected || piece?.color === myColor) { setSelected(piece?.color === myColor ? square : null); return; }
+        const next = new Chess(state.fen); let move = null;
+        try { move = next.move({ from: selected, to: square, promotion: 'q' }); } catch { /* illegal */ }
+        setSelected(null); if (!move) return;
+        setState({ fen: next.fen(), lastMove: [move.from, move.to] });
+        if (!live && !next.isGameOver()) askComputer(next.fen());
     };
-
-    const reset = () => { setSelected(null); setState({ board: createChessBoard(), turn: 'white', lastMove: null }); };
-    return <div className="w-full max-w-xl text-white">
-        <GameHeader icon="♟️" mode={gameMode} code={gameCode} detail={multiplayer ? `You are ${myColor}` : 'You are White'} />
-        <div className="my-3 flex items-center justify-between rounded-xl bg-white/5 px-4 py-2 text-sm">
-            <span>{result || `${state.turn === 'white' ? 'White' : 'Black'} to move`}</span>
-            <button onClick={reset} className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20">New game</button>
+    const reset = () => { setSelected(null); setThinking(false); setState({ fen: new Chess().fen(), lastMove: null }); };
+    return <div className="w-full max-w-[620px] text-white">
+        <Header icon="♟️" title="Professional Chess" mode={gameMode} code={gameCode} detail={`You play ${myColor === 'w' ? 'White' : 'Black'}`} />
+        <Toolbar title={thinking ? 'Computer is thinking…' : status(game)} subtitle="Standard FIDE movement rules" onReset={reset} />
+        <div className="mx-auto grid w-full max-w-[560px] grid-cols-8 overflow-hidden rounded-lg border-[6px] border-[#3b2516] shadow-2xl">
+            {squares.map(index => {
+                const square = toSquare(index); const piece = game.get(square); const light = (Math.floor(index / 8) + index % 8) % 2 === 0;
+                return <button key={square} onClick={() => play(square)} aria-label={`${square} ${piece?.type || 'empty'}`} className={`relative flex aspect-square items-center justify-center ${light ? 'bg-[#e8d2ad]' : 'bg-[#6d8b74]'} ${selected === square ? 'ring-4 ring-inset ring-yellow-300' : ''} ${state.lastMove?.includes(square) ? 'brightness-125' : ''}`}>
+                    {legal.includes(square) && <span className={`absolute z-10 rounded-full ${piece ? 'inset-1 border-4 border-yellow-300/80' : 'h-[22%] w-[22%] bg-yellow-500/70'}`} />}
+                    {piece && <span className={`text-[clamp(1.7rem,7vw,3.8rem)] leading-none ${piece.color === 'w' ? 'text-white drop-shadow-[0_2px_2px_#111]' : 'text-gray-950 drop-shadow-[0_1px_1px_#fff]'}`}>{ICON[piece.type]}</span>}
+                    <span className={`absolute bottom-0 left-1 text-[8px] font-black ${light ? 'text-[#6d8b74]' : 'text-[#e8d2ad]'}`}>{(reversed ? index % 8 === 7 : index % 8 === 0) ? square[1] : ''}</span>
+                    <span className={`absolute bottom-0 right-1 text-[8px] font-black ${light ? 'text-[#6d8b74]' : 'text-[#e8d2ad]'}`}>{(reversed ? index < 8 : index >= 56) ? square[0] : ''}</span>
+                </button>;
+            })}
         </div>
-        <div className="mx-auto grid w-full max-w-[520px] grid-cols-8 overflow-hidden rounded-xl border-4 border-amber-900 shadow-2xl">
-            {state.board.map((piece, index) => <button key={index} onClick={() => selectSquare(index)}
-                aria-label={`${String.fromCharCode(97 + col(index))}${8 - row(index)} ${piece || 'empty'}`}
-                className={`aspect-square text-[clamp(1.55rem,7vw,3.2rem)] leading-none ${(row(index) + col(index)) % 2 ? 'bg-emerald-800' : 'bg-amber-100'} ${selected === index ? 'ring-4 ring-inset ring-yellow-400' : ''} ${legal.includes(index) ? 'after:block after:h-3 after:w-3 after:rounded-full after:bg-yellow-400/80' : ''} ${state.lastMove?.includes(index) ? 'brightness-125' : ''} flex items-center justify-center`}>
-                <span className={piece && isWhite(piece) ? 'text-white drop-shadow-[0_1px_2px_#000]' : 'text-gray-950 drop-shadow-[0_1px_1px_#fff]'}>{PIECES[piece]}</span>
-            </button>)}
-        </div>
-        <p className="mt-3 text-center text-xs text-white/50">Capture the king to win · Pawns auto-promote to queens</p>
+        <p className="mt-3 text-center text-xs text-white/50">Checkmate · castling · en passant · promotion · stalemate and draw detection</p>
     </div>;
 };
 
-const LUDO_COLORS = ['red', 'yellow'];
-const START_OFFSET = { red: 0, yellow: 26 };
-const SAFE = new Set([0, 8, 13, 21, 26, 34, 39, 47]);
-const validLudo = state => Array.isArray(state?.tokens) && state.tokens.length === 2
-    && state.tokens.every(set => Array.isArray(set) && set.length === 4 && set.every(pos => Number.isInteger(pos) && pos >= -1 && pos <= 56))
-    && [0, 1].includes(state.turn) && (state.dice === null || (Number.isInteger(state.dice) && state.dice >= 1 && state.dice <= 6));
-export const createLudoState = () => ({ tokens: [Array(4).fill(-1), Array(4).fill(-1)], turn: 0, dice: null, winner: null });
-
-export const moveLudoToken = (state, tokenIndex) => {
-    const roll = state.dice;
-    const position = state.tokens[state.turn][tokenIndex];
-    if (!roll || (position === -1 && roll !== 6) || (position >= 0 && position + roll > 56)) return null;
-    const tokens = state.tokens.map(list => [...list]);
-    tokens[state.turn][tokenIndex] = position === -1 ? 0 : position + roll;
-    const landed = tokens[state.turn][tokenIndex];
+const COLORS = ['red', 'yellow'];
+const START = [0, 26];
+export const SAFE_CELLS = new Set([0, 8, 13, 21, 26, 34, 39, 47]);
+const PATH = [[6,1],[6,2],[6,3],[6,4],[6,5],[5,6],[4,6],[3,6],[2,6],[1,6],[0,6],[0,7],[0,8],[1,8],[2,8],[3,8],[4,8],[5,8],[6,9],[6,10],[6,11],[6,12],[6,13],[6,14],[7,14],[8,14],[8,13],[8,12],[8,11],[8,10],[8,9],[9,8],[10,8],[11,8],[12,8],[13,8],[14,8],[14,7],[14,6],[13,6],[12,6],[11,6],[10,6],[9,6],[8,5],[8,4],[8,3],[8,2],[8,1],[8,0],[7,0],[6,0]];
+const HOME = [Array.from({ length: 5 }, (_, i) => [7, i + 1]), Array.from({ length: 5 }, (_, i) => [7, 13 - i])];
+const YARD = [[[1,1],[1,4],[4,1],[4,4]], [[10,10],[10,13],[13,10],[13,13]]];
+export const createLudoState = () => ({ tokens: [Array(4).fill(-1), Array(4).fill(-1)], turn: 0, dice: null, winner: null, consecutiveSixes: 0 });
+const validLudo = s => Array.isArray(s?.tokens) && s.tokens.length === 2 && s.tokens.every(t => Array.isArray(t) && t.length === 4 && t.every(p => Number.isInteger(p) && p >= -1 && p <= 57)) && [0, 1].includes(s.turn) && (s.dice === null || Number.isInteger(s.dice) && s.dice >= 1 && s.dice <= 6);
+export const moveLudoToken = (state, token) => {
+    const roll = state.dice; const position = state.tokens[state.turn][token];
+    if (!roll || position === -1 && roll !== 6 || position >= 0 && position + roll > 57) return null;
+    const tokens = state.tokens.map(t => [...t]); tokens[state.turn][token] = position === -1 ? 0 : position + roll;
+    const landed = tokens[state.turn][token]; let captured = false;
     if (landed < 52) {
-        const global = (START_OFFSET[LUDO_COLORS[state.turn]] + landed) % 52;
-        if (!SAFE.has(global)) tokens[1 - state.turn] = tokens[1 - state.turn].map(enemy => enemy >= 0 && enemy < 52 && (START_OFFSET[LUDO_COLORS[1 - state.turn]] + enemy) % 52 === global ? -1 : enemy);
+        const global = (START[state.turn] + landed) % 52;
+        if (!SAFE_CELLS.has(global)) tokens[1 - state.turn] = tokens[1 - state.turn].map(enemy => {
+            if (enemy >= 0 && enemy < 52 && (START[1 - state.turn] + enemy) % 52 === global) { captured = true; return -1; } return enemy;
+        });
     }
-    const winner = tokens[state.turn].every(pos => pos === 56) ? state.turn : null;
-    return { tokens, turn: roll === 6 && winner === null ? state.turn : 1 - state.turn, dice: null, winner };
+    const winner = tokens[state.turn].every(p => p === 57) ? state.turn : null;
+    const bonus = (roll === 6 || captured || landed === 57) && winner === null;
+    return { tokens, turn: bonus ? state.turn : 1 - state.turn, dice: null, winner, consecutiveSixes: bonus && roll === 6 ? state.consecutiveSixes || 1 : 0 };
 };
+const coordinate = (player, position, token) => position === -1 ? YARD[player][token] : position < 52 ? PATH[(START[player] + position) % 52] : position < 57 ? HOME[player][position - 52] : [7, 7];
 
 export const LudoGame = ({ gameCode, gameMode, creatorId, currentUserId, socket, chatId }) => {
-    const multiplayer = gameMode === 'vs-friend';
-    const initial = useMemo(createLudoState, []);
-    const [state, setState] = useLiveState({ socket, chatId, gameCode, enabled: multiplayer, initialState: initial, validator: validLudo });
-    const myPlayer = multiplayer ? (String(creatorId) === String(currentUserId) ? 0 : 1) : 0;
-    const canAct = state.winner === null && state.turn === myPlayer;
-    const movable = state.dice ? state.tokens[state.turn].map((pos, i) => moveLudoToken(state, i) ? i : null).filter(i => i !== null) : [];
-
-    const botTurn = useCallback(current => {
-        window.setTimeout(() => {
-            const dice = 1 + Math.floor(Math.random() * 6);
-            const rolled = { ...current, dice };
-            const options = rolled.tokens[1].map((_, i) => moveLudoToken(rolled, i) ? i : null).filter(i => i !== null);
-            const next = options.length ? moveLudoToken(rolled, options[Math.floor(Math.random() * options.length)]) : { ...rolled, turn: 0, dice: null };
-            setState(next);
-        }, 550);
-    }, [setState]);
-
-    const rollDice = () => {
+    const live = gameMode === 'vs-friend'; const initial = useMemo(createLudoState, []);
+    const [state, setState] = useLiveState({ socket, chatId, gameCode, enabled: live, initialState: initial, validator: validLudo });
+    const me = live && String(creatorId) !== String(currentUserId) ? 1 : 0;
+    const movable = state.dice ? state.tokens[state.turn].map((_, i) => moveLudoToken(state, i) ? i : null).filter(i => i !== null) : [];
+    const canAct = state.winner === null && state.turn === me;
+    const botTurn = useCallback(current => window.setTimeout(() => {
+        const dice = 1 + Math.floor(Math.random() * 6);
+        if (dice === 6 && current.consecutiveSixes >= 2) { const next = { ...current, turn: 0, dice: null, consecutiveSixes: 0 }; setState(next); return; }
+        const rolled = { ...current, dice, consecutiveSixes: dice === 6 ? (current.consecutiveSixes || 0) + 1 : 0 };
+        const options = rolled.tokens[1].map((_, i) => moveLudoToken(rolled, i) ? i : null).filter(i => i !== null);
+        const next = options.length ? moveLudoToken(rolled, options.sort((a, b) => rolled.tokens[1][b] - rolled.tokens[1][a])[0]) : { ...rolled, turn: 0, dice: null };
+        setState(next); if (next.winner === null && next.turn === 1) botTurn(next);
+    }, 600), [setState]);
+    const roll = () => {
         if (!canAct || state.dice) return;
         const dice = 1 + Math.floor(Math.random() * 6);
-        const rolled = { ...state, dice };
-        const hasMove = rolled.tokens[rolled.turn].some((_, i) => moveLudoToken(rolled, i));
-        if (!hasMove) {
-            const next = { ...rolled, dice: null, turn: 1 - rolled.turn };
-            setState(next);
-            if (!multiplayer && next.turn === 1) botTurn(next);
+        if (dice === 6 && state.consecutiveSixes >= 2) { setState({ ...state, turn: 1 - state.turn, dice: null, consecutiveSixes: 0 }); if (!live) botTurn({ ...state, turn: 1, dice: null, consecutiveSixes: 0 }); return; }
+        const rolled = { ...state, dice, consecutiveSixes: dice === 6 ? (state.consecutiveSixes || 0) + 1 : 0 };
+        if (!rolled.tokens[rolled.turn].some((_, i) => moveLudoToken(rolled, i))) {
+            const next = { ...rolled, dice: null, turn: 1 - rolled.turn }; setState(next); if (!live && next.turn === 1) botTurn(next);
         } else setState(rolled);
     };
-    const move = index => {
-        if (!canAct || !movable.includes(index)) return;
-        const next = moveLudoToken(state, index);
-        setState(next);
-        if (!multiplayer && next.winner === null && next.turn === 1) botTurn(next);
+    const move = token => {
+        if (!canAct || !movable.includes(token)) return;
+        const next = moveLudoToken(state, token); setState(next); if (!live && next.winner === null && next.turn === 1) botTurn(next);
     };
-
-    return <div className="w-full max-w-xl text-white">
-        <GameHeader icon="🎲" mode={gameMode} code={gameCode} detail={multiplayer ? `You are ${LUDO_COLORS[myPlayer]}` : 'You are Red'} />
-        <div className="my-4 rounded-3xl border border-white/10 bg-[#10151f] p-4 shadow-2xl">
-            <div className="grid grid-cols-2 gap-3">
-                {LUDO_COLORS.map((color, player) => <div key={color} className={`rounded-2xl border-2 p-3 ${state.turn === player ? color === 'red' ? 'border-red-400 bg-red-500/15' : 'border-yellow-300 bg-yellow-400/15' : 'border-white/5 bg-white/[.03]'}`}>
-                    <div className="mb-2 flex items-center justify-between"><b className="capitalize">{color}</b><span className="text-xs text-white/50">{state.tokens[player].filter(p => p === 56).length}/4 home</span></div>
-                    <div className="grid grid-cols-2 gap-2">{state.tokens[player].map((position, index) => <button key={index} onClick={() => player === state.turn && move(index)} disabled={!movable.includes(index)}
-                        className={`aspect-square rounded-xl border text-xl font-black transition ${color === 'red' ? 'border-red-400/40 bg-red-500/25' : 'border-yellow-300/40 bg-yellow-400/25'} ${movable.includes(index) ? 'animate-pulse ring-2 ring-white hover:scale-105' : ''}`}>
-                        <span className={`mx-auto block h-7 w-7 rounded-full border-2 border-white/80 shadow ${color === 'red' ? 'bg-red-500' : 'bg-yellow-400'}`} />
-                        <span className="mt-1 block text-[10px] font-bold">{position === -1 ? 'YARD' : position === 56 ? 'HOME' : `${position}/56`}</span>
-                    </button>)}</div>
-                </div>)}
-            </div>
-            <div className="mt-4 flex items-center justify-center gap-4 rounded-2xl bg-white/5 p-4">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-3xl font-black text-gray-900 shadow-inner">{state.dice || '–'}</div>
-                <div><p className="mb-2 text-sm font-bold">{state.winner !== null ? `🏆 ${LUDO_COLORS[state.winner]} wins!` : `${LUDO_COLORS[state.turn]} turn`}</p>
-                    <button onClick={rollDice} disabled={!canAct || Boolean(state.dice)} className="rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-2 text-sm font-black disabled:opacity-40">Roll dice</button></div>
-            </div>
-            <button onClick={() => setState(createLudoState())} className="mt-3 w-full rounded-xl bg-white/5 py-2 text-xs font-bold text-white/70 hover:bg-white/10">Restart game</button>
+    const tokenMap = new Map();
+    state.tokens.forEach((tokens, player) => tokens.forEach((position, token) => { const key = coordinate(player, position, token).join('-'); tokenMap.set(key, [...(tokenMap.get(key) || []), { player, token }]); }));
+    return <div className="w-full max-w-[620px] text-white">
+        <Header icon="🎲" title="Classic Ludo" mode={gameMode} code={gameCode} detail={`You play ${COLORS[me]}`} />
+        <Toolbar title={state.winner === null ? `${COLORS[state.turn]}'s turn` : `🏆 ${COLORS[state.winner]} wins!`} subtitle="Two-player classic · opposite colours" onReset={() => setState(createLudoState())} />
+        <div className="mx-auto grid w-full max-w-[560px] grid-cols-[repeat(15,minmax(0,1fr))] overflow-hidden rounded-lg border-4 border-white/20 bg-[#f4ead4] shadow-2xl">
+            {Array.from({ length: 225 }, (_, i) => {
+                const r = Math.floor(i / 15), c = i % 15, key = `${r}-${c}`; const path = PATH.findIndex(([a,b]) => a === r && b === c);
+                const redHome = HOME[0].some(([a,b]) => a === r && b === c), yellowHome = HOME[1].some(([a,b]) => a === r && b === c);
+                let bg = 'bg-[#eadfc8]';
+                if (r < 6 && c < 6) bg = 'bg-red-500'; else if (r > 8 && c > 8) bg = 'bg-yellow-400'; else if (redHome) bg = 'bg-red-400'; else if (yellowHome) bg = 'bg-yellow-300'; else if (r >= 6 && r <= 8 && c >= 6 && c <= 8) bg = 'bg-gradient-to-br from-red-500 via-white to-yellow-400'; else if (path >= 0) bg = SAFE_CELLS.has(path) ? 'bg-emerald-200' : 'bg-white';
+                return <div key={key} className={`relative flex aspect-square items-center justify-center border-[0.5px] border-black/15 ${bg}`}>
+                    {path >= 0 && SAFE_CELLS.has(path) && <span className="text-[8px] text-emerald-700">★</span>}
+                    {(tokenMap.get(key) || []).map(({ player, token }) => <button key={`${player}-${token}`} onClick={() => player === state.turn && move(token)} disabled={!movable.includes(token)} aria-label={`${COLORS[player]} token ${token + 1}`} className={`absolute z-10 h-[72%] w-[72%] rounded-full border-2 border-white shadow-md ${player ? 'bg-yellow-500' : 'bg-red-600'} ${movable.includes(token) ? 'animate-pulse ring-2 ring-violet-500 scale-110' : ''}`} />)}
+                </div>;
+            })}
         </div>
-        <p className="text-center text-xs text-white/50">Roll 6 to leave the yard · Roll 6 to play again · Land on rivals to send them back</p>
+        <div className="mt-3 flex items-center justify-center gap-4 rounded-2xl bg-white/5 p-3"><div className="flex h-14 w-14 items-center justify-center rounded-xl bg-white text-3xl font-black text-gray-900">{state.dice || '–'}</div><button onClick={roll} disabled={!canAct || Boolean(state.dice)} className="rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-6 py-3 text-sm font-black disabled:opacity-40">Roll dice</button></div>
+        <p className="mt-2 text-center text-xs text-white/50">Roll 6 to enter · safe stars · capture bonus · exact finish · three sixes forfeit</p>
     </div>;
 };
 
-const GameHeader = ({ icon, mode, code, detail }) => <div className="rounded-2xl border border-violet-500/25 bg-gradient-to-r from-violet-950/70 to-indigo-950/70 p-3 text-center">
-    <div className="font-black">{icon} {mode === 'vs-friend' ? 'Live with friend' : 'Playing with computer'}</div>
-    <div className="mt-1 text-[11px] text-violet-200/70">{detail}{mode === 'vs-friend' && code ? ` · Room ${code}` : ''}</div>
-</div>;
+const Header = ({ icon, title, mode, code, detail }) => <div className="rounded-2xl border border-violet-500/25 bg-gradient-to-r from-violet-950/80 to-indigo-950/80 p-3 text-center shadow-lg"><div className="font-black">{icon} {title}</div><div className="mt-1 text-[11px] text-violet-200/70">{mode === 'vs-friend' ? 'Live friend match' : 'Computer match'} · {detail}{mode === 'vs-friend' && code ? ` · Room ${code}` : ''}</div></div>;
+const Toolbar = ({ title, subtitle, onReset }) => <div className="my-3 flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-2.5"><div><p className="text-sm font-bold capitalize">{title}</p><p className="text-[10px] text-white/45">{subtitle}</p></div><button onClick={onReset} className="rounded-lg bg-white/10 px-3 py-2 text-xs font-bold hover:bg-white/20">New match</button></div>;

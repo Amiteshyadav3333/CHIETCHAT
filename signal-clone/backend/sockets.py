@@ -780,9 +780,22 @@ def register_socket_events(socketio):
 
     @socketio.on('game_move')
     def on_game_move(data):
+        if not isinstance(data, dict):
+            return
         user_id = get_socket_user_id()
         chat_id = data.get('chatId')
         if not user_id or not chat_id or not user_can_access_chat(user_id, chat_id):
+            return
+        game_code = data.get('gameCode')
+        if not isinstance(game_code, str) or not game_code or len(game_code) > 32:
+            return
+        # Only relay the small, JSON-compatible state needed by built-in games.
+        # This prevents clients from using the event as an unrestricted payload channel.
+        import json
+        try:
+            if len(json.dumps(data, separators=(',', ':'))) > 12000:
+                return
+        except (TypeError, ValueError):
             return
         
         # Broadcast the move to all participants in this chat

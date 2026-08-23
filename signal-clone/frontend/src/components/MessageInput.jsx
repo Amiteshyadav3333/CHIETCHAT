@@ -461,12 +461,19 @@ const MessageInput = ({
             };
             onSend(JSON.stringify(payload), 'game', 0);
         } else {
+            const isBoardGame = type === 'Chess' || type === 'Ludo';
             if (mode === 'vs-computer') {
-                onSend('Tic-Tac-Toe', 'game', 0);
+                onSend(JSON.stringify({
+                    game: type,
+                    mode: 'vs-computer',
+                    gameCode: `${type === 'Chess' ? 'CHS' : type === 'Ludo' ? 'LDO' : 'TTT'}-${Math.floor(100000 + Math.random() * 900000)}`,
+                    creatorId: currentUserId
+                }), 'game', 0);
             } else {
-                const code = `TTT-${Math.floor(100000 + Math.random() * 900000)}`;
+                const prefix = type === 'Chess' ? 'CHS' : type === 'Ludo' ? 'LDO' : 'TTT';
+                const code = `${prefix}-${Math.floor(100000 + Math.random() * 900000)}`;
                 const payload = {
-                    game: 'Tic-Tac-Toe',
+                    game: isBoardGame ? type : 'Tic-Tac-Toe',
                     mode: 'vs-friend',
                     target: parseInt(targetWins) || 3,
                     gameCode: code,
@@ -980,11 +987,13 @@ const MessageInput = ({
                                     className="w-full bg-[#111b21] border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-[#00a884]"
                                 >
                                     <option value="Tic-Tac-Toe">Tic-Tac-Toe</option>
+                                    <option value="Chess">♟️ Chess</option>
+                                    <option value="Ludo">🎲 Ludo</option>
                                     <option value="Indiasearch Games">Indiasearch Games</option>
                                 </select>
                             </div>
 
-                            {gameType === 'Tic-Tac-Toe' && (
+                            {gameType !== 'Indiasearch Games' && (
                                 <>
                                     <div className="space-y-1">
                                         <label className="text-[10px] uppercase font-bold text-gray-400">Game Mode</label>

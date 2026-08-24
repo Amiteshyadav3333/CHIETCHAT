@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { PaperAirplaneIcon } from '@heroicons/react/24/solid';
+import LinkifiedText from './LinkifiedText';
 
 const NestedComment = ({ comment, onReply, onEdit, onDelete, currentUser, onProfileClick, depth = 0 }) => {
     const [showReplyBox, setShowReplyBox] = useState(false);
@@ -65,7 +66,7 @@ const NestedComment = ({ comment, onReply, onEdit, onDelete, currentUser, onProf
                                     <button type="submit" disabled={savingEdit || !editText.trim()} className="rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white disabled:opacity-50">{savingEdit ? 'Saving…' : 'Save'}</button>
                                 </div>
                             </form>
-                        ) : <p className="text-gray-100 text-sm mt-0.5 leading-relaxed break-words text-left">{comment.content}</p>}
+                        ) : <p className="text-gray-100 text-sm mt-0.5 leading-relaxed break-words text-left"><LinkifiedText>{comment.content}</LinkifiedText></p>}
                     </div>
                     
                     <div className="flex items-center gap-3 mt-1.5 px-1">

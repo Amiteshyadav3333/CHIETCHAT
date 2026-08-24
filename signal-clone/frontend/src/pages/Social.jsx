@@ -16,6 +16,7 @@ import {
 } from '@heroicons/react/24/solid';
 import FullscreenMediaModal from '../components/FullscreenMediaModal';
 import NestedComment from '../components/NestedComment';
+import LinkifiedText from '../components/LinkifiedText';
 import { getSafeWebsiteUrl } from '../utils/safeUrl';
 import SocialShareSheet from '../components/SocialShareSheet';
 import ProCameraStudio from '../components/ProCameraStudio';
@@ -392,7 +393,7 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
 
                 {displayPost.articleTitle && <div className="mt-3 rounded-2xl border border-blue-500/20 bg-blue-500/10 p-4"><span className="text-[10px] font-black uppercase tracking-widest text-blue-400">Premium article</span><h2 className="mt-1 text-xl font-black text-white">{displayPost.articleTitle}</h2></div>}
                 {displayPost.isMonetized && <span className="mt-2 inline-flex rounded-full bg-amber-400/15 px-2 py-1 text-[10px] font-bold text-amber-300">Creator earnings enabled</span>}
-                {postCaption && <p data-user-content style={{ marginTop: 4, fontSize: 15, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#e7e9ea' }}>{postCaption}</p>}
+                {postCaption && <p data-user-content style={{ marginTop: 4, fontSize: 15, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#e7e9ea' }}><LinkifiedText>{postCaption}</LinkifiedText></p>}
                 {authorId === currentUser?.id && currentUser?.isPremium && <button onClick={async e => { e.stopPropagation(); try { const { data } = await axios.get(`/api/social/posts/${post.id}/analytics`, { headers: authHeaders(token) }); alert(`Views: ${data.views}\nEngagement: ${data.engagement}\nEarnings: ₹${(data.earningsPaise / 100).toFixed(2)}`); } catch (err) { alert(err.response?.data?.error || 'Analytics unavailable'); } }} className="mt-3 inline-flex items-center gap-1 rounded-full bg-white/5 px-3 py-1.5 text-xs font-bold text-blue-400"><ChartBarIcon className="h-4 w-4" />Advanced analytics</button>}
 
                 {displayPost.poll && <div className="mt-3 space-y-2 rounded-2xl border border-[#2f3336] bg-[#0b1117] p-3">

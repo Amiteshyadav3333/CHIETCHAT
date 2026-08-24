@@ -1,5 +1,6 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
+import { INDIAN_MUSIC_CATEGORIES } from '../utils/indianMusic';
 import { AuthContext } from '../context/AuthContext';
 import {
     BackwardIcon,
@@ -72,6 +73,7 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
     const [libraryClips, setLibraryClips] = useState([]);
     const [generatingMemeId, setGeneratingMemeId] = useState(null);
     const [songQuery, setSongQuery] = useState('');
+    const [activeMusicCategory, setActiveMusicCategory] = useState('trending');
     const [songResults, setSongResults] = useState([]);
     const [searchingSongs, setSearchingSongs] = useState(false);
     const [songSearchOpen, setSongSearchOpen] = useState(false);
@@ -344,13 +346,14 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
         seekSource(nextTime);
     };
 
-    const searchSongs = async (e) => {
+    const searchSongs = async (e, categoryQuery = '') => {
         e?.preventDefault();
-        if (songQuery.trim().length < 2) return;
+        const query = categoryQuery || songQuery.trim();
+        if (query.length < 2) return;
         setSearchingSongs(true);
         try {
             const res = await axios.get('/api/music/search', {
-                params: { q: songQuery.trim() },
+                params: { q: query },
                 headers: { Authorization: `Bearer ${token}` }
             });
             setSongResults(res.data.tracks || []);
@@ -846,7 +849,7 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
                                 )}
                             </div>
                             <button
-                                onClick={() => setSongSearchOpen(true)}
+                                onClick={() => { setSongSearchOpen(true); if (!songResults.length) searchSongs(null, INDIAN_MUSIC_CATEGORIES[0].query); }}
                                 className="flex w-full items-center gap-2 rounded-lg bg-purple-600 px-3 py-3 text-sm font-bold"
                             >
                                 <MusicalNoteIcon className="h-5 w-5" />
@@ -1106,6 +1109,12 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
                         </div>
                         <button className="rounded-lg bg-purple-600 px-5 font-bold">Search</button>
                     </form>
+                    <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
+                        {INDIAN_MUSIC_CATEGORIES.map(category => (
+                            <button key={category.id} type="button" onClick={() => { setActiveMusicCategory(category.id); setSongQuery(''); searchSongs(null, category.query); }} className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold ${activeMusicCategory === category.id ? 'border-purple-400 bg-purple-600 text-white' : 'border-white/10 bg-white/5 text-gray-300'}`}>{category.label}</button>
+                        ))}
+                    </div>
+                    <p className="mb-3 text-xs font-semibold text-orange-300">Made for India · Bollywood & Indian music</p>
                     <div className="min-h-0 flex-1 overflow-y-auto space-y-3">
                         {searchingSongs && <p className="py-6 text-center text-gray-400">Searching...</p>}
                         {songResults.map(song => (

@@ -3,6 +3,7 @@ import { AuthContext } from '../context/AuthContext';
 import axios from 'axios';
 import { XMarkIcon, VideoCameraIcon, MusicalNoteIcon, MagnifyingGlassIcon, PlayIcon, PauseIcon, ArrowPathIcon, PlusIcon } from '@heroicons/react/24/outline';
 import ProCameraStudio from './ProCameraStudio';
+import { INDIAN_MUSIC_CATEGORIES } from '../utils/indianMusic';
 
 const MAX_DURATION = 60;
 
@@ -29,6 +30,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
     const [searchingSongs, setSearchingSongs] = useState(false);
     const [songSearchOpen, setSongSearchOpen] = useState(false);
     const [playingSongId, setPlayingSongId] = useState(null);
+    const [activeMusicCategory, setActiveMusicCategory] = useState('trending');
     const [selectedFilter, setSelectedFilter] = useState('none');
     const previewAudioRef = useRef(null);
 
@@ -173,13 +175,14 @@ const ReelUploader = ({ onClose, onSuccess }) => {
         setPlayingSongId(null);
     };
 
-    const searchSongs = async (e) => {
+    const searchSongs = async (e, categoryQuery = '') => {
         e?.preventDefault();
-        if (songQuery.length < 2) return;
+        const query = categoryQuery || songQuery.trim();
+        if (query.length < 2) return;
         setSearchingSongs(true);
         try {
             const res = await axios.get('/api/music/search', {
-                params: { q: songQuery },
+                params: { q: query },
                 headers: { Authorization: `Bearer ${token}` }
             });
             setSongResults(res.data.tracks || []);
@@ -385,7 +388,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                 {/* Music Section */}
                 <div className="space-y-3">
                     <button
-                        onClick={() => setSongSearchOpen(!songSearchOpen)}
+                        onClick={() => { const opening = !songSearchOpen; setSongSearchOpen(opening); if (opening && !songResults.length) searchSongs(null, INDIAN_MUSIC_CATEGORIES[0].query); }}
                         className="w-full flex items-center gap-3 bg-white/5 hover:bg-white/10 p-3 rounded-xl text-white transition-colors"
                     >
                         <MusicalNoteIcon className="w-5 h-5 text-purple-400" />
@@ -407,6 +410,12 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                                     <MagnifyingGlassIcon className="w-5 h-5" />
                                 </button>
                             </form>
+                            <div className="flex gap-2 overflow-x-auto pb-1">
+                                {INDIAN_MUSIC_CATEGORIES.map(category => (
+                                    <button key={category.id} type="button" onClick={() => { setActiveMusicCategory(category.id); setSongQuery(''); searchSongs(null, category.query); }} className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold ${activeMusicCategory === category.id ? 'border-purple-400 bg-purple-500 text-white' : 'border-white/10 bg-white/5 text-gray-300'}`}>{category.label}</button>
+                                ))}
+                            </div>
+                            <p className="px-1 text-[11px] font-semibold text-orange-300">Made for India · Bollywood & Indian music</p>
                             <div className="space-y-2">
                                 {searchingSongs && (
                                     <p className="text-xs text-gray-400 px-2">Searching songs...</p>

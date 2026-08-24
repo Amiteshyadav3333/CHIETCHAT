@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { XMarkIcon, MusicalNoteIcon, PhotoIcon, MagnifyingGlassIcon, PlayIcon, PauseIcon } from '@heroicons/react/24/solid';
 import axios from 'axios';
+import { INDIAN_MUSIC_CATEGORIES } from '../utils/indianMusic';
 
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
@@ -31,6 +32,7 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
     const [songSearchOpen, setSongSearchOpen] = useState(false);
     const [songWarning, setSongWarning] = useState('');
     const [playingSongId, setPlayingSongId] = useState(null);
+    const [activeMusicCategory, setActiveMusicCategory] = useState('trending');
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState('');
     const [videoDuration, setVideoDuration] = useState(null);
@@ -106,9 +108,9 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
         setPlayingSongId(null);
     };
 
-    const searchSongs = async (e) => {
+    const searchSongs = async (e, categoryQuery = '') => {
         e?.preventDefault();
-        const query = songQuery.trim();
+        const query = categoryQuery || songQuery.trim();
         if (query.length < 2) {
             setSongWarning('Type at least 2 characters');
             return;
@@ -349,7 +351,7 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
                     <div className="space-y-2 pt-1 border-t border-white/5">
                         <button
                             type="button"
-                            onClick={() => setSongSearchOpen(v => !v)}
+                            onClick={() => { const opening = !songSearchOpen; setSongSearchOpen(opening); if (opening && !songResults.length) searchSongs(null, INDIAN_MUSIC_CATEGORIES[0].query); }}
                             className="w-full flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm px-3 py-2 rounded-lg transition-colors"
                         >
                             <MusicalNoteIcon className="w-4 h-4 text-purple-400" />
@@ -395,6 +397,13 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
                                         <MagnifyingGlassIcon className="w-4 h-4" />
                                     </button>
                                 </form>
+
+                                <div className="flex gap-2 overflow-x-auto pb-1">
+                                    {INDIAN_MUSIC_CATEGORIES.map(category => (
+                                        <button key={category.id} type="button" onClick={() => { setActiveMusicCategory(category.id); setSongQuery(''); searchSongs(null, category.query); }} className={`shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold ${activeMusicCategory === category.id ? 'border-purple-400 bg-purple-600 text-white' : 'border-gray-700 bg-gray-900 text-gray-300'}`}>{category.label}</button>
+                                    ))}
+                                </div>
+                                <p className="text-[10px] font-semibold text-orange-300">Made for India · Bollywood & Indian music</p>
 
                                 {songWarning && <p className="text-xs text-yellow-300">{songWarning}</p>}
 

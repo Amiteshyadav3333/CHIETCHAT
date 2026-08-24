@@ -996,6 +996,9 @@ def search_itunes_tracks(query, limit=12):
         "media": "music",
         "entity": "song",
         "limit": limit,
+        "country": "IN",
+        "lang": "hi_in",
+        "explicit": "No",
     })
     url = f"https://itunes.apple.com/search?{params}"
     request_obj = urllib.request.Request(url, headers={"User-Agent": "CHIETCHAT/1.0"})

@@ -21,6 +21,11 @@ const ReelUploader = ({ onClose, onSuccess }) => {
     const [monetized, setMonetized] = useState(false);
     const [category, setCategory] = useState('entertainment');
     const [showProCamera, setShowProCamera] = useState(false);
+    const [showMemeLibrary, setShowMemeLibrary] = useState(false);
+    const [memeQuery, setMemeQuery] = useState('Indian memes');
+    const [memeResults, setMemeResults] = useState([]);
+    const [loadingMemes, setLoadingMemes] = useState(false);
+    const [importingMemeId, setImportingMemeId] = useState(null);
     
     // Music States
     const [musicName, setMusicName] = useState('');
@@ -167,6 +172,33 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                 setPreview(video.src);
             };
         }
+    };
+
+    const searchMemes = async (event, query = memeQuery) => {
+        event?.preventDefault();
+        setLoadingMemes(true);
+        try {
+            const { data } = await axios.get('/api/reels/memes', { params: { q: query.trim() || 'Indian memes' }, headers: { Authorization: `Bearer ${token}` } });
+            setMemeResults(data.items || []);
+        } catch { setMemeResults([]); }
+        finally { setLoadingMemes(false); }
+    };
+
+    const importMeme = async meme => {
+        setImportingMemeId(meme.id);
+        try {
+            const { data } = await axios.get('/api/reels/memes/import', { params: { url: meme.videoUrl }, responseType: 'blob', headers: { Authorization: `Bearer ${token}` } });
+            const imported = new File([data], `${meme.id}-meme.mp4`, { type: data.type || 'video/mp4' });
+            const objectUrl = URL.createObjectURL(imported);
+            const video = document.createElement('video');
+            video.src = objectUrl;
+            video.onloadedmetadata = () => {
+                if (video.duration > MAX_DURATION + 1) { URL.revokeObjectURL(objectUrl); alert('This meme is longer than 60 seconds.'); return; }
+                if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview);
+                setFile(imported); setPreview(objectUrl); setMediaDuration(Math.max(1, Math.ceil(video.duration))); setCategory('comedy'); setShowMemeLibrary(false);
+            };
+        } catch (error) { alert(error.response?.data?.error || 'Could not import this meme'); }
+        finally { setImportingMemeId(null); }
     };
 
     const stopSongPreview = () => {
@@ -361,6 +393,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                 )}
 
                 <input ref={fileInputRef} type="file" accept="video/*" onChange={handleFileChange} className="hidden" />
+                <button type="button" onClick={() => { setShowMemeLibrary(true); if (!memeResults.length) searchMemes(null, 'Indian memes'); }} className="flex w-full items-center justify-center gap-3 rounded-2xl border border-pink-400/25 bg-gradient-to-r from-pink-500/15 to-violet-500/15 px-4 py-3 text-sm font-black text-white hover:border-pink-400/50"><span className="text-xl">😂</span> Create Reel from Meme Library</button>
                 {showProCamera && <ProCameraStudio
                     initialMode="video"
                     maxDuration={60}
@@ -444,6 +477,8 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                     {selectedSong && <label className="block rounded-xl bg-white/5 p-3 text-xs text-gray-300"><span className="mb-2 flex justify-between"><span>Music volume</span><strong>{Math.round(musicVolume * 100)}%</strong></span><input type="range" min="0" max="1" step="0.05" value={musicVolume} onChange={event => setMusicVolume(Number(event.target.value))} className="w-full accent-purple-500" /></label>}
                 </div>
             </div>
+
+            {showMemeLibrary && <div className="absolute inset-0 z-[140] flex flex-col bg-black/95 p-4 text-white"><div className="mb-4 flex items-center justify-between"><div><h3 className="text-xl font-black">Meme Library</h3><p className="text-xs text-white/50">Search, import and edit a meme as your Reel · Powered by GIPHY</p></div><button type="button" onClick={() => setShowMemeLibrary(false)} className="rounded-full p-2 hover:bg-white/10"><XMarkIcon className="h-6 w-6" /></button></div><form onSubmit={searchMemes} className="flex gap-2"><input value={memeQuery} onChange={event => setMemeQuery(event.target.value)} placeholder="Search Indian, Bollywood or reaction memes" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-sm outline-none focus:border-pink-400" /><button disabled={loadingMemes} className="rounded-xl bg-pink-500 px-4 font-bold disabled:opacity-50"><MagnifyingGlassIcon className="h-5 w-5" /></button></form><div className="mt-3 flex gap-2 overflow-x-auto pb-2">{['Indian memes', 'Bollywood memes', 'Funny reaction', 'Cricket memes', 'Desi comedy'].map(query => <button key={query} type="button" onClick={() => { setMemeQuery(query); searchMemes(null, query); }} className="shrink-0 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs">{query}</button>)}</div><div className="mt-3 grid min-h-0 flex-1 grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3">{loadingMemes ? <p className="col-span-full py-12 text-center text-sm text-white/50">Loading memes…</p> : memeResults.map(meme => <button key={meme.id} type="button" disabled={importingMemeId === meme.id} onClick={() => importMeme(meme)} className="group relative aspect-square overflow-hidden rounded-xl border border-white/10 bg-white/5 disabled:opacity-50"><img src={meme.previewUrl} alt={meme.title} loading="lazy" className="h-full w-full object-cover" /><span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/70 to-transparent px-2 pb-2 pt-8 text-left text-[10px] font-bold">{importingMemeId === meme.id ? 'Importing…' : 'Use in Reel'}</span></button>)}{!loadingMemes && !memeResults.length && <p className="col-span-full py-12 text-center text-sm text-white/50">No meme clips found. Try another search.</p>}</div><p className="pt-3 text-center text-[10px] text-white/35">Only use content you have permission to publish. Imported clips still pass Reel safety checks.</p></div>}
             
             <style>{`
                 @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }

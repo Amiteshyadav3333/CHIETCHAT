@@ -1,5 +1,7 @@
 import datetime
-from flask import Blueprint, jsonify, request
+import requests
+import urllib.parse
+from flask import Blueprint, Response, jsonify, request
 from models import db, Reel, ReelLike, ReelView, ReelShare, ReelRepost, ReelComment, Follow, User, Status, UserReport
 from utils import (
     get_current_user_id, iso_utc, serialize_user, upload_to_cloudinary,
@@ -19,6 +21,56 @@ MAX_REPOST_NOTE_LENGTH = 280
 FREE_DAILY_REEL_LIMIT = 3
 PREMIUM_DAILY_REEL_LIMIT = 10
 REEL_CATEGORIES = {'entertainment', 'comedy', 'dance', 'music', 'sports', 'gaming', 'food', 'travel', 'fashion', 'fitness', 'education', 'technology', 'devotional', 'news'}
+MAX_MEME_IMPORT_BYTES = 25 * 1024 * 1024
+
+def _is_allowed_meme_host(hostname):
+    hostname = (hostname or '').lower().rstrip('.')
+    return hostname == 'giphy.com' or hostname.endswith('.giphy.com')
+
+@reels_bp.route('/api/reels/memes', methods=['GET'])
+def search_reel_memes():
+    if not get_current_user_id():
+        return jsonify({'error': 'Unauthorized'}), 401
+    query = str(request.args.get('q') or 'Indian memes').strip()[:80]
+    try:
+        response = requests.get('https://api.giphy.com/v1/gifs/search', params={'api_key': 'dc6zaTOxFJmzC', 'q': query, 'limit': 24, 'rating': 'pg', 'lang': 'en'}, timeout=8)
+        response.raise_for_status()
+        items = []
+        for gif in response.json().get('data', []):
+            images = gif.get('images') or {}
+            original = images.get('original') or {}
+            preview = (images.get('fixed_width') or {}).get('url') or original.get('url')
+            mp4 = original.get('mp4')
+            if mp4 and _is_allowed_meme_host(urllib.parse.urlparse(mp4).hostname):
+                items.append({'id': gif.get('id'), 'title': gif.get('title') or 'Meme clip', 'previewUrl': preview, 'videoUrl': mp4, 'source': 'GIPHY'})
+        return jsonify({'items': items, 'attribution': 'Powered by GIPHY'})
+    except requests.RequestException:
+        return jsonify({'items': [], 'warning': 'Meme library is temporarily unavailable'}), 200
+
+@reels_bp.route('/api/reels/memes/import', methods=['GET'])
+def import_reel_meme():
+    if not get_current_user_id():
+        return jsonify({'error': 'Unauthorized'}), 401
+    source = str(request.args.get('url') or '').strip()
+    parsed = urllib.parse.urlparse(source)
+    if parsed.scheme != 'https' or not _is_allowed_meme_host(parsed.hostname) or parsed.username or parsed.password:
+        return jsonify({'error': 'Unsupported meme source'}), 400
+    try:
+        upstream = requests.get(source, stream=True, timeout=15, allow_redirects=False)
+        upstream.raise_for_status()
+        content_type = upstream.headers.get('Content-Type', '').split(';', 1)[0].lower()
+        length = int(upstream.headers.get('Content-Length') or 0)
+        if content_type not in {'video/mp4', 'video/webm'} or length > MAX_MEME_IMPORT_BYTES:
+            return jsonify({'error': 'This meme clip cannot be imported'}), 415
+        chunks, total = [], 0
+        for chunk in upstream.iter_content(64 * 1024):
+            total += len(chunk)
+            if total > MAX_MEME_IMPORT_BYTES:
+                return jsonify({'error': 'Meme clip is larger than 25 MB'}), 413
+            chunks.append(chunk)
+        return Response(b''.join(chunks), mimetype=content_type, headers={'Content-Disposition': 'attachment; filename="meme-reel.mp4"', 'Cache-Control': 'private, max-age=300'})
+    except (requests.RequestException, ValueError):
+        return jsonify({'error': 'Meme clip download failed'}), 502
 
 @reels_bp.route('/api/reels/<int:reel_id>/report', methods=['POST'])
 def report_reel(reel_id):

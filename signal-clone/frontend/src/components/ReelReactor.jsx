@@ -72,6 +72,10 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
     const [selectedMemeId, setSelectedMemeId] = useState(null);
     const [libraryClips, setLibraryClips] = useState([]);
     const [generatingMemeId, setGeneratingMemeId] = useState(null);
+    const [onlineMemes, setOnlineMemes] = useState([]);
+    const [memeQuery, setMemeQuery] = useState('Indian memes');
+    const [searchingMemes, setSearchingMemes] = useState(false);
+    const [importingMemeId, setImportingMemeId] = useState(null);
     const [songQuery, setSongQuery] = useState('');
     const [activeMusicCategory, setActiveMusicCategory] = useState('trending');
     const [songResults, setSongResults] = useState([]);
@@ -84,6 +88,7 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
     useEffect(() => {
         startCamera();
         fetchMemeLibrary();
+        searchOnlineMemes(null, 'Indian memes');
         return () => stopEverything();
     }, []);
 
@@ -160,6 +165,26 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
         } catch {
             setLibraryClips([]);
         }
+    };
+
+    const searchOnlineMemes = async (event, query = memeQuery) => {
+        event?.preventDefault();
+        setSearchingMemes(true);
+        try {
+            const { data } = await axios.get('/api/reels/memes', { params: { q: query.trim() || 'Indian memes' }, headers: { Authorization: `Bearer ${token}` } });
+            setOnlineMemes(data.items || []);
+        } catch { setOnlineMemes([]); }
+        finally { setSearchingMemes(false); }
+    };
+
+    const importOnlineMeme = async meme => {
+        setImportingMemeId(meme.id);
+        try {
+            const { data } = await axios.get('/api/reels/memes/import', { params: { url: meme.videoUrl }, responseType: 'blob', headers: { Authorization: `Bearer ${token}` } });
+            const file = new File([data], `${meme.id}-meme.mp4`, { type: data.type || 'video/mp4' });
+            handleMemeFiles([file]);
+        } catch (error) { alert(error.response?.data?.error || 'Could not import this meme'); }
+        finally { setImportingMemeId(null); }
     };
 
     const drawVideoCover = (ctx, video, x, y, w, h, mirror = false) => {
@@ -934,6 +959,8 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
                                     <FilmIcon className="h-5 w-5" />
                                     Upload comedy/meme video clip
                                 </button>
+
+                                <div className="rounded-xl border border-pink-400/20 bg-gradient-to-br from-pink-500/10 to-purple-500/10 p-3"><div className="mb-2 flex items-center justify-between"><div><p className="text-xs font-black uppercase text-pink-200">Online Meme Library</p><p className="text-[10px] text-gray-400">Import directly into reaction timeline · GIPHY</p></div></div><form onSubmit={searchOnlineMemes} className="flex gap-2"><input value={memeQuery} onChange={event => setMemeQuery(event.target.value)} placeholder="Search memes" className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-white outline-none focus:border-pink-400" /><button disabled={searchingMemes} className="rounded-lg bg-pink-500 px-3 text-white disabled:opacity-50"><MagnifyingGlassIcon className="h-4 w-4" /></button></form><div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">{['Indian memes', 'Bollywood memes', 'Cricket memes', 'Funny reaction'].map(query => <button key={query} type="button" onClick={() => { setMemeQuery(query); searchOnlineMemes(null, query); }} className="shrink-0 rounded-full bg-white/5 px-2.5 py-1 text-[10px] text-gray-300">{query}</button>)}</div>{searchingMemes && <p className="py-4 text-center text-xs text-gray-400">Searching memes…</p>}{onlineMemes.length > 0 && <div className="mt-2 grid max-h-56 grid-cols-3 gap-1.5 overflow-y-auto">{onlineMemes.map(meme => <button key={meme.id} type="button" disabled={importingMemeId === meme.id} onClick={() => importOnlineMeme(meme)} className="relative aspect-square overflow-hidden rounded-lg bg-black/30 disabled:opacity-50"><img src={meme.previewUrl} alt={meme.title} loading="lazy" className="h-full w-full object-cover" /><span className="absolute inset-x-0 bottom-0 bg-black/75 px-1 py-1 text-[9px] font-bold">{importingMemeId === meme.id ? 'Adding…' : '+ Timeline'}</span></button>)}</div>}</div>
 
                                 <div>
                                     <p className="mb-2 text-xs font-bold uppercase text-gray-400">Quick Meme Pack</p>

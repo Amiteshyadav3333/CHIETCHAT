@@ -4,6 +4,7 @@ import axios from 'axios';
 import { XMarkIcon, VideoCameraIcon, MusicalNoteIcon, MagnifyingGlassIcon, PlayIcon, PauseIcon, ArrowPathIcon, PlusIcon } from '@heroicons/react/24/outline';
 import ProCameraStudio from './ProCameraStudio';
 import { INDIAN_MUSIC_CATEGORIES } from '../utils/indianMusic';
+import { REEL_CATEGORIES } from '../utils/reelCategories';
 
 const MAX_DURATION = 60;
 
@@ -18,6 +19,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
     const [mediaStream, setMediaStream] = useState(null);
     const [facingMode, setFacingMode] = useState('user');
     const [monetized, setMonetized] = useState(false);
+    const [category, setCategory] = useState('entertainment');
     const [showProCamera, setShowProCamera] = useState(false);
     
     // Music States
@@ -217,6 +219,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
         const formData = new FormData();
         formData.append('video', file);
         formData.append('caption', caption);
+        formData.append('category', category);
         if (selectedSong) {
             formData.append('musicUrl', selectedSong.previewUrl);
             formData.append('musicName', musicName);
@@ -382,6 +385,8 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                     className="w-full bg-transparent text-white outline-none resize-none border-b border-white/10 pb-2 focus:border-white transition-colors"
                     rows={2}
                 />
+
+                <div><p className="mb-2 text-xs font-bold text-gray-300">Choose Reel category</p><div className="flex gap-2 overflow-x-auto pb-1">{REEL_CATEGORIES.map(([id, label]) => <button key={id} type="button" onClick={() => setCategory(id)} className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold ${category === id ? 'border-pink-400 bg-pink-500 text-white' : 'border-white/10 bg-white/5 text-gray-300'}`}>{label}</button>)}</div></div>
 
                 <button type="button" onClick={() => user?.isPremium ? setMonetized(v => !v) : alert('Paid reels are available with Premium')} className={`flex w-full items-center justify-between rounded-xl border p-3 text-left ${monetized ? 'border-amber-400/40 bg-amber-400/10 text-amber-200' : 'border-white/10 bg-white/5 text-white'}`}><span><span className="block text-sm font-bold">₹ Get paid to post</span><span className="text-xs text-gray-400">Enable creator earnings for this Reel</span></span><span className={`rounded-full px-2 py-1 text-[10px] font-black ${user?.isPremium ? 'bg-blue-500 text-white' : 'bg-white/10 text-gray-400'}`}>{user?.isPremium ? (monetized ? 'ON' : 'PREMIUM') : 'LOCKED'}</span></button>
 

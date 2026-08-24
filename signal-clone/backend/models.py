@@ -104,6 +104,26 @@ class GroupJoinRequest(db.Model):
     chat = db.relationship('Chat')
     __table_args__ = (db.UniqueConstraint('chat_id', 'user_id', name='uq_group_user_request'),)
 
+class GroupBot(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    chat_id = db.Column(db.Integer, db.ForeignKey('chat.id'), nullable=False, index=True)
+    creator_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    name = db.Column(db.String(80), nullable=False)
+    username = db.Column(db.String(64), nullable=False)
+    description = db.Column(db.String(300), nullable=True)
+    commands = db.Column(db.Text, nullable=False, default='{}')
+    is_enabled = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utc_now)
+    creator = db.relationship('User')
+    __table_args__ = (db.UniqueConstraint('chat_id', 'username', name='uq_group_bot_username'),)
+
+    def commands_dict(self):
+        try:
+            value = json.loads(self.commands or '{}')
+            return value if isinstance(value, dict) else {}
+        except (TypeError, ValueError):
+            return {}
+
 class Contact(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -355,6 +375,7 @@ class Reel(db.Model):
     music_name = db.Column(db.String(200), nullable=True)
     music_volume = db.Column(db.Float, default=0.8)
     caption = db.Column(db.String(500), nullable=True)
+    category = db.Column(db.String(40), nullable=False, default='entertainment', index=True)
     shares_count = db.Column(db.Integer, default=0)
     views_count = db.Column(db.Integer, default=0)
     is_monetized = db.Column(db.Boolean, nullable=False, default=False)

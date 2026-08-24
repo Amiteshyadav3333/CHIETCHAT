@@ -706,6 +706,7 @@ def update_ui_preferences():
         'callSounds', 'mediaAutoDownload', 'dataSaver', 'hdMedia',
         'screenshotAlerts', 'spamDetection', 'incognitoKeyboard',
         'reelsDefaultFeed', 'reelsAutoplay', 'reelsMuted', 'reelsDataSaver',
+        'reelsInterests',
         'socialDefaultFeed', 'socialAutoplayVideos', 'socialMutedVideos',
         'podliveAllowCamera', 'podliveAllowMicrophone', 'podliveAutoplay',
     }

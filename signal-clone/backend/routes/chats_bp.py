@@ -7,7 +7,7 @@ import datetime
 import urllib.parse
 from werkzeug.utils import secure_filename
 from sqlalchemy import or_
-from models import db, Chat, ChatParticipant, Message, User, MessageDeletion, PaymentOrder, ScheduledMessage, CallRecord
+from models import db, Chat, ChatParticipant, Message, User, MessageDeletion, PaymentOrder, ScheduledMessage, CallRecord, GroupBot
 from extensions import socketio
 from utils import (
     get_current_user_id, user_can_access_chat, serialize_user, 
@@ -20,6 +20,28 @@ from observability import report_safe_exception
 from features.polls import normalize_poll_option, serialize_votes
 
 chats_bp = Blueprint('chats_bp', __name__)
+MAX_GROUP_MEMBERS = 500_000
+
+def _group_member_count(chat_id):
+    return ChatParticipant.query.filter_by(chat_id=chat_id).count()
+
+def _ensure_group_capacity(chat_id):
+    return _group_member_count(chat_id) < MAX_GROUP_MEMBERS
+
+def _serialize_group_bot(bot):
+    return {'id': bot.id, 'chatId': bot.chat_id, 'creatorId': bot.creator_id, 'name': bot.name, 'username': bot.username, 'description': bot.description or '', 'commands': bot.commands_dict(), 'isEnabled': bool(bot.is_enabled), 'createdAt': iso_utc(bot.created_at)}
+
+def _normalize_bot_commands(value):
+    if not isinstance(value, dict) or len(value) > 30:
+        return None
+    commands = {}
+    for raw_command, raw_reply in value.items():
+        command = str(raw_command).strip().lower().lstrip('/')
+        reply = str(raw_reply).strip()
+        if not command or len(command) > 32 or not command.replace('_', '').isalnum() or not reply or len(reply) > 1000:
+            return None
+        commands[command] = reply
+    return commands
 
 def parse_scheduled_time(value):
     try:
@@ -249,6 +271,8 @@ def get_chats():
                 "myAvatarForContact": my_audience_profile['avatar'] if my_audience_profile else None,
                 "hasCustomAvatarForContact": my_audience_profile['hasCustomAudienceAvatar'] if my_audience_profile else False,
                 "participants": part_data,
+                "memberCount": len(participants),
+                "memberLimit": MAX_GROUP_MEMBERS if chat.is_group else None,
                 "groupAdminId": chat.group_admin_id,
                 "isPublic": getattr(chat, 'is_public', False),
                 "isChatDisabled": getattr(chat, 'is_chat_disabled', False),
@@ -702,6 +726,8 @@ def add_group_participant(chat_id):
 
     existing = ChatParticipant.query.filter_by(chat_id=chat_id, user_id=target_uid).first()
     if not existing:
+        if not _ensure_group_capacity(chat_id):
+            return jsonify({"error": "This group has reached its 500,000 member limit"}), 409
         participant = ChatParticipant(chat_id=chat_id, user_id=target_uid)
         db.session.add(participant)
         db.session.commit()
@@ -712,6 +738,124 @@ def add_group_participant(chat_id):
         })
 
     return jsonify({"ok": True})
+
+@chats_bp.route('/api/groups/<int:chat_id>/members', methods=['GET'])
+def get_group_members(chat_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    group = db.session.get(Chat, chat_id)
+    if not group or not group.is_group:
+        return jsonify({"error": "Group not found"}), 404
+    if not user_can_access_chat(user_id, chat_id):
+        return jsonify({"error": "Forbidden"}), 403
+
+    limit = min(max(request.args.get('limit', 50, type=int), 1), 100)
+    after = max(request.args.get('after', 0, type=int), 0)
+    search = str(request.args.get('q') or '').strip()[:80]
+    query = ChatParticipant.query.join(User).filter(
+        ChatParticipant.chat_id == chat_id,
+        ChatParticipant.id > after,
+    )
+    if search:
+        pattern = f"%{search.lstrip('@')}%"
+        query = query.filter(or_(User.username.ilike(pattern), User.platform_id.ilike(pattern)))
+    rows = query.order_by(ChatParticipant.id.asc()).limit(limit + 1).all()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    items = []
+    for row in rows:
+        member = serialize_user(row.user, viewer_id=user_id)
+        if row.user_id != user_id:
+            member['phone'] = 'Hidden'
+            member['bio'] = ''
+            member['websiteUrl'] = ''
+        member['membershipId'] = row.id
+        member['role'] = 'owner' if row.user_id == group.group_admin_id else 'member'
+        items.append(member)
+    return jsonify({
+        "items": items,
+        "memberCount": _group_member_count(chat_id),
+        "memberLimit": MAX_GROUP_MEMBERS,
+        "nextCursor": rows[-1].id if has_more and rows else None,
+    })
+
+@chats_bp.route('/api/groups/<int:chat_id>/bots', methods=['GET', 'POST'])
+def group_bots(chat_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    group = db.session.get(Chat, chat_id)
+    if not group or not group.is_group:
+        return jsonify({'error': 'Bots can only be used inside groups'}), 404
+    if not user_can_access_chat(user_id, chat_id):
+        return jsonify({'error': 'Forbidden'}), 403
+    if request.method == 'GET':
+        bots = GroupBot.query.filter_by(chat_id=chat_id).order_by(GroupBot.created_at.asc()).all()
+        return jsonify([_serialize_group_bot(bot) for bot in bots])
+    if group.group_admin_id != user_id:
+        return jsonify({'error': 'Only the group owner can create bots'}), 403
+    if GroupBot.query.filter_by(chat_id=chat_id).count() >= 20:
+        return jsonify({'error': 'A group can have up to 20 bots'}), 409
+    data = get_json_data()
+    name = str(data.get('name') or '').strip()[:80]
+    username = str(data.get('username') or '').strip().lower().lstrip('@')[:64]
+    commands = _normalize_bot_commands(data.get('commands') or {})
+    if not name or len(username) < 5 or not username.replace('_', '').isalnum():
+        return jsonify({'error': 'Bot name and a 5+ character username are required'}), 400
+    if commands is None:
+        return jsonify({'error': 'Invalid bot commands'}), 400
+    bot = GroupBot(chat_id=chat_id, creator_id=user_id, name=name, username=username, description=str(data.get('description') or '').strip()[:300], commands=json.dumps(commands))
+    db.session.add(bot)
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify({'error': 'That bot username is already used in this group'}), 409
+    return jsonify(_serialize_group_bot(bot)), 201
+
+@chats_bp.route('/api/groups/<int:chat_id>/bots/<int:bot_id>', methods=['PATCH', 'DELETE'])
+def manage_group_bot(chat_id, bot_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    group = db.session.get(Chat, chat_id)
+    bot = db.session.get(GroupBot, bot_id)
+    if not group or not group.is_group or not bot or bot.chat_id != chat_id:
+        return jsonify({'error': 'Bot not found'}), 404
+    if group.group_admin_id != user_id and bot.creator_id != user_id:
+        return jsonify({'error': 'Forbidden'}), 403
+    if request.method == 'DELETE':
+        db.session.delete(bot)
+        db.session.commit()
+        return jsonify({'ok': True})
+    data = get_json_data()
+    if 'name' in data: bot.name = str(data.get('name') or '').strip()[:80] or bot.name
+    if 'description' in data: bot.description = str(data.get('description') or '').strip()[:300]
+    if 'isEnabled' in data: bot.is_enabled = bool(data['isEnabled'])
+    if 'commands' in data:
+        commands = _normalize_bot_commands(data['commands'])
+        if commands is None: return jsonify({'error': 'Invalid bot commands'}), 400
+        bot.commands = json.dumps(commands)
+    db.session.commit()
+    return jsonify(_serialize_group_bot(bot))
+
+@chats_bp.route('/api/groups/<int:chat_id>/bots/execute', methods=['POST'])
+def execute_group_bot(chat_id):
+    user_id = get_current_user_id()
+    if not user_id or not user_can_access_chat(user_id, chat_id):
+        return jsonify({'error': 'Forbidden'}), 403
+    group = db.session.get(Chat, chat_id)
+    if not group or not group.is_group:
+        return jsonify({'error': 'Bots only work in groups'}), 400
+    data = get_json_data()
+    username = str(data.get('username') or '').strip().lower().lstrip('@')
+    command = str(data.get('command') or '').strip().lower().lstrip('/').split()[0][:32]
+    bot = GroupBot.query.filter_by(chat_id=chat_id, username=username, is_enabled=True).first()
+    reply = bot.commands_dict().get(command) if bot else None
+    if not bot or reply is None:
+        return jsonify({'error': 'Bot or command not found'}), 404
+    return jsonify({'bot': _serialize_group_bot(bot), 'command': command, 'reply': reply})
 
 # Discover Public Groups
 @chats_bp.route('/api/groups/public', methods=['GET'])
@@ -796,6 +940,8 @@ def join_group(chat_id):
 
     if getattr(group, 'is_public', False) and not getattr(group, 'join_approval_required', False):
         # Directly join
+        if not _ensure_group_capacity(chat_id):
+            return jsonify({"error": "This group has reached its 500,000 member limit"}), 409
         participant = ChatParticipant(chat_id=chat_id, user_id=user_id)
         db.session.add(participant)
         db.session.commit()
@@ -885,6 +1031,8 @@ def respond_group_request(request_id):
 
     try:
         if action == 'approve':
+            if not _ensure_group_capacity(join_req.chat_id):
+                return jsonify({"error": "This group has reached its 500,000 member limit"}), 409
             join_req.status = 'approved'
             # Add user to participants
             existing = ChatParticipant.query.filter_by(chat_id=join_req.chat_id, user_id=join_req.user_id).first()

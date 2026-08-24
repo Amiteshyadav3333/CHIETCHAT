@@ -118,6 +118,7 @@ const StatusSection = ({ user, token, onStatusGroupsChange, mobileFull = false }
 
             {uploaderOpen && (
                 <StatusUploader
+                    user={user}
                     token={token}
                     onClose={() => setUploaderOpen(false)}
                     onUploaded={fetchStatuses}

@@ -127,6 +127,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     const [profilePrivacy, setProfilePrivacy] = useState(() => user?.profilePhotoPrivacy || localStorage.getItem('profile_photo_privacy_mode') || 'everyone');
     const [storyExceptions, setStoryExceptions] = useState(() => user?.storyPrivacyExceptions || localStorage.getItem('story_privacy_exceptions') || '');
     const [profileExceptions, setProfileExceptions] = useState(() => user?.profilePhotoExceptions || localStorage.getItem('profile_privacy_exceptions') || '');
+    const [phonePrivacy, setPhonePrivacy] = useState(() => user?.phoneNumberPrivacy || 'nobody');
     const [customFont, setCustomFont] = useState(() => serverUi.customFont || localStorage.getItem('chat_custom_font') || 'system');
     const [notificationSoundName, setNotificationSoundName] = useState(() => localStorage.getItem('custom_notification_name') || '');
     const [businessData, setBusinessData] = useState(() => businessDefaults(user));
@@ -173,9 +174,11 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
             const res = await axios.put('/api/user/preferences', change, { headers: { Authorization: `Bearer ${token}` } });
             onUserUpdate?.({ ...user, uiPreferences: res.data.uiPreferences });
             window.dispatchEvent(new CustomEvent('cheetchat-preferences-updated', { detail: res.data.uiPreferences }));
+            return true;
         } catch (error) {
             console.error('Could not sync customization', error);
             setMessage({ type: 'error', text: 'The setting could not be saved. Please try again.' });
+            return false;
         }
     };
 
@@ -198,12 +201,14 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                 return;
             }
         }
-        setPrefs(current => {
-            const next = !current[name];
-            localStorage.setItem(storageKey, next ? '1' : '0');
-            persistUi({ [name]: next });
-            return { ...current, [name]: next };
-        });
+        const previous = prefs[name];
+        const next = !previous;
+        setPrefs(current => ({ ...current, [name]: next }));
+        localStorage.setItem(storageKey, next ? '1' : '0');
+        if (!await persistUi({ [name]: next })) {
+            setPrefs(current => ({ ...current, [name]: previous }));
+            localStorage.setItem(storageKey, previous ? '1' : '0');
+        }
     };
 
     const choosePreference = (stateSetter, storageKey, apiKey, value) => {
@@ -233,6 +238,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     };
 
     const handleTogglePrivacy = async (field, value) => {
+        const previous = prefs[field];
         setPrefs(prev => ({ ...prev, [field]: value }));
         localStorage.setItem(
             field === 'hideLastSeen' ? 'hide_last_seen' 
@@ -252,6 +258,12 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
             onUserUpdate?.(res.data);
         } catch (err) {
             console.error("Failed to update privacy on server:", err);
+            setPrefs(prev => ({ ...prev, [field]: previous }));
+            localStorage.setItem(
+                field === 'hideLastSeen' ? 'hide_last_seen' : field === 'hideOnlineStatus' ? 'hide_online_status' : 'read_receipts',
+                previous ? '1' : '0'
+            );
+            setMessage({ type: 'error', text: err.response?.data?.error || 'Privacy setting could not be saved.' });
         }
     };
 
@@ -689,22 +701,22 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                     icon={<EyeSlashIcon />} 
                                     title="Hide last seen" 
                                     subtitle="Your last seen time will not be shared" 
-                                    value={user?.hideLastSeen || false} 
-                                    onClick={() => handleTogglePrivacy('hideLastSeen', !(user?.hideLastSeen))} 
+                                    value={prefs.hideLastSeen}
+                                    onClick={() => handleTogglePrivacy('hideLastSeen', !prefs.hideLastSeen)}
                                 />
                                 <SettingsToggle 
                                     icon={<EyeSlashIcon />} 
                                     title="Hide online status" 
                                     subtitle="Your online badge will not be shown to others" 
-                                    value={user?.hideOnlineStatus || false} 
-                                    onClick={() => handleTogglePrivacy('hideOnlineStatus', !(user?.hideOnlineStatus))} 
+                                    value={prefs.hideOnlineStatus}
+                                    onClick={() => handleTogglePrivacy('hideOnlineStatus', !prefs.hideOnlineStatus)}
                                 />
                                 <SettingsToggle 
                                     icon={<ShieldCheckIcon />} 
                                     title="Read receipts (Blue tick)" 
                                     subtitle="Send and receive read confirmation checkmarks" 
-                                    value={user?.readReceipts !== false} 
-                                    onClick={() => handleTogglePrivacy('readReceipts', !(user?.readReceipts))} 
+                                    value={prefs.readReceipts}
+                                    onClick={() => handleTogglePrivacy('readReceipts', !prefs.readReceipts)}
                                 />
                             </SettingsGroup>
                             
@@ -712,12 +724,14 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                             <SettingsGroup>
                                 <ChoiceRow
                                     title="Who can see my phone number"
-                                    value={user?.phoneNumberPrivacy || 'nobody'}
+                                    value={phonePrivacy}
                                     onChange={async (val) => {
+                                        const previous = phonePrivacy;
+                                        setPhonePrivacy(val);
                                         try {
                                             const res = await axios.put('/api/user/privacy', { phoneNumberPrivacy: val }, { headers: { Authorization: `Bearer ${token}` } });
                                             onUserUpdate?.(res.data);
-                                        } catch (err) { console.error(err); }
+                                        } catch (err) { setPhonePrivacy(previous); setMessage({ type: 'error', text: err.response?.data?.error || 'Phone privacy could not be saved.' }); }
                                     }}
                                     options={[["nobody", "Nobody (username only)"], ["contacts", "My Contacts"], ["everyone", "Everyone"]]}
                                 />
@@ -849,7 +863,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                         <>
                             <SectionLabel>Feed</SectionLabel>
                             <SettingsGroup>
-                                <ChoiceRow title="Open Reels on" value={reelsDefaultFeed} onChange={val => choosePreference(setReelsDefaultFeed, 'reels_default_feed', 'reelsDefaultFeed', val)} options={[["foryou", "For You"], ["following", "Following"]]} />
+                                <ChoiceRow title="Open Reels on" value={reelsDefaultFeed} onChange={val => choosePreference(setReelsDefaultFeed, 'reels_default_feed', 'reelsDefaultFeed', val)} options={[["foryou", "For You"], ["following", "Following"], ["custom", "My Feed"]]} />
                             </SettingsGroup>
                             <SectionLabel>Playback</SectionLabel>
                             <SettingsGroup>
@@ -1086,8 +1100,8 @@ const SettingsGroup = ({ children }) => <div className="border-y border-gray-800
 const SettingsForm = ({ children, onSubmit }) => <form onSubmit={onSubmit} className="space-y-5 p-5">{children}</form>;
 const Field = ({ label, value, onChange, type = 'text', ...props }) => <label className="block"><span className="mb-2 block text-sm font-medium text-gray-200">{label}</span><input type={type} value={value} onChange={event => onChange(event.target.value)} className="w-full rounded-lg border border-gray-700 bg-[#202c33] px-3 py-3 text-sm text-white outline-none placeholder:text-gray-600 focus:border-[#00a884]" {...props} /></label>;
 const PrimaryButton = ({ children, busy }) => <button disabled={busy} className="w-full rounded-lg bg-[#00a884] px-4 py-3 text-sm font-semibold text-white hover:bg-[#069b7e] disabled:opacity-50">{busy ? 'Please wait...' : children}</button>;
-const SettingsRow = ({ icon, title, subtitle, onClick, danger = false }) => <button onClick={onClick} className="flex w-full items-center gap-4 border-b border-gray-800/70 px-5 py-4 text-left last:border-b-0 hover:bg-white/5"><span className={`h-6 w-6 [&>svg]:h-6 [&>svg]:w-6 ${danger ? 'text-red-400' : 'text-gray-400'}`}>{icon}</span><span className="min-w-0 flex-1"><span className={`block text-sm font-medium ${danger ? 'text-red-400' : 'text-white'}`}>{title}</span><span className="mt-0.5 block truncate text-xs text-gray-500">{subtitle}</span></span><ChevronRightIcon className="h-4 w-4 text-gray-600" /></button>;
-const SettingsToggle = ({ icon, title, subtitle, value, onClick }) => <button onClick={onClick} className="flex w-full items-center gap-4 border-b border-gray-800/70 px-5 py-4 text-left last:border-b-0 hover:bg-white/5"><span className="h-6 w-6 text-gray-400 [&>svg]:h-6 [&>svg]:w-6">{icon}</span><span className="min-w-0 flex-1"><span className="block text-sm font-medium text-white">{title}</span><span className="mt-0.5 block text-xs text-gray-500">{subtitle}</span></span><span className={`h-6 w-11 rounded-full p-0.5 transition ${value ? 'bg-[#00a884]' : 'bg-gray-700'}`}><span className={`block h-5 w-5 rounded-full bg-white transition ${value ? 'translate-x-5' : ''}`} /></span></button>;
+const SettingsRow = ({ icon, title, subtitle, onClick, danger = false }) => <button type="button" onClick={onClick} disabled={!onClick} className="flex w-full items-center gap-4 border-b border-gray-800/70 px-5 py-4 text-left last:border-b-0 hover:bg-white/5 disabled:cursor-default"><span className={`h-6 w-6 [&>svg]:h-6 [&>svg]:w-6 ${danger ? 'text-red-400' : 'text-gray-400'}`}>{icon}</span><span className="min-w-0 flex-1"><span className={`block text-sm font-medium ${danger ? 'text-red-400' : 'text-white'}`}>{title}</span><span className="mt-0.5 block truncate text-xs text-gray-500">{subtitle}</span></span>{onClick && <ChevronRightIcon className="h-4 w-4 text-gray-600" />}</button>;
+const SettingsToggle = ({ icon, title, subtitle, value, onClick }) => <button type="button" role="switch" aria-checked={value} onClick={onClick} className="flex w-full items-center gap-4 border-b border-gray-800/70 px-5 py-4 text-left last:border-b-0 hover:bg-white/5"><span className="h-6 w-6 text-gray-400 [&>svg]:h-6 [&>svg]:w-6">{icon}</span><span className="min-w-0 flex-1"><span className="block text-sm font-medium text-white">{title}</span><span className="mt-0.5 block text-xs text-gray-500">{subtitle}</span></span><span className={`h-6 w-11 rounded-full p-0.5 transition ${value ? 'bg-[#00a884]' : 'bg-gray-700'}`}><span className={`block h-5 w-5 rounded-full bg-white transition ${value ? 'translate-x-5' : ''}`} /></span></button>;
 const ChoiceRow = ({ title, value, onChange, options }) => <div className="border-b border-gray-800/70 px-5 py-4 last:border-b-0"><p className="mb-3 text-sm font-medium text-white">{title}</p><div className="flex flex-wrap gap-2">{options.map(([id, label]) => <button type="button" key={id} onClick={() => onChange(id)} className={`rounded-full border px-3 py-1.5 text-xs ${value === id ? 'border-[#00a884] bg-[#00a884]/15 text-[#00a884]' : 'border-gray-700 text-gray-400 hover:border-gray-500'}`}>{label}</button>)}</div></div>;
 const AudienceInput = ({ value, onChange, mode }) => <label className="block border-b border-gray-800/70 px-5 py-4"><span className="mb-2 block text-xs font-medium text-gray-300">{mode === 'only' ? 'Only these contacts' : 'Hide from these contacts'}</span><textarea value={value} onChange={event => onChange(event.target.value)} rows={3} placeholder="Names or @handles, comma separated" className="w-full resize-none rounded-xl border border-gray-700 bg-[#202c33] px-3 py-2 text-sm text-white outline-none placeholder:text-gray-600 focus:border-[#00a884]" /><span className="mt-1 block text-[11px] text-gray-500">Example: @rahul, Priya, Family group</span></label>;
 const InfoRow = ({ title, text }) => <div className="border-b border-gray-800/70 px-5 py-4 last:border-b-0"><p className="text-sm font-medium text-white">{title}</p><p className="mt-1 text-xs leading-5 text-gray-500">{text}</p></div>;

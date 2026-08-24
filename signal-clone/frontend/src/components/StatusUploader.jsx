@@ -13,7 +13,14 @@ const GRADIENTS = [
     { name: 'Rose/Orange', colors: ['#be123c', '#111827', '#ea580c'], class: 'from-rose-700 via-gray-900 to-orange-600' },
 ];
 
-const StatusUploader = ({ token, onClose, onUploaded }) => {
+const STORY_AUDIENCES = [
+    { id: 'contacts', label: 'My contacts', hint: 'All saved contacts can view' },
+    { id: 'contacts_except', label: 'Contacts except…', hint: 'Hide from selected people' },
+    { id: 'only', label: 'Only share with…', hint: 'Only selected people can view' },
+    { id: 'nobody', label: 'Only me', hint: 'Hide this story from everyone' },
+];
+
+const StatusUploader = ({ user, token, onClose, onUploaded }) => {
     const [file, setFile] = useState(null);
     const [preview, setPreview] = useState(null);
     const [mediaType, setMediaType] = useState('image');
@@ -36,6 +43,11 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState('');
     const [videoDuration, setVideoDuration] = useState(null);
+    const [audienceOpen, setAudienceOpen] = useState(false);
+    const [storyPrivacy, setStoryPrivacy] = useState(user?.storyPrivacy || localStorage.getItem('story_privacy') || 'contacts');
+    const [storyExceptions, setStoryExceptions] = useState(user?.storyPrivacyExceptions || localStorage.getItem('story_privacy_exceptions') || '');
+    const [savingAudience, setSavingAudience] = useState(false);
+    const [audienceMessage, setAudienceMessage] = useState('');
 
     const fileRef = useRef();
     const musicRef = useRef();
@@ -160,6 +172,22 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
         setMusicName(`${song.title} - ${song.artist}`);
         setSongSearchOpen(false);
         setSongWarning('');
+    };
+
+    const saveStoryAudience = async () => {
+        setSavingAudience(true);
+        setAudienceMessage('');
+        try {
+            await axios.put('/api/user/privacy', { storyPrivacy, storyPrivacyExceptions: storyExceptions }, { headers: { Authorization: `Bearer ${token}` } });
+            localStorage.setItem('story_privacy', storyPrivacy);
+            localStorage.setItem('story_privacy_exceptions', storyExceptions);
+            setAudienceMessage('Story privacy saved');
+            setAudienceOpen(false);
+        } catch (err) {
+            setAudienceMessage(err.response?.data?.error || 'Could not save story privacy');
+        } finally {
+            setSavingAudience(false);
+        }
     };
 
     const clearMusic = () => {
@@ -453,7 +481,14 @@ const StatusUploader = ({ token, onClose, onUploaded }) => {
                     </div>
                     <input ref={musicRef} type="file" accept="audio/*" className="hidden" onChange={handleMusicSelect} />
 
-                    <div className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-2 text-xs"><span className="font-semibold text-white">Audience</span><span className="text-[#25d366]">Your story privacy settings</span></div>
+                    <button type="button" onClick={() => setAudienceOpen(v => !v)} className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-left text-xs hover:bg-white/10"><span><span className="block font-semibold text-white">Audience</span><span className="mt-0.5 block text-[10px] text-gray-400">Control exactly who can see your story</span></span><span className="rounded-full bg-[#25d366]/15 px-3 py-1 font-bold text-[#25d366]">{STORY_AUDIENCES.find(item => item.id === storyPrivacy)?.label}</span></button>
+                    {audienceOpen && <div className="space-y-3 rounded-2xl border border-white/10 bg-[#111b21] p-3">
+                        <p className="text-sm font-bold text-white">Story privacy</p>
+                        <div className="space-y-1">{STORY_AUDIENCES.map(item => <button key={item.id} type="button" onClick={() => setStoryPrivacy(item.id)} className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left ${storyPrivacy === item.id ? 'border-[#25d366] bg-[#25d366]/10' : 'border-white/5 bg-white/[0.03]'}`}><span className={`h-4 w-4 rounded-full border-2 ${storyPrivacy === item.id ? 'border-[#25d366] bg-[#25d366] shadow-[inset_0_0_0_3px_#111b21]' : 'border-gray-500'}`} /><span><span className="block text-xs font-semibold text-white">{item.label}</span><span className="text-[10px] text-gray-400">{item.hint}</span></span></button>)}</div>
+                        {(storyPrivacy === 'contacts_except' || storyPrivacy === 'only') && <label className="block"><span className="mb-1.5 block text-[11px] font-semibold text-gray-300">{storyPrivacy === 'only' ? 'Share only with these people' : 'Hide story from these people'}</span><textarea value={storyExceptions} onChange={event => setStoryExceptions(event.target.value)} rows={3} placeholder="@rahul, @priya (comma separated)" className="w-full resize-none rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-white outline-none focus:border-[#25d366]" /><span className="mt-1 block text-[10px] text-gray-500">Use username, platform ID, or user ID.</span></label>}
+                        <button type="button" disabled={savingAudience} onClick={saveStoryAudience} className="w-full rounded-xl bg-[#25d366] py-2.5 text-xs font-black text-black disabled:opacity-50">{savingAudience ? 'Saving…' : 'Save audience'}</button>
+                    </div>}
+                    {audienceMessage && <p className="px-1 text-[11px] text-[#25d366]">{audienceMessage}</p>}
                     {/* Post Button */}
                     <button
                         onClick={handleSubmit}

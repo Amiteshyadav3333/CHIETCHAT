@@ -19,6 +19,26 @@ STATUS_DEFAULT_LIMIT = 100
 STATUS_MAX_LIMIT = 200
 MAX_STATUS_CAPTION_LENGTH = 300
 
+def _story_audience_tokens(owner):
+    return {part.strip().lower().lstrip('@') for part in (owner.story_privacy_exceptions or '').split(',') if part.strip()}
+
+def _can_view_story(owner, viewer_id):
+    if owner.id == viewer_id:
+        return True
+    if not has_contact(viewer_id, owner.id) or is_blocked(viewer_id, owner.id):
+        return False
+    mode = owner.story_privacy or 'contacts'
+    if mode == 'nobody':
+        return False
+    viewer = db.session.get(type(owner), viewer_id)
+    tokens = _story_audience_tokens(owner)
+    viewer_matches = bool(viewer and ({str(viewer.id), (viewer.username or '').lower(), (viewer.platform_id or '').lower()} & tokens))
+    if mode == 'contacts_except':
+        return not viewer_matches
+    if mode == 'only':
+        return viewer_matches
+    return True
+
 @status_bp.route('/api/status', methods=['GET'])
 def get_statuses():
     user_id = get_current_user_id()
@@ -40,11 +60,7 @@ def get_statuses():
     for s in statuses:
         uid = s.user_id
         if uid != user_id:
-            mode = s.user.story_privacy or 'contacts'
-            tokens = {part.strip().lower().lstrip('@') for part in (s.user.story_privacy_exceptions or '').split(',') if part.strip()}
-            viewer = db.session.get(type(s.user), user_id)
-            viewer_matches = bool(viewer and ({str(viewer.id), (viewer.username or '').lower(), (viewer.platform_id or '').lower()} & tokens))
-            if mode == 'nobody' or (mode == 'contacts_except' and viewer_matches) or (mode == 'only' and not viewer_matches):
+            if not _can_view_story(s.user, user_id):
                 continue
         if uid not in users_map:
             users_map[uid] = {
@@ -171,7 +187,7 @@ def view_status(status_id):
     status = db.session.get(Status, status_id)
     if not status or status.expires_at <= utc_now():
         return jsonify({"error": "Status not found"}), 404
-    if status.user_id != user_id and not has_contact(user_id, status.user_id):
+    if not _can_view_story(status.user, user_id):
         return jsonify({"error": "Forbidden"}), 403
     existing = StatusView.query.filter_by(status_id=status_id, viewer_id=user_id).first()
     if not existing:
@@ -193,7 +209,7 @@ def react_to_status(status_id):
     status = db.session.get(Status, status_id)
     if not status or status.expires_at <= utc_now():
         return jsonify({"error": "Status not found"}), 404
-    if status.user_id != user_id and not has_contact(user_id, status.user_id):
+    if not _can_view_story(status.user, user_id):
         return jsonify({"error": "Forbidden"}), 403
 
     existing = StatusReaction.query.filter_by(status_id=status_id, user_id=user_id).first()
@@ -234,7 +250,7 @@ def reply_to_status(status_id):
         return jsonify({"error": "Status not found"}), 404
     if status.user_id == user_id:
         return jsonify({"error": "You cannot reply to your own status"}), 400
-    if not has_contact(user_id, status.user_id):
+    if not _can_view_story(status.user, user_id):
         return jsonify({"error": "You can only reply to your contacts' statuses"}), 403
     if is_blocked(user_id, status.user_id):
         return jsonify({"error": "Blocked"}), 403

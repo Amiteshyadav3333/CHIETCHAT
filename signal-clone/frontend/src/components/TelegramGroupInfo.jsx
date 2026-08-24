@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { XMarkIcon, LinkIcon, PhotoIcon, DocumentIcon, BellIcon, PencilSquareIcon, UserPlusIcon, ShieldCheckIcon, CheckIcon, CameraIcon, TrashIcon, LockClosedIcon } from '@heroicons/react/24/outline';
 import UserAvatar from './UserAvatar';
@@ -24,6 +24,14 @@ export default function TelegramGroupInfo({ chat, user, token, messages, request
     const [saving, setSaving] = useState(false);
     const [copied, setCopied] = useState(false);
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
+    const [members, setMembers] = useState(chat.participants || []);
+    const [memberCount, setMemberCount] = useState(chat.memberCount || chat.participants?.length || 0);
+    const [memberCursor, setMemberCursor] = useState(null);
+    const [memberSearch, setMemberSearch] = useState('');
+    const [loadingMembers, setLoadingMembers] = useState(false);
+    const [bots, setBots] = useState([]);
+    const [botDraft, setBotDraft] = useState({ name: '', username: '', description: '', commands: 'help=Available commands: /help' });
+    const [creatingBot, setCreatingBot] = useState(false);
     const avatarInputRef = useRef(null);
     const [draft, setDraft] = useState({
         name: chat.name || '', description: chat.description || '', groupUsername: chat.groupUsername || '',
@@ -35,6 +43,40 @@ export default function TelegramGroupInfo({ chat, user, token, messages, request
     const files = useMemo(() => messages.filter(m => ['file', 'audio'].includes(m.type)), [messages]);
     const links = useMemo(() => messages.filter(m => /https?:\/\//i.test(m.content || '')), [messages]);
     const inviteLink = `${window.location.origin}/join/${chat.groupUsername || chat.id}`;
+
+    const loadMembers = async ({ reset = false, query = memberSearch } = {}) => {
+        setLoadingMembers(true);
+        try {
+            const { data } = await axios.get(`/api/groups/${chat.id}/members`, { params: { limit: 50, after: reset ? 0 : (memberCursor || 0), q: query }, headers: { Authorization: `Bearer ${token}` } });
+            setMembers(current => reset ? data.items : [...current, ...data.items.filter(item => !current.some(existing => existing.id === item.id))]);
+            setMemberCount(data.memberCount);
+            setMemberCursor(data.nextCursor);
+        } catch (error) { console.error('Could not load group members', error); }
+        finally { setLoadingMembers(false); }
+    };
+    useEffect(() => { loadMembers({ reset: true, query: '' }); }, [chat.id]);
+    useEffect(() => { axios.get(`/api/groups/${chat.id}/bots`, { headers: { Authorization: `Bearer ${token}` } }).then(({ data }) => setBots(data)).catch(() => setBots([])); }, [chat.id, token]);
+
+    const createBot = async event => {
+        event.preventDefault();
+        const commands = Object.fromEntries(botDraft.commands.split('\n').map(line => line.split('=')).filter(parts => parts.length >= 2).map(([command, ...reply]) => [command.trim().replace(/^\//, ''), reply.join('=').trim()]));
+        setCreatingBot(true);
+        try {
+            const { data } = await axios.post(`/api/groups/${chat.id}/bots`, { ...botDraft, commands }, { headers: { Authorization: `Bearer ${token}` } });
+            setBots(current => [...current, data]);
+            setBotDraft({ name: '', username: '', description: '', commands: 'help=Available commands: /help' });
+        } catch (error) { alert(error.response?.data?.error || 'Could not create bot'); }
+        finally { setCreatingBot(false); }
+    };
+    const toggleBot = async bot => {
+        const { data } = await axios.patch(`/api/groups/${chat.id}/bots/${bot.id}`, { isEnabled: !bot.isEnabled }, { headers: { Authorization: `Bearer ${token}` } });
+        setBots(current => current.map(item => item.id === bot.id ? data : item));
+    };
+    const deleteBot = async bot => {
+        if (!window.confirm(`Delete @${bot.username}?`)) return;
+        await axios.delete(`/api/groups/${chat.id}/bots/${bot.id}`, { headers: { Authorization: `Bearer ${token}` } });
+        setBots(current => current.filter(item => item.id !== bot.id));
+    };
 
     const save = async () => {
         setSaving(true);
@@ -77,7 +119,8 @@ export default function TelegramGroupInfo({ chat, user, token, messages, request
                             <input ref={avatarInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={e => uploadAvatar(e.target.files?.[0])} />
                         </div>
                         <h3 className="relative mt-3 text-xl font-bold text-white">{chat.name}</h3>
-                        <p className="mt-1 text-sm text-slate-400">{chat.participants?.length || 0} members · {chat.isPublic ? 'public group' : 'private group'}</p>
+                        <p className="mt-1 text-sm text-slate-400">{memberCount.toLocaleString()} members · {chat.isPublic ? 'public group' : 'private group'}</p>
+                        <p className="mt-1 text-[11px] text-slate-500">Capacity: {memberCount.toLocaleString()} / 500,000</p>
                         {chat.groupUsername && <p className="mt-1 text-sm font-medium text-[#58a9ef]">@{chat.groupUsername}</p>}
                         {chat.description && <p className="mx-auto mt-3 max-w-sm whitespace-pre-wrap text-sm leading-5 text-slate-300">{chat.description}</p>}
                         {isAdmin && chat.avatar && <button onClick={removeAvatar} className="mt-2 inline-flex items-center gap-1 text-xs text-rose-400 hover:text-rose-300"><TrashIcon className="h-3.5 w-3.5" />Remove photo</button>}
@@ -108,12 +151,20 @@ export default function TelegramGroupInfo({ chat, user, token, messages, request
                         <button onClick={save} disabled={saving} className="mx-4 mb-2 w-[calc(100%-2rem)] rounded-xl bg-[#3390ec]/15 py-2.5 text-sm font-bold text-[#58a9ef] hover:bg-[#3390ec]/25">Apply permissions</button>
                     </section>}
 
+                    <section className="border-b border-white/10 p-4">
+                        <div className="flex items-center justify-between"><div><p className="text-sm font-bold text-white">Group bots</p><p className="text-xs text-slate-400">Custom command bots work only in this group</p></div><span className="rounded-full bg-[#3390ec]/15 px-2 py-1 text-[10px] font-bold text-[#58a9ef]">{bots.length}/20</span></div>
+                        <div className="mt-3 space-y-2">{bots.map(bot => <div key={bot.id} className="rounded-xl border border-white/10 bg-[#1d2a36] p-3"><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-[#3390ec] to-violet-600 text-lg">🤖</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-white">{bot.name}</p><p className="truncate text-xs text-[#58a9ef]">@{bot.username} · {Object.keys(bot.commands).length} commands</p></div>{isAdmin && <Toggle value={bot.isEnabled} onChange={() => toggleBot(bot)} />}{isAdmin && <button type="button" onClick={() => deleteBot(bot)} className="text-xs text-rose-400">Delete</button>}</div>{bot.description && <p className="mt-2 text-xs text-slate-400">{bot.description}</p>}<div className="mt-2 flex flex-wrap gap-1">{Object.keys(bot.commands).map(command => <span key={command} className="rounded-md bg-black/20 px-2 py-1 text-[10px] text-slate-300">/{command}@{bot.username}</span>)}</div></div>)}</div>
+                        {isAdmin && <form onSubmit={createBot} className="mt-3 space-y-2 rounded-xl border border-dashed border-[#3390ec]/30 bg-[#3390ec]/5 p-3"><p className="text-xs font-bold text-[#58a9ef]">CREATE A BOT</p><input required maxLength={80} value={botDraft.name} onChange={e => setBotDraft(d => ({ ...d, name: e.target.value }))} placeholder="Bot name" className="w-full rounded-lg border border-white/10 bg-[#17212b] px-3 py-2 text-xs text-white outline-none" /><div className="flex items-center rounded-lg border border-white/10 bg-[#17212b] px-3"><span className="text-slate-500">@</span><input required minLength={5} maxLength={64} value={botDraft.username} onChange={e => setBotDraft(d => ({ ...d, username: e.target.value.replace(/[^a-zA-Z0-9_]/g, '') }))} placeholder="my_group_bot" className="w-full bg-transparent px-1 py-2 text-xs text-white outline-none" /></div><input maxLength={300} value={botDraft.description} onChange={e => setBotDraft(d => ({ ...d, description: e.target.value }))} placeholder="What does this bot do?" className="w-full rounded-lg border border-white/10 bg-[#17212b] px-3 py-2 text-xs text-white outline-none" /><label className="block text-[10px] text-slate-400">One command per line: command=reply<textarea required rows={4} value={botDraft.commands} onChange={e => setBotDraft(d => ({ ...d, commands: e.target.value }))} className="mt-1 w-full resize-none rounded-lg border border-white/10 bg-[#17212b] px-3 py-2 text-xs text-white outline-none" /></label><button disabled={creatingBot || bots.length >= 20} className="w-full rounded-lg bg-[#3390ec] py-2 text-xs font-bold text-white disabled:opacity-50">{creatingBot ? 'Creating…' : 'Create group bot'}</button></form>}
+                    </section>
+
                     <nav className="sticky top-0 z-10 grid grid-cols-4 border-b border-white/10 bg-[#17212b]/95 backdrop-blur">
-                        {[['members', `Members ${chat.participants?.length || 0}`], ['media', `Media ${media.length}`], ['files', `Files ${files.length}`], ['links', `Links ${links.length}`]].map(([id, label]) => <button key={id} onClick={() => setTab(id)} className={`border-b-2 px-1 py-3 text-xs font-semibold ${tab === id ? 'border-[#3390ec] text-[#58a9ef]' : 'border-transparent text-slate-400'}`}>{label}</button>)}
+                        {[['members', `Members ${memberCount.toLocaleString()}`], ['media', `Media ${media.length}`], ['files', `Files ${files.length}`], ['links', `Links ${links.length}`]].map(([id, label]) => <button key={id} onClick={() => setTab(id)} className={`border-b-2 px-1 py-3 text-xs font-semibold ${tab === id ? 'border-[#3390ec] text-[#58a9ef]' : 'border-transparent text-slate-400'}`}>{label}</button>)}
                     </nav>
                     {tab === 'members' && <div className="py-2">
+                        <form onSubmit={event => { event.preventDefault(); setMemberCursor(null); loadMembers({ reset: true, query: memberSearch }); }} className="mx-3 mb-3 flex gap-2"><input value={memberSearch} onChange={event => setMemberSearch(event.target.value)} placeholder="Search members" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-[#243442] px-3 py-2 text-xs text-white outline-none focus:border-[#3390ec]" /><button className="rounded-xl bg-[#3390ec] px-3 text-xs font-bold text-white">Search</button></form>
                         {isAdmin && requests.length > 0 && <div className="mx-3 mb-3 rounded-xl border border-[#3390ec]/25 bg-[#3390ec]/5 p-2"><p className="px-2 py-1 text-xs font-bold text-[#58a9ef]">JOIN REQUESTS · {requests.length}</p>{requests.map(r => <div key={r.id} className="flex items-center gap-2 p-2"><UserAvatar src={r.avatar} name={r.username} className="h-9 w-9 rounded-full" /><span className="min-w-0 flex-1 truncate text-sm text-white">{r.username}</span><button onClick={() => onRespondRequest(r.id, 'reject')} className="text-xs text-rose-400">Decline</button><button onClick={() => onRespondRequest(r.id, 'approve')} className="rounded-lg bg-[#3390ec] px-2.5 py-1.5 text-xs font-bold text-white">Add</button></div>)}</div>}
-                        {chat.participants?.map(p => <div key={p.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/[.035]"><UserAvatar src={p.avatar} name={p.username} className="h-10 w-10 rounded-full" /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-white">{p.username}{p.id === user?.id ? ' (you)' : ''}</span><span className="block truncate text-xs text-[#58a9ef]">@{p.platformId || `user_${p.id}`}</span><span className={`text-[11px] ${p.isOnline ? 'text-emerald-400' : 'text-slate-500'}`}>{p.id === chat.groupAdminId ? 'Owner · phone hidden' : p.isOnline ? 'online · phone hidden' : 'phone hidden'}</span></span>{p.id === chat.groupAdminId && <span className="rounded-md bg-[#3390ec]/15 px-2 py-1 text-[10px] font-bold text-[#58a9ef]">ADMIN</span>}</div>)}
+                        {members.map(p => <div key={p.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/[.035]"><UserAvatar src={p.avatar} name={p.username} className="h-10 w-10 rounded-full" /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-white">{p.username}{p.id === user?.id ? ' (you)' : ''}</span><span className="block truncate text-xs text-[#58a9ef]">@{p.platformId || `user_${p.id}`}</span><span className={`text-[11px] ${p.isOnline ? 'text-emerald-400' : 'text-slate-500'}`}>{p.id === chat.groupAdminId ? 'Owner · phone hidden' : p.isOnline ? 'online · phone hidden' : 'phone hidden'}</span></span>{p.id === chat.groupAdminId && <span className="rounded-md bg-[#3390ec]/15 px-2 py-1 text-[10px] font-bold text-[#58a9ef]">OWNER</span>}</div>)}
+                        {memberCursor && <button type="button" disabled={loadingMembers} onClick={() => loadMembers()} className="mx-4 my-3 w-[calc(100%-2rem)] rounded-xl border border-[#3390ec]/30 py-2.5 text-xs font-bold text-[#58a9ef] disabled:opacity-50">{loadingMembers ? 'Loading…' : 'Load more members'}</button>}
                     </div>}
                     {tab !== 'members' && <div className="grid grid-cols-3 gap-1 p-2">{(tab === 'media' ? media : tab === 'files' ? files : links).length ? (tab === 'media' ? media : tab === 'files' ? files : links).map(m => <div key={m.id} className="flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-[#243442] p-2 text-center text-xs text-slate-300">{m.type === 'image' && m.content ? <img src={m.content} className="h-full w-full object-cover" alt="" /> : <><DocumentIcon className="mr-1 h-5 w-5 text-[#58a9ef]" /><span className="line-clamp-3 break-all">{m.content || m.type}</span></>}</div>) : <p className="col-span-3 py-12 text-center text-sm text-slate-500">Nothing shared here yet</p>}</div>}
                 </div>

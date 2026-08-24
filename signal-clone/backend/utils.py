@@ -345,7 +345,7 @@ def ensure_runtime_compat_schema():
     if 'payment_order' in inspector.get_table_names():
         db.session.execute(text("UPDATE payment_order SET purpose = COALESCE(purpose, 'business')"))
     inspector = inspect(db.engine)
-    add_missing_columns(inspector, 'reel', {'is_monetized': db.Boolean(), 'earnings_paise': db.Integer()})
+    add_missing_columns(inspector, 'reel', {'is_monetized': db.Boolean(), 'earnings_paise': db.Integer(), 'category': db.String(40)})
     inspector = inspect(db.engine)
     add_missing_columns(inspector, 'status', {'music_volume': db.Float(), 'music_start': db.Float()})
     inspector = inspect(db.engine)

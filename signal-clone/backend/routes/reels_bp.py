@@ -18,6 +18,7 @@ MAX_COMMENT_LENGTH = 1000
 MAX_REPOST_NOTE_LENGTH = 280
 FREE_DAILY_REEL_LIMIT = 3
 PREMIUM_DAILY_REEL_LIMIT = 10
+REEL_CATEGORIES = {'entertainment', 'comedy', 'dance', 'music', 'sports', 'gaming', 'food', 'travel', 'fashion', 'fitness', 'education', 'technology', 'devotional', 'news'}
 
 @reels_bp.route('/api/reels/<int:reel_id>/report', methods=['POST'])
 def report_reel(reel_id):
@@ -51,6 +52,7 @@ def serialize_reel(reel, current_user_id, is_following=None):
         "musicName": reel.music_name,
         "musicVolume": reel.music_volume if reel.music_volume is not None else 0.8,
         "caption": reel.caption,
+        "category": reel.category or 'entertainment',
         "createdAt": iso_utc(reel.created_at),
         "user": user_data,
         "likesCount": len(reel.likes),
@@ -84,6 +86,10 @@ def get_reels():
     if filter_type == 'following':
         followed_ids = [f.followed_id for f in Follow.query.filter_by(follower_id=user_id).all()]
         query = query.filter(Reel.user_id.in_(followed_ids))
+    elif filter_type == 'custom':
+        interests = {item.strip().lower() for item in request.args.get('interests', '').split(',')} & REEL_CATEGORIES
+        if interests:
+            query = query.filter(Reel.category.in_(interests))
     
     reels = query.order_by(Reel.created_at.desc()).limit(
         bounded_limit(FEED_DEFAULT_LIMIT, FEED_MAX_LIMIT)
@@ -139,6 +145,9 @@ def create_reel():
     
     file = request.files['video']
     caption = request.form.get('caption', '').strip()
+    category = request.form.get('category', 'entertainment').strip().lower()
+    if category not in REEL_CATEGORIES:
+        return jsonify({"error": "Invalid Reel category"}), 400
     user = User.query.filter_by(id=user_id).with_for_update().one()
     today = utc_now().date()
     day_start = datetime.datetime.combine(today, datetime.time.min)
@@ -190,6 +199,7 @@ def create_reel():
             user_id=user_id, 
             video_url=video_url, 
             caption=caption, 
+            category=category,
             music_url=music_url, 
             music_name=music_name,
             music_volume=music_volume,

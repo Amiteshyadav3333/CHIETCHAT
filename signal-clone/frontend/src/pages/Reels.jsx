@@ -2,11 +2,12 @@ import React, { useState, useEffect, useContext, useRef } from 'react';
 import axios from 'axios';
 import ReelCard from '../components/ReelCard';
 import { AuthContext } from '../context/AuthContext';
-import { ArrowLeftIcon, PlusIcon, UserPlusIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, PlusIcon, UserPlusIcon, XMarkIcon, AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import ReelUploader from '../components/ReelUploader';
 import ReelProfile from '../components/ReelProfile';
 import ReelReactor from '../components/ReelReactor';
 import { loadReelCache, saveReelCache } from '../utils/reelCache';
+import { REEL_CATEGORIES } from '../utils/reelCategories';
 
 const Reels = ({ active, onBack, onShareToChat }) => {
     const { user, token } = useContext(AuthContext);
@@ -29,6 +30,9 @@ const Reels = ({ active, onBack, onShareToChat }) => {
     const [suggestions, setSuggestions] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [followingIds, setFollowingIds] = useState({});
+    const [interests, setInterests] = useState(() => (user?.uiPreferences?.reelsInterests || localStorage.getItem('reels_interests') || 'entertainment,comedy,music').split(',').filter(Boolean));
+    const [showFeedCustomizer, setShowFeedCustomizer] = useState(false);
+    const [savingFeed, setSavingFeed] = useState(false);
     const hasFetched = useRef(false);
 
     useEffect(() => {
@@ -44,7 +48,8 @@ const Reels = ({ active, onBack, onShareToChat }) => {
     const fetchReels = async (f = filter, silent = false) => {
         if (!silent) setLoading(true);
         try {
-            const res = await axios.get(`/api/reels?filter=${f}`, {
+            const res = await axios.get('/api/reels', {
+                params: { filter: f, ...(f === 'custom' ? { interests: interests.join(',') } : {}) },
                 headers: { Authorization: `Bearer ${token}` }
             });
             const nextReels = Array.isArray(res.data) ? res.data.filter(item => item?.id) : [];
@@ -93,6 +98,22 @@ const Reels = ({ active, onBack, onShareToChat }) => {
             fetchReels(filter, reels.length > 0);
         }
     }, [filter]);
+
+    const toggleInterest = id => setInterests(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
+    const saveCustomFeed = async () => {
+        if (!interests.length) return;
+        setSavingFeed(true);
+        const value = interests.join(',');
+        try {
+            const { data } = await axios.put('/api/user/preferences', { reelsDefaultFeed: 'custom', reelsInterests: value }, { headers: { Authorization: `Bearer ${token}` } });
+            localStorage.setItem('reels_default_feed', 'custom');
+            localStorage.setItem('reels_interests', value);
+            window.dispatchEvent(new CustomEvent('cheetchat-preferences-updated', { detail: data.uiPreferences }));
+            setFilter('custom');
+            setShowFeedCustomizer(false);
+            fetchReels('custom', false);
+        } finally { setSavingFeed(false); }
+    };
 
     const visibleReels = Array.isArray(reels) ? reels.filter(item => item?.id) : [];
 
@@ -199,11 +220,14 @@ const Reels = ({ active, onBack, onShareToChat }) => {
                     >
                         Following
                     </button>
+                    <button onClick={() => setShowFeedCustomizer(true)} className={`flex items-center gap-1 font-bold text-lg transition-all ${filter === 'custom' ? 'border-b-2 border-white text-white' : 'text-white/50'}`}><AdjustmentsHorizontalIcon className="h-5 w-5" /><span className="hidden sm:inline">My Feed</span></button>
                 </div>
                 <button onClick={() => setShowUploader(true)} className="p-2 text-white hover:bg-white/10 rounded-full transition-colors">
                     <PlusIcon className="w-6 h-6" />
                 </button>
             </div>
+
+            {showFeedCustomizer && <div className="absolute inset-0 z-[80] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md" onClick={() => setShowFeedCustomizer(false)}><div className="w-full max-w-md rounded-3xl border border-white/15 bg-[#151515] p-5 text-white shadow-2xl" onClick={event => event.stopPropagation()}><div className="flex items-center justify-between"><div><h2 className="text-xl font-black">Build your Reel feed</h2><p className="mt-1 text-xs text-white/50">Choose what you want to watch</p></div><button type="button" onClick={() => setShowFeedCustomizer(false)} className="rounded-full p-2 hover:bg-white/10"><XMarkIcon className="h-5 w-5" /></button></div><div className="mt-5 grid grid-cols-2 gap-2">{REEL_CATEGORIES.map(([id, label]) => <button key={id} type="button" onClick={() => toggleInterest(id)} className={`rounded-xl border px-3 py-3 text-left text-sm font-semibold ${interests.includes(id) ? 'border-pink-400 bg-pink-500/20 text-white' : 'border-white/10 bg-white/5 text-white/65'}`}>{label}{interests.includes(id) && <span className="float-right text-pink-300">✓</span>}</button>)}</div><p className="mt-3 text-xs text-white/40">Selected: {interests.length}. You can change these interests anytime.</p><button type="button" onClick={saveCustomFeed} disabled={!interests.length || savingFeed} className="mt-4 w-full rounded-xl bg-gradient-to-r from-pink-500 to-violet-600 py-3 text-sm font-black disabled:opacity-40">{savingFeed ? 'Saving…' : 'Use my custom feed'}</button></div></div>}
 
             {suggestions.length > 0 && (
                 <div className="absolute right-3 top-20 z-40">

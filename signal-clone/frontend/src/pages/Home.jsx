@@ -313,6 +313,7 @@ const Home = () => {
             callSounds: 'call_sounds', mediaAutoDownload: 'media_auto_download', dataSaver: 'data_saver',
             hdMedia: 'hd_media', screenshotAlerts: 'screenshot_alerts', spamDetection: 'spam_detection',
             incognitoKeyboard: 'incognito_keyboard', reelsDefaultFeed: 'reels_default_feed',
+            reelsInterests: 'reels_interests',
             reelsAutoplay: 'reels_autoplay', reelsMuted: 'reels_muted', reelsDataSaver: 'reels_data_saver',
             socialDefaultFeed: 'social_default_feed', socialAutoplayVideos: 'social_autoplay_videos',
             socialMutedVideos: 'social_muted_videos', podliveAllowCamera: 'podlive_allow_camera',

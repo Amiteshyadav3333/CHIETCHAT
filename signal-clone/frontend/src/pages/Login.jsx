@@ -7,6 +7,7 @@ import { EnvelopeIcon, KeyIcon, LockClosedIcon, UserPlusIcon } from '@heroicons/
 import { getDeviceFingerprint } from '../utils/deviceIdentity';
 import { loadDevicePrivateKey, saveDevicePrivateKey } from '../utils/secureKeyStore';
 import { getSupabaseClient } from '../utils/supabaseClient';
+import MarketingLanding from '../components/MarketingLanding';
 
 const Login = () => {
     const [mode, setMode] = useState('login');
@@ -325,9 +326,10 @@ const Login = () => {
     const submitLabel = isOtpStep ? 'Verify OTP' : isLogin ? 'Log in' : isRegister ? 'Create account' : 'Send reset link';
 
     return (
-        <div className="flex h-[100dvh] min-h-0 overflow-y-auto overscroll-contain bg-[#08090b] p-4 text-signal-text">
+        <div className="h-[100dvh] overflow-y-auto overscroll-contain bg-[#08090b] text-signal-text scroll-smooth">
             {googleOnboarding && <div className="fixed inset-0 z-[140] flex overflow-y-auto bg-black/85 p-4 backdrop-blur-md"><form onSubmit={completeGoogleOnboarding} className="m-auto max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-3xl border border-white/10 bg-[#121820] p-6 shadow-2xl"><div className="flex items-center gap-3"><img src={useGoogleAvatar && googleOnboarding.googleAvatarUrl ? googleOnboarding.googleAvatarUrl : '/cheetchat-logo.png'} alt="Profile preview" className="h-16 w-16 rounded-full object-cover" referrerPolicy="no-referrer" /><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-[#53bdeb]">Google verified</p><h2 className="truncate text-xl font-black text-white">{googleOnboarding.displayName}</h2><p className="truncate text-xs text-gray-400">{googleOnboarding.email}</p></div></div><div className="mt-5 rounded-xl bg-white/5 p-3"><p className="text-xs text-gray-400">Your CHEETCHAT ID</p><p className="mt-1 font-bold text-emerald-300">@{googleOnboarding.suggestedPlatformId}</p><p className="mt-1 text-[11px] text-gray-500">Platform automatically creates it. You can change it later in Settings.</p></div><label className="mt-5 block"><span className="mb-2 block text-sm font-semibold text-white">Mobile number <span className="font-normal text-gray-500">(optional)</span></span><input autoFocus value={googlePhone} onChange={event => setGooglePhone(event.target.value.replace(/\D/g, '').slice(0, 10))} inputMode="numeric" pattern="\d{10}" maxLength={10} placeholder="Add now or skip" className="w-full rounded-xl border border-white/10 bg-[#202c33] px-4 py-3 text-white outline-none focus:border-[#00a884]" /><span className="mt-2 block text-[11px] leading-4 text-gray-400">You can skip this and link your number later when you tap +.</span></label>{googleOnboarding.googleAvatarUrl && <label className="mt-4 flex cursor-pointer items-center justify-between rounded-xl border border-white/10 p-3"><span><span className="block text-sm font-semibold text-white">Use Google profile photo</span><span className="text-[11px] text-gray-500">Optional — off करके default avatar रखें</span></span><input type="checkbox" checked={useGoogleAvatar} onChange={event => setUseGoogleAvatar(event.target.checked)} className="h-5 w-5 accent-[#00a884]" /></label>}<div className="mt-6 flex gap-2"><button type="button" onClick={event => completeGoogleOnboarding(event, true)} disabled={googleLoading} className="flex-1 rounded-xl border border-white/10 py-3 text-sm font-semibold text-gray-200 disabled:opacity-60">Skip for now</button><button type="submit" disabled={googleLoading} className="flex-1 rounded-xl bg-[#00a884] py-3 text-sm font-black text-white disabled:opacity-60">{googleLoading ? 'Creating…' : googlePhone ? 'Add & create' : 'Create account'}</button></div></form></div>}
-            <div className="m-auto grid w-full max-w-5xl shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-[#121418] shadow-2xl md:grid-cols-[0.95fr_1.05fr]">
+            <section id="auth-top" className="auth-stage">
+            <div className="grid w-full max-w-5xl shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-[#121418] shadow-2xl md:grid-cols-[0.95fr_1.05fr]">
                 <div className="hidden min-h-[640px] border-r border-white/10 bg-[#0d1117] p-8 md:flex md:flex-col md:justify-between">
                     <div>
                         <div className="mb-10 flex items-center gap-3">
@@ -526,6 +528,9 @@ const Login = () => {
                     </div>
                 </div>
             </div>
+            <a href="#features" className="auth-scroll-cue" aria-label="Explore CHEETCHAT features"><span>Explore CHEETCHAT</span><b>↓</b></a>
+            </section>
+            <MarketingLanding />
         </div>
     );
 };

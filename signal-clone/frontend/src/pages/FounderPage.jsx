@@ -1,0 +1,33 @@
+import React, { useEffect } from 'react';
+import { ArrowLeftIcon, ArrowTopRightOnSquareIcon, CheckBadgeIcon, CodeBracketIcon, LightBulbIcon, RocketLaunchIcon } from '@heroicons/react/24/outline';
+
+const qualifications = [
+  { title: 'Android App Development with AI', issuer: 'Schooliverse Educare Private Limited · Internshala Trainings / Skill India ecosystem', detail: 'Successfully completed with Grade A · Issued May 1, 2026', image: '/founder/android-ai-certificate.jpg', accent: 'green' },
+  { title: 'Oracle Cloud Infrastructure Foundations Associate', issuer: 'Oracle Certified · 2025', detail: 'Cloud infrastructure foundations, core services and cloud concepts.', image: '/founder/oracle-cloud.jpeg', accent: 'orange' },
+  { title: 'Oracle Cloud Infrastructure AI Foundations Associate', issuer: 'Oracle Certified · 2025', detail: 'Artificial intelligence, machine learning and OCI AI service foundations.', image: '/founder/oracle-ai.jpeg', accent: 'blue' },
+];
+
+const projects = [
+  ['CHEETCHAT', 'An India-first super app connecting private chat, social, reels, calls, AI, communities and creator tools.', '/cheetchat-logo.png', '/login'],
+  ['IndiaSearch', 'A multilingual AI voice-search experience created for Indian users.', '/marketing/indiasearch.png', 'https://indiasearch.site/'],
+  ['India PodLive', 'An Indian creator and video-sharing platform for education and entertainment.', '/marketing/podlive.png', 'https://indiapodlive.vercel.app'],
+  ['Anuvandini', 'A real-time language translation product designed to make communication more inclusive.', '/marketing/translator.png', 'https://downloader.indiasearch.site/'],
+];
+
+export default function FounderPage() {
+  useEffect(() => { const previous = document.title; document.title = 'Amitesh Kumar Yadav — Founder of CHEETCHAT'; return () => { document.title = previous; }; }, []);
+  return <main className="founder-page">
+    <header className="founder-page-header"><a href="/login" className="founder-page-brand"><img src="/cheetchat-logo.png" alt="CHEETCHAT"/><span>CHEET<strong>CHAT</strong></span></a><nav><a href="/login#features">Product</a><a href="#qualifications">Qualifications</a><a href="#projects">Projects</a></nav><a href="/login" className="founder-back"><ArrowLeftIcon/> Back to CHEETCHAT</a></header>
+
+    <section className="founder-hero"><div className="founder-hero-glow"/><div className="founder-portrait-wrap"><div className="founder-portrait-frame"><img src="/marketing/founder.jpg" alt="Amitesh Kumar Yadav, founder of CHEETCHAT"/></div><span className="founder-role">Founder of CHEETCHAT</span><div className="founder-floating-tag tag-products"><RocketLaunchIcon/> 4 India-first products</div><div className="founder-floating-tag tag-certified"><CheckBadgeIcon/> Oracle certified</div></div><div className="founder-intro"><span className="founder-kicker">FOUNDER · PRODUCT CREATOR · INDIA</span><h1>Amitesh Kumar<br/><strong>Yadav</strong></h1><p className="founder-lead">The founder of CHEETCHAT and creator of a growing India-first technology ecosystem focused on communication, multilingual access, content creation and AI-powered discovery.</p><div className="founder-mission"><LightBulbIcon/><div><strong>The mission</strong><p>Build practical technology that helps Indian students communicate in their own language, learn, create communities, express ideas and grow digital businesses from one connected ecosystem.</p></div></div><div className="founder-hero-actions"><a href="#qualifications">View qualifications</a><a href="#projects">Explore projects</a></div></div></section>
+
+    <section className="founder-story"><div><span>THE STORY</span><h2>Built from a student’s understanding of real digital needs.</h2></div><div className="founder-story-copy"><p>CHEETCHAT was designed especially for Indian college students who currently switch between many apps for messaging, social updates, short video, learning, calls, communities and AI tools.</p><p>Amitesh’s product direction brings these activities together while prioritising Indian-language communication, user-controlled feeds, private messaging and accessible tools for student founders and local businesses.</p><div className="founder-values"><article><CodeBracketIcon/><strong>Build</strong><span>Turn ambitious ideas into working products.</span></article><article><LightBulbIcon/><strong>Include</strong><span>Design for India’s languages and diverse users.</span></article><article><CheckBadgeIcon/><strong>Protect</strong><span>Make privacy and user control visible.</span></article></div></div></section>
+
+    <section className="founder-qualifications" id="qualifications"><div className="founder-section-title"><span>VERIFIED LEARNING</span><h2>Qualifications & certifications</h2><p>Professional learning demonstrated through the certificates supplied by the founder.</p></div><div className="qualification-grid">{qualifications.map((item, index) => <article className={`qualification-card ${item.accent}`} key={item.title}><div className="qualification-index">0{index + 1}</div><img src={item.image} alt={`${item.title} credential`}/><div><span>{item.issuer}</span><h3>{item.title}</h3><p>{item.detail}</p><button type="button" onClick={() => window.open(item.image, '_blank', 'noopener,noreferrer')}>View credential <ArrowTopRightOnSquareIcon/></button></div></article>)}</div><p className="credential-note">Credentials are displayed for portfolio presentation. Visitors should use the issuing organisation’s verification process where available.</p></section>
+
+    <section className="founder-projects" id="projects"><div className="founder-section-title"><span>PRODUCT ECOSYSTEM</span><h2>Projects created by Amitesh</h2></div><div className="founder-project-grid">{projects.map(([name, description, image, href]) => <a href={href} target={href.startsWith('http') ? '_blank' : undefined} rel={href.startsWith('http') ? 'noreferrer' : undefined} key={name}><img src={image} alt=""/><div><h3>{name}</h3><p>{description}</p><strong>Explore project <ArrowTopRightOnSquareIcon/></strong></div></a>)}</div></section>
+
+    <section className="founder-closing"><img src="/cheetchat-logo.png" alt=""/><span>FOUNDER’S VISION</span><blockquote>“Technology becomes meaningful when it helps people speak in their own language, create with confidence and stay in control of their identity.”</blockquote><strong>— Amitesh Kumar Yadav</strong><a href="/login">Discover CHEETCHAT</a></section>
+    <footer className="founder-footer"><span>CHEETCHAT · Made in India 🇮🇳</span><span>Founder: Amitesh Kumar Yadav</span></footer>
+  </main>;
+}

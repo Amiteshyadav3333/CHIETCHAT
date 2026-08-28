@@ -11,6 +11,7 @@ import About from './pages/About';
 import ProfileSetup from './pages/ProfileSetup';
 import PublicReel from './pages/PublicReel';
 import RecoveryCode from './pages/RecoveryCode';
+import FounderPage from './pages/FounderPage';
 import './index.css';
 import axios from 'axios';
 import { API_BASE_URL } from './utils/apiBaseUrl';
@@ -104,10 +105,12 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 <SocketProvider>
                     <Routes>
                         <Route path="/login" element={<Login />} />
+                        <Route path="/signup" element={<Login />} />
                         <Route path="/reset-password" element={<ResetPassword />} />
                         <Route path="/terms" element={<LegalPage type="terms" />} />
                         <Route path="/privacy" element={<LegalPage type="privacy" />} />
                         <Route path="/about" element={<About />} />
+                        <Route path="/founder" element={<FounderPage />} />
                         <Route path="/reels/:reelId" element={<PublicReel />} />
                         <Route path="/setup-profile" element={
                             <ProtectedRoute>

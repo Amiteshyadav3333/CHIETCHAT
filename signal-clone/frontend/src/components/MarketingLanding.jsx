@@ -95,6 +95,25 @@ const faqs = [
   ['Who created CHEETCHAT?', 'CHEETCHAT was founded by Amitesh Kumar Yadav and designed especially for Indian college students, creators, communities and small businesses.'],
 ];
 
+const appScreens = [
+  ['/marketing/social.jpg', 'CHEETCHAT social feed'], ['/marketing/social-profile.jpg', 'Creator profile and posts'],
+  ['/marketing/chat.jpg', 'Private multilingual chat'], ['/marketing/smart.jpg', 'AI Grammar and smart replies'],
+  ['/marketing/chat-actions.jpg', 'Draw, translate and message actions'], ['/marketing/chat-list.jpg', 'Chats, stories, groups and calls'],
+  ['/marketing/social-compose.jpg', 'Social posts and communities'], ['/marketing/social-video.jpg', 'Social video publishing'],
+  ['/marketing/chat-attachments.jpg', 'Rich chat attachments'], ['/marketing/desktop-chat.jpg', 'CHEETCHAT desktop experience'],
+];
+
+const productOverview = [
+  ['/marketing/chat-list.jpg', 'Connect', 'Chats, groups, stories and calls in one familiar inbox.'],
+  ['/marketing/chat-actions.jpg', 'Express', 'Translate, draw, react and use smart actions inside every conversation.'],
+  ['/marketing/social-profile.jpg', 'Create', 'Build a creator identity with posts, videos and community activity.'],
+  ['/marketing/social-video.jpg', 'Watch', 'Discover vertical video and publish rich social content.'],
+  ['/marketing/podlive.png', 'Go live', 'Host podcasts, invite speakers and grow an audience with PodLive.'],
+  ['/marketing/indiasearch-ui.png', 'Discover', 'Search the web and explore India-first multilingual products.'],
+  ['/marketing/indiasearch-ai.png', 'Ask AI', 'Get concise AI answers and continue the conversation naturally.'],
+  ['/marketing/cheetchat-splash.jpg', 'One ecosystem', 'A consistent India-first identity across mobile and desktop.'],
+];
+
 const Phone = ({ src, alt, className = '' }) => <div className={`phone-3d ${className}`}><div className="phone-speaker"/><img src={src} alt={alt}/></div>;
 
 export default function MarketingLanding() {
@@ -102,27 +121,27 @@ export default function MarketingLanding() {
   useEffect(() => {
     const saved = localStorage.getItem('cheetchat-marketing-language');
     setLang(saved || (navigator.language?.toLowerCase().startsWith('hi') ? 'hi' : 'en'));
+    const syncLanguage = event => setLang(event.detail === 'hi' ? 'hi' : 'en');
+    window.addEventListener('cheetchat-language-change', syncLanguage);
+    return () => window.removeEventListener('cheetchat-language-change', syncLanguage);
   }, []);
   const t = copy[lang];
-  const chooseLang = (next) => { setLang(next); localStorage.setItem('cheetchat-marketing-language', next); };
 
   return <div className="marketing-site" lang={lang === 'hi' ? 'hi' : 'en'}>
-    <header className="marketing-nav">
-      <a href="#top" className="marketing-brand"><img src="/cheetchat-logo.png" alt="CHEETCHAT"/><span>CHEET<span>CHAT</span></span></a>
-      <nav>{t.nav.map((item, i) => <a key={item} href={`#${['features','security','projects','pricing','legal','faq'][i]}`}>{item}</a>)}</nav>
-      <div className="language-switch" aria-label="Choose language"><LanguageIcon/><button className={lang === 'en' ? 'active' : ''} onClick={() => chooseLang('en')}>EN</button><button className={lang === 'hi' ? 'active' : ''} onClick={() => chooseLang('hi')}>हिं</button></div>
-    </header>
-
     <section className="marketing-hero" id="top">
       <div className="hero-copy"><span className="hero-badge">🇮🇳 {t.badge}</span><h1>{t.title}</h1><p>{t.intro}</p><div className="hero-actions"><a href="#features" className="primary-cta">{t.explore}</a><a href="https://docs.google.com/uc?export=download&id=1Ljn280n5VmWfD1kEl7u_AAyZ-2S6L1s9" className="secondary-cta">{t.android}</a></div><div className="trust-row"><span><LockClosedIcon/>{t.trusted}</span><span>🇮🇳 {t.india}</span><span><LanguageIcon/>{t.languages}</span></div></div>
       <div className="hero-visual" aria-label="CHEETCHAT app screens"><div className="orbit orbit-one"/><div className="orbit orbit-two"/><Phone src="/marketing/chat.jpg" alt="CHEETCHAT multilingual private chat" className="phone-left"/><Phone src="/marketing/social.jpg" alt="CHEETCHAT social feed" className="phone-center"/><Phone src="/marketing/smart.jpg" alt="CHEETCHAT AI smart chat tools" className="phone-right"/><div className="floating-chip chip-one">AI Grammar <SparklesIcon/></div><div className="floating-chip chip-two">HD Call <VideoCameraIcon/></div></div>
     </section>
 
+    <section className="founder-section founder-top section-shell" id="founder"><div className="founder-photo"><img src="/marketing/founder.jpg" alt="CHEETCHAT founder Amitesh Kumar Yadav"/><span>Founder</span></div><div><span className="eyebrow">FOUNDER OF CHEETCHAT</span><h2>{t.founderTitle}</h2><p>{t.founderBody}</p><div className="founder-facts"><article><strong>India-first products</strong><span>CHEETCHAT, IndiaSearch, India PodLive and Anuvandini</span></article><article><strong>Android + AI</strong><span>Completed Android App Development with AI with Grade A</span></article><article><strong>Cloud & AI foundations</strong><span>Oracle Cloud Infrastructure Foundations and AI Foundations certified</span></article><article><strong>Student-focused mission</strong><span>Communication, learning, creation and business tools in one ecosystem</span></article></div><div className="founder-quote">“Technology becomes meaningful when it helps people speak in their own language, create with confidence and stay in control of their identity.”</div></div></section>
+
+    <section className="screen-gallery-section"><div className="section-shell gallery-heading"><span className="eyebrow">INSIDE THE APP</span><h2>A cinematic look at the complete CHEETCHAT experience.</h2><p>Explore social, private chat, AI tools, creator profiles, rich attachments and desktop communication through real product screens.</p></div><div className="screen-gallery-track">{appScreens.map(([src, alt], index) => <figure className={`gallery-phone gallery-phone-${index % 4}`} key={src}><img src={src} alt={alt}/><figcaption>{alt}</figcaption></figure>)}</div></section>
+
+    <section className="overview-section section-shell" id="overview"><div className="section-heading"><span>COMPLETE PRODUCT TOUR</span><h2>See how the whole CHEETCHAT ecosystem fits together.</h2><p>Real screens from messaging, social, creator video, PodLive and IndiaSearch give new users a clear overview before they create an account.</p></div><div className="overview-grid">{productOverview.map(([src, title, body], index) => <article className={`overview-card overview-card-${index + 1}`} key={src}><img src={src} alt={`${title} — CHEETCHAT product screen`}/><div><span>0{index + 1}</span><h3>{title}</h3><p>{body}</p></div></article>)}</div></section>
+
     <section className="feature-section section-shell" id="features"><div className="section-heading"><span>SUPER APP</span><h2>{t.featureTitle}</h2><p>{t.featureIntro}</p></div><div className="feature-grid">{features.map(([Icon, enTitle, hiTitle, enBody, hiBody], index) => <article className="feature-card" key={enTitle}><div className="feature-number">0{index + 1}</div><Icon/><h3>{lang === 'hi' ? hiTitle : enTitle}</h3><p>{lang === 'hi' ? hiBody : enBody}</p></article>)}</div></section>
 
     <section className="security-section section-shell" id="security"><div className="security-copy"><span className="eyebrow">SECURITY ARCHITECTURE</span><h2>{t.securityTitle}</h2><p>{t.securityBody}</p><div className="security-points"><span><CheckCircleIcon/>AES-GCM message content</span><span><CheckCircleIcon/>Public-key wrapping</span><span><CheckCircleIcon/>Verifiable safety numbers</span><span><CheckCircleIcon/>Secure WebRTC calls</span></div><div className="retention-card"><h3>{t.retentionTitle}</h3><p>{t.retentionBody}</p></div></div><div className="security-art"><div className="security-ring ring-a"/><div className="security-ring ring-b"/><div className="lock-core"><LockClosedIcon/><strong>E2EE</strong><span>Verify every private chat</span></div></div></section>
-
-    <section className="founder-section section-shell"><div className="founder-photo"><img src="/marketing/founder.jpg" alt="CHEETCHAT founder Amitesh Kumar Yadav"/><span>Founder · Builder · Student</span></div><div><span className="eyebrow">THE FOUNDER</span><h2>{t.founderTitle}</h2><p>{t.founderBody}</p><div className="founder-quote">“Technology becomes meaningful when it helps people speak in their own language, create with confidence and stay in control of their identity.”</div></div></section>
 
     <section className="projects-section section-shell" id="projects"><div className="section-heading"><span>INDIA-FIRST ECOSYSTEM</span><h2>{t.projectsTitle}</h2></div><div className="project-grid">{projects.map(([name, desc, tag, href, image]) => <a className="project-card" href={href} target="_blank" rel="noreferrer" key={name}><img src={image} alt=""/><div><span>{tag}</span><h3>{name}</h3><p>{desc}</p><strong>Visit project <ArrowTopRightOnSquareIcon/></strong></div></a>)}</div></section>
 

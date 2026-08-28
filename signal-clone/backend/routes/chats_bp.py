@@ -843,7 +843,9 @@ def manage_group_bot(chat_id, bot_id):
 @chats_bp.route('/api/groups/<int:chat_id>/bots/execute', methods=['POST'])
 def execute_group_bot(chat_id):
     user_id = get_current_user_id()
-    if not user_id or not user_can_access_chat(user_id, chat_id):
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    if not user_can_access_chat(user_id, chat_id):
         return jsonify({'error': 'Forbidden'}), 403
     group = db.session.get(Chat, chat_id)
     if not group or not group.is_group:

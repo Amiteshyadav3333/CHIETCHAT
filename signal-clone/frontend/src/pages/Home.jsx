@@ -60,6 +60,7 @@ const podLiveModulePromise = import('./PodLiveView');
 const PodLiveView = React.lazy(() => podLiveModulePromise);
 const AiChat = React.lazy(() => import('../components/AiChat'));
 const AiSmartSpace = React.lazy(() => import('../components/AiSmartSpace'));
+const SaskatAI = React.lazy(() => import('./SaskatAI/SaskatAI'));
 const SettingsModal = React.lazy(() => import('../components/SettingsModal'));
 const NotificationPanel = React.lazy(() => import('../components/NotificationPanel'));
 
@@ -3327,59 +3328,9 @@ const Home = () => {
             </div>}
 
             {showSaskatAI && <div className="fixed inset-0 z-50 bg-[#0a0e27]">
-                <div className="w-full h-full flex flex-col bg-gradient-to-br from-[#0a0e27] via-[#1a1f3a] to-[#0f1428]">
-                    <div className="flex items-center justify-between p-4 border-b border-cyan-500/20">
-                        <div className="flex items-center gap-3">
-                            <div className="text-2xl">🤖</div>
-                            <div>
-                                <h1 className="text-white font-bold">Saskat AI</h1>
-                                <p className="text-xs text-cyan-400">Advanced AI Chat System</p>
-                            </div>
-                        </div>
-                        <button onClick={() => setShowSaskatAI(false)} className="text-gray-400 hover:text-white p-2">
-                            <XMarkIcon className="w-6 h-6" />
-                        </button>
-                    </div>
-                    <div className="flex-1 overflow-auto p-6">
-                        <div className="max-w-4xl mx-auto space-y-6">
-                            <div className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 rounded-2xl p-8 text-center">
-                                <h2 className="text-3xl font-bold text-white mb-3">Welcome to Saskat AI</h2>
-                                <p className="text-gray-300 mb-6">Your advanced AI chat companion with multiple models, voice mode, and image generation</p>
-                                <button 
-                                    onClick={() => {
-                                        setShowSaskatAI(false);
-                                        window.location.href = '/saskat-ai';
-                                    }}
-                                    className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-bold py-3 px-8 rounded-xl transition-all"
-                                >
-                                    Open Saskat AI →
-                                </button>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="bg-[#1a1f3a] border border-cyan-500/20 rounded-xl p-6 hover:border-cyan-500/50 transition">
-                                    <div className="text-3xl mb-3">💬</div>
-                                    <h3 className="text-white font-bold mb-2">Multi-Model Chat</h3>
-                                    <p className="text-sm text-gray-400">Chat with GPT-4, Claude 3, Gemini, and Groq models</p>
-                                </div>
-                                <div className="bg-[#1a1f3a] border border-cyan-500/20 rounded-xl p-6 hover:border-cyan-500/50 transition">
-                                    <div className="text-3xl mb-3">🎤</div>
-                                    <h3 className="text-white font-bold mb-2">Voice Mode</h3>
-                                    <p className="text-sm text-gray-400">Interact with AI using voice-to-text technology</p>
-                                </div>
-                                <div className="bg-[#1a1f3a] border border-cyan-500/20 rounded-xl p-6 hover:border-cyan-500/50 transition">
-                                    <div className="text-3xl mb-3">🖼️</div>
-                                    <h3 className="text-white font-bold mb-2">Image Generation</h3>
-                                    <p className="text-sm text-gray-400">Generate images with DALL-E, Midjourney, and Stable Diffusion</p>
-                                </div>
-                                <div className="bg-[#1a1f3a] border border-cyan-500/20 rounded-xl p-6 hover:border-cyan-500/50 transition">
-                                    <div className="text-3xl mb-3">📢</div>
-                                    <h3 className="text-white font-bold mb-2">Smart Ads</h3>
-                                    <p className="text-sm text-gray-400">Contextual ads based on your conversations</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <React.Suspense fallback={<FeatureLoader />}>
+                    <SaskatAI onClose={() => setShowSaskatAI(false)} />
+                </React.Suspense>
             </div>}
 
             {showSettings && <React.Suspense fallback={<FeatureLoader />}><SettingsModal user={user} token={token} onClose={() => setShowSettings(false)} onLogout={logout} onUserUpdate={updateUser} theme={theme} wallpaper={wallpaper} onThemeChange={setTheme} onWallpaperChange={setWallpaper} onOpenSmartSpace={() => { setShowSettings(false); setShowSmartSpace(true); }} smartSpaceButtonEnabled={smartSpaceButtonEnabled} onSmartSpaceButtonChange={(enabled) => { setSmartSpaceButtonEnabled(enabled); localStorage.setItem('smart_space_button_enabled', enabled ? '1' : '0'); }} /></React.Suspense>}

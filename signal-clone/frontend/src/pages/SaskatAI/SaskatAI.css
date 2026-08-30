@@ -1,467 +1,720 @@
-.saskat-ai-container {
+/* ── Root ── */
+.sai-root {
     display: flex;
     flex-direction: column;
-    height: 100vh;
-    background: linear-gradient(135deg, #0f0f1e 0%, #1a1a2e 100%);
-    color: #e0e0e0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(160deg, #0a0e1f 0%, #111827 60%, #0d1117 100%);
+    color: #e2e8f0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    overflow: hidden;
 }
 
-.saskat-header {
+/* ── Header ── */
+.sai-header {
     display: flex;
+    align-items: center;
     justify-content: space-between;
-    align-items: center;
-    padding: 20px 30px;
-    background: rgba(15, 15, 30, 0.8);
-    border-bottom: 1px solid rgba(100, 200, 255, 0.2);
-    backdrop-filter: blur(10px);
+    padding: 14px 20px;
+    background: rgba(10, 14, 31, 0.9);
+    border-bottom: 1px solid rgba(56, 189, 248, 0.15);
+    backdrop-filter: blur(12px);
+    flex-shrink: 0;
+    gap: 12px;
 }
 
-.saskat-logo {
+.sai-header-left {
     display: flex;
     align-items: center;
-    gap: 15px;
+    gap: 12px;
 }
 
-.logo-icon {
-    font-size: 32px;
-    animation: float 3s ease-in-out infinite;
-}
-
-@keyframes float {
-    0%, 100% { transform: translateY(0px); }
-    50% { transform: translateY(-10px); }
-}
-
-.saskat-logo h1 {
-    margin: 0;
+.sai-logo-icon {
     font-size: 28px;
+    animation: sai-float 3s ease-in-out infinite;
+}
+
+@keyframes sai-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+}
+
+.sai-title {
+    font-size: 18px;
     font-weight: 700;
-    background: linear-gradient(135deg, #64c8ff 0%, #00d4ff 100%);
+    background: linear-gradient(90deg, #38bdf8, #818cf8);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+    line-height: 1.2;
 }
 
-.logo-subtitle {
-    margin: 0;
-    font-size: 12px;
-    color: #888;
-    margin-left: 10px;
+.sai-subtitle {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 1px;
 }
 
-.header-controls {
+.sai-header-right {
     display: flex;
-    gap: 12px;
     align-items: center;
+    gap: 10px;
 }
 
-.image-btn {
-    padding: 10px 16px;
-    background: rgba(100, 200, 255, 0.1);
-    border: 1px solid rgba(100, 200, 255, 0.3);
-    color: #64c8ff;
+/* ── Model Selector ── */
+.sai-model-wrap {
+    position: relative;
+}
+
+.sai-model-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    background: rgba(56, 189, 248, 0.08);
+    border: 1px solid rgba(56, 189, 248, 0.25);
     border-radius: 8px;
+    color: #38bdf8;
+    font-size: 13px;
+    font-weight: 600;
     cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.sai-model-btn:hover {
+    background: rgba(56, 189, 248, 0.15);
+    border-color: rgba(56, 189, 248, 0.4);
+}
+
+.sai-chevron {
+    font-size: 10px;
+    opacity: 0.7;
+}
+
+.sai-model-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    background: #1e2535;
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    border-radius: 10px;
+    overflow: hidden;
+    z-index: 100;
+    min-width: 160px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+
+.sai-model-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 14px;
+    background: none;
+    border: none;
+    color: #cbd5e1;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s;
+    text-align: left;
+}
+
+.sai-model-option:hover {
+    background: rgba(56, 189, 248, 0.1);
+    color: #fff;
+}
+
+.sai-model-option.active {
+    background: rgba(56, 189, 248, 0.12);
+    color: #38bdf8;
+}
+
+.sai-check {
+    margin-left: auto;
+    color: #38bdf8;
+    font-weight: 700;
+}
+
+.sai-close-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: #94a3b8;
     font-size: 14px;
-    font-weight: 500;
-    transition: all 0.3s ease;
-}
-
-.image-btn:hover {
-    background: rgba(100, 200, 255, 0.2);
-    border-color: rgba(100, 200, 255, 0.5);
-    transform: translateY(-2px);
-}
-
-.saskat-main {
+    cursor: pointer;
     display: flex;
-    flex: 1;
-    gap: 20px;
-    padding: 20px;
-    overflow: hidden;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
 }
 
-.chat-section {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    background: rgba(26, 26, 46, 0.5);
-    border-radius: 16px;
-    border: 1px solid rgba(100, 200, 255, 0.1);
-    overflow: hidden;
+.sai-close-btn:hover {
+    background: rgba(239,68,68,0.15);
+    border-color: rgba(239,68,68,0.3);
+    color: #f87171;
 }
 
-.messages-container {
+/* ── Messages ── */
+.sai-messages {
     flex: 1;
     overflow-y: auto;
-    padding: 20px;
+    padding: 20px 16px;
     display: flex;
     flex-direction: column;
+    gap: 14px;
+    scroll-behavior: smooth;
 }
 
-.messages-container::-webkit-scrollbar {
-    width: 8px;
-}
+.sai-messages::-webkit-scrollbar { width: 5px; }
+.sai-messages::-webkit-scrollbar-track { background: transparent; }
+.sai-messages::-webkit-scrollbar-thumb { background: rgba(56,189,248,0.25); border-radius: 3px; }
 
-.messages-container::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.messages-container::-webkit-scrollbar-thumb {
-    background: rgba(100, 200, 255, 0.3);
-    border-radius: 4px;
-}
-
-.messages-container::-webkit-scrollbar-thumb:hover {
-    background: rgba(100, 200, 255, 0.5);
-}
-
-.empty-state {
+/* ── Empty State ── */
+.sai-empty {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 100%;
+    flex: 1;
     text-align: center;
-    gap: 20px;
+    gap: 12px;
+    padding: 40px 20px;
 }
 
-.empty-icon {
-    font-size: 64px;
-    animation: pulse 2s ease-in-out infinite;
+.sai-empty-icon {
+    font-size: 56px;
+    animation: sai-pulse 2s ease-in-out infinite;
 }
 
-@keyframes pulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.1); }
+@keyframes sai-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.08); opacity: 0.85; }
 }
 
-.empty-state h2 {
+.sai-empty h2 {
     margin: 0;
-    font-size: 24px;
-    color: #64c8ff;
+    font-size: 22px;
+    font-weight: 700;
+    color: #f1f5f9;
 }
 
-.empty-state p {
+.sai-empty p {
     margin: 0;
-    color: #888;
     font-size: 14px;
+    color: #64748b;
 }
 
-.quick-prompts {
+.sai-quick-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 10px;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
     width: 100%;
-    max-width: 600px;
+    max-width: 480px;
 }
 
-.quick-prompts button {
-    padding: 12px 16px;
-    background: rgba(100, 200, 255, 0.1);
-    border: 1px solid rgba(100, 200, 255, 0.3);
-    color: #64c8ff;
-    border-radius: 8px;
-    cursor: pointer;
+.sai-quick-btn {
+    padding: 10px 14px;
+    background: rgba(56, 189, 248, 0.07);
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    border-radius: 10px;
+    color: #94a3b8;
     font-size: 13px;
-    transition: all 0.3s ease;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: left;
 }
 
-.quick-prompts button:hover {
-    background: rgba(100, 200, 255, 0.2);
-    border-color: rgba(100, 200, 255, 0.5);
-    transform: translateY(-2px);
+.sai-quick-btn:hover {
+    background: rgba(56, 189, 248, 0.14);
+    border-color: rgba(56, 189, 248, 0.4);
+    color: #e2e8f0;
+    transform: translateY(-1px);
 }
 
-.messages-list {
+/* ── Image Generator Panel ── */
+.sai-imggen-panel {
+    background: rgba(30, 37, 53, 0.8);
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    border-radius: 14px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
-}
-
-.message-wrapper {
-    display: flex;
-    justify-content: flex-start;
-    animation: slideIn 0.3s ease;
-}
-
-@keyframes slideIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.message-wrapper.user {
-    justify-content: flex-end;
-}
-
-.message {
-    display: flex;
     gap: 12px;
-    max-width: 70%;
-    align-items: flex-start;
+    animation: sai-fadein 0.25s ease;
 }
 
-.message.user {
-    flex-direction: row-reverse;
-}
-
-.message.assistant {
-    max-width: 85%;
-}
-
-.avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    object-fit: cover;
-    flex-shrink: 0;
-}
-
-.ai-avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #64c8ff 0%, #00d4ff 100%);
+.sai-imggen-header {
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    flex-shrink: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #38bdf8;
 }
 
-.message-content {
+.sai-imggen-header button {
+    background: none;
+    border: none;
+    color: #64748b;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: color 0.2s;
+}
+
+.sai-imggen-header button:hover { color: #f87171; }
+
+.sai-imggen-input {
+    padding: 10px 14px;
+    background: rgba(15, 20, 40, 0.8);
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    border-radius: 8px;
+    color: #e2e8f0;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.sai-imggen-input:focus {
+    border-color: rgba(56, 189, 248, 0.5);
+}
+
+.sai-imggen-input::placeholder { color: #475569; }
+
+.sai-imggen-generate-btn {
+    padding: 10px;
+    background: linear-gradient(90deg, #0ea5e9, #6366f1);
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.2s;
+}
+
+.sai-imggen-generate-btn:hover:not(:disabled) {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+.sai-imggen-generate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.sai-imggen-result {
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
 
-.message-text {
-    padding: 12px 16px;
-    background: rgba(100, 200, 255, 0.1);
-    border: 1px solid rgba(100, 200, 255, 0.2);
-    border-radius: 12px;
-    line-height: 1.5;
-    word-wrap: break-word;
+.sai-imggen-result img {
+    width: 100%;
+    border-radius: 10px;
+    border: 1px solid rgba(56,189,248,0.2);
+}
+
+.sai-imggen-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.sai-imggen-send-btn {
+    flex: 1;
+    padding: 8px;
+    background: rgba(56, 189, 248, 0.15);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    border-radius: 8px;
+    color: #38bdf8;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.sai-imggen-send-btn:hover {
+    background: rgba(56, 189, 248, 0.25);
+}
+
+.sai-imggen-dl-btn {
+    flex: 1;
+    padding: 8px;
+    background: rgba(99, 102, 241, 0.15);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: 8px;
+    color: #818cf8;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    text-align: center;
+    transition: all 0.2s;
+}
+
+.sai-imggen-dl-btn:hover {
+    background: rgba(99, 102, 241, 0.25);
+}
+
+/* ── Message Rows ── */
+.sai-msg-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    animation: sai-fadein 0.25s ease;
+}
+
+@keyframes sai-fadein {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.sai-msg-row.user {
+    flex-direction: row-reverse;
+}
+
+.sai-ai-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #0ea5e9, #6366f1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.sai-user-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 2px solid rgba(56,189,248,0.3);
+}
+
+/* ── Bubbles ── */
+.sai-bubble {
+    max-width: 72%;
+    padding: 10px 14px;
+    border-radius: 14px;
+    font-size: 14px;
+    line-height: 1.6;
+    word-break: break-word;
     white-space: pre-wrap;
-}
-
-.message.user .message-text {
-    background: linear-gradient(135deg, #64c8ff 0%, #00d4ff 100%);
-    border: none;
-    color: #0f0f1e;
-}
-
-.message.assistant .message-text {
-    background: rgba(100, 200, 255, 0.08);
-    border: 1px solid rgba(100, 200, 255, 0.15);
-}
-
-.message.error .message-text {
-    background: rgba(255, 100, 100, 0.1);
-    border-color: rgba(255, 100, 100, 0.3);
-    color: #ff6464;
-}
-
-.sources {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    padding: 8px 12px;
-    background: rgba(100, 200, 255, 0.05);
-    border-left: 3px solid rgba(100, 200, 255, 0.3);
+}
+
+.sai-bubble.user {
+    background: linear-gradient(135deg, #0ea5e9, #6366f1);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+}
+
+.sai-bubble.assistant {
+    background: rgba(30, 37, 53, 0.9);
+    border: 1px solid rgba(56, 189, 248, 0.12);
+    color: #e2e8f0;
+    border-bottom-left-radius: 4px;
+}
+
+.sai-bubble.error {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.25);
+    color: #fca5a5;
+}
+
+.sai-bubble-text { }
+
+.sai-attach-img {
+    max-width: 220px;
+    border-radius: 8px;
+    display: block;
+}
+
+.sai-attach-file {
+    font-size: 12px;
+    color: rgba(255,255,255,0.7);
+    background: rgba(255,255,255,0.1);
+    padding: 4px 8px;
+    border-radius: 6px;
+}
+
+/* ── Sources ── */
+.sai-sources {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 10px;
+    background: rgba(56, 189, 248, 0.05);
+    border-left: 2px solid rgba(56, 189, 248, 0.3);
     border-radius: 4px;
     font-size: 12px;
 }
 
-.sources-label {
-    color: #64c8ff;
+.sai-sources-label {
+    color: #38bdf8;
     font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 
-.source-link {
-    color: #64c8ff;
+.sai-source-link {
+    color: #7dd3fc;
     text-decoration: none;
     font-size: 12px;
-    transition: all 0.2s ease;
-    word-break: break-word;
+    transition: color 0.15s;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.source-link:hover {
-    text-decoration: underline;
-    color: #00d4ff;
-}
+.sai-source-link:hover { color: #38bdf8; text-decoration: underline; }
 
-.search-badge {
+.sai-search-badge {
     display: inline-block;
-    padding: 4px 8px;
-    background: rgba(100, 200, 255, 0.15);
+    padding: 2px 7px;
+    background: rgba(56, 189, 248, 0.12);
     border-radius: 4px;
     font-size: 11px;
-    color: #64c8ff;
+    color: #38bdf8;
     width: fit-content;
 }
 
-.typing-indicator {
+/* ── Typing ── */
+.sai-typing {
     display: flex;
     gap: 4px;
-    padding: 8px 12px;
+    padding: 4px 2px;
 }
 
-.typing-indicator span {
-    width: 8px;
-    height: 8px;
+.sai-typing span {
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
-    background: #64c8ff;
-    animation: typing 1.4s infinite;
+    background: #38bdf8;
+    animation: sai-bounce 1.3s infinite;
 }
 
-.typing-indicator span:nth-child(2) {
-    animation-delay: 0.2s;
+.sai-typing span:nth-child(2) { animation-delay: 0.18s; }
+.sai-typing span:nth-child(3) { animation-delay: 0.36s; }
+
+@keyframes sai-bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30% { transform: translateY(-8px); opacity: 1; }
 }
 
-.typing-indicator span:nth-child(3) {
-    animation-delay: 0.4s;
-}
-
-@keyframes typing {
-    0%, 60%, 100% {
-        opacity: 0.3;
-        transform: translateY(0);
-    }
-    30% {
-        opacity: 1;
-        transform: translateY(-10px);
-    }
-}
-
-.input-section {
-    padding: 16px 20px;
-    border-top: 1px solid rgba(100, 200, 255, 0.1);
-    background: rgba(15, 15, 30, 0.5);
-}
-
-.input-wrapper {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-}
-
-.message-input {
-    flex: 1;
+/* ── Input Bar ── */
+.sai-input-bar {
     padding: 12px 16px;
-    background: rgba(100, 200, 255, 0.05);
-    border: 1px solid rgba(100, 200, 255, 0.2);
+    border-top: 1px solid rgba(56, 189, 248, 0.1);
+    background: rgba(10, 14, 31, 0.85);
+    backdrop-filter: blur(10px);
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sai-attached-preview {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: rgba(56, 189, 248, 0.08);
+    border: 1px solid rgba(56, 189, 248, 0.2);
     border-radius: 8px;
-    color: #e0e0e0;
+    font-size: 12px;
+    color: #94a3b8;
+}
+
+.sai-attached-preview img {
+    height: 40px;
+    width: 40px;
+    object-fit: cover;
+    border-radius: 6px;
+}
+
+.sai-attached-preview button {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: #64748b;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: color 0.2s;
+}
+
+.sai-attached-preview button:hover { color: #f87171; }
+
+.sai-input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ── + Button ── */
+.sai-plus-wrap {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.sai-plus-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: rgba(56, 189, 248, 0.1);
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    color: #38bdf8;
+    font-size: 22px;
+    font-weight: 300;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    line-height: 1;
+}
+
+.sai-plus-btn:hover {
+    background: rgba(56, 189, 248, 0.2);
+    border-color: rgba(56, 189, 248, 0.45);
+    transform: rotate(45deg);
+}
+
+.sai-plus-menu {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    background: #1e2535;
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    border-radius: 12px;
+    overflow: hidden;
+    z-index: 100;
+    min-width: 160px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    animation: sai-fadein 0.15s ease;
+}
+
+.sai-plus-menu button {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 11px 16px;
+    background: none;
+    border: none;
+    color: #cbd5e1;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s;
+    text-align: left;
+}
+
+.sai-plus-menu button:hover {
+    background: rgba(56, 189, 248, 0.1);
+    color: #fff;
+}
+
+.sai-plus-menu button span:first-child {
+    font-size: 18px;
+}
+
+/* ── Text Input ── */
+.sai-text-input {
+    flex: 1;
+    padding: 10px 14px;
+    background: rgba(15, 20, 40, 0.8);
+    border: 1px solid rgba(56, 189, 248, 0.18);
+    border-radius: 10px;
+    color: #e2e8f0;
     font-size: 14px;
     outline: none;
-    transition: all 0.3s ease;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    min-width: 0;
 }
 
-.message-input:focus {
-    background: rgba(100, 200, 255, 0.1);
-    border-color: rgba(100, 200, 255, 0.4);
-    box-shadow: 0 0 0 3px rgba(100, 200, 255, 0.1);
+.sai-text-input:focus {
+    border-color: rgba(56, 189, 248, 0.45);
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.08);
 }
 
-.message-input::placeholder {
-    color: #666;
+.sai-text-input::placeholder { color: #475569; }
+.sai-text-input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Mic Button ── */
+.sai-mic-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: rgba(99, 102, 241, 0.1);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    color: #818cf8;
+    font-size: 17px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
 }
 
-.message-input:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+.sai-mic-btn:hover {
+    background: rgba(99, 102, 241, 0.2);
+    border-color: rgba(99, 102, 241, 0.45);
 }
 
-.send-btn {
-    padding: 12px 16px;
-    background: linear-gradient(135deg, #64c8ff 0%, #00d4ff 100%);
+.sai-mic-btn.listening {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.5);
+    color: #f87171;
+    animation: sai-mic-pulse 1s ease-in-out infinite;
+}
+
+@keyframes sai-mic-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+    50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+}
+
+/* ── Send Button ── */
+.sai-send-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #0ea5e9, #6366f1);
     border: none;
-    border-radius: 8px;
-    color: #0f0f1e;
+    color: #fff;
     font-size: 16px;
     cursor: pointer;
-    font-weight: 600;
-    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
 }
 
-.send-btn:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 16px rgba(100, 200, 255, 0.3);
+.sai-send-btn:hover:not(:disabled) {
+    transform: scale(1.08);
+    box-shadow: 0 4px 16px rgba(14, 165, 233, 0.4);
 }
 
-.send-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
+.sai-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.input-hint {
-    margin: 8px 0 0 0;
-    font-size: 12px;
-    color: #666;
-}
+.hidden { display: none !important; }
 
-.image-gen-section {
-    width: 350px;
-    background: rgba(26, 26, 46, 0.5);
-    border-radius: 16px;
-    border: 1px solid rgba(100, 200, 255, 0.1);
-    padding: 20px;
-    overflow-y: auto;
-}
-
-.image-gen-section::-webkit-scrollbar {
-    width: 6px;
-}
-
-.image-gen-section::-webkit-scrollbar-thumb {
-    background: rgba(100, 200, 255, 0.3);
-    border-radius: 3px;
-}
-
-@media (max-width: 1200px) {
-    .saskat-main {
-        flex-direction: column;
-    }
-
-    .image-gen-section {
-        width: 100%;
-        max-height: 300px;
-    }
-
-    .message {
-        max-width: 85%;
-    }
-
-    .message.assistant {
-        max-width: 90%;
-    }
-}
-
-@media (max-width: 768px) {
-    .saskat-header {
-        flex-direction: column;
-        gap: 15px;
-        padding: 15px;
-    }
-
-    .header-controls {
-        width: 100%;
-        justify-content: space-between;
-    }
-
-    .message {
-        max-width: 90%;
-    }
-
-    .quick-prompts {
-        grid-template-columns: 1fr;
-    }
+/* ── Responsive ── */
+@media (max-width: 600px) {
+    .sai-header { padding: 10px 14px; }
+    .sai-title { font-size: 16px; }
+    .sai-model-btn span:nth-child(2) { display: none; }
+    .sai-bubble { max-width: 85%; font-size: 13px; }
+    .sai-quick-grid { grid-template-columns: 1fr; }
 }

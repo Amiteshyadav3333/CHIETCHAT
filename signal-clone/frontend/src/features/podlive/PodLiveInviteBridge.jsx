@@ -31,6 +31,8 @@ export default function PodLiveInviteBridge({ active, onInvite, onLiveStatus }) 
                     cache: 'no-store',
                     headers: { Authorization: `Bearer ${token}` }
                 });
+                // 404 means the endpoint doesn't exist on this server version — stop polling silently
+                if (response.status === 404) return;
                 if (response.status === 401 && allowSessionRetry) {
                     clearPodLiveSession();
                     await ensurePodLiveSession({ validate: true });

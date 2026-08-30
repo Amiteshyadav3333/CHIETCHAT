@@ -34,12 +34,16 @@ axios.interceptors.request.use(config => {
     return config;
 });
 
-// Suppress expected 401 errors from /api/auth/me during initial auth check
+// Suppress expected errors from initial auth check and server cold-start
 const originalError = console.error;
 const originalWarn = console.warn;
 const shouldSuppress = (args) => {
     const message = String(args[0] || '');
-    return message.includes('/api/auth/me') && message.includes('401');
+    return (
+        (message.includes('/api/auth/me') && message.includes('401')) ||
+        message.includes('502') ||
+        message.includes('status code 502')
+    );
 };
 console.error = function(...args) {
     if (!shouldSuppress(args)) originalError.apply(console, args);
@@ -125,7 +129,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                         } />
                         <Route path="/saskat-ai" element={
                             <ProtectedRoute>
-                                <SaskatAI />
+                                <SaskatAI onClose={() => window.history.back()} />
                             </ProtectedRoute>
                         } />
                         <Route path="/admin/login" element={<AdminLogin />} />

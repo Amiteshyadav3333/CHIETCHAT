@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { clearPodLiveSession, ensurePodLiveSession } from './auth/usePodLiveSession';
 import { PODLIVE_API_URL, PODLIVE_STORAGE } from './config';
@@ -6,6 +6,9 @@ import { PODLIVE_API_URL, PODLIVE_STORAGE } from './config';
 // Keeps the PodLive identity reachable while the user is anywhere in CHEETCHAT.
 // Without this bridge, stage invites only arrive after PodLive is already open.
 export default function PodLiveInviteBridge({ active, onInvite, onLiveStatus }) {
+    // Persists across re-renders — once 404 is seen, stop polling forever this session
+    const inviteEndpointMissingRef = useRef(false);
+
     useEffect(() => {
         if (!active) return undefined;
         let socket;
@@ -24,6 +27,9 @@ export default function PodLiveInviteBridge({ active, onInvite, onLiveStatus }) 
         };
 
         const refreshPendingInvite = async (allowSessionRetry = true) => {
+            // Endpoint confirmed missing on this server — skip entirely
+            if (inviteEndpointMissingRef.current) return;
+
             const token = localStorage.getItem(PODLIVE_STORAGE.token);
             if (!token) return;
             try {
@@ -31,8 +37,11 @@ export default function PodLiveInviteBridge({ active, onInvite, onLiveStatus }) 
                     cache: 'no-store',
                     headers: { Authorization: `Bearer ${token}` }
                 });
-                // 404 means the endpoint doesn't exist on this server version — stop polling silently
-                if (response.status === 404) return;
+                if (response.status === 404) {
+                    // Endpoint doesn't exist on this server version — disable permanently
+                    inviteEndpointMissingRef.current = true;
+                    return;
+                }
                 if (response.status === 401 && allowSessionRetry) {
                     clearPodLiveSession();
                     await ensurePodLiveSession({ validate: true });

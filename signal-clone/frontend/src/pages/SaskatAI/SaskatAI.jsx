@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useContext, useCallback } from 'react';
 import { AuthContext } from '../../context/AuthContext';
 import AdPanel from './components/AdPanel';
+import VideoAdOverlay from './components/VideoAdOverlay';
+import SideAdBanner from './components/SideAdBanner';
 import './SaskatAI.css';
 
 const MODELS = [
@@ -35,6 +37,10 @@ const SaskatAI = ({ onClose }) => {
     const [attachedFile, setAttachedFile] = useState(null); // { name, type, dataUrl }
     const [contextualAd, setContextualAd] = useState(null);
     const [buyingAd, setBuyingAd] = useState(null);
+    const [videoAd, setVideoAd] = useState(null);
+    const [sideAd, setSideAd] = useState(null);
+    const [lastVideoAdTime, setLastVideoAdTime] = useState(Date.now());
+    const [adOptedIn, setAdOptedIn] = useState(false);
 
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
@@ -42,10 +48,33 @@ const SaskatAI = ({ onClose }) => {
     const recognitionRef = useRef(null);
     const modelMenuRef = useRef(null);
     const plusMenuRef = useRef(null);
+    const videoAdTimerRef = useRef(null);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, isLoading]);
+
+    // Video ad polling — fetch a video ad every 5 minutes for free users
+    useEffect(() => {
+        const fetchVideoAd = async () => {
+            if (!user) return;
+            try {
+                const res = await fetch('/api/saskat/ads/video', {
+                    headers: { 'X-CSRF-Token': getCsrf() },
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.ad) setVideoAd(data.ad);
+                }
+            } catch { /* silent */ }
+        };
+
+        videoAdTimerRef.current = window.setInterval(() => {
+            if (messages.length > 0) fetchVideoAd();
+        }, 5 * 60 * 1000); // every 5 minutes
+
+        return () => window.clearInterval(videoAdTimerRef.current);
+    }, [messages.length, user]);
 
     // Close dropdowns on outside click
     useEffect(() => {
@@ -89,6 +118,7 @@ const SaskatAI = ({ onClose }) => {
                     timestamp: new Date(),
                 }]);
                 setContextualAd(data.ad || data.sponsored || null);
+                if (data.ad || data.sponsored) setSideAd(data.ad || data.sponsored);
             } else {
                 setMessages(prev => [...prev, {
                     id: Date.now() + 1,
@@ -207,7 +237,7 @@ const SaskatAI = ({ onClose }) => {
     ];
 
     return (
-        <div className="sai-root">
+        <div className="sai-root" style={{ position: 'relative' }}>
             {/* Header */}
             <div className="sai-header">
                 <div className="sai-header-left">
@@ -427,6 +457,24 @@ const SaskatAI = ({ onClose }) => {
                 <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelect} />
                 <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} />
             </div>
+
+            {/* YouTube-style video ad overlay — every 5 minutes for free users */}
+            {videoAd && (
+                <VideoAdOverlay
+                    ad={videoAd}
+                    onSkip={() => setVideoAd(null)}
+                    onClose={() => setVideoAd(null)}
+                />
+            )}
+
+            {/* Side banner — bottom-right, compact, doesn't cover chat */}
+            {sideAd && (
+                <SideAdBanner
+                    ad={sideAd}
+                    onClose={() => setSideAd(null)}
+                    onProductClick={openAdPurchase}
+                />
+            )}
         </div>
     );
 };

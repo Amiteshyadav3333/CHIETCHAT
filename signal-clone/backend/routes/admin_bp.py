@@ -36,6 +36,9 @@ class Ad(db.Model):
     # Bug #8 fix: is_active flag lets admins pause ads without deleting them;
     # saskat_bp filters with WHERE is_active=true to avoid loading all rows.
     is_active = db.Column(db.Boolean, nullable=False, default=True)
+    ad_type = db.Column(db.String(20), nullable=False, default='banner')  # 'banner' | 'video'
+    category = db.Column(db.String(80), nullable=True)  # 'jobs', 'courses', 'agri', 'beauty', 'health', 'finance', 'general'
+    cta_url = db.Column(db.String(500), nullable=True)   # direct product/booking URL inside app
     created_at = db.Column(db.DateTime, default=utc_now)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
 
@@ -53,6 +56,9 @@ class Ad(db.Model):
             'impressions': self.impressions,
             'clicks': self.clicks,
             'isActive': self.is_active,
+            'adType': self.ad_type,
+            'category': self.category,
+            'ctaUrl': self.cta_url,
             'createdAt': self.created_at.isoformat() if self.created_at else None
         }
 
@@ -198,7 +204,10 @@ def create_ad():
             image_url=data.get('imageUrl'),
             product_link=data['productLink'],
             product_id=data['productId'],
-            keywords=data.get('keywords', [])
+            keywords=data.get('keywords', []),
+            ad_type=data.get('adType', 'banner'),
+            category=data.get('category'),
+            cta_url=data.get('cta_url'),
         )
         db.session.add(ad)
         db.session.commit()
@@ -239,6 +248,12 @@ def update_ad(ad_id):
             ad.keywords = data['keywords']
         if 'isActive' in data:
             ad.is_active = bool(data['isActive'])
+        if 'adType' in data:
+            ad.ad_type = data['adType']
+        if 'category' in data:
+            ad.category = data['category']
+        if 'ctaUrl' in data:
+            ad.cta_url = data['ctaUrl']
 
         ad.updated_at = utc_now()
         db.session.commit()

@@ -360,6 +360,37 @@ def ensure_runtime_compat_schema():
     add_missing_columns(inspector, 'ad', {'is_active': db.Boolean()})
     if 'ad' in inspector.get_table_names():
         db.session.execute(text('UPDATE ad SET is_active = COALESCE(is_active, TRUE)'))
+    inspector = inspect(db.engine)
+    add_missing_columns(inspector, 'ad', {
+        'ad_type': db.String(20),
+        'category': db.String(80),
+        'cta_url': db.String(500),
+    })
+    if 'ad' in inspector.get_table_names():
+        db.session.execute(text("UPDATE ad SET ad_type = COALESCE(ad_type, 'banner')"))
+    # Create saskat_session table if not exists
+    inspector = inspect(db.engine)
+    if 'saskat_session' not in inspector.get_table_names():
+        if db.engine.dialect.name == 'postgresql':
+            db.session.execute(text(
+                'CREATE TABLE IF NOT EXISTS saskat_session ('
+                'id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES "user"(id), '
+                'session_key VARCHAR(64) NOT NULL, role VARCHAR(20) NOT NULL, '
+                'content TEXT NOT NULL, intent_tags TEXT, '
+                'created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, '
+                'expires_at TIMESTAMP NOT NULL)'
+            ))
+        else:
+            db.session.execute(text(
+                'CREATE TABLE IF NOT EXISTS saskat_session ('
+                'id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, '
+                'session_key VARCHAR(64) NOT NULL, role VARCHAR(20) NOT NULL, '
+                'content TEXT NOT NULL, intent_tags TEXT, '
+                'created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, '
+                'expires_at DATETIME NOT NULL, '
+                'FOREIGN KEY(user_id) REFERENCES user(id))'
+            ))
+        db.session.commit()
     if 'user' in inspector.get_table_names():
         db.session.execute(text(
             "UPDATE \"user\" SET phone_number_privacy = COALESCE(phone_number_privacy, 'nobody'), "

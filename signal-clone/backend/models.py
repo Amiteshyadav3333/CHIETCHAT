@@ -601,3 +601,17 @@ class AiConversation(db.Model):
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now, index=True)
     user = db.relationship('User')
+
+
+class SaskatSession(db.Model):
+    """Stores Saskat AI chat turns per user. Auto-deleted after 24h."""
+    __tablename__ = 'saskat_session'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    session_key = db.Column(db.String(64), nullable=False, index=True)  # date-based session bucket
+    role = db.Column(db.String(20), nullable=False)   # 'user' | 'assistant'
+    content = db.Column(db.Text, nullable=False)
+    intent_tags = db.Column(db.Text, nullable=True)   # JSON list of detected intent tags
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False, index=True)
+    expires_at = db.Column(db.DateTime, nullable=False, index=True)     # created_at + 24h
+    user = db.relationship('User')

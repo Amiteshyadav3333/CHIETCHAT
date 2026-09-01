@@ -770,3 +770,279 @@
     .sai-private-badge { display: none; }
     .ad-panel { inset: auto 12px 12px; width: auto; }
 }
+
+/* ── Video Ad Overlay (YouTube-style) ── */
+.vad-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 200;
+    background: rgba(0, 0, 0, 0.88);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: sai-fadein 0.2s ease;
+}
+
+.vad-container {
+    position: relative;
+    width: 100%;
+    max-width: 520px;
+    display: flex;
+    flex-direction: column;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #000;
+}
+
+.vad-video {
+    width: 100%;
+    max-height: 280px;
+    object-fit: cover;
+    display: block;
+}
+
+.vad-image-card {
+    display: flex;
+    flex-direction: column;
+}
+
+.vad-img {
+    width: 100%;
+    max-height: 200px;
+    object-fit: cover;
+}
+
+.vad-title-card {
+    padding: 16px;
+    background: #111;
+    color: #fff;
+}
+
+.vad-title-card h3 { margin: 6px 0 4px; font-size: 15px; }
+.vad-title-card p { margin: 0; font-size: 12px; color: #94a3b8; }
+
+.vad-ad-label {
+    font-size: 10px;
+    background: rgba(99, 102, 241, 0.8);
+    color: #fff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.vad-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 14px;
+    background: rgba(10, 14, 31, 0.95);
+}
+
+.vad-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.vad-ad-badge {
+    font-size: 10px;
+    color: #c4b5fd;
+    font-weight: 800;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+
+.vad-ad-name {
+    font-size: 12px;
+    color: #e2e8f0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.vad-cta {
+    font-size: 12px;
+    color: #38bdf8;
+    font-weight: 700;
+    text-decoration: none;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.vad-cta:hover { text-decoration: underline; }
+
+.vad-skip-btn {
+    flex-shrink: 0;
+    padding: 8px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.vad-skip-btn.waiting {
+    background: rgba(255,255,255,0.06);
+    color: #64748b;
+    cursor: not-allowed;
+}
+
+.vad-skip-btn.ready {
+    background: rgba(56, 189, 248, 0.15);
+    border-color: rgba(56, 189, 248, 0.4);
+    color: #38bdf8;
+}
+
+.vad-skip-btn.ready:hover {
+    background: rgba(56, 189, 248, 0.25);
+}
+
+/* ── Side Ad Banner (bottom-right, compact) ── */
+.sab-wrap {
+    position: absolute;
+    bottom: 80px;
+    right: 12px;
+    z-index: 90;
+    width: 200px;
+    background: #13172a;
+    border: 1px solid rgba(129, 140, 248, 0.35);
+    border-radius: 12px;
+    overflow: hidden;
+    animation: sai-ad-enter 0.25s ease-out;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+}
+
+.sab-wrap.expanded {
+    width: 220px;
+}
+
+.sab-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    background: rgba(129, 140, 248, 0.08);
+    border-bottom: 1px solid rgba(129, 140, 248, 0.12);
+}
+
+.sab-label {
+    font-size: 9px;
+    font-weight: 800;
+    color: #c4b5fd;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.sab-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.sab-toggle, .sab-close {
+    background: none;
+    border: none;
+    color: #64748b;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    line-height: 1;
+}
+
+.sab-toggle:hover, .sab-close:hover { color: #94a3b8; }
+
+.sab-collapsed-body {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+}
+
+.sab-thumb {
+    width: 32px;
+    height: 32px;
+    object-fit: cover;
+    border-radius: 6px;
+    flex-shrink: 0;
+}
+
+.sab-collapsed-title {
+    font-size: 11px;
+    color: #cbd5e1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sab-body {
+    display: flex;
+    flex-direction: column;
+}
+
+.sab-img {
+    width: 100%;
+    max-height: 110px;
+    object-fit: cover;
+}
+
+.sab-text {
+    padding: 8px 10px 4px;
+}
+
+.sab-title {
+    margin: 0 0 3px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #f1f5f9;
+}
+
+.sab-desc {
+    margin: 0;
+    font-size: 11px;
+    color: #64748b;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.sab-price {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    font-weight: 800;
+    color: #fcd34d;
+}
+
+.sab-cta {
+    display: block;
+    margin: 6px 10px 10px;
+    padding: 7px 10px;
+    background: #6366f1;
+    color: #fff;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+    transition: opacity 0.15s;
+}
+
+.sab-cta:hover { opacity: 0.88; }
+
+/* Responsive */
+@media (max-width: 600px) {
+    .sab-wrap { right: 8px; bottom: 72px; width: 170px; }
+    .sab-wrap.expanded { width: 190px; }
+    .vad-container { border-radius: 0; }
+    .vad-video { max-height: 200px; }
+}

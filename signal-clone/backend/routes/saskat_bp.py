@@ -20,6 +20,7 @@ from utils import get_current_user_id, get_json_data, utc_now
 from models import db, User
 import os
 import json
+import hashlib
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -287,6 +288,101 @@ def _web_search(query: str) -> list | None:
 
 
 # ---------------------------------------------------------------------------
+# Redis response cache helpers
+# ---------------------------------------------------------------------------
+
+CACHE_QUESTION_TYPES = re.compile(
+    r'\b(mausam|weather|pradhanmantri|prime minister|president|rashtrapati|'
+    r'capital|rajdhani|population|aabadi|cricket score|ipl|'
+    r'aaj ka|today|latest news|breaking|kaun hai|who is)\b',
+    re.IGNORECASE
+)
+
+
+def _is_cacheable(message: str) -> bool:
+    return bool(CACHE_QUESTION_TYPES.search(message))
+
+
+def _get_redis():
+    try:
+        return current_app.extensions.get('cheetchat_redis')
+    except Exception:
+        return None
+
+
+def _cache_get(message: str) -> str | None:
+    """Try Redis first. Returns cached answer or None."""
+    redis_client = _get_redis()
+    if not redis_client:
+        return None
+    key = 'saskat:cache:' + hashlib.md5(message.strip().casefold().encode()).hexdigest()
+    try:
+        return redis_client.get(key)
+    except Exception:
+        return None
+
+
+def _cache_set(message: str, answer: str, ttl_seconds: int = 3600) -> None:
+    """Store answer in Redis for ttl_seconds (default 1 hour)."""
+    redis_client = _get_redis()
+    if not redis_client:
+        return
+    key = 'saskat:cache:' + hashlib.md5(message.strip().casefold().encode()).hexdigest()
+    try:
+        redis_client.setex(key, ttl_seconds, answer)
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Intent extraction — maps user message to ad category tags
+# ---------------------------------------------------------------------------
+
+_INTENT_MAP = {
+    'jobs':    re.compile(r'\b(job|naukri|vacancy|hiring|placement|career|rozgar|employment|work)\b', re.I),
+    'courses': re.compile(r'\b(course|sikho|learn|tutorial|training|certification|coaching|class)\b', re.I),
+    'agri':    re.compile(r'\b(kisan|farmer|fasal|crop|kheti|beej|seed|fertilizer|irrigation|agriculture)\b', re.I),
+    'beauty':  re.compile(r'\b(hair|skin|face|beauty|makeup|moisturizer|shampoo|cream|serum|fairness)\b', re.I),
+    'health':  re.compile(r'\b(health|fitness|gym|yoga|diet|weight|protein|vitamin|supplement)\b', re.I),
+    'finance': re.compile(r'\b(invest|mutual fund|sip|stock|share|bank|saving|fd|emi|insurance)\b', re.I),
+    'travel':  re.compile(r'\b(travel|yatra|tour|hotel|flight|train|bus|ticket|booking)\b', re.I),
+}
+
+
+def _extract_intents(message: str) -> list:
+    found = []
+    for tag, pattern in _INTENT_MAP.items():
+        if pattern.search(message):
+            found.append(tag)
+    return found
+
+
+# ---------------------------------------------------------------------------
+# Session save helper
+# ---------------------------------------------------------------------------
+
+def _save_session_turn(user_id: int, role: str, content: str, intent_tags: list) -> None:
+    """Save one chat turn to SaskatSession. Silently no-ops on error."""
+    try:
+        from models import SaskatSession
+        now = utc_now()
+        session_key = now.strftime('%Y-%m-%d') + ':' + str(user_id)
+        turn = SaskatSession(
+            user_id=user_id,
+            session_key=session_key,
+            role=role,
+            content=content[:4000],
+            intent_tags=json.dumps(intent_tags),
+            created_at=now,
+            expires_at=now + datetime.timedelta(hours=24),
+        )
+        db.session.add(turn)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
+# ---------------------------------------------------------------------------
 # Sponsored offer matcher — Bug #8 fix + new design
 #
 # Design: AI answer is ALWAYS neutral. The sponsored card is a SEPARATE
@@ -322,25 +418,41 @@ def _terms(value: str, minimum: int = 2) -> set:
     return set(re.findall(r"[\w']{%d,}" % minimum, str(value or '').casefold(), flags=re.UNICODE))
 
 
-def _find_sponsored_offer(query: str, ads_opt_in: bool) -> dict | None:
+def _find_sponsored_offer(query: str, ads_opt_in: bool, intent_tags: list | None = None) -> dict | None:
     """
     Return one relevant sponsor card or None.
 
     * Never called when query is sensitive.
     * Bug #8 fix: filter with DB WHERE clause + is_active flag instead of
       loading every ad row into Python memory.
+    * Intent tags (from _extract_intents) are used to prefer category-matched banner ads.
     """
     if _is_sensitive_query(query):
         return None
 
     from routes.admin_bp import Ad
 
+    # Try category match via intent tags first (banner ads only)
+    if intent_tags:
+        for tag in intent_tags:
+            category_ad = Ad.query.filter_by(is_active=True, ad_type='banner', category=tag).first()
+            if category_ad:
+                try:
+                    category_ad.impressions = (category_ad.impressions or 0) + 1
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+                return category_ad.to_dict()
+
     terms = _terms(query, minimum=2)
     if not terms:
         return None
 
-    # Bug #8 fix: only load active ads; DB does the filtering.
-    active_ads = Ad.query.filter_by(is_active=True).all()
+    # Bug #8 fix: only load active banner ads; DB does the filtering.
+    active_ads = Ad.query.filter_by(is_active=True, ad_type='banner').all()
+    if not active_ads:
+        # Fall back to any active ad if no banner-typed ads exist yet
+        active_ads = Ad.query.filter_by(is_active=True).all()
 
     candidates = []
     for ad in active_ads:
@@ -436,45 +548,64 @@ def saskat_chat():
     ]
 
     try:
-        # Web search enrichment
-        context_msg = message
+        # Step 1: Redis cache check for common queries
+        intent_tags = _extract_intents(message)
+        served = 'llm'
+        response = None
         sources = []
-        search_results = _web_search(message)
-        if search_results:
-            sources = search_results
-            context_msg = (
-                f"{message}\n\n[Fresh web research — cite the source titles you rely on:\n"
-                + "\n".join([f"- {r['title']}: {r['snippet']}" for r in search_results])
-                + "]"
+        if _is_cacheable(message):
+            cached = _cache_get(message)
+            if cached:
+                response = cached if isinstance(cached, str) else cached.decode('utf-8', errors='replace')
+                served = 'cache'
+
+        if response is None:
+            # Step 2: Web search enrichment + LLM
+            context_msg = message
+            search_results = _web_search(message)
+            if search_results:
+                sources = search_results
+                context_msg = (
+                    f"{message}\n\n[Fresh web research — cite the source titles you rely on:\n"
+                    + "\n".join([f"- {r['title']}: {r['snippet']}" for r in search_results])
+                    + "]"
+                )
+
+            system_prompt = (
+                "You are Saskat AI, a thoughtful research assistant inside CHEETCHAT. "
+                "Speak naturally, warmly and intelligently in the user's Hindi, Hinglish or English. "
+                "Give direct, well-structured neutral answers with practical next steps and honest "
+                "comparisons (free vs paid options, official sources, etc.). "
+                "IMPORTANT: Never recommend a specific paid product or sponsor inside your answer text. "
+                "Sponsored offers are shown separately by the platform — your job is purely the neutral answer. "
+                "When fresh web research is supplied, ground claims in it; never invent sources. "
+                "For health, skin, medical, money or safety topics, avoid guarantees and encourage "
+                "qualified professional advice where appropriate."
             )
 
-        system_prompt = (
-            "You are Saskat AI, a thoughtful research assistant inside CHEETCHAT. "
-            "Speak naturally, warmly and intelligently in the user's Hindi, Hinglish or English. "
-            "Give direct, well-structured neutral answers with practical next steps and honest "
-            "comparisons (free vs paid options, official sources, etc.). "
-            "IMPORTANT: Never recommend a specific paid product or sponsor inside your answer text. "
-            "Sponsored offers are shown separately by the platform — your job is purely the neutral answer. "
-            "When fresh web research is supplied, ground claims in it; never invent sources. "
-            "For health, skin, medical, money or safety topics, avoid guarantees and encourage "
-            "qualified professional advice where appropriate."
-        )
+            ai_messages = [{"role": "system", "content": system_prompt}]
+            ai_messages.extend(safe_history)
+            ai_messages.append({"role": "user", "content": context_msg})
 
-        messages = [{"role": "system", "content": system_prompt}]
-        messages.extend(safe_history)
-        messages.append({"role": "user", "content": context_msg})
+            response = _get_ai_reply(ai_messages, model=model)
 
-        response = _get_ai_reply(messages, model=model)
+            # Cache cacheable answers
+            if _is_cacheable(message) and response:
+                _cache_set(message, response)
 
-        # Sponsored offer matching — only for free users, only when not sensitive,
-        # only after the neutral AI answer is already decided.
+        # Step 3: Sponsored offer matching — only for free users, only when not sensitive
         ad = None
         if not premium_active:
             ads_opt_in = _user_has_ads_opt_in(user)
             try:
-                ad = _find_sponsored_offer(message, ads_opt_in)
+                ad = _find_sponsored_offer(message, ads_opt_in, intent_tags=intent_tags)
             except Exception:
                 db.session.rollback()
+
+        # Save session turns (24h TTL) — fire-and-forget, never blocks response
+        _save_session_turn(user_id, 'user', message, intent_tags)
+        if response:
+            _save_session_turn(user_id, 'assistant', response, [])
 
         credits_info = None
         if not premium_active and 'credits_remaining' in usage:
@@ -486,18 +617,68 @@ def saskat_chat():
         return jsonify({
             'response': response,
             'sources': sources,
-            'searched': bool(search_results),
+            'searched': bool(sources),
             # Sponsored card is a SEPARATE field — frontend renders it below
             # the answer, never inside it.
-            'sponsored': ad,
-            'ephemeral': True,
+            'ad': ad,
+            'sponsored': ad,          # backward compat
+            'intent_tags': intent_tags,
+            'served': served,
+            'ephemeral': False,        # now stored 24h in saskat_session
             'model_used': model,
             'credits': credits_info,
+            'video_ad': None,          # video ads come via /api/saskat/ads/video
         }), 200
 
     except Exception as e:
         logger.exception("saskat_chat error")
         return jsonify({'error': str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# /api/saskat/ads/video  — returns one active video ad for 5-min interval
+# ---------------------------------------------------------------------------
+
+@saskat_bp.route('/api/saskat/ads/video', methods=['GET'])
+def saskat_video_ad():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    user = db.session.get(User, user_id)
+    if user and user.is_premium and (not user.premium_expires_at or user.premium_expires_at > utc_now()):
+        return jsonify({'ad': None}), 200
+    from routes.admin_bp import Ad
+    import random
+    video_ads = Ad.query.filter_by(is_active=True, ad_type='video').all()
+    if not video_ads:
+        return jsonify({'ad': None}), 200
+    ad = random.choice(video_ads)
+    try:
+        ad.impressions = (ad.impressions or 0) + 1
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+    return jsonify({'ad': ad.to_dict()}), 200
+
+
+# ---------------------------------------------------------------------------
+# /api/saskat/session/cleanup  — delete expired session rows
+# ---------------------------------------------------------------------------
+
+@saskat_bp.route('/api/saskat/session/cleanup', methods=['POST'])
+def cleanup_sessions():
+    """Delete expired SaskatSession rows. Called by background scheduler."""
+    from models import SaskatSession
+    try:
+        expired = SaskatSession.query.filter(SaskatSession.expires_at < utc_now()).all()
+        count = len(expired)
+        for row in expired:
+            db.session.delete(row)
+        db.session.commit()
+        return jsonify({'deleted': count}), 200
+    except Exception:
+        db.session.rollback()
+        return jsonify({'error': 'cleanup failed'}), 500
 
 
 # ---------------------------------------------------------------------------

@@ -76,6 +76,9 @@ const FeedVideo = ({ src, multi, muted, autoplay, onOpen }) => {
     const videoRef = useRef(null);
     const [nearViewport, setNearViewport] = useState(false);
     const [visible, setVisible] = useState(false);
+    const [failed, setFailed] = useState(false);
+
+    if (failed) return <div className="flex min-h-36 items-center justify-center bg-[#16181c] px-4 text-center text-xs text-[#71767b]">This media is no longer available.</div>;
 
     useEffect(() => {
         const preloadObserver = new IntersectionObserver(([entry]) => {
@@ -112,6 +115,7 @@ const FeedVideo = ({ src, multi, muted, autoplay, onOpen }) => {
                 loop={autoplay}
                 controls
                 playsInline
+                onError={() => setFailed(true)}
             />
             {!visible && <div style={{ pointerEvents: 'none', position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.12)' }}>
                 <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(15,20,25,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -406,7 +410,7 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
                         {postMediaItems.map((item, index) => item.type === 'video' ? (
                             <FeedVideo key={`${item.url}-${index}`} src={item.url} multi={postMediaItems.length > 1} muted={mutedVideos} autoplay={autoplayVideos} onOpen={() => setZoomedMedia({ src: item.url, type: 'video' })} />
                         ) : (
-                            <img key={`${item.url}-${index}`} src={item.url} alt={`Post media ${index + 1}`} style={{ width: '100%', height: postMediaItems.length > 1 ? 255 : 'auto', maxHeight: 500, objectFit: 'cover', cursor: 'pointer', display: 'block' }} onClick={() => setZoomedMedia({ src: item.url, type: 'image' })} />
+                            <img key={`${item.url}-${index}`} src={item.url} alt={`Post media ${index + 1}`} style={{ width: '100%', height: postMediaItems.length > 1 ? 255 : 'auto', maxHeight: 500, objectFit: 'cover', cursor: 'pointer', display: 'block' }} onError={event => { event.currentTarget.style.display = 'none'; }} onClick={() => setZoomedMedia({ src: item.url, type: 'image' })} />
                         ))}
                     </div>
                 )}
@@ -1053,10 +1057,10 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                     {/* Tab bar / header */}
                     <div className="flex-shrink-0">
                         {!selectedChannel ? (
-                            <div className="flex overflow-x-auto scrollbar-hide border-b border-[#2f3336] bg-black/80 backdrop-blur-md sticky top-0 z-10">
+                            <div className="flex border-b border-[#2f3336] bg-black/80 backdrop-blur-md sticky top-0 z-10">
                                 {TABS.map(({ key, label }) => (
                                     <button key={key} onClick={() => setActiveTab(key)}
-                                        className="min-w-[88px] flex-1 whitespace-nowrap py-4 text-xs sm:text-sm font-bold bg-transparent border-none cursor-pointer transition-colors relative"
+                                        className="flex-1 py-4 text-sm font-bold bg-transparent border-none cursor-pointer transition-colors relative"
                                         style={{ color: activeTab === key ? '#e7e9ea' : '#71767b' }}>
                                         {label}
                                         {activeTab === key && <div className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[4px] w-14 rounded-full bg-[#1d9bf0]" />}
@@ -1110,6 +1114,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                         {[
                             { icon: <HomeIcon className="w-6 h-6" />, action: () => { setSelectedChannel(null); setActiveTab('for-you'); } },
                             { icon: <ChartBarIcon className="w-6 h-6" />, action: () => { setSelectedChannel(null); setActiveTab('community'); } },
+                            { icon: <SparklesIcon className="w-6 h-6" />, action: () => { setSelectedChannel(null); setActiveTab('saskat-ai'); } },
                             { icon: <UsersIcon className="w-6 h-6" />, action: () => { setSelectedChannel(null); setActiveTab('channels'); } },
                             { icon: user && user.avatar ? <img src={user.avatar} alt="" className="w-6 h-6 rounded-full object-cover" /> : <UserCircleIcon className="w-6 h-6" />, action: () => setProfileView({ userId: user.id }) },
                         ].map((btn, i) => (

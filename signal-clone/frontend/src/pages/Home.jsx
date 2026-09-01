@@ -60,6 +60,7 @@ const podLiveModulePromise = import('./PodLiveView');
 const PodLiveView = React.lazy(() => podLiveModulePromise);
 const AiChat = React.lazy(() => import('../components/AiChat'));
 const AiSmartSpace = React.lazy(() => import('../components/AiSmartSpace'));
+const SaskatAI = React.lazy(() => import('./SaskatAI/SaskatAI'));
 const SettingsModal = React.lazy(() => import('../components/SettingsModal'));
 const NotificationPanel = React.lazy(() => import('../components/NotificationPanel'));
 
@@ -124,6 +125,7 @@ const Home = () => {
     const [showPodlive, setShowPodlive] = useState(false);
     const [podliveInvite, setPodliveInvite] = useState(null);
     const [podliveLiveCount, setPodliveLiveCount] = useState(0);
+    const [showSaskatAI, setShowSaskatAI] = useState(false);
     const updatePodliveLiveCount = useCallback((count) => {
         setPodliveLiveCount(Math.max(0, Number(count) || 0));
     }, []);
@@ -2054,8 +2056,9 @@ const Home = () => {
         },
         { label: 'Reels', icon: PlayIcon, active: showReels, action: () => { hideAppNavForFeature(); setShowSocial(false); setShowPodlive(false); setShowReels(true); setShowAiChat(false); } },
         { label: 'Social', icon: PhotoIcon, active: showSocial, action: () => { hideAppNavForFeature(); setShowReels(false); setShowPodlive(false); setShowSocial(true); setShowAiChat(false); } },
-        { label: 'PodLive', icon: MicrophoneIcon, active: showPodlive, live: podliveLiveCount > 0, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(true); setShowAiChat(false); } },
-        { label: 'AI', icon: SparklesIcon, active: showAiChat, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(false); setShowAiChat(true); } },
+        { label: 'PodLive', icon: MicrophoneIcon, active: showPodlive, live: podliveLiveCount > 0, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(true); setShowAiChat(false); setShowSaskatAI(false); } },
+        { label: 'Saskat AI', icon: SparklesIcon, active: showSaskatAI, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(false); setShowAiChat(false); setShowSaskatAI(true); } },
+        { label: 'AI', icon: SparklesIcon, active: showAiChat, action: () => { hideAppNavForFeature(); setShowReels(false); setShowSocial(false); setShowPodlive(false); setShowAiChat(true); setShowSaskatAI(false); } },
         { label: 'Notify', icon: BellIcon, active: showNotifications, action: openNotifications, badge: unreadCount },
         { label: 'New', icon: PlusIcon, active: showSearchModal || showLinkPhoneModal, action: openNewChat },
         { label: 'Settings', icon: Cog6ToothIcon, active: showSettings, action: () => { setShowNotifications(false); setShowSearchModal(false); setShowSettings(true); } }
@@ -3321,6 +3324,12 @@ const Home = () => {
                     incomingInvite={podliveInvite}
                     onInviteConsumed={() => setPodliveInvite(null)}
                 />
+                </React.Suspense>
+            </div>}
+
+            {showSaskatAI && <div className="fixed inset-0 z-50 bg-[#0a0e27]">
+                <React.Suspense fallback={<FeatureLoader />}>
+                    <SaskatAI onClose={() => setShowSaskatAI(false)} />
                 </React.Suspense>
             </div>}
 

@@ -207,7 +207,14 @@ def saskat_chat():
         response = _get_ai_reply(messages)
         user = User.query.get(user_id)
         premium_active = bool(user and user.is_premium and (not user.premium_expires_at or user.premium_expires_at > utc_now()))
-        ad = None if premium_active else _ad_for_query(message)
+        # Advertising must never interrupt the assistant.  A missing legacy ad
+        # table, bad catalog row, or metrics failure simply means no ad.
+        ad = None
+        if not premium_active:
+            try:
+                ad = _ad_for_query(message)
+            except Exception:
+                db.session.rollback()
 
         return jsonify({
             'response': response,
@@ -246,7 +253,12 @@ def get_contextual_ad():
     if user and user.is_premium and (not user.premium_expires_at or user.premium_expires_at > utc_now()):
         return jsonify({'ad': None}), 200
     query = str(get_json_data().get('query') or '').strip()[:8000]
-    return jsonify({'ad': _ad_for_query(query) if query else None}), 200
+    try:
+        ad = _ad_for_query(query) if query else None
+    except Exception:
+        db.session.rollback()
+        ad = None
+    return jsonify({'ad': ad}), 200
 
 
 @saskat_bp.route('/api/saskat/ads/<int:ad_id>/click', methods=['POST'])

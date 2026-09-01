@@ -1,17 +1,24 @@
 from flask import Blueprint, jsonify, request
-from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.security import check_password_hash
 import jwt
 import os
 import datetime
+import hmac
 from utils import get_json_data, utc_now
-from models import db
+from models import db, PaymentOrder, User
 from extensions import socketio
 
 admin_bp = Blueprint('admin_bp', __name__)
 
-# Admin credentials (should be in environment variables in production)
-ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'admin@saskatai.com')
-ADMIN_PASSWORD_HASH = os.environ.get('ADMIN_PASSWORD_HASH', generate_password_hash('admin@123'))
+def admin_config():
+    """Never ship a default administrator account or secret in source code."""
+    return {
+        'name': os.environ.get('ADMIN_NAME', '').strip(),
+        'email': os.environ.get('ADMIN_EMAIL', '').strip().lower(),
+        'phone': os.environ.get('ADMIN_PHONE', '').strip(),
+        'password_hash': os.environ.get('ADMIN_PASSWORD_HASH', '').strip(),
+        'access_code': os.environ.get('ADMIN_ACCESS_CODE', ''),
+    }
 
 # Ad model
 class Ad(db.Model):
@@ -48,28 +55,40 @@ class Ad(db.Model):
 @admin_bp.route('/api/admin/login', methods=['POST'])
 def admin_login():
     data = get_json_data()
+    name = str(data.get('name') or '').strip()
     email = data.get('email', '').strip().lower()
+    phone = ''.join(char for char in str(data.get('phone') or '') if char.isdigit())
     password = data.get('password', '')
+    access_code = str(data.get('accessCode') or '')
+    config = admin_config()
 
-    if not email or not password:
-        return jsonify({'error': 'Email and password are required'}), 400
+    if not all((name, email, phone, password, access_code)):
+        return jsonify({'error': 'Name, email, mobile, password and access code are required'}), 400
+    if not all(config.values()):
+        return jsonify({'error': 'Admin access is not configured on this server'}), 503
 
-    if email != ADMIN_EMAIL:
+    if not (
+        hmac.compare_digest(name.casefold(), config['name'].casefold())
+        and hmac.compare_digest(email, config['email'])
+        and hmac.compare_digest(phone, ''.join(char for char in config['phone'] if char.isdigit()))
+        and hmac.compare_digest(access_code, config['access_code'])
+    ):
         return jsonify({'error': 'Invalid credentials'}), 401
 
-    if not check_password_hash(ADMIN_PASSWORD_HASH, password):
+    if not check_password_hash(config['password_hash'], password):
         return jsonify({'error': 'Invalid credentials'}), 401
 
     token = jwt.encode({
         'admin_email': email,
-        'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)
+        'admin': True,
+        'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=2)
     }, os.environ.get('JWT_SECRET_KEY', 'admin-secret-key'), algorithm='HS256')
 
     return jsonify({
         'token': token,
         'admin': {
             'email': email,
-            'name': 'Admin'
+            'name': config['name']
         }
     }), 200
 
@@ -81,9 +100,69 @@ def verify_admin_token():
     token = auth_header.split(' ', 1)[1].strip()
     try:
         payload = jwt.decode(token, os.environ.get('JWT_SECRET_KEY', 'admin-secret-key'), algorithms=['HS256'])
-        return payload.get('admin_email')
+        config = admin_config()
+        if not payload.get('admin') or not config['email'] or not hmac.compare_digest(payload.get('admin_email', ''), config['email']):
+            return None
+        return config['email']
     except jwt.InvalidTokenError:
         return None
+
+
+def premium_payment_payload(payment):
+    payer = db.session.get(User, payment.payer_id)
+    return {
+        'id': payment.id,
+        'amount': payment.amount_paise / 100,
+        'currency': payment.currency,
+        'status': payment.status,
+        'providerPaymentId': payment.provider_payment_id,
+        'providerOrderId': payment.provider_order_id,
+        'createdAt': payment.created_at.isoformat() if payment.created_at else None,
+        'paidAt': payment.paid_at.isoformat() if payment.paid_at else None,
+        'reviewedAt': payment.admin_reviewed_at.isoformat() if payment.admin_reviewed_at else None,
+        'reviewedBy': payment.admin_reviewed_by,
+        'reviewNote': payment.admin_review_note,
+        'user': {
+            'id': payer.id, 'username': payer.username, 'email': payer.email,
+            'platformId': payer.platform_id,
+        } if payer else None,
+    }
+
+
+@admin_bp.route('/api/admin/premium-payments', methods=['GET'])
+def get_premium_payments():
+    if not verify_admin_token():
+        return jsonify({'error': 'Unauthorized'}), 401
+    payments = PaymentOrder.query.filter_by(purpose='premium').order_by(PaymentOrder.created_at.desc()).limit(200).all()
+    return jsonify({'payments': [premium_payment_payload(payment) for payment in payments]}), 200
+
+
+@admin_bp.route('/api/admin/premium-payments/<int:payment_id>/review', methods=['POST'])
+def review_premium_payment(payment_id):
+    admin_email = verify_admin_token()
+    if not admin_email:
+        return jsonify({'error': 'Unauthorized'}), 401
+    payment = PaymentOrder.query.filter_by(id=payment_id, purpose='premium').first()
+    if not payment:
+        return jsonify({'error': 'Premium payment not found'}), 404
+    if payment.status != 'approval_pending':
+        return jsonify({'error': 'Only provider-verified premium payments can be reviewed'}), 409
+    data = get_json_data()
+    action = str(data.get('action') or '').lower()
+    note = str(data.get('note') or '').strip()[:500]
+    if action not in ('approve', 'reject'):
+        return jsonify({'error': 'Review action must be approve or reject'}), 400
+
+    payment.status = 'approved' if action == 'approve' else 'rejected'
+    payment.admin_reviewed_by = admin_email
+    payment.admin_reviewed_at = utc_now()
+    payment.admin_review_note = note or None
+    if action == 'approve':
+        # Imported here to keep the payment flow and its activation rule in one place.
+        from routes.payments_bp import activate_premium_if_approved
+        activate_premium_if_approved(payment)
+    db.session.commit()
+    return jsonify({'payment': premium_payment_payload(payment)}), 200
 
 @admin_bp.route('/api/admin/ads', methods=['GET'])
 def get_ads():
@@ -99,11 +178,6 @@ def create_ad():
     admin_email = verify_admin_token()
     if not admin_email:
         return jsonify({'error': 'Unauthorized'}), 401
-
-    # Verify CSRF token
-    csrf_token = request.headers.get('X-CSRF-Token')
-    if not csrf_token:
-        return jsonify({'error': 'CSRF token missing'}), 403
 
     data = get_json_data()
     
@@ -134,11 +208,6 @@ def update_ad(ad_id):
     admin_email = verify_admin_token()
     if not admin_email:
         return jsonify({'error': 'Unauthorized'}), 401
-
-    # Verify CSRF token
-    csrf_token = request.headers.get('X-CSRF-Token')
-    if not csrf_token:
-        return jsonify({'error': 'CSRF token missing'}), 403
 
     ad = Ad.query.get(ad_id)
     if not ad:
@@ -176,11 +245,6 @@ def delete_ad(ad_id):
     admin_email = verify_admin_token()
     if not admin_email:
         return jsonify({'error': 'Unauthorized'}), 401
-
-    # Verify CSRF token
-    csrf_token = request.headers.get('X-CSRF-Token')
-    if not csrf_token:
-        return jsonify({'error': 'CSRF token missing'}), 403
 
     ad = Ad.query.get(ad_id)
     if not ad:
@@ -235,6 +299,8 @@ def upload_file():
 
 @admin_bp.route('/api/admin/ads/<int:ad_id>/track', methods=['POST'])
 def track_ad_interaction(ad_id):
+    if not verify_admin_token():
+        return jsonify({'error': 'Unauthorized'}), 401
     ad = Ad.query.get(ad_id)
     if not ad:
         return jsonify({'error': 'Ad not found'}), 404

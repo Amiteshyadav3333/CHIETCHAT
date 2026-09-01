@@ -12,7 +12,6 @@ import ProfileSetup from './pages/ProfileSetup';
 import PublicReel from './pages/PublicReel';
 import RecoveryCode from './pages/RecoveryCode';
 import FounderPage from './pages/FounderPage';
-import SaskatAI from './pages/SaskatAI/SaskatAI';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import './index.css';
@@ -42,7 +41,8 @@ const shouldSuppress = (args) => {
     return (
         (message.includes('/api/auth/me') && message.includes('401')) ||
         message.includes('502') ||
-        message.includes('status code 502')
+        message.includes('status code 502') ||
+        (message.includes('/api/chats') && (message.includes('404') || message.includes('502')))
     );
 };
 console.error = function(...args) {
@@ -127,17 +127,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                         <Route path="/recovery-code" element={
                             <ProtectedRoute><RecoveryCode /></ProtectedRoute>
                         } />
-                        <Route path="/saskat-ai" element={
-                            <ProtectedRoute>
-                                <SaskatAI onClose={() => window.history.back()} />
-                            </ProtectedRoute>
-                        } />
                         <Route path="/admin/login" element={<AdminLogin />} />
-                        <Route path="/admin/dashboard" element={
-                            <ProtectedRoute>
-                                <AdminDashboard />
-                            </ProtectedRoute>
-                        } />
+                        <Route path="/admin/dashboard" element={<AdminDashboard />} />
                         <Route path="/" element={
                             <ProtectedRoute>
                                 <Home />

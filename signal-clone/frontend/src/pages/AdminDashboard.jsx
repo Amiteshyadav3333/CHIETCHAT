@@ -13,6 +13,8 @@ const AdminDashboard = () => {
     const [showForm, setShowForm] = useState(false);
     const [editingAd, setEditingAd] = useState(null);
     const [activeTab, setActiveTab] = useState('ads');
+    const [premiumPayments, setPremiumPayments] = useState([]);
+    const [premiumLoading, setPremiumLoading] = useState(false);
     const navigate = useNavigate();
 
     const adminToken = localStorage.getItem('adminToken');
@@ -49,6 +51,25 @@ const AdminDashboard = () => {
         } catch (error) {
             console.error('Failed to fetch stats:', error);
         }
+    };
+
+    const fetchPremiumPayments = async () => {
+        setPremiumLoading(true);
+        try {
+            const response = await axios.get('/api/admin/premium-payments', { headers: { Authorization: `Bearer ${adminToken}` } });
+            setPremiumPayments(response.data.payments || []);
+        } catch (error) {
+            console.error('Failed to fetch premium payments:', error);
+        } finally { setPremiumLoading(false); }
+    };
+
+    const reviewPremiumPayment = async (payment, action) => {
+        const label = action === 'approve' ? 'approve and activate Premium' : 'reject';
+        if (!window.confirm(`Do you want to ${label} for ${payment.user?.username || 'this user'}?`)) return;
+        try {
+            await axios.post(`/api/admin/premium-payments/${payment.id}/review`, { action }, { headers: { Authorization: `Bearer ${adminToken}` } });
+            fetchPremiumPayments();
+        } catch (error) { alert(error.response?.data?.error || 'Could not review payment.'); }
     };
 
     const handleAddAd = async (formData) => {
@@ -133,6 +154,12 @@ const AdminDashboard = () => {
                     >
                         📊 Statistics
                     </button>
+                    <button
+                        className={`nav-item ${activeTab === 'premium' ? 'active' : ''}`}
+                        onClick={() => { setActiveTab('premium'); fetchPremiumPayments(); }}
+                    >
+                        💎 Premium approvals
+                    </button>
                     <button 
                         className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`}
                         onClick={() => setActiveTab('settings')}
@@ -182,6 +209,18 @@ const AdminDashboard = () => {
 
                     {activeTab === 'stats' && (
                         <AdStats stats={stats} />
+                    )}
+
+                    {activeTab === 'premium' && (
+                        <div className="premium-payments-section">
+                            <div className="section-header"><div><h2>Premium payment approvals</h2><p>Only provider-verified payments can activate Premium after your approval.</p></div><button className="add-ad-btn" onClick={fetchPremiumPayments}>Refresh</button></div>
+                            {premiumLoading ? <p>Loading payments…</p> : premiumPayments.length === 0 ? <div className="settings-card"><p>No Premium payments yet.</p></div> : <div className="premium-payment-list">
+                                {premiumPayments.map(payment => <article className="premium-payment-card" key={payment.id}>
+                                    <div><strong>{payment.user?.username || 'Deleted user'}</strong><span>{payment.user?.email || payment.user?.platformId || `User #${payment.user?.id || ''}`}</span><small>Order #{payment.id} · ₹{payment.amount} · {payment.providerPaymentId || 'Payment ID pending'}</small></div>
+                                    <div className="premium-payment-actions"><span className={`payment-status ${payment.status}`}>{payment.status.replace(/_/g, ' ')}</span>{payment.status === 'approval_pending' && <><button className="approve-premium-btn" onClick={() => reviewPremiumPayment(payment, 'approve')}>Approve & activate</button><button className="reject-premium-btn" onClick={() => reviewPremiumPayment(payment, 'reject')}>Reject</button></>}</div>
+                                </article>)}
+                            </div>}
+                        </div>
                     )}
 
                     {activeTab === 'settings' && (

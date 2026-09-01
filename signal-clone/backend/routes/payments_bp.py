@@ -13,11 +13,11 @@ from flask import Blueprint, jsonify, request
 from sqlalchemy.exc import IntegrityError
 
 from models import db, User, ChatParticipant, BusinessProfile, PaymentOrder
-from utils import get_current_user_id, get_json_data, iso_utc, serialize_user, utc_now
+from utils import get_current_user_id, get_json_data, iso_utc, utc_now
 from observability import report_safe_exception
 
 payments_bp = Blueprint('payments_bp', __name__)
-CAPTURE_TERMINAL_STATUSES = {'refunding', 'refunded'}
+CAPTURE_TERMINAL_STATUSES = {'refunding', 'refunded', 'approved', 'rejected'}
 PREMIUM_PRICE_PAISE = int(os.environ.get('PREMIUM_PRICE_PAISE', '19900'))
 
 
@@ -37,11 +37,19 @@ def payment_payload(payment):
         'providerRefundId': payment.provider_refund_id,
         'clientRequestId': payment.client_request_id,
         'status': payment.status,
+        'premiumApprovalStatus': (
+            'approved' if payment.purpose == 'premium' and payment.status == 'approved'
+            else 'rejected' if payment.purpose == 'premium' and payment.status == 'rejected'
+            else 'pending' if payment.purpose == 'premium' and payment.status == 'approval_pending'
+            else None
+        ),
+        'adminReviewedAt': iso_utc(payment.admin_reviewed_at),
+        'adminReviewNote': payment.admin_review_note if payment.purpose == 'premium' else None,
         'createdAt': iso_utc(payment.created_at),
         'paidAt': iso_utc(payment.paid_at),
         'refundRequestedAt': iso_utc(payment.refund_requested_at),
         'refundedAt': iso_utc(payment.refunded_at),
-        'verified': payment.status in ('paid', 'captured'),
+        'verified': payment.status in ('paid', 'captured', 'approval_pending', 'approved'),
     }
 
 
@@ -97,7 +105,6 @@ def exact_amount_paise(value):
 
 
 def reconcile_captured_entity(payment, entity):
-    was_captured = payment.status == 'captured'
     provider_payment_id = str(entity.get('id') or '')
     if (
         payment.status in CAPTURE_TERMINAL_STATUSES
@@ -117,15 +124,13 @@ def reconcile_captured_entity(payment, entity):
     if payment.provider_payment_id and payment.provider_payment_id != provider_payment_id:
         return False
     payment.provider_payment_id = provider_payment_id
-    payment.status = 'captured'
+    payment.status = 'approval_pending' if payment.purpose == 'premium' else 'captured'
     payment.paid_at = payment.paid_at or utc_now()
-    if not was_captured:
-        activate_premium_if_paid(payment)
     return True
 
 
-def activate_premium_if_paid(payment):
-    if payment.purpose != 'premium' or payment.status != 'captured' or not payment.payer_id:
+def activate_premium_if_approved(payment):
+    if payment.purpose != 'premium' or payment.status != 'approved' or not payment.payer_id:
         return
     user = db.session.get(User, payment.payer_id)
     if user:
@@ -338,17 +343,14 @@ def verify_payment(payment_id):
     provider_status = str(provider_payment.get('status') or '').lower()
     if provider_status not in ('authorized', 'captured'):
         return jsonify({'error': 'Payment has not been authorized by the provider'}), 409
-    was_captured = payment.status == 'captured'
     payment.provider_payment_id = provider_payment_id
-    payment.status = provider_status
+    payment.status = 'approval_pending' if payment.purpose == 'premium' and provider_status == 'captured' else provider_status
     if provider_status == 'captured':
         payment.paid_at = payment.paid_at or utc_now()
-        if not was_captured:
-            activate_premium_if_paid(payment)
     db.session.commit()
     payload = payment_payload(payment)
     if payment.purpose == 'premium' and provider_status == 'captured':
-        payload['user'] = serialize_user(db.session.get(User, payer_id), viewer_id=payer_id)
+        payload['message'] = 'Payment verified. Premium will activate after admin approval.'
     return jsonify(payload), 200 if provider_status == 'captured' else 202
 
 
@@ -455,7 +457,7 @@ def razorpay_webhook():
             and reconcile_captured_entity(payment, payment_entity)
         ):
             db.session.commit()
-    if payment and event_name == 'payment.failed' and payment.status not in ('captured', 'refunding', 'refunded'):
+    if payment and event_name == 'payment.failed' and payment.status not in ('captured', 'approval_pending', 'approved', 'rejected', 'refunding', 'refunded'):
         if payment_entity.get('amount') == payment.amount_paise and str(payment_entity.get('currency') or '').upper() == payment.currency:
             payment.status = 'failed'
             db.session.commit()

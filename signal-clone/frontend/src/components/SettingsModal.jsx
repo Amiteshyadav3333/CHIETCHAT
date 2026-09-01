@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import QRCode from 'qrcode';
 import {
     ArrowDownTrayIcon, ArrowLeftIcon, ArrowRightOnRectangleIcon, BellIcon, ChartBarIcon,
     ChatBubbleBottomCenterTextIcon, CheckBadgeIcon, ChevronRightIcon,
@@ -59,13 +58,8 @@ const normalizeBusinessData = (data, user) => {
     };
 };
 
-const PremiumUpiCard = ({ token }) => {
-    const [qr, setQr] = useState('');
-    const [price, setPrice] = useState(199);
-    const uri = `upi://pay?pa=yadavamitesh569%40oksbi&pn=CHEETCHAT%20Premium&am=${price}&cu=INR&tn=Three%20Month%20Premium`;
-    useEffect(() => { axios.get('/api/payments/config', { headers: { Authorization: `Bearer ${token}` } }).then(({ data }) => setPrice(data.premiumPrice || 199)).catch(() => {}); }, [token]);
-    useEffect(() => { QRCode.toDataURL(uri, { width: 320, margin: 2 }).then(setQr).catch(() => setQr('')); }, [uri]);
-    return <div className="rounded-2xl border border-violet-400/25 bg-violet-500/10 p-4 text-center"><p className="font-black text-white">₹{price}: one month + two months free</p><p className="mt-1 text-xs text-violet-200">Three months of Premium access</p>{qr && <div className="mx-auto mt-3 w-fit rounded-xl bg-white p-2"><img src={qr} alt="CHEETCHAT Premium UPI QR code" className="h-44 w-44" /></div>}<p className="mt-2 text-xs text-gray-300">UPI ID: <strong className="text-white">yadavamitesh569@oksbi</strong></p><a href={uri} className="mt-3 block rounded-xl bg-violet-500 py-3 text-sm font-black text-white">Open UPI app</a><p className="mt-2 text-[10px] leading-4 text-gray-500">Use secure provider checkout in Social for automatic server-verified activation.</p></div>;
+const PremiumUpiCard = () => {
+    return <div className="rounded-2xl border border-violet-400/25 bg-violet-500/10 p-4 text-center"><p className="font-black text-white">Secure Premium checkout</p><p className="mt-2 text-xs leading-5 text-violet-100">Purchase Premium from the Social section. The payment is verified by the backend and stays pending until an admin approves it.</p></div>;
 };
 
 const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wallpaper, onThemeChange, onWallpaperChange, onOpenSmartSpace, smartSpaceButtonEnabled, onSmartSpaceButtonChange }) => {
@@ -652,7 +646,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
 
                     {screen === 'language' && <div className="p-5"><p className="mb-4 text-sm leading-6 text-gray-400">English is the default. Select an Indian language to translate the complete app interface.</p><div className="grid gap-2 sm:grid-cols-2">{INDIAN_LANGUAGES.map(([code, name]) => <button key={code} onClick={() => changeLanguage(code)} className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left text-sm font-semibold ${appLanguage === code ? 'border-[#00a884] bg-[#00a884]/15 text-white' : 'border-white/10 bg-white/5 text-gray-200'}`}><span>{name}</span>{appLanguage === code && <span className="text-[#00a884]">✓</span>}</button>)}</div></div>}
 
-                    {screen === 'premium' && !user?.isPremium && <div className="px-5 pb-5"><PremiumUpiCard token={token} /></div>}
+                    {screen === 'premium' && !user?.isPremium && <div className="px-5 pb-5"><PremiumUpiCard /></div>}
 
                     {screen === 'account' && (
                         <>

@@ -217,6 +217,11 @@ class PaymentOrder(db.Model):
     provider_refund_id = db.Column(db.String(100), unique=True, nullable=True)
     client_request_id = db.Column(db.String(100), nullable=True)
     status = db.Column(db.String(30), default='created', nullable=False)
+    # Premium purchases require a second, human approval after the payment
+    # provider has confirmed capture.  These fields form the admin audit trail.
+    admin_reviewed_by = db.Column(db.String(120), nullable=True)
+    admin_reviewed_at = db.Column(db.DateTime, nullable=True)
+    admin_review_note = db.Column(db.String(500), nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now)
     paid_at = db.Column(db.DateTime, nullable=True)
     refund_requested_at = db.Column(db.DateTime, nullable=True)

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useContext, useCallback } from 'react';
 import { AuthContext } from '../../context/AuthContext';
+import AdPanel from './components/AdPanel';
 import './SaskatAI.css';
 
 const MODELS = [
@@ -32,6 +33,8 @@ const SaskatAI = ({ onClose }) => {
     const [generatedImg, setGeneratedImg] = useState(null);
     const [isGeneratingImg, setIsGeneratingImg] = useState(false);
     const [attachedFile, setAttachedFile] = useState(null); // { name, type, dataUrl }
+    const [contextualAd, setContextualAd] = useState(null);
+    const [buyingAd, setBuyingAd] = useState(null);
 
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
@@ -69,9 +72,11 @@ const SaskatAI = ({ onClose }) => {
         setIsLoading(true);
 
         try {
-            const res = await apiFetch('/api/ai/chat', {
+            const res = await apiFetch('/api/saskat/chat', {
                 message: text || (fileAttachment ? `[Attached: ${fileAttachment.name}]` : ''),
                 model: selectedModel,
+                // This context lives only in the browser request; Saskat does not save it.
+                history: messages.slice(-8).map(({ role, content }) => ({ role, content })),
             });
             const data = await res.json();
             if (res.ok) {
@@ -83,6 +88,7 @@ const SaskatAI = ({ onClose }) => {
                     searched: data.searched,
                     timestamp: new Date(),
                 }]);
+                setContextualAd(data.ad || null);
             } else {
                 setMessages(prev => [...prev, {
                     id: Date.now() + 1,
@@ -103,7 +109,12 @@ const SaskatAI = ({ onClose }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [selectedModel]);
+    }, [selectedModel, messages]);
+
+    const openAdPurchase = async (ad) => {
+        try { await apiFetch(`/api/saskat/ads/${ad.id}/click`, {}); } catch { /* analytics must not block checkout */ }
+        setBuyingAd(ad);
+    };
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -206,7 +217,9 @@ const SaskatAI = ({ onClose }) => {
                         <div className="sai-subtitle">Powered by ChietChat AI</div>
                     </div>
                 </div>
-                <div className="sai-header-right">
+                    <div className="sai-header-right">
+                    {/* Incognito toggle */}
+                        <span className="sai-private-badge" title="Saskat chats are not saved">🔒 Private session</span>
                     {/* Model selector */}
                     <div className="sai-model-wrap" ref={modelMenuRef}>
                         <button className="sai-model-btn" onClick={() => setShowModelMenu(v => !v)}>
@@ -335,8 +348,13 @@ const SaskatAI = ({ onClose }) => {
                         </div>
                     </div>
                 )}
+                {contextualAd && !isLoading && <AdPanel ad={contextualAd} onClose={() => setContextualAd(null)} onProductClick={openAdPurchase} />}
                 <div ref={messagesEndRef} />
             </div>
+
+            {buyingAd && <div className="sai-buy-overlay" role="dialog" aria-modal="true" aria-label={`Buy ${buyingAd.title}`}>
+                <div className="sai-buy-sheet"><button className="sai-buy-close" onClick={() => setBuyingAd(null)}>✕</button><div className="sai-buy-heading"><span>Sponsored checkout</span><h2>{buyingAd.title}</h2></div><iframe className="sai-buy-frame" src={buyingAd.productLink} title={`Buy ${buyingAd.title}`} /><p>If the store blocks embedded checkout, open it in a new tab.</p><a href={buyingAd.productLink} target="_blank" rel="noopener noreferrer">Open secure store</a></div>
+            </div>}
 
             {/* Input Bar */}
             <div className="sai-input-bar">

@@ -61,6 +61,28 @@
     gap: 10px;
 }
 
+.sai-private-badge {
+    border: 1px solid rgba(74, 222, 128, .28);
+    background: rgba(74, 222, 128, .08);
+    color: #bbf7d0;
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+/* Contextual ads appear only for free users after a reply and are always skippable. */
+.ad-panel { position: fixed; inset: auto 18px 18px auto; z-index: 80; width: min(380px, calc(100vw - 32px)); overflow: hidden; border: 1px solid rgba(129, 140, 248, .38); border-radius: 16px; background: #13172a; box-shadow: 0 20px 55px rgba(0,0,0,.5); color: #f8fafc; animation: sai-ad-enter .25s ease-out; }
+@keyframes sai-ad-enter { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+.ad-header, .ad-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; }
+.ad-label { color: #c4b5fd; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+.close-btn, .skip-btn, .buy-btn { border: 0; cursor: pointer; font-weight: 700; }
+.close-btn { background: transparent; color: #cbd5e1; font-size: 16px; }.ad-video, .ad-image { display: block; width: 100%; max-height: 190px; object-fit: cover; }
+.ad-info { padding: 12px; }.ad-info h3, .ad-info p { margin: 0; }.ad-info h3 { font-size: 15px; }.ad-info p { color: #cbd5e1; font-size: 13px; line-height: 1.4; margin-top: 4px; }.ad-price { display: block; margin-top: 8px; font-weight: 800; color: #fcd34d; }
+.ad-actions { padding-top: 0; }.skip-btn { background: transparent; color: #cbd5e1; padding: 8px; }.skip-btn:disabled { opacity: .55; cursor: not-allowed; }.buy-btn { background: #6366f1; color: #fff; border-radius: 9px; padding: 9px 12px; }.ad-progress { height: 3px; background: rgba(255,255,255,.08); }.progress-bar { height: 100%; background: #818cf8; transition: width 1s linear; }
+.sai-buy-overlay { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 16px; background: rgba(2,6,23,.82); backdrop-filter: blur(8px); }.sai-buy-sheet { position: relative; width: min(760px, 100%); height: min(720px, calc(100dvh - 32px)); display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(129,140,248,.38); border-radius: 18px; background: #fff; color: #0f172a; }.sai-buy-heading { padding: 16px 48px 12px 18px; background: #f8fafc; }.sai-buy-heading span { color: #6366f1; font-size: 11px; font-weight: 800; text-transform: uppercase; }.sai-buy-heading h2 { margin: 3px 0 0; font-size: 18px; }.sai-buy-close { position: absolute; right: 12px; top: 12px; border: 0; background: #e2e8f0; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; }.sai-buy-frame { flex: 1; border: 0; width: 100%; }.sai-buy-sheet p { margin: 0; padding: 10px 18px 2px; color: #475569; font-size: 12px; }.sai-buy-sheet > a { padding: 10px 18px 14px; color: #4f46e5; font-weight: 700; text-decoration: none; }
+
 /* ── Model Selector ── */
 .sai-model-wrap {
     position: relative;
@@ -155,6 +177,34 @@
     background: rgba(239,68,68,0.15);
     border-color: rgba(239,68,68,0.3);
     color: #f87171;
+}
+
+/* ── Incognito Button ── */
+.sai-incognito-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 11px;
+    background: rgba(100, 116, 139, 0.1);
+    border: 1px solid rgba(100, 116, 139, 0.25);
+    border-radius: 8px;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.sai-incognito-btn:hover {
+    background: rgba(100, 116, 139, 0.2);
+    color: #94a3b8;
+}
+
+.sai-incognito-btn.active {
+    background: rgba(139, 92, 246, 0.15);
+    border-color: rgba(139, 92, 246, 0.4);
+    color: #a78bfa;
 }
 
 /* ── Messages ── */
@@ -717,4 +767,6 @@
     .sai-model-btn span:nth-child(2) { display: none; }
     .sai-bubble { max-width: 85%; font-size: 13px; }
     .sai-quick-grid { grid-template-columns: 1fr; }
+    .sai-private-badge { display: none; }
+    .ad-panel { inset: auto 12px 12px; width: auto; }
 }

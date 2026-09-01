@@ -4,8 +4,11 @@ import { useNavigate } from '../utils/clientRouter';
 import './AdminLogin.css';
 
 const AdminLogin = () => {
+    const [name, setName] = useState('');
     const [email, setEmail] = useState('');
+    const [phone, setPhone] = useState('');
     const [password, setPassword] = useState('');
+    const [accessCode, setAccessCode] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
@@ -17,8 +20,11 @@ const AdminLogin = () => {
 
         try {
             const response = await axios.post('/api/admin/login', {
+                name: name.trim(),
                 email: email.trim().toLowerCase(),
-                password
+                phone,
+                password,
+                accessCode,
             });
 
             if (response.data.token) {
@@ -50,6 +56,7 @@ const AdminLogin = () => {
                 )}
 
                 <form onSubmit={handleSubmit} className="admin-login-form">
+                    <div className="form-group"><label htmlFor="name">Admin name</label><input id="name" type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your registered admin name" required disabled={loading} className="form-input" /></div>
                     <div className="form-group">
                         <label htmlFor="email">Email Address</label>
                         <input
@@ -64,6 +71,8 @@ const AdminLogin = () => {
                         />
                     </div>
 
+                    <div className="form-group"><label htmlFor="phone">Registered mobile number</label><input id="phone" type="tel" inputMode="numeric" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="10-digit mobile number" required disabled={loading} className="form-input" /></div>
+
                     <div className="form-group">
                         <label htmlFor="password">Password</label>
                         <input
@@ -77,6 +86,8 @@ const AdminLogin = () => {
                             className="form-input"
                         />
                     </div>
+
+                    <div className="form-group"><label htmlFor="accessCode">Secret access code</label><input id="accessCode" type="password" value={accessCode} onChange={(e) => setAccessCode(e.target.value)} placeholder="Admin-only secret code" required disabled={loading} className="form-input" /></div>
 
                     <button 
                         type="submit" 

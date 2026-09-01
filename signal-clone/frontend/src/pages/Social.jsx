@@ -20,7 +20,7 @@ import LinkifiedText from '../components/LinkifiedText';
 import { getSafeWebsiteUrl } from '../utils/safeUrl';
 import SocialShareSheet from '../components/SocialShareSheet';
 import ProCameraStudio from '../components/ProCameraStudio';
-import QRCode from 'qrcode';
+import SaskatAIEmbed from './SaskatAI/SaskatAI';
 
 const authHeaders = (token) => ({ Authorization: `Bearer ${token}` });
 
@@ -813,7 +813,6 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
     const [premiumPrompt, setPremiumPrompt] = useState(false);
     const [premiumPrice, setPremiumPrice] = useState(199);
     const [premiumBuying, setPremiumBuying] = useState(false);
-    const [upiQr, setUpiQr] = useState('');
     const [posting, setPosting] = useState(false);
     const [showChannelForm, setShowChannelForm] = useState(false);
     const [channelForm, setChannelForm] = useState({ name: '', description: '', cover: null });
@@ -868,12 +867,6 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
         return () => urls.forEach(url => URL.revokeObjectURL(url));
     }, [media]);
 
-    useEffect(() => {
-        if (!premiumPrompt) return;
-        const uri = `upi://pay?pa=yadavamitesh569%40oksbi&pn=CHEETCHAT%20Premium&am=${premiumPrice}&cu=INR&tn=Three%20Month%20Premium`;
-        QRCode.toDataURL(uri, { width: 320, margin: 2 }).then(setUpiQr).catch(() => setUpiQr(''));
-    }, [premiumPrompt, premiumPrice]);
-
     const submitPost = async (channelId, postKind = 'standard', premiumOptions = {}) => {
         if (typeof postKind === 'object') { premiumOptions = postKind; postKind = premiumOptions.postKind || 'standard'; }
         if (!caption.trim() && media.length === 0) return;
@@ -912,8 +905,8 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                 name: 'CHEETCHAT Premium', description: 'Unlimited Social posts', order_id: payment.providerOrderId,
                 handler: async result => {
                     const verified = await axios.post(`/api/payments/orders/${payment.id}/verify`, result, { headers });
-                    if (verified.data.user) updateUser(verified.data.user);
-                    setPremiumPrompt(false); alert('Premium is active. You can now publish unlimited posts.');
+                    setPremiumPrompt(false);
+                    alert('Payment verified. Your Premium request is waiting for admin approval. Premium will activate once approved.');
                 },
                 modal: { ondismiss: () => setPremiumBuying(false) }, theme: { color: '#8b5cf6' },
             });
@@ -983,7 +976,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
             onBack={() => setProfileView(null)} onOpenProfile={openProfile} onShareToChat={onShareToChat} onDirectMessage={onDirectMessage} />
     );
     const currentPosts = selectedChannel ? channelPosts : posts;
-    const TABS = [{ key: 'for-you', label: 'For You' }, { key: 'community', label: 'Community' }, { key: 'following', label: 'Following' }, { key: 'channels', label: 'Spaces' }];
+    const TABS = [{ key: 'for-you', label: 'For You' }, { key: 'community', label: 'Community' }, { key: 'saskat-ai', label: '✨ Saskat AI' }, { key: 'following', label: 'Following' }, { key: 'channels', label: 'Spaces' }];
 
     const displayedPosts = currentPosts.filter(post => {
         if (!searchQuery) return true;
@@ -1022,6 +1015,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                         {[
                             { icon: <HomeIcon className="w-7 h-7" />, label: 'Home', action: () => { setSelectedChannel(null); setActiveTab('for-you'); } },
                             { icon: <ChartBarIcon className="w-7 h-7" />, label: 'Community', action: () => { setSelectedChannel(null); setActiveTab('community'); } },
+                            { icon: <SparklesIcon className="w-7 h-7" />, label: 'Saskat AI', action: () => { setSelectedChannel(null); setActiveTab('saskat-ai'); } },
                             { icon: <UsersIcon className="w-7 h-7" />, label: 'Spaces', action: () => { setSelectedChannel(null); setActiveTab('channels'); } },
                             { icon: <UserCircleIcon className="w-7 h-7" />, label: 'Profile', action: () => setProfileView({ userId: user.id }) },
                             { icon: <ArrowLeftIcon className="w-7 h-7" />, label: 'Back', action: onBack },
@@ -1059,10 +1053,10 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                     {/* Tab bar / header */}
                     <div className="flex-shrink-0">
                         {!selectedChannel ? (
-                            <div className="flex border-b border-[#2f3336] bg-black/80 backdrop-blur-md sticky top-0 z-10">
+                            <div className="flex overflow-x-auto scrollbar-hide border-b border-[#2f3336] bg-black/80 backdrop-blur-md sticky top-0 z-10">
                                 {TABS.map(({ key, label }) => (
                                     <button key={key} onClick={() => setActiveTab(key)}
-                                        className="flex-1 py-4 text-sm font-bold bg-transparent border-none cursor-pointer transition-colors relative"
+                                        className="min-w-[88px] flex-1 whitespace-nowrap py-4 text-xs sm:text-sm font-bold bg-transparent border-none cursor-pointer transition-colors relative"
                                         style={{ color: activeTab === key ? '#e7e9ea' : '#71767b' }}>
                                         {label}
                                         {activeTab === key && <div className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[4px] w-14 rounded-full bg-[#1d9bf0]" />}
@@ -1088,6 +1082,10 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                             <ChannelView channel={selectedChannel} posts={currentPosts} user={user} token={token} preview={preview} media={media} caption={caption} posting={posting} fileRef={fileRef} setCaption={setCaption} setMedia={setMedia}
                                 submitPost={() => submitPost(selectedChannel.id)} likePost={id => likePost(id, true)} retweetPost={id => retweetPost(id, true)} sharePost={(id, count) => sharePost(id, true, count)} onShareToChat={onShareToChat} deletePost={id => deletePost(id, true)}
                                 toggleFollow={toggleFollow} requestSubscribe={() => requestSubscribe(selectedChannel.id)} reviewRequest={reviewRequest} openProfile={openProfile} currentUser={user} onUpgrade={showPremiumUpgrade} />
+                        ) : activeTab === 'saskat-ai' ? (
+                            <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                                <SaskatAIEmbed onClose={() => setActiveTab('for-you')} />
+                            </div>
                         ) : activeTab === 'channels' ? (
                             <ChannelsList channels={displayedChannels} loading={loading} onOpen={fetchChannel} onSubscribe={requestSubscribe} onCreateNew={() => setShowChannelForm(true)} />
                         ) : (
@@ -1162,11 +1160,8 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                         <h2 className="mt-3 text-2xl font-black text-white">Your three free posts are used</h2>
                         <p className="mt-2 text-sm leading-6 text-gray-300">Upgrade for unlimited posts, articles, analytics and creator tools.</p>
                         <div className="mt-5 rounded-2xl bg-white/5 p-4"><p className="text-xs font-bold uppercase tracking-wider text-violet-300">One month + two months free</p><p className="mt-1 text-3xl font-black text-white">₹{premiumPrice}</p><p className="mt-1 text-xs text-gray-400">Three months total access</p></div>
-                        {upiQr && <div className="mx-auto mt-4 w-fit rounded-2xl bg-white p-3"><img src={upiQr} alt="UPI payment QR code" className="h-48 w-48" /></div>}
-                        <p className="mt-2 text-xs text-gray-300">Scan using any UPI app or pay to <strong className="text-white">yadavamitesh569@oksbi</strong>.</p>
-                        <a href={`upi://pay?pa=yadavamitesh569%40oksbi&pn=CHEETCHAT%20Premium&am=${premiumPrice}&cu=INR&tn=Three%20Month%20Premium`} className="mt-3 block w-full rounded-xl border border-violet-400/40 py-3 text-sm font-black text-violet-200">Open UPI app</a>
-                        <button disabled={premiumBuying} onClick={buyPremium} className="mt-3 w-full rounded-xl bg-violet-500 py-3.5 text-sm font-black text-white hover:bg-violet-400 disabled:opacity-60">{premiumBuying ? 'Opening secure checkout…' : 'Pay and activate securely'}</button>
-                        <p className="mt-2 text-[11px] leading-4 text-gray-500">Automatic activation uses secure checkout and server signature verification. A direct transfer cannot activate Premium automatically.</p>
+                        <button disabled={premiumBuying} onClick={buyPremium} className="mt-5 w-full rounded-xl bg-violet-500 py-3.5 text-sm font-black text-white hover:bg-violet-400 disabled:opacity-60">{premiumBuying ? 'Opening secure checkout…' : 'Pay securely'}</button>
+                        <p className="mt-3 text-[11px] leading-4 text-gray-400">Your payment is verified by the server first. After that, an admin must approve it before Premium becomes active.</p>
                         <button onClick={() => setPremiumPrompt(false)} className="mt-3 text-sm font-semibold text-gray-400">Try another free post tomorrow</button>
                     </div>
                 </div>

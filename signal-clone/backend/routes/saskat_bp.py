@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify
 from utils import get_current_user_id, get_json_data
-from models import db, AiConversation
+from models import db, User
+from utils import utc_now
 import os
 import json
 import urllib.request
@@ -136,17 +137,27 @@ def _web_search(query):
         return None
 
 
-def _save_turn(user_id, user_msg, ai_reply):
-    try:
-        db.session.add(AiConversation(user_id=user_id, role='user', content=user_msg))
-        db.session.add(AiConversation(user_id=user_id, role='assistant', content=ai_reply))
-        db.session.commit()
-    except Exception:
-        pass
+def _ad_for_query(query):
+    """Realtime catalog retrieval: only aggregate ad metrics are persisted, never the query."""
+    from routes.admin_bp import Ad
+    terms = set(re.findall(r"[\w']{3,}", query.lower()))
+    candidates = []
+    for ad in Ad.query.all():
+        keywords = ad.keywords if isinstance(ad.keywords, list) else []
+        ad_terms = set(re.findall(r"[\w']{2,}", ' '.join(map(str, keywords)).lower()))
+        score = len(terms & ad_terms)
+        if score:
+            candidates.append((score, ad))
+    if not candidates:
+        return None
+    _, ad = max(candidates, key=lambda item: (item[0], item[1].updated_at or item[1].created_at))
+    ad.impressions = (ad.impressions or 0) + 1
+    db.session.commit()
+    return ad.to_dict()
 
 
-@saskat_bp.route('/api/ai/chat', methods=['POST'])
-def ai_chat():
+@saskat_bp.route('/api/saskat/chat', methods=['POST'])
+def saskat_chat():
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({'error': 'Unauthorized'}), 401
@@ -157,43 +168,53 @@ def ai_chat():
         return jsonify({'error': 'Message is required'}), 400
     if len(message) > 8000:
         return jsonify({'error': 'Message too long'}), 400
+    history = data.get('history') if isinstance(data.get('history'), list) else []
+    # Saskat is session-only: the browser sends a small current-session context,
+    # but neither the question nor the answer is written to the database.
+    safe_history = [
+        {'role': item.get('role'), 'content': str(item.get('content') or '')[:4000]}
+        for item in history[-8:]
+        if item.get('role') in ('user', 'assistant') and str(item.get('content') or '').strip()
+    ]
 
     try:
-        search_keywords = ['search', 'latest', 'news', 'today', 'current', 'price', 'weather',
-                           'khoj', 'aaj', 'abhi', 'batao']
-        needs_search = any(kw in message.lower() for kw in search_keywords)
-
         context_msg = message
         sources = []
-        if needs_search:
-            search_results = _web_search(message)
-            if search_results:
-                sources = search_results
-                context_msg = (
-                    f"{message}\n\n[Web search results:\n"
-                    + "\n".join([f"- {r['title']}: {r['snippet']}" for r in search_results])
-                    + "]"
-                )
+        search_results = _web_search(message)
+        if search_results:
+            sources = search_results
+            context_msg = (
+                f"{message}\n\n[Fresh web research — cite the source titles you rely on:\n"
+                + "\n".join([f"- {r['title']}: {r['snippet']}" for r in search_results])
+                + "]"
+            )
 
         messages = [
             {
                 "role": "system",
                 "content": (
-                    "You are Saskat AI, a helpful and knowledgeable assistant built into ChietChat. "
-                    "Answer clearly and concisely. Support Hindi, Hinglish, and English. "
-                    "When web search results are provided, use them to give accurate answers."
+                    "You are Saskat AI, a thoughtful, capable research assistant inside CHEETCHAT. "
+                    "Speak naturally, warmly and intelligently in the user's Hindi, Hinglish or English. "
+                    "Give direct, well-structured answers with useful nuance, practical next steps and uncertainty where appropriate. "
+                    "When fresh web research is supplied, ground claims in it; never invent sources. "
+                    "For health, skin, medical, money or safety topics, avoid guarantees and encourage qualified professional advice when appropriate."
                 )
-            },
-            {"role": "user", "content": context_msg}
+            }
         ]
+        messages.extend(safe_history)
+        messages.append({"role": "user", "content": context_msg})
 
         response = _get_ai_reply(messages)
-        _save_turn(user_id, message, response)
+        user = User.query.get(user_id)
+        premium_active = bool(user and user.is_premium and (not user.premium_expires_at or user.premium_expires_at > utc_now()))
+        ad = None if premium_active else _ad_for_query(message)
 
         return jsonify({
             'response': response,
             'sources': sources,
-            'searched': needs_search
+            'searched': bool(search_results),
+            'ad': ad,
+            'ephemeral': True,
         }), 200
 
     except Exception as e:
@@ -221,4 +242,21 @@ def get_contextual_ad():
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({'error': 'Unauthorized'}), 401
-    return jsonify({}), 200
+    user = User.query.get(user_id)
+    if user and user.is_premium and (not user.premium_expires_at or user.premium_expires_at > utc_now()):
+        return jsonify({'ad': None}), 200
+    query = str(get_json_data().get('query') or '').strip()[:8000]
+    return jsonify({'ad': _ad_for_query(query) if query else None}), 200
+
+
+@saskat_bp.route('/api/saskat/ads/<int:ad_id>/click', methods=['POST'])
+def saskat_ad_click(ad_id):
+    if not get_current_user_id():
+        return jsonify({'error': 'Unauthorized'}), 401
+    from routes.admin_bp import Ad
+    ad = db.session.get(Ad, ad_id)
+    if not ad:
+        return jsonify({'error': 'Ad not found'}), 404
+    ad.clicks = (ad.clicks or 0) + 1
+    db.session.commit()
+    return jsonify({'ok': True}), 200

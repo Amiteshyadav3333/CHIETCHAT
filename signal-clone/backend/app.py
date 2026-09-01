@@ -103,6 +103,7 @@ _sensitive_limits = {
     '/api/auth/2fa/login-verify': (10, 15 * 60),
     '/api/auth/google/exchange': (20, 15 * 60),
     '/api/auth/google/complete': (5, 15 * 60),
+    '/api/admin/login': (5, 15 * 60),
     '/api/ai/grammar': (30, 60),
     '/api/ai/chat': (60, 60 * 60),
     '/api/ai/chat/stream': (60, 60 * 60),

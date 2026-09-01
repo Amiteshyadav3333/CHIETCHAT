@@ -14,6 +14,13 @@ const PUBLIC_AUTH_PATHS = new Set([
     '/api/auth/google/complete',
 ]);
 
+// External services (PodLive etc.) ke 401 se CHEETCHAT session expire nahi
+// hona chahiye. Sirf same-origin /api/* paths se session expire hoga.
+const EXTERNAL_HOSTS = new Set([
+    'podlive-api-18as.onrender.com',
+    'podlive-sigma.vercel.app',
+]);
+
 const requestPath = (requestUrl) => {
     try {
         return new URL(String(requestUrl || ''), 'https://cheetchat.invalid').pathname;
@@ -22,8 +29,20 @@ const requestPath = (requestUrl) => {
     }
 };
 
+const isExternalRequest = (requestUrl) => {
+    try {
+        const host = new URL(String(requestUrl || '')).hostname;
+        return EXTERNAL_HOSTS.has(host);
+    } catch {
+        return false;
+    }
+};
+
 export const shouldExpireSession = ({ status, requestUrl, hasSession }) => (
-    Boolean(hasSession) && status === 401 && !PUBLIC_AUTH_PATHS.has(requestPath(requestUrl))
+    Boolean(hasSession)
+    && status === 401
+    && !PUBLIC_AUTH_PATHS.has(requestPath(requestUrl))
+    && !isExternalRequest(requestUrl)
 );
 
 export const usableBearerToken = (value) => {

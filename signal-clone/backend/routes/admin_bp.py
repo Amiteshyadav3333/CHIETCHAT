@@ -33,6 +33,9 @@ class Ad(db.Model):
     keywords = db.Column(db.JSON, default=[])
     impressions = db.Column(db.Integer, default=0)
     clicks = db.Column(db.Integer, default=0)
+    # Bug #8 fix: is_active flag lets admins pause ads without deleting them;
+    # saskat_bp filters with WHERE is_active=true to avoid loading all rows.
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, default=utc_now)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
 
@@ -49,6 +52,7 @@ class Ad(db.Model):
             'keywords': self.keywords,
             'impressions': self.impressions,
             'clicks': self.clicks,
+            'isActive': self.is_active,
             'createdAt': self.created_at.isoformat() if self.created_at else None
         }
 
@@ -209,7 +213,8 @@ def update_ad(ad_id):
     if not admin_email:
         return jsonify({'error': 'Unauthorized'}), 401
 
-    ad = Ad.query.get(ad_id)
+    # Bug #3 fix: use db.session.get instead of deprecated Ad.query.get
+    ad = db.session.get(Ad, ad_id)
     if not ad:
         return jsonify({'error': 'Ad not found'}), 404
 
@@ -232,7 +237,9 @@ def update_ad(ad_id):
             ad.product_id = data['productId']
         if 'keywords' in data:
             ad.keywords = data['keywords']
-        
+        if 'isActive' in data:
+            ad.is_active = bool(data['isActive'])
+
         ad.updated_at = utc_now()
         db.session.commit()
         return jsonify({'ad': ad.to_dict()}), 200
@@ -246,7 +253,8 @@ def delete_ad(ad_id):
     if not admin_email:
         return jsonify({'error': 'Unauthorized'}), 401
 
-    ad = Ad.query.get(ad_id)
+    # Bug #3 fix: use db.session.get instead of deprecated Ad.query.get
+    ad = db.session.get(Ad, ad_id)
     if not ad:
         return jsonify({'error': 'Ad not found'}), 404
 
@@ -301,7 +309,8 @@ def upload_file():
 def track_ad_interaction(ad_id):
     if not verify_admin_token():
         return jsonify({'error': 'Unauthorized'}), 401
-    ad = Ad.query.get(ad_id)
+    # Bug #3 fix: use db.session.get instead of deprecated Ad.query.get
+    ad = db.session.get(Ad, ad_id)
     if not ad:
         return jsonify({'error': 'Ad not found'}), 404
 

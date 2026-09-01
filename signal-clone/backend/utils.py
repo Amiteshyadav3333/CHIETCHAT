@@ -355,6 +355,11 @@ def ensure_runtime_compat_schema():
     add_missing_columns(inspector, 'status', {'music_volume': db.Float(), 'music_start': db.Float()})
     inspector = inspect(db.engine)
     add_missing_columns(inspector, 'user_report', {'content_type': db.String(30), 'content_id': db.Integer()})
+    inspector = inspect(db.engine)
+    # Bug #8 fix: ad.is_active column — allows pausing ads without deletion
+    add_missing_columns(inspector, 'ad', {'is_active': db.Boolean()})
+    if 'ad' in inspector.get_table_names():
+        db.session.execute(text('UPDATE ad SET is_active = COALESCE(is_active, TRUE)'))
     if 'user' in inspector.get_table_names():
         db.session.execute(text(
             "UPDATE \"user\" SET phone_number_privacy = COALESCE(phone_number_privacy, 'nobody'), "

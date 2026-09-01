@@ -109,6 +109,8 @@ _sensitive_limits = {
     '/api/ai/chat/stream': (60, 60 * 60),
     '/api/ai/image': (10, 60 * 60),
     '/api/ai/tts': (30, 60 * 60),
+    '/api/saskat/chat': (120, 60 * 60),
+    '/api/ai/image/generate': (20, 60 * 60),
     '/api/translate': (120, 60 * 60),
     '/api/upload': (60, 60 * 60),
     '/api/payments/orders': (20, 15 * 60),

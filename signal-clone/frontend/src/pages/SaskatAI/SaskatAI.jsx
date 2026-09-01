@@ -88,7 +88,7 @@ const SaskatAI = ({ onClose }) => {
                     searched: data.searched,
                     timestamp: new Date(),
                 }]);
-                setContextualAd(data.ad || null);
+                setContextualAd(data.ad || data.sponsored || null);
             } else {
                 setMessages(prev => [...prev, {
                     id: Date.now() + 1,

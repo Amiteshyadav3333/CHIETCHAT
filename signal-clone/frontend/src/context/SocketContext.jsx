@@ -13,7 +13,12 @@ export const SocketProvider = ({ children }) => {
     useEffect(() => {
         if (token) {
             // We can pass token in auth object
-            const url = import.meta.env.PROD ? SOCKET_BASE_URL : (API_BASE_URL || '/');
+            // Dev mein: Vite proxy `/socket.io` ko backend pe forward karta hai (ws: true).
+            // Isliye dev mein always same-origin '/' use karo — direct backend URL dene se
+            // browser `ws://localhost:5001` open karta hai jahan CORS header nahi hota,
+            // result: "Invalid frame header" error.
+            // Prod mein: direct backend URL use hoti hai (Vercel WebSocket proxy nahi karta).
+            const url = import.meta.env.PROD ? SOCKET_BASE_URL : '/';
             const newSocket = io(url, {
                 auth: async (callback) => {
                     if (token !== 'cookie-session') {

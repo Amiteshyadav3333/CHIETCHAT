@@ -356,17 +356,20 @@ def ensure_runtime_compat_schema():
     inspector = inspect(db.engine)
     add_missing_columns(inspector, 'user_report', {'content_type': db.String(30), 'content_id': db.Integer()})
     inspector = inspect(db.engine)
-    # Bug #8 fix: ad.is_active column — allows pausing ads without deletion
-    add_missing_columns(inspector, 'ad', {'is_active': db.Boolean()})
-    if 'ad' in inspector.get_table_names():
-        db.session.execute(text('UPDATE ad SET is_active = COALESCE(is_active, TRUE)'))
-    inspector = inspect(db.engine)
+    # Create 'ad' table if it doesn't exist yet (first deploy)
+    if 'ad' not in inspector.get_table_names():
+        from routes.admin_bp import Ad as _Ad
+        _Ad.__table__.create(db.engine, checkfirst=True)
+        inspector = inspect(db.engine)
+    # Add any missing columns to existing ad table
     add_missing_columns(inspector, 'ad', {
+        'is_active': db.Boolean(),
         'ad_type': db.String(20),
         'category': db.String(80),
         'cta_url': db.String(500),
     })
     if 'ad' in inspector.get_table_names():
+        db.session.execute(text("UPDATE ad SET is_active = COALESCE(is_active, TRUE)"))
         db.session.execute(text("UPDATE ad SET ad_type = COALESCE(ad_type, 'banner')"))
     # Create saskat_session table if not exists
     inspector = inspect(db.engine)

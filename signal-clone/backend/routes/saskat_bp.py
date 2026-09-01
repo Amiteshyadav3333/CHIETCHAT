@@ -104,11 +104,18 @@ def _check_and_consume_credits(user_id: int, cost: int, is_premium: bool) -> dic
 # Bug #12 fixed: Gemini returns None only when truly nothing to send
 # ---------------------------------------------------------------------------
 
-def _call_gemini(messages: list) -> str | None:
-    api_key = _key('GEMINI_API_KEY')
-    if not api_key:
-        return None
+# Gemini model preference order — tried one by one until one succeeds.
+# gemini-flash-lite-latest is the most reliably available on free quota.
+_GEMINI_MODELS = [
+    'gemini-flash-lite-latest',   # free-tier quota, most reliable
+    'gemini-2.5-flash',           # if user has paid quota / new key
+    'gemini-flash-latest',        # alias, sometimes available
+    'gemini-2.5-flash-lite',      # fallback lite
+]
 
+
+def _call_gemini_model(api_key: str, model_name: str, messages: list) -> str | None:
+    """Try one specific Gemini model. Returns text or None on any error."""
     gemini_contents = []
     system_instruction = None
     for m in messages:
@@ -118,8 +125,6 @@ def _call_gemini(messages: list) -> str | None:
         role = 'user' if m['role'] == 'user' else 'model'
         gemini_contents.append({"role": role, "parts": [{"text": m['content']}]})
 
-    # Bug #12 fix: if no user/assistant turns exist yet, send a minimal user
-    # turn so Gemini has something to respond to rather than silently failing.
     if not gemini_contents:
         if system_instruction:
             gemini_contents.append({"role": "user", "parts": [{"text": "Hello"}]})
@@ -142,7 +147,7 @@ def _call_gemini(messages: list) -> str | None:
     payload = json.dumps(payload_dict).encode()
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-2.5-flash:generateContent?key={api_key}"
+        f"{model_name}:generateContent?key={api_key}"
     )
     req = urllib.request.Request(
         url, data=payload,
@@ -155,6 +160,18 @@ def _call_gemini(messages: list) -> str | None:
         return data['candidates'][0]['content']['parts'][0]['text']
     except Exception:
         return None
+
+
+def _call_gemini(messages: list) -> str | None:
+    """Try Gemini models in preference order; return first successful response."""
+    api_key = _key('GEMINI_API_KEY')
+    if not api_key:
+        return None
+    for model_name in _GEMINI_MODELS:
+        result = _call_gemini_model(api_key, model_name, messages)
+        if result:
+            return result
+    return None
 
 
 def _call_groq(messages: list) -> str | None:
@@ -173,6 +190,8 @@ def _call_groq(messages: list) -> str | None:
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
+            # Cloudflare 1010 fix: send a real browser-like User-Agent
+            "User-Agent": "Mozilla/5.0 (compatible; CheetchatAI/1.0)",
         },
         method="POST",
     )
@@ -217,7 +236,7 @@ def _call_grok(messages: list) -> str | None:
     if not api_key:
         return None
     payload = json.dumps({
-        "model": "grok-2-latest",
+        "model": "grok-3-mini",   # grok-2-latest no longer exists; grok-3-mini is current free tier
         "messages": messages,
         "max_tokens": 1024,
         "temperature": 0.85,
@@ -253,10 +272,16 @@ _DEFAULT_ORDER = [_call_gemini, _call_groq, _call_openai, _call_grok]
 def _get_ai_reply(messages: list, model: str = 'gemini') -> str:
     """Try the requested model first, then fall back in order."""
     chain = _MODEL_ORDER.get(model, _DEFAULT_ORDER)
+    errors = []
     for caller in chain:
-        result = caller(messages)
-        if result:
-            return result
+        try:
+            result = caller(messages)
+            if result:
+                return result
+            errors.append(f"{caller.__name__}: returned None")
+        except Exception as exc:
+            errors.append(f"{caller.__name__}: {exc}")
+    logger.error("All AI providers failed. Errors: %s", " | ".join(errors))
     return "Sorry, AI is temporarily unavailable. Please try again later."
 
 

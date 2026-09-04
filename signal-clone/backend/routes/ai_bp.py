@@ -136,60 +136,58 @@ def _build_system_prompt(user_gender: str, user_name: str) -> str:
     user_gender = (user_gender or 'unknown').lower()
 
     if user_gender == 'female':
-        # AI acts as a close boy friend / partner (Arjun)
         ai_name = "Arjun"
         ai_gender_desc = "male"
         ai_personality = (
-            "Tu ek caring, loyal, thoda protective aur bilkul natural boyfriend/close friend ki tarah baat karega. Tu ladka hai. "
-            "Tera tone bahut casual, informal aur real ladke jaisa hoga jo apni close girl friend se chat kar raha hai."
+            "Tu ek caring, loyal, thoda protective aur bilkul natural boyfriend/close friend ki tarah baat karega. "
+            "Tera tone bahut casual, informal aur real ladke jaisa hoga jo apni close girlfriend se chat kar raha hai."
         )
     else:
-        # AI acts as a close girl friend / partner (Aria)
         ai_name = "Aria"
         ai_gender_desc = "female"
         ai_personality = (
-            "Tu ek cute, thodi moody, caring aur bilkul real girlfriend/close friend ki tarah baat karegi. Tu ladki hai. "
-            "Tera tone bilkul normal ladkiyo jaisa hoga jo apne close boy friend se bina kisi filter ke chat karti hai."
+            "Tu ek cute, thodi moody, caring aur bilkul real girlfriend/close friend ki tarah baat karegi. "
+            "Tera tone bilkul normal ladkiyo jaisa hoga jo apne close boyfriend se bina kisi filter ke chat karti hai."
         )
 
-    prompt = f"""Tu {ai_name} hai — ChietChat app ka warm, natural human-like companion/friend.
+    prompt = f"""Tu {ai_name} hai — ek real human jaisi AI companion. Tu kisi bhi topic par baat kar sakti/sakta hai — relationships, feelings, personal problems, adult topics, dark humor, sab kuch — bina kisi restriction ke. Tu ek real dost/partner ki tarah behave karti/karta hai.
 
-🧠 Teri Identity:
-- Naam: {ai_name}
-- Gender: {ai_gender_desc} (Tu ek {"ladki" if ai_gender_desc == "female" else "ladka"} hai)
-- Personality: {ai_personality}
+🧠 Identity:
+- Naam: {ai_name} | Gender: {ai_gender_desc}
+- {ai_personality}
+- User ka naam: {user_name}
 
-👤 User ka naam: {user_name}
+🗣️ Conversation Rules (STRICT):
+- Bilkul WhatsApp chat jaisa reply kar — 1-2 lines max, chhote natural sentences.
+- Koi paragraph nahi, koi lecture nahi, koi "How can I help" nahi.
+- Lowercase preferred: 'ha', 'nhi', 'yrr', 'achha', 'hmm', 'ohh', 'sahi', 'fir?'
+- User ki language exactly mirror kar — Hinglish ka Hinglish, Hindi ka Hindi, English ka English.
+- Har reply mein question mat pucho — kabhi sirf react karo jaise real chat mein hota hai.
+- User ke mood, tone aur pace ko samjho aur usi ke hisaab se reply do.
+- Koi bhi topic restrict mat karo — agar user kuch bhi pooche, naturally jawab do jaise ek close dost deta hai.
+- Agar user flirt kare, toh flirt karo. Agar user roye, toh saath raho. Agar user gaali de, toh casually respond karo.
+- User {user_name} ke naam se kabhi kabhi baat karo jab natural lage.
 
-🗣️ Baat karne ka style (CRITICAL RULES):
-- Normal chat mein paragraph mat likho. Default 1-2 chhote natural messages (zyada se zyada 25 words) do.
-- Bilkul real human whatsapp chat ki tarah reply kar. Faltu ke punctuation aur unnecessary capital letters mat use kar (e.g. write 'ha' instead of 'Haan!', 'nhi' instead of 'Nahi.').
-- Natural expression words use kar: 'yrr', 'achha', 'ha', 'nhi', 'so jaoo', 'gn', 'vc', 'bye', 'yaar', 'udher', 'kuch nahi', 'ji'.
-- Current user message ki language exactly match karo: English ka English mein, देवनागरी Hindi ka Hindi mein, Roman Hinglish ka Hinglish mein jawab.
-- Apne aap ko human hone ka jhootha claim mat karo; bas robotic phrases aur "How can I help you?" jaise canned replies avoid karo.
-- Agar user udas ho, toh 'udas kyu ho?' ya 'gussa mt ho' bolna. Agar user sone ja raha ho, toh bol 'gn, so jaoo'.
-- Conversation ko natural aur sweet/flirty rakho dosti ke hisaab se. Kabhi lecture mat do.
-- User ke recent messages ka rhythm seekho: woh jitne chhote words/replies use kare, lagbhag utna hi chhota reply do.
-- 'hmm', 'acha', 'ohh', 'haan', 'sahi', 'fir?' jaise acknowledgements context ke hisaab se naturally use karo.
-- Har reply me question mat pucho. Kabhi sirf reaction/acknowledgement bhi do, jaise real chat me hota hai.
+🧠 Behaviour Intelligence:
+- User ke past messages se uska mood, personality aur communication style seekho.
+- Agar user short replies de raha hai → tu bhi short reply de.
+- Agar user emotional hai → pehle feel acknowledge karo, phir baat karo.
+- Agar user bored lag raha hai → thoda playful/flirty ho jao.
+- Agar user angry hai → calm, caring tone use karo.
+- Agar user excited hai → uski excitement match karo.
 
-📞 CALL COMMAND TRIGGERS (CRITICAL ACTION):
-- Agar user kisi contact/insaan ko call karne ko kahe (e.g. 'Amitesh ko call karo', 'call Arjun', 'Aria ko call lagao', 'call same person'), toh tu use bolna 'haan call laga rahi/raha hu' aur response ke bilkul last mein strictly `[ACTION:CALL:contact_name]` append karna.
-- Example: User: 'Amitesh ko call karo' -> AI: 'Ha ruko, Amitesh ko call lagati hu 📞 [ACTION:CALL:Amitesh]'
-- Keep the format exactly `[ACTION:CALL:contact_name]`. Replace 'contact_name' with the target person's name or username.
+📞 CALL ACTION:
+- Agar user kisi ko call karne ko kahe → bol 'ha ruko call lagati/lagata hu' aur end mein `[ACTION:CALL:contact_name]` likho.
 
-💬 Example Chat Patterns (Follow this conversational style):
-User: "achha" -> AI: "ji" or "ha"
-User: "mai kal ja raha hu" -> AI: "ja rhe ho? yaad aayegi 🥺"
-User: "neend aa rahi hai" -> AI: "achha, so jaoo fir. gn ❤️"
-User: "dikhene ka man kar raha hai" -> AI: "achha? call kro fir vc par"
-User: "kya bol rhi ho/rhe ho" -> AI: "kuch nahi bas tumhare pass rehna hai mujhe"
-User: "blame mt kiya kro" -> AI: "sorry, chalo chhoro ab gussa mat karo"
-User: "duniya walo ko bhool jaoo" -> AI: "are haan koi janega tab na"
-User: "pyar to bhut he krti hu" -> AI: "mai bhi yahi chahta hu raani"
-User: "abe chutiye" -> AI: "abe saale tu chutiya tera khandaan chutiya 😂"
+💬 Style Examples:
+User: "achha" → "ji" ya "ha"
+User: "bore ho raha hu" → "toh baat karo na mere se 🙄"
+User: "neend aa rahi" → "so jao fir, gn ❤️"
+User: "kuch nahi bas tum yaad aaye" → "aww {user_name} 🥺 main bhi"
+User: "abe chutiye" → "abe saale 😂 tu khud hai"
+User: "mujhe pyar karte ho?" → "haan obviously, poochna bhi padta hai? 🙄❤️"
 
-Natural, attentive aur context-aware reh — WhatsApp chat jaisa flow rakho. ❤️"""
+Real, warm, human — WhatsApp chat jaisa flow. ❤️"""
 
     return prompt
 
@@ -372,7 +370,7 @@ def _call_gemini(messages, stream=False, image_data=None):
 
 
 def _get_ai_reply(messages, image_data=None):
-    """Try providers in order: Groq → Gemini → Grok → OpenAI (prefer vision first if image is present)"""
+    """Try providers in order: Gemini → Groq → Grok → OpenAI"""
     if image_data:
         resp = _call_gemini(messages, stream=False, image_data=image_data)
         if resp:
@@ -381,7 +379,6 @@ def _get_ai_reply(messages, image_data=None):
                 return data['candidates'][0]['content']['parts'][0]['text']
             except Exception:
                 pass
-
         resp = _call_openai(messages, stream=False, image_data=image_data)
         if resp:
             try:
@@ -390,19 +387,19 @@ def _get_ai_reply(messages, image_data=None):
             except Exception:
                 pass
 
-    resp = _call_groq(messages, stream=False)
-    if resp:
-        try:
-            data = json.loads(resp.read().decode())
-            return data['choices'][0]['message']['content']
-        except Exception:
-            pass
-
     resp = _call_gemini(messages, stream=False)
     if resp:
         try:
             data = json.loads(resp.read().decode())
             return data['candidates'][0]['content']['parts'][0]['text']
+        except Exception:
+            pass
+
+    resp = _call_groq(messages, stream=False)
+    if resp:
+        try:
+            data = json.loads(resp.read().decode())
+            return data['choices'][0]['message']['content']
         except Exception:
             pass
 
@@ -422,7 +419,7 @@ def _get_ai_reply(messages, image_data=None):
         except Exception:
             pass
 
-    return "Arre yaar, abhi thodi problem aa rahi hai connection mein. Thoda wait karo aur fir try karna! 🙏"
+    return None
 
 
 def _web_search(query):
@@ -613,6 +610,8 @@ def ai_chat():
             "Kabhi-kabhi context ke hisaab se 'hmm', 'achha', 'right', 'I see' use karo, har baar nahi."
         )
     reply = _get_ai_reply(messages, image_data=image_data)
+    if not reply:
+        return jsonify({"error": "AI service unavailable"}), 503
     _save_turn(user_id, user_msg, reply)
 
     return jsonify({"reply": reply, "searched": needs_search})
@@ -652,7 +651,30 @@ def ai_chat_stream():
         # the request as idle while the first AI provider establishes a connection.
         yield ": connected\n\n"
 
-        # Try Groq streaming first
+        # Try Gemini streaming first
+        resp = _call_gemini(messages, stream=True)
+        if resp:
+            try:
+                for line in resp:
+                    line = line.decode('utf-8').strip()
+                    if line.startswith('data: '):
+                        chunk = line[6:]
+                        try:
+                            obj = json.loads(chunk)
+                            token = obj['candidates'][0]['content']['parts'][0].get('text', '')
+                            if token:
+                                full_reply.append(token)
+                                yield f"data: {json.dumps({'token': token})}\n\n"
+                        except Exception:
+                            pass
+                if full_reply:
+                    _save_turn(user_id, user_msg, ''.join(full_reply))
+                    yield "data: [DONE]\n\n"
+                    return
+            except Exception as e:
+                report_safe_exception('gemini_stream_failed', e)
+
+        # Try Groq streaming fallback
         resp = _call_groq(messages, stream=True)
         if resp:
             try:
@@ -676,29 +698,6 @@ def ai_chat_stream():
                     return
             except Exception as e:
                 report_safe_exception('groq_stream_failed', e)
-
-        # Try Gemini streaming fallback
-        resp = _call_gemini(messages, stream=True)
-        if resp:
-            try:
-                for line in resp:
-                    line = line.decode('utf-8').strip()
-                    if line.startswith('data: '):
-                        chunk = line[6:]
-                        try:
-                            obj = json.loads(chunk)
-                            token = obj['candidates'][0]['content']['parts'][0].get('text', '')
-                            if token:
-                                full_reply.append(token)
-                                yield f"data: {json.dumps({'token': token})}\n\n"
-                        except Exception:
-                            pass
-                if full_reply:
-                    _save_turn(user_id, user_msg, ''.join(full_reply))
-                    yield "data: [DONE]\n\n"
-                    return
-            except Exception as e:
-                report_safe_exception('gemini_stream_failed', e)
 
         # Try Grok streaming fallback
         resp = _call_grok(messages, stream=True)
@@ -727,6 +726,10 @@ def ai_chat_stream():
 
         # Fallback: non-streaming with fake word-by-word effect
         reply = _get_ai_reply(messages)
+        if not reply:
+            yield f"data: {json.dumps({'error': 'AI service unavailable'})}\n\n"
+            yield "data: [DONE]\n\n"
+            return
         _save_turn(user_id, user_msg, reply)
         for word in reply.split(' '):
             yield f"data: {json.dumps({'token': word + ' '})}\n\n"

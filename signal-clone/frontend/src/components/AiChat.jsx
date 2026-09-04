@@ -196,10 +196,10 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
             setCallState('connected');
 
             // Play AI greeting
-            const greeting = language === 'hi-IN'
-                ? (botInfo?.name === 'Arjun' ? "हाँ, बोलो यार। क्या चल रहा है?" : "हेलो, बोलो ना। आज क्या बात करनी है?")
-                : `Hello, I'm ${botInfo?.name || 'your AI companion'}. I'm listening.`;
-            
+            const uname = user?.username || '';
+            const greeting = botInfo?.name === 'Arjun'
+                ? (uname ? `ha ${uname}, bol kya scene hai` : `ha bol, kya scene hai`)
+                : (uname ? `heyy ${uname}, chalo start karte hain ❤️` : `heyy, chalo start karte hain ❤️`);
             speakAiResponse(greeting);
         }, 2500);
     };
@@ -240,11 +240,11 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
             setCallState('connected');
 
             // Play AI greeting
-            const greeting = language === 'hi-IN'
-                ? "हाँ, मैं वीडियो कॉल पर हूँ। बोलो, मैं सुन रही हूँ।"
-                : `Hello, I'm on video with you. Tell me what's on your mind.`;
-            
-            speakAiResponse(greeting);
+            const uname = user?.username || '';
+            const vgreeting = botInfo?.name === 'Arjun'
+                ? (uname ? `ha ${uname}, video pe aa gaya, bol` : `ha bol, video pe hoon`)
+                : (uname ? `heyy ${uname}, chalo start karte hain ❤️` : `heyy, chalo start karte hain ❤️`);
+            speakAiResponse(vgreeting);
         }, 2500);
     };
 
@@ -402,9 +402,9 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         } catch (e) {
             console.error(e);
             setLoading(false);
-            speakAiResponse(language === 'hi-IN'
-                ? "कनेक्शन में थोड़ी दिक्कत है, एक बार फिर बोलो।"
-                : "The connection had a problem. Please say that once more.");
+            speakAiResponse(language.startsWith('hi')
+                ? "thodi connectivity issue hai, ek baar fir bolo"
+                : "connection issue, please say that again");
         }
     };
 
@@ -777,7 +777,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         } else if (!abortRef.current) {
             setMessages(prev => [...prev, {
                 id: Date.now(), role: 'assistant',
-                content: "The AI service is unavailable right now. Please try again. 🙏",
+                content: "thodi der baad try karo, abhi AI busy hai 🙏",
                 timestamp: new Date().toISOString()
             }]);
         }

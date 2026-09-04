@@ -200,10 +200,10 @@ def _call_grok(messages, stream=False):
     if not GROK_API_KEY:
         return None
     payload = json.dumps({
-        "model": "grok-2-latest",
+        "model": "grok-3-mini",
         "messages": messages,
         "stream": stream,
-        "max_tokens": 1024,
+        "max_tokens": 512,
         "temperature": 0.85,
     }).encode()
     req = urllib.request.Request(
@@ -212,12 +212,12 @@ def _call_grok(messages, stream=False):
         headers={
             "Authorization": f"Bearer {GROK_API_KEY}",
             "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "User-Agent": "Mozilla/5.0"
         },
         method="POST"
     )
     try:
-        return urllib.request.urlopen(req, timeout=30)
+        return urllib.request.urlopen(req, timeout=12)
     except Exception as e:
         report_safe_exception('grok_request_failed', e)
         return None
@@ -230,7 +230,7 @@ def _call_groq(messages, stream=False):
         "model": "llama-3.3-70b-versatile",
         "messages": messages,
         "stream": stream,
-        "max_tokens": 1024,
+        "max_tokens": 512,
         "temperature": 0.85,
         "top_p": 0.9,
     }).encode()
@@ -240,12 +240,12 @@ def _call_groq(messages, stream=False):
         headers={
             "Authorization": f"Bearer {GROQ_API_KEY}",
             "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "User-Agent": "Mozilla/5.0"
         },
         method="POST"
     )
     try:
-        return urllib.request.urlopen(req, timeout=30)
+        return urllib.request.urlopen(req, timeout=12)
     except urllib.error.HTTPError as e:
         e.read()
         report_safe_exception('groq_http_failed', e)
@@ -309,6 +309,16 @@ def _call_openai(messages, stream=False, image_data=None):
         return None
 
 
+# Gemini models to try in order (fallback chain) — all confirmed available
+_GEMINI_MODELS = [
+    'gemini-2.5-flash',
+    'gemini-flash-latest',
+    'gemini-2.5-flash-lite',
+    'gemini-flash-lite-latest',
+    'gemini-3-flash-preview',
+    'gemini-3.5-flash',
+]
+
 def _call_gemini(messages, stream=False, image_data=None):
     if not GEMINI_API_KEY:
         return None
@@ -325,15 +335,12 @@ def _call_gemini(messages, stream=False, image_data=None):
         mime_type, base64_str = _parse_base64_image(image_data)
         if mime_type and base64_str:
             gemini_contents[-1]["parts"].append({
-                "inlineData": {
-                    "mimeType": mime_type,
-                    "data": base64_str
-                }
+                "inlineData": {"mimeType": mime_type, "data": base64_str}
             })
 
     payload_dict = {
         "contents": gemini_contents,
-        "generationConfig": {"maxOutputTokens": 1024, "temperature": 0.85},
+        "generationConfig": {"maxOutputTokens": 512, "temperature": 0.85},
         "safetySettings": [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -343,42 +350,48 @@ def _call_gemini(messages, stream=False, image_data=None):
         ]
     }
     if system_instruction:
-        payload_dict["systemInstruction"] = {
-            "parts": [{"text": system_instruction}]
-        }
-    
+        payload_dict["systemInstruction"] = {"parts": [{"text": system_instruction}]}
+
     payload = json.dumps(payload_dict).encode()
-    if stream:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key={GEMINI_API_KEY}"
-    else:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
-        
-    req = urllib.request.Request(
-        url,
-        data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        },
-        method="POST"
-    )
-    try:
-        return urllib.request.urlopen(req, timeout=30)
-    except Exception as e:
-        report_safe_exception('gemini_request_failed', e)
-        return None
+
+    # Try each Gemini model until one works
+    for model in _GEMINI_MODELS:
+        if stream:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse&key={GEMINI_API_KEY}"
+        else:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
+        req = urllib.request.Request(
+            url, data=payload,
+            headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"},
+            method="POST"
+        )
+        try:
+            resp = urllib.request.urlopen(req, timeout=20)
+            return resp
+        except urllib.error.HTTPError as e:
+            e.read()
+            # 429 = quota exceeded, try next model; other errors also try next
+            report_safe_exception(f'gemini_{model}_failed', e)
+            continue
+        except Exception as e:
+            report_safe_exception(f'gemini_{model}_failed', e)
+            continue
+    return None
 
 
 def _get_ai_reply(messages, image_data=None):
-    """Try providers in order: Gemini → Groq → Grok → OpenAI"""
-    if image_data:
-        resp = _call_gemini(messages, stream=False, image_data=image_data)
-        if resp:
-            try:
-                data = json.loads(resp.read().decode())
-                return data['candidates'][0]['content']['parts'][0]['text']
-            except Exception:
-                pass
+    """Gemini (4 model fallback) → Groq → Grok → OpenAI"""
+    # Gemini handles image too — always try first
+    resp = _call_gemini(messages, stream=False, image_data=image_data)
+    if resp:
+        try:
+            data = json.loads(resp.read().decode())
+            return data['candidates'][0]['content']['parts'][0]['text']
+        except Exception:
+            pass
+
+    # OpenAI vision fallback if image present
+    if image_data and OPENAI_API_KEY:
         resp = _call_openai(messages, stream=False, image_data=image_data)
         if resp:
             try:
@@ -386,14 +399,6 @@ def _get_ai_reply(messages, image_data=None):
                 return data['choices'][0]['message']['content']
             except Exception:
                 pass
-
-    resp = _call_gemini(messages, stream=False)
-    if resp:
-        try:
-            data = json.loads(resp.read().decode())
-            return data['candidates'][0]['content']['parts'][0]['text']
-        except Exception:
-            pass
 
     resp = _call_groq(messages, stream=False)
     if resp:
@@ -651,7 +656,7 @@ def ai_chat_stream():
         # the request as idle while the first AI provider establishes a connection.
         yield ": connected\n\n"
 
-        # Try Gemini streaming first
+        # Gemini streaming (tries all 4 models internally)
         resp = _call_gemini(messages, stream=True)
         if resp:
             try:
@@ -674,7 +679,7 @@ def ai_chat_stream():
             except Exception as e:
                 report_safe_exception('gemini_stream_failed', e)
 
-        # Try Groq streaming fallback
+        # Groq streaming fallback
         resp = _call_groq(messages, stream=True)
         if resp:
             try:
@@ -699,35 +704,10 @@ def ai_chat_stream():
             except Exception as e:
                 report_safe_exception('groq_stream_failed', e)
 
-        # Try Grok streaming fallback
-        resp = _call_grok(messages, stream=True)
-        if resp:
-            try:
-                for line in resp:
-                    line = line.decode('utf-8').strip()
-                    if line.startswith('data: '):
-                        chunk = line[6:]
-                        if chunk == '[DONE]':
-                            break
-                        try:
-                            obj = json.loads(chunk)
-                            token = obj['choices'][0]['delta'].get('content', '')
-                            if token:
-                                full_reply.append(token)
-                                yield f"data: {json.dumps({'token': token})}\n\n"
-                        except Exception:
-                            pass
-                if full_reply:
-                    _save_turn(user_id, user_msg, ''.join(full_reply))
-                    yield "data: [DONE]\n\n"
-                    return
-            except Exception as e:
-                report_safe_exception('grok_stream_failed', e)
-
-        # Fallback: non-streaming with fake word-by-word effect
+        # Final fallback: non-streaming _get_ai_reply (tries all providers)
         reply = _get_ai_reply(messages)
         if not reply:
-            yield f"data: {json.dumps({'error': 'AI service unavailable'})}\n\n"
+            yield f"data: {json.dumps({'token': 'thodi der baad try karo 🙏'})}\n\n"
             yield "data: [DONE]\n\n"
             return
         _save_turn(user_id, user_msg, reply)

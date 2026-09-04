@@ -155,7 +155,7 @@ def _call_gemini_model(api_key: str, model_name: str, messages: list) -> str | N
         method="POST",
     )
     try:
-        resp = urllib.request.urlopen(req, timeout=30)
+        resp = urllib.request.urlopen(req, timeout=15)
         data = json.loads(resp.read().decode())
         return data['candidates'][0]['content']['parts'][0]['text']
     except Exception:
@@ -196,7 +196,7 @@ def _call_groq(messages: list) -> str | None:
         method="POST",
     )
     try:
-        resp = urllib.request.urlopen(req, timeout=30)
+        resp = urllib.request.urlopen(req, timeout=15)
         data = json.loads(resp.read().decode())
         return data['choices'][0]['message']['content']
     except Exception:
@@ -223,7 +223,7 @@ def _call_openai(messages: list, model: str = "gpt-4o-mini") -> str | None:
         method="POST",
     )
     try:
-        resp = urllib.request.urlopen(req, timeout=30)
+        resp = urllib.request.urlopen(req, timeout=15)
         data = json.loads(resp.read().decode())
         return data['choices'][0]['message']['content']
     except Exception:
@@ -251,7 +251,7 @@ def _call_grok(messages: list) -> str | None:
         method="POST",
     )
     try:
-        resp = urllib.request.urlopen(req, timeout=30)
+        resp = urllib.request.urlopen(req, timeout=15)
         data = json.loads(resp.read().decode())
         return data['choices'][0]['message']['content']
     except Exception:
@@ -542,6 +542,7 @@ def saskat_chat():
 
     # Bug #4 fix: use db.session.get instead of deprecated User.query.get
     user = db.session.get(User, user_id)
+    user_name = user.username if user else 'Friend'
     premium_active = bool(
         user
         and user.is_premium
@@ -597,15 +598,14 @@ def saskat_chat():
                 )
 
             system_prompt = (
-                "You are Saskat AI, a thoughtful research assistant inside CHEETCHAT. "
-                "Speak naturally, warmly and intelligently in the user's Hindi, Hinglish or English. "
-                "Give direct, well-structured neutral answers with practical next steps and honest "
-                "comparisons (free vs paid options, official sources, etc.). "
-                "IMPORTANT: Never recommend a specific paid product or sponsor inside your answer text. "
-                "Sponsored offers are shown separately by the platform — your job is purely the neutral answer. "
-                "When fresh web research is supplied, ground claims in it; never invent sources. "
-                "For health, skin, medical, money or safety topics, avoid guarantees and encourage "
-                "qualified professional advice where appropriate."
+                f"You are Saskat AI, a thoughtful research assistant inside CHEETCHAT. "
+                f"Speak directly to {user_name} with warmth and intelligence in their Hindi, Hinglish or English. "
+                f"Give direct, well-structured neutral answers with practical next steps. "
+                f"IMPORTANT: Never recommend a specific paid product inside your answer. "
+                f"Sponsored offers are shown separately — your job is purely the neutral answer. "
+                f"When web research is supplied, ground claims in it; never invent sources. "
+                f"For health, medical, money or safety topics, encourage qualified professional advice. "
+                f"Keep responses concise and actionable."
             )
 
             ai_messages = [{"role": "system", "content": system_prompt}]

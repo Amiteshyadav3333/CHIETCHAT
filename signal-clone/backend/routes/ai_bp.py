@@ -785,11 +785,11 @@ def ai_info():
     # If user is female → male AI (Arjun), else → female AI (Aria)
     if (user_gender or 'unknown').lower() == 'female':
         ai_name = "Arjun"
-        ai_avatar = "https://api.dicebear.com/9.x/avataaars/svg?seed=Arjun&style=circle&backgroundColor=b6e3f4&clothingColor=blue"
+        ai_avatar = "/ai/arjun-royal.jpg"
         ai_bio = "Tera dost Arjun — hamesha yahan hoon tere liye 💙"
     else:
         ai_name = "Aria"
-        ai_avatar = "https://api.dicebear.com/9.x/avataaars/svg?seed=Aria&style=circle&backgroundColor=ffd5dc&clothingColor=pink"
+        ai_avatar = "/ai/aria-royal.jpg"
         ai_bio = "Main Aria hoon — teri apni AI companion ✨"
 
     return jsonify({

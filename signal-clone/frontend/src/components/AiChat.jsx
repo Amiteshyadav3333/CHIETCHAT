@@ -10,6 +10,7 @@ import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import UserAvatar from './UserAvatar';
 import { EMOJIS, MessageBubble, TypingDots, WaveformVisualizer, renderMarkdown } from './AiChatPresentation';
 import AiVoiceWallpaper, { AI_WALLPAPER_THEMES } from './AiVoiceWallpaper';
+import HumanoidAiAvatar from './HumanoidAiAvatar';
 import { API_BASE_URL } from '../utils/apiBaseUrl';
 
 const SaskatAI = lazy(() => import('../pages/SaskatAI/SaskatAI'));
@@ -57,6 +58,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     const [callWallpaperTheme, setCallWallpaperTheme] = useState(() => localStorage.getItem('ai_call_wallpaper_theme') || 'quantum_sphere');
     const [showWpSelector, setShowWpSelector] = useState(false);
     const [liveSpokenText, setLiveSpokenText] = useState('');
+    const [showLiveCaptions, setShowLiveCaptions] = useState(false); // Clean UI by default (no text clutter unless enabled)
 
     // Call Refs to prevent closure stale states
     const isCallActiveRef = useRef(false);
@@ -897,9 +899,11 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     // Quick prompt suggestions based on AI gender
     const quickPrompts = ["hmm", "kya kar rhe ho?", "suno na", "interview ki taiyari kara do", "aaj mood off hai"];
 
-    const isArjun = botInfo?.name === 'Arjun';
-    const defaultRobotAvatar = isArjun ? '/ai/arjun-robot.jpg' : '/ai/aria-robot.jpg';
-    const botAvatar = botInfo?.avatar || defaultRobotAvatar;
+    const storedGender = (userGender || user?.gender || localStorage.getItem('user_gender') || '').toLowerCase();
+    const isFemaleUser = storedGender === 'female';
+    const isArjun = botInfo?.name ? botInfo.name === 'Arjun' : isFemaleUser;
+    const defaultRoyalAvatar = isArjun ? '/ai/arjun-royal.jpg' : '/ai/aria-royal.jpg';
+    const botAvatar = (botInfo?.avatar && !botInfo.avatar.includes('dicebear')) ? botInfo.avatar : defaultRoyalAvatar;
 
     return (
         <div className="ai-chat-root">
@@ -1940,101 +1944,79 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                     <div className="ai-call-container">
                         <div className="ai-call-header flex items-center justify-between px-2">
                             <span className="ai-call-encryption">🔒 Encrypted AI Call</span>
-                            <div className="relative">
+                            <div className="flex items-center gap-2">
                                 <button
                                     type="button"
-                                    onClick={() => setShowWpSelector(v => !v)}
-                                    className="flex items-center gap-1.5 rounded-full border border-white/20 bg-black/40 px-3 py-1 text-xs font-semibold text-white/90 backdrop-blur-md transition hover:bg-black/60 hover:border-white/40"
-                                    title="Choose AI Call Wallpaper"
+                                    onClick={() => setShowLiveCaptions(v => !v)}
+                                    className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold backdrop-blur-md transition ${
+                                        showLiveCaptions
+                                            ? 'bg-purple-600/40 text-purple-200 border-purple-400/50'
+                                            : 'border-white/20 bg-black/40 text-white/70 hover:bg-black/60 hover:text-white'
+                                    }`}
+                                    title={showLiveCaptions ? "Switch to Clean UI (Hide text)" : "Show live spoken text"}
                                 >
-                                    <span>{AI_WALLPAPER_THEMES.find(t => t.id === callWallpaperTheme)?.icon || '🔮'}</span>
-                                    <span>Wallpaper</span>
-                                    <span className="text-[10px] text-white/60">▼</span>
+                                    <span>💬</span>
+                                    <span>{showLiveCaptions ? 'Text ON' : 'Clean UI'}</span>
                                 </button>
+                                <div className="relative">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowWpSelector(v => !v)}
+                                        className="flex items-center gap-1.5 rounded-full border border-white/20 bg-black/40 px-3 py-1 text-xs font-semibold text-white/90 backdrop-blur-md transition hover:bg-black/60 hover:border-white/40"
+                                        title="Choose AI Call Wallpaper"
+                                    >
+                                        <span>{AI_WALLPAPER_THEMES.find(t => t.id === callWallpaperTheme)?.icon || '🔮'}</span>
+                                        <span>Wallpaper</span>
+                                        <span className="text-[10px] text-white/60">▼</span>
+                                    </button>
 
-                                {showWpSelector && (
-                                    <div className="absolute right-0 top-8 z-50 w-60 rounded-2xl border border-white/15 bg-[#0f0b1e]/95 p-2 shadow-2xl backdrop-blur-xl animate-scale-in">
-                                        <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-purple-400">AI Call Wallpapers</p>
-                                        {AI_WALLPAPER_THEMES.map(theme => (
-                                            <button
-                                                key={theme.id}
-                                                type="button"
-                                                onClick={() => {
-                                                    setCallWallpaperTheme(theme.id);
-                                                    localStorage.setItem('ai_call_wallpaper_theme', theme.id);
-                                                    setShowWpSelector(false);
-                                                }}
-                                                className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-xs transition ${
-                                                    callWallpaperTheme === theme.id
-                                                        ? 'bg-purple-600/30 text-white font-bold border border-purple-500/40'
-                                                        : 'text-gray-300 hover:bg-white/10'
-                                                }`}
-                                            >
-                                                <span className="text-base">{theme.icon}</span>
-                                                <div className="min-w-0 flex-1">
-                                                    <div className="truncate font-medium">{theme.name}</div>
-                                                    <div className="truncate text-[10px] text-gray-400">{theme.desc}</div>
-                                                </div>
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
+                                    {showWpSelector && (
+                                        <div className="absolute right-0 top-8 z-50 w-60 rounded-2xl border border-white/15 bg-[#0f0b1e]/95 p-2 shadow-2xl backdrop-blur-xl animate-scale-in">
+                                            <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-purple-400">AI Call Wallpapers</p>
+                                            {AI_WALLPAPER_THEMES.map(theme => (
+                                                <button
+                                                    key={theme.id}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setCallWallpaperTheme(theme.id);
+                                                        localStorage.setItem('ai_call_wallpaper_theme', theme.id);
+                                                        setShowWpSelector(false);
+                                                    }}
+                                                    className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-xs transition ${
+                                                        callWallpaperTheme === theme.id
+                                                            ? 'bg-purple-600/30 text-white font-bold border border-purple-500/40'
+                                                            : 'text-gray-300 hover:bg-white/10'
+                                                    }`}
+                                                >
+                                                    <span className="text-base">{theme.icon}</span>
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="truncate font-medium">{theme.name}</div>
+                                                        <div className="truncate text-[10px] text-gray-400">{theme.desc}</div>
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
 
                         <div className="ai-call-main">
-                            {/* ── AI Face Card ── */}
-                            <div className="ai-face-card">
-                                {/* Outer glow ring — pulses when ringing, glows green when speaking */}
-                                <div className={`ai-face-ring ${
-                                    callState === 'ringing' ? 'ai-face-ring--ringing' :
-                                    aiSpeaking ? 'ai-face-ring--speaking' :
-                                    userSpeaking ? 'ai-face-ring--listening' :
-                                    loading ? 'ai-face-ring--thinking' : 'ai-face-ring--idle'
-                                }`} />
+                            {/* ── Humanoid Lifelike Interactive Face ── */}
+                            <HumanoidAiAvatar
+                                avatarUrl={botAvatar}
+                                name={botInfo?.name || (isArjun ? 'Arjun' : 'Aria')}
+                                isArjun={isArjun}
+                                aiSpeaking={aiSpeaking}
+                                userSpeaking={userSpeaking}
+                                loading={loading}
+                                callState={callState}
+                            />
 
-                                {/* Avatar */}
-                                <div className="ai-face-avatar-wrap">
-                                    <img
-                                        src={botAvatar}
-                                        alt={botInfo?.name || (isArjun ? 'Arjun' : 'Aria')}
-                                        className="ai-face-avatar-img"
-                                    />
-                                    {/* Cybernetic HUD scan line */}
-                                    <div className={`ai-face-scanline ${aiSpeaking || userSpeaking ? 'ai-face-scanline--active' : ''}`} />
-
-                                    {/* Expression overlay — robotic state */}
-                                    <div className={`ai-face-expression ${
-                                        callState === 'ringing' ? 'ai-face-expr--ringing' :
-                                        aiSpeaking ? 'ai-face-expr--speaking' :
-                                        userSpeaking ? 'ai-face-expr--listening' :
-                                        loading ? 'ai-face-expr--thinking' : 'ai-face-expr--idle'
-                                    }`}>
-                                        {callState === 'ringing' && '📞'}
-                                        {callState === 'connected' && aiSpeaking && '🗣️'}
-                                        {callState === 'connected' && userSpeaking && '👂'}
-                                        {callState === 'connected' && loading && '🤔'}
-                                        {callState === 'connected' && !aiSpeaking && !userSpeaking && !loading && '🤖'}
-                                    </div>
-                                </div>
-
-                                {/* Mouth animation bar — moves when AI speaks */}
-                                {callState === 'connected' && (
-                                    <div className={`ai-face-mouth ${aiSpeaking ? 'ai-face-mouth--active' : ''}`}>
-                                        {[...Array(7)].map((_, i) => (
-                                            <div key={i} className="ai-face-mouth-bar" style={{
-                                                animationDelay: `${i * 0.08}s`,
-                                                height: aiSpeaking ? undefined : 3,
-                                            }} />
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="text-center">
+                            <div className="text-center mt-1">
                                 <h2 className="ai-call-name">{botInfo?.name || (isArjun ? 'Arjun' : 'Aria')}</h2>
                                 <p className="text-[11px] font-semibold text-purple-300/80 tracking-wide uppercase mt-0.5">
-                                    {isArjun ? '⚡ Cybernetic Companion' : '✨ Robotic AI Companion'}
+                                    {isArjun ? 'Royal AI Companion' : 'Royal AI Companion'}
                                 </p>
                             </div>
 
@@ -2070,9 +2052,9 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                                 </div>
                             )}
 
-                            {/* Live Spoken Voice Dialogue Banner */}
-                            {callState === 'connected' && liveSpokenText && (
-                                <div className="mx-auto max-w-sm px-2 text-center">
+                            {/* Live Spoken Voice Dialogue Banner (Only shown when user turns Text ON) */}
+                            {callState === 'connected' && showLiveCaptions && liveSpokenText && (
+                                <div className="mx-auto max-w-sm px-2 text-center animate-fade-in">
                                     <div className={`inline-block rounded-2xl px-4 py-2 text-xs leading-relaxed shadow-lg backdrop-blur-md transition-all ${
                                         aiSpeaking
                                             ? 'border border-purple-500/40 bg-purple-950/70 text-purple-200'

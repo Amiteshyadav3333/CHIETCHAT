@@ -1486,32 +1486,31 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                     100% { transform: translateY(-100vh) scale(0.3); opacity: 0; }
                 }
 
-                /* ── Face card ── */
+                /* ── Full Screen Call Container ── */
                 .ai-call-container {
-                    flex: 1;
+                    position: absolute;
+                    inset: 0;
                     display: flex;
                     flex-direction: column;
                     justify-content: space-between;
-                    padding: 32px 24px 28px;
+                    padding: 24px 20px 24px;
                     z-index: 10;
-                    position: relative;
+                    pointer-events: none;
+                }
+                .ai-call-container > * {
+                    pointer-events: auto;
                 }
                 .ai-call-header {
                     text-align: center;
                 }
                 .ai-call-encryption {
                     font-size: 11px;
-                    color: rgba(255,255,255,0.45);
-                    background: rgba(255,255,255,0.06);
+                    color: rgba(255,255,255,0.7);
+                    background: rgba(0,0,0,0.45);
+                    border: 1px solid rgba(255,255,255,0.15);
                     padding: 4px 12px;
                     border-radius: 12px;
                     backdrop-filter: blur(8px);
-                }
-                .ai-call-main {
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    gap: 12px;
                 }
 
                 /* Face card container */
@@ -1958,19 +1957,34 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
             )}
 
             {/* ─── Call Overlay Modal ─── */}
+            {/* ─── Call Overlay Modal (Full-Screen Immersive Humanoid Call) ─── */}
             {isCallActive && (
                 <div className="ai-call-overlay">
-                    {/* ── Animated wallpaper background ── */}
-                    <div className="ai-call-wallpaper">
-                        <AiVoiceWallpaper
-                            theme={callWallpaperTheme}
-                            aiSpeaking={aiSpeaking}
-                            userSpeaking={userSpeaking}
-                            loading={loading}
-                            callState={callState}
-                            stream={videoStreamRef.current}
-                        />
-                    </div>
+                    {/* ── 1. Full-Screen Cinematic Human Presenter ── */}
+                    <HumanoidAiAvatar
+                        avatarUrl={botAvatar}
+                        name={botInfo?.name || (isArjun ? 'Arjun' : 'Aria')}
+                        isArjun={isArjun}
+                        aiSpeaking={aiSpeaking}
+                        userSpeaking={userSpeaking}
+                        loading={loading}
+                        callState={callState}
+                        fullScreen={true}
+                    />
+
+                    {/* Optional subtle ambient wallpaper effect behind/around when selected */}
+                    {callWallpaperTheme !== 'quantum_sphere' && (
+                        <div className="ai-call-wallpaper opacity-20 pointer-events-none">
+                            <AiVoiceWallpaper
+                                theme={callWallpaperTheme}
+                                aiSpeaking={aiSpeaking}
+                                userSpeaking={userSpeaking}
+                                loading={loading}
+                                callState={callState}
+                                stream={videoStreamRef.current}
+                            />
+                        </div>
+                    )}
 
                     {isCallVideo && (
                         <div className="ai-call-video-container">
@@ -1982,32 +1996,62 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                         </div>
                     )}
 
+                    {/* ── 2. Floating Call HUD & Controls ── */}
                     <div className="ai-call-container">
-                        <div className="ai-call-header flex items-center justify-between px-2">
-                            <span className="ai-call-encryption">🔒 Encrypted AI Call</span>
+                        {/* Top Floating Glass Header */}
+                        <div className="ai-call-header flex items-center justify-between px-2 pt-1 pointer-events-auto">
                             <div className="flex items-center gap-2">
+                                <span className="ai-call-encryption">🔒 Encrypted</span>
+                                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/50 border border-white/15 backdrop-blur-md">
+                                    <span className="text-xs font-bold text-white tracking-wide">{botInfo?.name || (isArjun ? 'Arjun' : 'Aria')}</span>
+                                    <span className="text-[11px] text-purple-200">· {callState === 'connected' ? formatDuration(callDuration) : 'Calling…'}</span>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                {/* Live Status indicator */}
+                                {callState === 'connected' && (
+                                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/50 border border-white/15 backdrop-blur-md text-[11px] font-medium">
+                                        {loading ? (
+                                            <span className="text-purple-300 animate-pulse">✦ Thinking…</span>
+                                        ) : aiSpeaking ? (
+                                            <span className="text-emerald-300 flex items-center gap-1.5 font-semibold">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                                                Speaking
+                                            </span>
+                                        ) : userSpeaking ? (
+                                            <span className="text-amber-300 flex items-center gap-1.5 font-semibold">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                                                Listening
+                                            </span>
+                                        ) : (
+                                            <span className="text-gray-300">✦ Ready</span>
+                                        )}
+                                    </div>
+                                )}
+
                                 <button
                                     type="button"
                                     onClick={() => setShowLiveCaptions(v => !v)}
                                     className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold backdrop-blur-md transition ${
                                         showLiveCaptions
-                                            ? 'bg-purple-600/40 text-purple-200 border-purple-400/50'
-                                            : 'border-white/20 bg-black/40 text-white/70 hover:bg-black/60 hover:text-white'
+                                            ? 'bg-purple-600/50 text-purple-100 border-purple-400/60 shadow-lg'
+                                            : 'border-white/20 bg-black/50 text-white/80 hover:bg-black/70 hover:text-white'
                                     }`}
                                     title={showLiveCaptions ? "Switch to Clean UI (Hide text)" : "Show live spoken text"}
                                 >
                                     <span>💬</span>
                                     <span>{showLiveCaptions ? 'Text ON' : 'Clean UI'}</span>
                                 </button>
+
                                 <div className="relative">
                                     <button
                                         type="button"
                                         onClick={() => setShowWpSelector(v => !v)}
-                                        className="flex items-center gap-1.5 rounded-full border border-white/20 bg-black/40 px-3 py-1 text-xs font-semibold text-white/90 backdrop-blur-md transition hover:bg-black/60 hover:border-white/40"
+                                        className="flex items-center gap-1.5 rounded-full border border-white/20 bg-black/50 px-3 py-1 text-xs font-semibold text-white/90 backdrop-blur-md transition hover:bg-black/70 hover:border-white/40"
                                         title="Choose AI Call Wallpaper"
                                     >
                                         <span>{AI_WALLPAPER_THEMES.find(t => t.id === callWallpaperTheme)?.icon || '🔮'}</span>
-                                        <span>Wallpaper</span>
                                         <span className="text-[10px] text-white/60">▼</span>
                                     </button>
 
@@ -2042,72 +2086,34 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                             </div>
                         </div>
 
-                        <div className="ai-call-main">
-                            {/* ── Humanoid Lifelike Interactive Face ── */}
-                            <HumanoidAiAvatar
-                                avatarUrl={botAvatar}
-                                name={botInfo?.name || (isArjun ? 'Arjun' : 'Aria')}
-                                isArjun={isArjun}
-                                aiSpeaking={aiSpeaking}
-                                userSpeaking={userSpeaking}
-                                loading={loading}
-                                callState={callState}
-                            />
-
-                            <div className="text-center mt-1">
-                                <h2 className="ai-call-name">{botInfo?.name || (isArjun ? 'Arjun' : 'Aria')}</h2>
-                                <p className="text-[11px] font-semibold text-purple-300/80 tracking-wide uppercase mt-0.5">
-                                    {isArjun ? 'Royal AI Companion' : 'Royal AI Companion'}
-                                </p>
-                            </div>
-
-                            <p className="ai-call-status">
-                                {callState === 'ringing' && (
-                                    <span className="ai-call-status--ringing">Calling…</span>
-                                )}
-                                {callState === 'connected' && formatDuration(callDuration)}
-                            </p>
-
-                            {/* Status label */}
-                            {callState === 'connected' && (
-                                <div className="ai-call-state-label">
-                                    {loading ? (
-                                        <span className="ai-state-thinking">✦ Thinking…</span>
-                                    ) : aiSpeaking ? (
-                                        <span className="ai-state-speaking">✦ Speaking</span>
-                                    ) : userSpeaking ? (
-                                        <span className="ai-state-listening">✦ Listening</span>
-                                    ) : (
-                                        <span className="ai-state-idle">✦ Say something…</span>
-                                    )}
+                        {/* Middle Spacer with Live Spoken Voice Dialogue Banner (Only shown when user turns Text ON) */}
+                        <div className="flex-1 flex flex-col justify-end pb-3 pointer-events-none">
+                            {callState === 'connected' && showLiveCaptions && liveSpokenText && (
+                                <div className="mx-auto max-w-md px-4 text-center animate-fade-in pointer-events-auto">
+                                    <div className={`inline-block rounded-2xl px-4 py-2.5 text-xs leading-relaxed shadow-2xl backdrop-blur-xl transition-all ${
+                                        aiSpeaking
+                                            ? 'border border-purple-500/50 bg-purple-950/85 text-purple-100'
+                                            : userSpeaking
+                                            ? 'border border-emerald-500/50 bg-emerald-950/85 text-emerald-100'
+                                            : 'border border-white/15 bg-black/75 text-gray-200'
+                                    }`}>
+                                        <p className="line-clamp-3 font-medium">{liveSpokenText}</p>
+                                    </div>
                                 </div>
                             )}
+                        </div>
 
-                            {/* Waveform */}
+                        {/* Bottom Soundwave & Controls */}
+                        <div className="pointer-events-auto flex flex-col items-center gap-3 pb-2">
+                            {/* Waveform Minimalist Glow */}
                             {callState === 'connected' && (
-                                <div className="ai-call-waves">
+                                <div className="w-48 opacity-80">
                                     <WaveformVisualizer
                                         active={aiSpeaking || userSpeaking || loading}
                                         color={isArjun ? '#60a5fa' : '#c084fc'}
                                     />
                                 </div>
                             )}
-
-                            {/* Live Spoken Voice Dialogue Banner (Only shown when user turns Text ON) */}
-                            {callState === 'connected' && showLiveCaptions && liveSpokenText && (
-                                <div className="mx-auto max-w-sm px-2 text-center animate-fade-in">
-                                    <div className={`inline-block rounded-2xl px-4 py-2 text-xs leading-relaxed shadow-lg backdrop-blur-md transition-all ${
-                                        aiSpeaking
-                                            ? 'border border-purple-500/40 bg-purple-950/70 text-purple-200'
-                                            : userSpeaking
-                                            ? 'border border-emerald-500/40 bg-emerald-950/70 text-emerald-200'
-                                            : 'border border-white/10 bg-black/50 text-gray-300'
-                                    }`}>
-                                        <p className="line-clamp-2">{liveSpokenText}</p>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
 
                         {/* Controls */}
                         <div className="ai-call-controls">
@@ -2165,7 +2171,8 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                         </div>
                     </div>
                 </div>
-            )}
+            </div>
+        )}
         </div>
     );
 };

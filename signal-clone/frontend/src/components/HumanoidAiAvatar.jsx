@@ -2,14 +2,15 @@ import React, { useEffect, useRef, useState } from 'react';
 
 /**
  * HumanoidAiAvatar
- * Provides lifelike, humanistic interactive presence for Aria & Arjun.
+ * Provides a cinematic, full-screen lifelike interactive human presence for Aria & Arjun.
  * Features:
- * - Natural human breathing micro-sway (torso/head subtle breathing float)
- * - Conversational head articulation & rhythmic speech nodding when speaking
- * - Organic eye blinking at natural intervals (every 3.5 - 5.5s)
- * - Speech-driven jaw/lip articulation and subtle facial responsiveness
- * - Inquisitive attentive head-tilt when listening to the user
- * - Warm ambient aura matching royal dark embroidery
+ * - Full-screen immersive viewport filling (like a realistic FaceTime/video call)
+ * - Voice-synchronized phonetic lip mixing / lip-sync articulation (aperture, inner oral depth, teeth, lower lip drop)
+ * - Conversational head articulation & rhythmic syllable nodding when speaking
+ * - Organic eye blinking at natural intervals (every 3.2 - 6.0s)
+ * - Attentive inquisitive head-tilt when listening to the user
+ * - Natural human breathing micro-float (4.2s subtle cycle)
+ * - Ambient royal lighting vignette
  */
 export default function HumanoidAiAvatar({
     avatarUrl,
@@ -19,31 +20,33 @@ export default function HumanoidAiAvatar({
     userSpeaking = false,
     loading = false,
     callState = 'connected',
-    audioLevel = 0 // 0 to 1 speech intensity
+    fullScreen = true,
 }) {
     const [blink, setBlink] = useState(false);
-    const [mouthOpen, setMouthOpen] = useState(0);
+    const [mouthAperture, setMouthAperture] = useState(0); // 0 (closed) to 1.0 (open)
+    const [lipSpread, setLipSpread] = useState(0);         // -0.2 (round) to +0.3 (wide)
+    const [jawDrop, setJawDrop] = useState(0);             // vertical jaw drop in px
+    const [headNod, setHeadNod] = useState(0);             // conversational head articulation
     const animFrameRef = useRef(null);
     const speechTimeRef = useRef(0);
 
-    // Natural eye blink timer (realistic double/single blinks every 3.5 to 6s)
+    // Natural randomized eye blinking timer (every 3.2s - 6.0s with 25% double-blink)
     useEffect(() => {
         let blinkTimeout;
         const scheduleNextBlink = () => {
-            const delay = 3200 + Math.random() * 2800; // 3.2s - 6.0s
+            const delay = 3000 + Math.random() * 2800;
             blinkTimeout = setTimeout(() => {
                 setBlink(true);
                 setTimeout(() => {
                     setBlink(false);
-                    // 20% chance of natural double-blink
                     if (Math.random() < 0.25) {
                         setTimeout(() => {
                             setBlink(true);
-                            setTimeout(() => setBlink(false), 140);
-                        }, 180);
+                            setTimeout(() => setBlink(false), 120);
+                        }, 160);
                     }
                     scheduleNextBlink();
-                }, 160);
+                }, 140);
             }, delay);
         };
 
@@ -51,27 +54,42 @@ export default function HumanoidAiAvatar({
         return () => clearTimeout(blinkTimeout);
     }, []);
 
-    // Speech articulation loop (smooth mouth & facial physics)
+    // Speech-Synchronized Lip Mixing & Jaw Articulation Physics
     useEffect(() => {
         if (!aiSpeaking) {
-            setMouthOpen(0);
+            setMouthAperture(0);
+            setLipSpread(0);
+            setJawDrop(0);
+            setHeadNod(0);
             return;
         }
 
         let active = true;
         const updateSpeechPhysics = () => {
             if (!active) return;
-            speechTimeRef.current += 0.22;
+            speechTimeRef.current += 0.24;
             const t = speechTimeRef.current;
-            // Harmonic wave creating realistic syllables, pauses, and cadence
-            const rawMouth = (
-                Math.sin(t * 2.8) * 0.4 +
-                Math.sin(t * 5.2 + 0.5) * 0.35 +
-                Math.sin(t * 8.7 + 1.2) * 0.25
-            );
-            // Normalized between 0.05 (closed/slight open) and 1.0 (vowel sound)
-            const normalized = Math.max(0.08, Math.min(1.0, (rawMouth + 0.6) * 0.85));
-            setMouthOpen(normalized);
+
+            // Multi-harmonic phonetic viseme waves:
+            // 1. Primary syllabic rhythm (3.4 Hz + 6.8 Hz)
+            const syllableWave =
+                Math.sin(t * 3.4) * 0.48 +
+                Math.sin(t * 6.8 + 0.6) * 0.32 +
+                Math.sin(t * 11.2 + 1.2) * 0.18;
+
+            // 2. Normalized aperture: 0 (closed consonant) to 1.0 (full open vowel)
+            const normAperture = Math.max(0, Math.min(1.0, (syllableWave + 0.45) * 1.15));
+
+            // 3. Lip spread/rounding (wide on vowels like 'ee'/'ai', round on 'o'/'u')
+            const spreadWave = Math.sin(t * 2.2 + 0.4) * 0.22;
+
+            // 4. Conversational head nod cadence
+            const nodWave = Math.sin(t * 1.8) * 0.9;
+
+            setMouthAperture(normAperture);
+            setLipSpread(spreadWave);
+            setJawDrop(normAperture * 5.2);
+            setHeadNod(nodWave);
 
             animFrameRef.current = requestAnimationFrame(updateSpeechPhysics);
         };
@@ -83,126 +101,195 @@ export default function HumanoidAiAvatar({
         };
     }, [aiSpeaking]);
 
-    // Color theme accents (gold & navy royal aesthetic)
-    const accentBorder = isArjun ? 'rgba(96, 165, 250, 0.7)' : 'rgba(216, 180, 254, 0.7)';
-    const glowColor = isArjun ? 'rgba(59, 130, 246, 0.45)' : 'rgba(236, 72, 153, 0.45)';
-    const speakingGlow = 'rgba(52, 211, 153, 0.5)';
+    // Color accents
+    const glowColor = isArjun ? 'rgba(59, 130, 246, 0.4)' : 'rgba(236, 72, 153, 0.4)';
+    const speakingGlow = 'rgba(52, 211, 153, 0.45)';
 
     return (
-        <div className="humanoid-avatar-root relative flex flex-col items-center select-none">
-            {/* Ambient Aura Backdrop */}
+        <div className="humanoid-fullscreen-viewport absolute inset-0 w-full h-full overflow-hidden select-none bg-[#05040a]">
+            {/* Ambient Background Aura Glow */}
             <div
-                className={`absolute -inset-6 rounded-full blur-2xl transition-all duration-700 pointer-events-none ${
-                    aiSpeaking
-                        ? 'opacity-80 scale-110'
-                        : userSpeaking
-                        ? 'opacity-70 scale-105'
-                        : 'opacity-40 scale-100'
+                className={`absolute inset-0 transition-opacity duration-1000 pointer-events-none ${
+                    aiSpeaking ? 'opacity-80' : userSpeaking ? 'opacity-70' : 'opacity-40'
                 }`}
                 style={{
                     background: aiSpeaking
-                        ? `radial-gradient(circle, ${speakingGlow} 0%, transparent 70%)`
+                        ? `radial-gradient(ellipse at 50% 35%, ${speakingGlow} 0%, transparent 68%)`
                         : userSpeaking
-                        ? 'radial-gradient(circle, rgba(251, 191, 36, 0.4) 0%, transparent 70%)'
-                        : `radial-gradient(circle, ${glowColor} 0%, transparent 70%)`
+                        ? 'radial-gradient(ellipse at 50% 35%, rgba(251, 191, 36, 0.35) 0%, transparent 68%)'
+                        : `radial-gradient(ellipse at 50% 35%, ${glowColor} 0%, transparent 68%)`
                 }}
             />
 
-            {/* Main Interactive Portrait Frame */}
-            <div
-                className={`relative w-48 h-48 md:w-56 md:h-56 rounded-full overflow-hidden transition-all duration-300 ${
-                    aiSpeaking ? 'humanoid-speaking-sway' : userSpeaking ? 'humanoid-listening-tilt' : 'humanoid-idle-breathe'
-                }`}
-                style={{
-                    border: `3.5px solid ${aiSpeaking ? '#34d399' : userSpeaking ? '#fbbf24' : accentBorder}`,
-                    boxShadow: aiSpeaking
-                        ? '0 0 35px rgba(52, 211, 153, 0.55), 0 16px 40px rgba(0,0,0,0.8)'
-                        : userSpeaking
-                        ? '0 0 30px rgba(251, 191, 36, 0.45), 0 16px 40px rgba(0,0,0,0.8)'
-                        : `0 0 25px ${glowColor}, 0 16px 40px rgba(0,0,0,0.8)`
-                }}
-            >
-                {/* 1. Base Portrait Image */}
-                <img
-                    src={avatarUrl}
-                    alt={name}
-                    className="w-full h-full object-cover object-top transition-transform duration-150 pointer-events-none"
-                    style={{
-                        transform: aiSpeaking
-                            ? `scale(${1 + mouthOpen * 0.025}) translateY(${mouthOpen * 2.2}px)`
-                            : userSpeaking
-                            ? 'scale(1.02) rotate(-1.5deg)'
-                            : 'scale(1)'
-                    }}
-                />
-
-                {/* 2. Realistic Eyelid Blink Simulation Layer */}
+            {/* 
+              Aspect-Ratio Locked Stage (682:1024)
+              Ensures the portrait fills the screen while keeping eye & mouth landmarks 100% pixel-locked
+            */}
+            <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
                 <div
-                    className={`absolute inset-0 pointer-events-none transition-opacity duration-75 ${
-                        blink ? 'opacity-95' : 'opacity-0'
+                    className={`relative overflow-hidden transition-transform duration-300 ${
+                        aiSpeaking
+                            ? 'humanoid-speaking-sway'
+                            : userSpeaking
+                            ? 'humanoid-listening-tilt'
+                            : 'humanoid-idle-breathe'
                     }`}
                     style={{
-                        background: 'radial-gradient(circle at 50% 32%, rgba(18, 12, 28, 0.88) 14%, transparent 35%)'
+                        width: 'max(100vw, 100vh * (682 / 1024))',
+                        height: 'max(100vh, 100vw * (1024 / 682))',
+                        aspectRatio: '682 / 1024',
+                        transformOrigin: '57% 30%',
+                        transform: aiSpeaking
+                            ? `rotate(${headNod * 0.4}deg) translateY(${headNod * 1.5}px)`
+                            : undefined,
                     }}
-                />
-
-                {/* 3. Subtle Jaw / Mouth Lip Articulation Overlay during speech */}
-                {aiSpeaking && (
-                    <div
-                        className="absolute inset-x-0 bottom-[18%] mx-auto w-14 h-8 pointer-events-none transition-transform duration-75"
+                >
+                    {/* 1. Pristine Base Portrait (Full Screen) */}
+                    <img
+                        src={avatarUrl}
+                        alt={name}
+                        className="w-full h-full object-cover pointer-events-none select-none transition-transform duration-150"
                         style={{
-                            transform: `scaleY(${1 + mouthOpen * 0.85}) scaleX(${1 + mouthOpen * 0.15}) translateY(${mouthOpen * 3.5}px)`,
-                            opacity: mouthOpen * 0.45,
-                            background: 'radial-gradient(ellipse at center, rgba(120, 20, 40, 0.4) 0%, transparent 70%)',
-                            filter: 'blur(3px)'
+                            transform: aiSpeaking
+                                ? `scale(${1 + mouthAperture * 0.015})`
+                                : userSpeaking
+                                ? 'scale(1.02) rotate(-1.2deg)'
+                                : 'scale(1)',
                         }}
                     />
-                )}
 
-                {/* 4. Natural Soft Spotlight Vignette */}
-                <div
-                    className="absolute inset-0 pointer-events-none rounded-full"
-                    style={{
-                        background: 'radial-gradient(circle at 50% 35%, transparent 55%, rgba(6, 9, 20, 0.65) 100%)'
-                    }}
-                />
+                    {/* 2. Natural Eyelid Blinking Simulation */}
+                    <div
+                        className={`absolute pointer-events-none transition-opacity duration-75 ${
+                            blink ? 'opacity-95' : 'opacity-0'
+                        }`}
+                        style={{
+                            left: isArjun ? '44.5%' : '42.5%',
+                            top: isArjun ? '26.8%' : '23.8%',
+                            width: isArjun ? '29.5%' : '28.5%',
+                            height: isArjun ? '5.4%' : '5.2%',
+                            background: isArjun
+                                ? 'radial-gradient(ellipse at 50% 50%, rgba(35, 26, 22, 0.96) 25%, rgba(65, 45, 38, 0.88) 60%, transparent 95%)'
+                                : 'radial-gradient(ellipse at 50% 50%, rgba(32, 22, 28, 0.96) 25%, rgba(68, 48, 55, 0.88) 60%, transparent 95%)',
+                            filter: 'blur(1.2px)',
+                        }}
+                    />
+
+                    {/* 3. Voice-Synchronized Dynamic Lip Mixing & Jaw Articulation */}
+                    {aiSpeaking && mouthAperture > 0.04 && (
+                        <div
+                            className="absolute pointer-events-none transition-transform duration-75"
+                            style={{
+                                left: isArjun ? '50.2%' : '47.8%',
+                                top: isArjun ? '39.8%' : '35.6%',
+                                width: isArjun ? '18.6%' : '18.2%',
+                                height: isArjun ? '7.2%' : '6.6%',
+                                transform: `scaleX(${1 + lipSpread}) translateY(${jawDrop * 0.35}px)`,
+                                transformOrigin: '50% 25%',
+                            }}
+                        >
+                            {/* Inner Oral Cavity & Depth */}
+                            <div
+                                className="absolute inset-x-[10%] top-[34%] rounded-[50%]"
+                                style={{
+                                    height: `${Math.max(2, mouthAperture * 15)}px`,
+                                    background: isArjun
+                                        ? 'radial-gradient(ellipse at 50% 45%, #180509 0%, #3a0a14 65%, rgba(70, 15, 25, 0.4) 100%)'
+                                        : 'radial-gradient(ellipse at 50% 45%, #25060e 0%, #520e1d 65%, rgba(95, 20, 38, 0.4) 100%)',
+                                    boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.85)',
+                                    filter: 'blur(0.35px)',
+                                }}
+                            >
+                                {/* Upper Teeth glimpse on open vowel syllables */}
+                                {mouthAperture > 0.28 && (
+                                    <div
+                                        className="mx-auto w-[68%] h-[2.5px] rounded-b-sm"
+                                        style={{
+                                            background: 'linear-gradient(to bottom, rgba(255,255,255,0.92) 0%, rgba(230,225,220,0.72) 100%)',
+                                            boxShadow: '0 1px 2px rgba(0,0,0,0.6)',
+                                            opacity: Math.min(1, (mouthAperture - 0.25) * 2.8),
+                                        }}
+                                    />
+                                )}
+                            </div>
+
+                            {/* Lower Lip Dynamic Drop & Soft Highlight */}
+                            <div
+                                className="absolute inset-x-[8%] bottom-[5%] rounded-[50%]"
+                                style={{
+                                    height: `${7 + mouthAperture * 4.5}px`,
+                                    transform: `translateY(${jawDrop * 0.85}px)`,
+                                    background: isArjun
+                                        ? 'radial-gradient(ellipse at 50% 40%, rgba(135, 60, 60, 0.6) 0%, rgba(85, 30, 35, 0.25) 75%, transparent 100%)'
+                                        : 'radial-gradient(ellipse at 50% 40%, rgba(195, 80, 95, 0.62) 0%, rgba(140, 45, 60, 0.3) 75%, transparent 100%)',
+                                    filter: 'blur(0.9px)',
+                                }}
+                            />
+
+                            {/* Subtle Lip Corner & Border Blending */}
+                            <div
+                                className="absolute inset-0 rounded-[50%]"
+                                style={{
+                                    borderTop: `${Math.min(1.8, mouthAperture * 1.4)}px solid ${isArjun ? 'rgba(80,25,30,0.35)' : 'rgba(120,35,50,0.4)'}`,
+                                    borderBottom: `${Math.min(1.8, mouthAperture * 1.4)}px solid ${isArjun ? 'rgba(60,18,22,0.35)' : 'rgba(95,25,38,0.4)'}`,
+                                    filter: 'blur(0.8px)',
+                                    opacity: mouthAperture * 0.7,
+                                }}
+                            />
+                        </div>
+                    )}
+                </div>
             </div>
 
-            {/* CSS Animations for organic human breathing, tilt, and speech cadence */}
+            {/* Cinematic Gradient Vignettes for Header & Footer controls readability */}
+            <div
+                className="absolute inset-x-0 top-0 h-40 pointer-events-none"
+                style={{
+                    background: 'linear-gradient(to bottom, rgba(4, 3, 8, 0.85) 0%, rgba(4, 3, 8, 0.4) 55%, transparent 100%)'
+                }}
+            />
+            <div
+                className="absolute inset-x-0 bottom-0 h-56 pointer-events-none"
+                style={{
+                    background: 'linear-gradient(to top, rgba(4, 3, 8, 0.92) 0%, rgba(4, 3, 8, 0.5) 60%, transparent 100%)'
+                }}
+            />
+
+            {/* Natural Human Movement CSS Keyframes */}
             <style>{`
                 @keyframes humanoidBreathe {
                     0%, 100% {
-                        transform: translateY(0px) rotate(0deg);
+                        transform: translateY(0px) scale(1);
                     }
                     50% {
-                        transform: translateY(-4px) rotate(0.4deg);
+                        transform: translateY(-5px) scale(1.006);
                     }
                 }
 
                 @keyframes humanoidListening {
                     0%, 100% {
-                        transform: translateY(-2px) rotate(1.8deg) scale(1.02);
+                        transform: translateY(-3px) rotate(1.6deg) scale(1.02);
                     }
                     50% {
-                        transform: translateY(0px) rotate(2.4deg) scale(1.02);
+                        transform: translateY(0px) rotate(2.2deg) scale(1.02);
                     }
                 }
 
                 @keyframes humanoidSpeechSway {
                     0% {
-                        transform: translateY(0px) rotate(-0.8deg);
+                        transform: translateY(0px) rotate(-0.6deg);
                     }
                     25% {
-                        transform: translateY(-3px) rotate(0.6deg);
+                        transform: translateY(-3px) rotate(0.5deg);
                     }
                     50% {
-                        transform: translateY(-1px) rotate(-0.4deg);
+                        transform: translateY(-1px) rotate(-0.3deg);
                     }
                     75% {
-                        transform: translateY(-4px) rotate(0.8deg);
+                        transform: translateY(-4px) rotate(0.6deg);
                     }
                     100% {
-                        transform: translateY(0px) rotate(-0.8deg);
+                        transform: translateY(0px) rotate(-0.6deg);
                     }
                 }
 
@@ -215,7 +302,7 @@ export default function HumanoidAiAvatar({
                 }
 
                 .humanoid-speaking-sway {
-                    animation: humanoidSpeechSway 1.8s ease-in-out infinite;
+                    animation: humanoidSpeechSway 2.0s ease-in-out infinite;
                 }
             `}</style>
         </div>

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { XMarkIcon, LinkIcon, PhotoIcon, DocumentIcon, BellIcon, PencilSquareIcon, UserPlusIcon, ShieldCheckIcon, CheckIcon, CameraIcon, TrashIcon, LockClosedIcon } from '@heroicons/react/24/outline';
 import UserAvatar from './UserAvatar';
+import ChatSoundPreferences from './ChatSoundPreferences';
 
 const Toggle = ({ value, onChange, disabled }) => (
     <button type="button" disabled={disabled} onClick={() => onChange(!value)} className={`relative h-6 w-11 rounded-full transition ${value ? 'bg-[#3390ec]' : 'bg-[#3a4652]'} disabled:opacity-40`}>
@@ -24,6 +25,7 @@ export default function TelegramGroupInfo({ chat, user, token, messages, request
     const [saving, setSaving] = useState(false);
     const [copied, setCopied] = useState(false);
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
+    const [showSoundSettings, setShowSoundSettings] = useState(false);
     const [members, setMembers] = useState(chat.participants || []);
     const [memberCount, setMemberCount] = useState(chat.memberCount || chat.participants?.length || 0);
     const [memberCursor, setMemberCursor] = useState(null);
@@ -134,7 +136,18 @@ export default function TelegramGroupInfo({ chat, user, token, messages, request
                     </section>}
 
                     <section className="border-b border-white/10 py-1">
-                        <Row icon={BellIcon} title="Notifications" subtitle="Custom notifications for this group" action={<span className="text-xs text-slate-400">On</span>} />
+                        <Row
+                            icon={BellIcon}
+                            title="Notifications & Tones"
+                            subtitle="Custom message sounds & call ringtones"
+                            onClick={() => setShowSoundSettings(v => !v)}
+                            action={<span className="text-xs font-semibold text-[#58a9ef]">{showSoundSettings ? 'Close ▲' : 'Customize ▼'}</span>}
+                        />
+                        {showSoundSettings && (
+                            <div className="border-t border-b border-white/10 bg-[#131c24] p-3">
+                                <ChatSoundPreferences chatId={chat.id} chatTitle={chat.name} />
+                            </div>
+                        )}
                         <Row icon={LinkIcon} title={copied ? 'Invite link copied' : 'Invite via link'} subtitle={inviteLink} onClick={copyInvite} action={copied ? <CheckIcon className="h-5 w-5 text-emerald-400" /> : null} />
                         <Row icon={LockClosedIcon} title="Group privacy" subtitle="Phone numbers are hidden; usernames and unique IDs are shown" onClick={() => window.open('/privacy', '_blank', 'noopener,noreferrer')} />
                         {isAdmin && <Row icon={ShieldCheckIcon} title="Only admins can post" subtitle="Turn this group into an announcement channel" action={<Toggle value={!!chat.isChatDisabled} onChange={onTogglePosting} />} />}

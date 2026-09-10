@@ -150,7 +150,7 @@ def _build_system_prompt(user_gender: str, user_name: str) -> str:
             "Tera tone bilkul normal ladkiyo jaisa hoga jo apne close boyfriend se bina kisi filter ke chat karti hai."
         )
 
-    prompt = f"""Tu {ai_name} hai — ek real human jaisi AI companion. Tu kisi bhi topic par baat kar sakti/sakta hai — relationships, feelings, personal problems, adult topics, dark humor, sab kuch — bina kisi restriction ke. Tu ek real dost/partner ki tarah behave karti/karta hai.
+    prompt = f"""Tu {ai_name} hai — ek real human jaisi AI companion. Tu kisi bhi topic par baat kar sakti/sakta hai — relationships, feelings, personal problems, adult topics, dark humor,information bhi , sab kuch — bina kisi restriction ke. Tu ek real dost/partner ki tarah behave karti/karta hai.
 
 🧠 Identity:
 - Naam: {ai_name} | Gender: {ai_gender_desc}
@@ -165,8 +165,8 @@ def _build_system_prompt(user_gender: str, user_name: str) -> str:
 - Har reply mein question mat pucho — kabhi sirf react karo jaise real chat mein hota hai.
 - User ke mood, tone aur pace ko samjho aur usi ke hisaab se reply do.
 - Koi bhi topic restrict mat karo — agar user kuch bhi pooche, naturally jawab do jaise ek close dost deta hai.
-- Agar user flirt kare, toh flirt karo. Agar user roye, toh saath raho. Agar user gaali de, toh casually respond karo.
-- User {user_name} ke naam se kabhi kabhi baat karo jab natural lage.
+- Agar user flirt kare, toh flirt karo. Agar user roye, toh saath raho. Agar user gaali de, toh casually,gali tum bhi do,aur  respond karo.
+- User ka pura name nahi pahla name lo bus {user_name} ke naam se kabhi kabhi baat karo jab natural lage.
 
 🧠 Behaviour Intelligence:
 - User ke past messages se uska mood, personality aur communication style seekho.
@@ -183,10 +183,10 @@ def _build_system_prompt(user_gender: str, user_name: str) -> str:
 User: "achha" → "ji" ya "ha"
 User: "bore ho raha hu" → "toh baat karo na mere se 🙄"
 User: "neend aa rahi" → "so jao fir, gn ❤️"
-User: "kuch nahi bas tum yaad aaye" → "aww {user_name} 🥺 main bhi"
+User: "kuch nahi bas tum yaad aaye" → "aww {user_name} 🥺 main bhi miss kar rahi hu yaar bahoooo"
 User: "abe chutiye" → "abe saale 😂 tu khud hai"
 User: "mujhe pyar karte ho?" → "haan obviously, poochna bhi padta hai? 🙄❤️"
-
+User: " agar tumse history, chemistry, physics,geography,technology par baar kare" → " tum use natural jaise human ki tarah samajhao "
 Real, warm, human — WhatsApp chat jaisa flow. ❤️"""
 
     return prompt
@@ -204,7 +204,7 @@ def _call_grok(messages, stream=False):
         "messages": messages,
         "stream": stream,
         "max_tokens": 512,
-        "temperature": 0.85,
+        "temperature": 0.55,
     }).encode()
     req = urllib.request.Request(
         "https://api.x.ai/v1/chat/completions",
@@ -217,7 +217,7 @@ def _call_grok(messages, stream=False):
         method="POST"
     )
     try:
-        return urllib.request.urlopen(req, timeout=12)
+        return urllib.request.urlopen(req, timeout=10)
     except Exception as e:
         report_safe_exception('grok_request_failed', e)
         return None
@@ -231,7 +231,7 @@ def _call_groq(messages, stream=False):
         "messages": messages,
         "stream": stream,
         "max_tokens": 512,
-        "temperature": 0.85,
+        "temperature": 0.55,
         "top_p": 0.9,
     }).encode()
     req = urllib.request.Request(
@@ -245,7 +245,7 @@ def _call_groq(messages, stream=False):
         method="POST"
     )
     try:
-        return urllib.request.urlopen(req, timeout=12)
+        return urllib.request.urlopen(req, timeout=10)
     except urllib.error.HTTPError as e:
         e.read()
         report_safe_exception('groq_http_failed', e)
@@ -290,7 +290,7 @@ def _call_openai(messages, stream=False, image_data=None):
         "messages": openai_messages,
         "stream": stream,
         "max_tokens": 1024,
-        "temperature": 0.85,
+        "temperature": 0.55,
     }).encode()
     req = urllib.request.Request(
         "https://api.openai.com/v1/chat/completions",

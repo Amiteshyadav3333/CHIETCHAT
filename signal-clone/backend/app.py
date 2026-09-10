@@ -59,6 +59,7 @@ from routes.payments_bp import payments_bp
 from routes.calls_bp import calls_bp
 from routes.saskat_bp import saskat_bp
 from routes.admin_bp import admin_bp
+from routes.collaboration_bp import collaboration_bp
 
 # Sockets
 from sockets import register_socket_events
@@ -334,6 +335,7 @@ app.register_blueprint(payments_bp)
 app.register_blueprint(calls_bp)
 app.register_blueprint(saskat_bp)
 app.register_blueprint(admin_bp)
+app.register_blueprint(collaboration_bp)
 
 # Always repair the small set of columns required by the running release.
 # This protects production when a hosting plan skips a pre-deploy hook.

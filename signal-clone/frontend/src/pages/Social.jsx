@@ -20,7 +20,6 @@ import LinkifiedText from '../components/LinkifiedText';
 import { getSafeWebsiteUrl } from '../utils/safeUrl';
 import SocialShareSheet from '../components/SocialShareSheet';
 import ProCameraStudio from '../components/ProCameraStudio';
-import SaskatAIEmbed from './SaskatAI/SaskatAI';
 
 const authHeaders = (token) => ({ Authorization: `Bearer ${token}` });
 
@@ -980,7 +979,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
             onBack={() => setProfileView(null)} onOpenProfile={openProfile} onShareToChat={onShareToChat} onDirectMessage={onDirectMessage} />
     );
     const currentPosts = selectedChannel ? channelPosts : posts;
-    const TABS = [{ key: 'for-you', label: 'For You' }, { key: 'community', label: 'Community' }, { key: 'saskat-ai', label: '✨ Saskat AI' }, { key: 'following', label: 'Following' }, { key: 'channels', label: 'Spaces' }];
+    const TABS = [{ key: 'for-you', label: 'For You' }, { key: 'community', label: 'Community' }, { key: 'following', label: 'Following' }, { key: 'channels', label: 'Spaces' }];
 
     const displayedPosts = currentPosts.filter(post => {
         if (!searchQuery) return true;
@@ -1019,7 +1018,6 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                         {[
                             { icon: <HomeIcon className="w-7 h-7" />, label: 'Home', action: () => { setSelectedChannel(null); setActiveTab('for-you'); } },
                             { icon: <ChartBarIcon className="w-7 h-7" />, label: 'Community', action: () => { setSelectedChannel(null); setActiveTab('community'); } },
-                            { icon: <SparklesIcon className="w-7 h-7" />, label: 'Saskat AI', action: () => { setSelectedChannel(null); setActiveTab('saskat-ai'); } },
                             { icon: <UsersIcon className="w-7 h-7" />, label: 'Spaces', action: () => { setSelectedChannel(null); setActiveTab('channels'); } },
                             { icon: <UserCircleIcon className="w-7 h-7" />, label: 'Profile', action: () => setProfileView({ userId: user.id }) },
                             { icon: <ArrowLeftIcon className="w-7 h-7" />, label: 'Back', action: onBack },
@@ -1086,10 +1084,6 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                             <ChannelView channel={selectedChannel} posts={currentPosts} user={user} token={token} preview={preview} media={media} caption={caption} posting={posting} fileRef={fileRef} setCaption={setCaption} setMedia={setMedia}
                                 submitPost={() => submitPost(selectedChannel.id)} likePost={id => likePost(id, true)} retweetPost={id => retweetPost(id, true)} sharePost={(id, count) => sharePost(id, true, count)} onShareToChat={onShareToChat} deletePost={id => deletePost(id, true)}
                                 toggleFollow={toggleFollow} requestSubscribe={() => requestSubscribe(selectedChannel.id)} reviewRequest={reviewRequest} openProfile={openProfile} currentUser={user} onUpgrade={showPremiumUpgrade} />
-                        ) : activeTab === 'saskat-ai' ? (
-                            <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                                <SaskatAIEmbed onClose={() => setActiveTab('for-you')} />
-                            </div>
                         ) : activeTab === 'channels' ? (
                             <ChannelsList channels={displayedChannels} loading={loading} onOpen={fetchChannel} onSubscribe={requestSubscribe} onCreateNew={() => setShowChannelForm(true)} />
                         ) : (
@@ -1114,7 +1108,6 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                         {[
                             { icon: <HomeIcon className="w-6 h-6" />, action: () => { setSelectedChannel(null); setActiveTab('for-you'); } },
                             { icon: <ChartBarIcon className="w-6 h-6" />, action: () => { setSelectedChannel(null); setActiveTab('community'); } },
-                            { icon: <SparklesIcon className="w-6 h-6" />, action: () => { setSelectedChannel(null); setActiveTab('saskat-ai'); } },
                             { icon: <UsersIcon className="w-6 h-6" />, action: () => { setSelectedChannel(null); setActiveTab('channels'); } },
                             { icon: user && user.avatar ? <img src={user.avatar} alt="" className="w-6 h-6 rounded-full object-cover" /> : <UserCircleIcon className="w-6 h-6" />, action: () => setProfileView({ userId: user.id }) },
                         ].map((btn, i) => (

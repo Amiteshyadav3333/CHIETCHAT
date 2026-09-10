@@ -1,15 +1,18 @@
-import React, { useState, useEffect, useRef, useContext } from 'react';
+import React, { useState, useEffect, useRef, useContext, lazy, Suspense } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import {
     XMarkIcon, TrashIcon,
     PaperAirplaneIcon, StopIcon, MicrophoneIcon,
-    FaceSmileIcon, PhoneIcon
+    FaceSmileIcon, PhoneIcon, SparklesIcon
 } from '@heroicons/react/24/solid';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import UserAvatar from './UserAvatar';
 import { EMOJIS, MessageBubble, TypingDots, WaveformVisualizer, renderMarkdown } from './AiChatPresentation';
+import AiVoiceWallpaper, { AI_WALLPAPER_THEMES } from './AiVoiceWallpaper';
 import { API_BASE_URL } from '../utils/apiBaseUrl';
+
+const SaskatAI = lazy(() => import('../pages/SaskatAI/SaskatAI'));
 
 const AI_LANGUAGES = [
     { code: 'hi-IN', label: 'हिंदी' }, { code: 'en-IN', label: 'English' },
@@ -33,6 +36,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     const [showEmoji, setShowEmoji] = useState(false);
     const [userGender, setUserGender] = useState('unknown');
     const [language, setLanguage] = useState(() => localStorage.getItem('ai_language') || 'en-IN');
+    const [showSaskat, setShowSaskat] = useState(false);
 
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
@@ -50,6 +54,9 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     const [isCallSpeaker, setIsCallSpeaker] = useState(true);
     const [aiSpeaking, setAiSpeaking] = useState(false);
     const [userSpeaking, setUserSpeaking] = useState(false);
+    const [callWallpaperTheme, setCallWallpaperTheme] = useState(() => localStorage.getItem('ai_call_wallpaper_theme') || 'quantum_sphere');
+    const [showWpSelector, setShowWpSelector] = useState(false);
+    const [liveSpokenText, setLiveSpokenText] = useState('');
 
     // Call Refs to prevent closure stale states
     const isCallActiveRef = useRef(false);
@@ -180,7 +187,18 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         setIsCallMuted(false);
         setAiSpeaking(false);
         setUserSpeaking(false);
+        setLiveSpokenText('');
         pendingActionCallRef.current = null;
+
+        if (navigator.mediaDevices?.getUserMedia) {
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                if (isCallActiveRef.current) {
+                    videoStreamRef.current = stream;
+                } else {
+                    stream.getTracks().forEach(t => t.stop());
+                }
+            }).catch(() => {});
+        }
 
         startRingtone();
 
@@ -351,6 +369,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
 
     const handleCallUserSpeech = async (speechText) => {
         stopListening();
+        setLiveSpokenText(`You: "${speechText}"`);
 
         let frameData = null;
         if (isCallVideo) {
@@ -375,8 +394,11 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                 image: frameData,
                 call_mode: isCallVideo ? 'video' : 'voice',
                 language,
+                // Ask for short conversational reply during calls
+                max_tokens: 80,
             }, {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: `Bearer ${token}` },
+                timeout: 10000,
             });
 
             const replyText = res.data.reply;
@@ -389,6 +411,10 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                 pendingActionCallRef.current = callMatch[1];
             }
 
+            // Truncate to first 2 sentences for faster TTS during calls
+            const sentences = cleanReplyText.match(/[^.!?]+[.!?]+/g) || [cleanReplyText];
+            const shortReply = sentences.slice(0, 2).join(' ').trim() || cleanReplyText;
+
             const aiMsg = {
                 id: Date.now() + 1,
                 role: 'assistant',
@@ -398,7 +424,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
             setMessages(prev => [...prev, aiMsg]);
             setLoading(false);
 
-            speakAiResponse(cleanReplyText);
+            speakAiResponse(shortReply);
         } catch (e) {
             console.error(e);
             setLoading(false);
@@ -408,8 +434,10 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         }
     };
 
-    // Custom high-quality speech synthesis method
+    // Fast call TTS — use Web Speech API directly (zero network latency)
     const speakAiResponse = async (text) => {
+        if (!text) return;
+        setLiveSpokenText(text);
         if (window.speechSynthesis) {
             window.speechSynthesis.cancel();
         }
@@ -418,12 +446,19 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
             ttsAudioRef.current = null;
         }
 
-        const isArjun = botInfo?.name === 'Arjun';
-        const gender = isArjun ? 'male' : 'female';
-        
         stopListening();
         setAiSpeaking(true);
         aiSpeakingRef.current = true;
+
+        // Use Web Speech API directly for calls — instant, no network delay
+        if (isCallActiveRef.current && window.speechSynthesis) {
+            fallbackSpeakAiResponse(text);
+            return;
+        }
+
+        // Non-call: use custom TTS with network
+        const isArjun = botInfo?.name === 'Arjun';
+        const gender = isArjun ? 'male' : 'female';
 
         let audio;
         let objectUrl;
@@ -432,6 +467,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                 params: { text, gender, lang: recognitionLangRef.current, t: Date.now() },
                 headers: { Authorization: `Bearer ${token}` },
                 responseType: 'blob',
+                timeout: 8000,
             });
             objectUrl = URL.createObjectURL(response.data);
             audio = new Audio(objectUrl);
@@ -452,7 +488,6 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
             setAiSpeaking(false);
             aiSpeakingRef.current = false;
             
-            // Trigger call action if pending
             if (pendingActionCallRef.current && onActionCall) {
                 const target = pendingActionCallRef.current;
                 pendingActionCallRef.current = null;
@@ -499,11 +534,11 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         if (isArjun) {
             selectedVoice = languageVoices.find(v => /male|ravi|hemant|david/i.test(v.name)) || naturalVoice || languageVoices[0];
             utterance.pitch = 0.96;
-            utterance.rate = 0.96;
+            utterance.rate = isCallActiveRef.current ? 1.1 : 0.96;
         } else {
             selectedVoice = languageVoices.find(v => /female|swara|heera|aria|zira/i.test(v.name)) || naturalVoice || languageVoices[0];
             utterance.pitch = 1.03;
-            utterance.rate = 0.97;
+            utterance.rate = isCallActiveRef.current ? 1.1 : 0.97;
         }
 
         if (selectedVoice) {
@@ -863,6 +898,8 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     const quickPrompts = ["hmm", "kya kar rhe ho?", "suno na", "interview ki taiyari kara do", "aaj mood off hai"];
 
     const isArjun = botInfo?.name === 'Arjun';
+    const defaultRobotAvatar = isArjun ? '/ai/arjun-robot.jpg' : '/ai/aria-robot.jpg';
+    const botAvatar = botInfo?.avatar || defaultRobotAvatar;
 
     return (
         <div className="ai-chat-root">
@@ -1341,107 +1378,293 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                     z-index: 1000;
                     display: flex;
                     flex-direction: column;
-                    background: rgba(11, 20, 26, 0.95);
-                    backdrop-filter: blur(20px);
-                    -webkit-backdrop-filter: blur(20px);
-                    animation: fadeIn 0.3s ease;
+                    overflow: hidden;
+                    animation: fadeIn 0.35s ease;
                 }
-                .ai-call-bg-blur {
+
+                /* ── Animated wallpaper ── */
+                .ai-call-wallpaper {
                     position: absolute;
                     inset: 0;
-                    background: radial-gradient(circle at center, rgba(124,58,237,0.12) 0%, transparent 70%);
+                    background: ${isArjun
+                        ? 'linear-gradient(145deg,#0a1628 0%,#0d2044 40%,#0a1628 100%)'
+                        : 'linear-gradient(145deg,#120820 0%,#1e0a38 40%,#120820 100%)'};
+                    overflow: hidden;
+                }
+                .ai-call-wp-orb {
+                    position: absolute;
+                    border-radius: 50%;
+                    filter: blur(60px);
+                    opacity: 0.35;
+                    animation: orb-drift 8s ease-in-out infinite alternate;
+                }
+                .ai-call-wp-orb1 {
+                    width: 320px; height: 320px;
+                    top: -80px; left: -60px;
+                    background: ${isArjun ? '#1d4ed8' : '#7c3aed'};
+                    animation-duration: 9s;
+                }
+                .ai-call-wp-orb2 {
+                    width: 260px; height: 260px;
+                    bottom: -60px; right: -40px;
+                    background: ${isArjun ? '#0ea5e9' : '#a855f7'};
+                    animation-duration: 11s;
+                    animation-delay: -3s;
+                }
+                .ai-call-wp-orb3 {
+                    width: 180px; height: 180px;
+                    top: 40%; left: 50%;
+                    transform: translate(-50%,-50%);
+                    background: ${isArjun ? '#06b6d4' : '#ec4899'};
+                    opacity: 0.18;
+                    animation-duration: 7s;
+                    animation-delay: -5s;
+                }
+                @keyframes orb-drift {
+                    0% { transform: translate(0,0) scale(1); }
+                    100% { transform: translate(20px,30px) scale(1.12); }
+                }
+                .ai-call-wp-particles {
+                    position: absolute;
+                    inset: 0;
                     pointer-events: none;
                 }
+                .ai-call-wp-particle {
+                    position: absolute;
+                    bottom: -6px;
+                    border-radius: 50%;
+                    background: rgba(255,255,255,0.55);
+                    animation: particle-rise linear infinite;
+                }
+                @keyframes particle-rise {
+                    0% { transform: translateY(0) scale(1); opacity: 0.6; }
+                    100% { transform: translateY(-100vh) scale(0.3); opacity: 0; }
+                }
+
+                /* ── Face card ── */
                 .ai-call-container {
                     flex: 1;
                     display: flex;
                     flex-direction: column;
                     justify-content: space-between;
-                    padding: 40px 24px;
+                    padding: 32px 24px 28px;
                     z-index: 10;
+                    position: relative;
                 }
                 .ai-call-header {
                     text-align: center;
-                    opacity: 0.7;
                 }
                 .ai-call-encryption {
                     font-size: 11px;
-                    color: #9ca3af;
-                    background: rgba(255,255,255,0.04);
-                    padding: 4px 10px;
+                    color: rgba(255,255,255,0.45);
+                    background: rgba(255,255,255,0.06);
+                    padding: 4px 12px;
                     border-radius: 12px;
+                    backdrop-filter: blur(8px);
                 }
                 .ai-call-main {
                     display: flex;
                     flex-direction: column;
                     align-items: center;
-                    justify-content: center;
-                    gap: 16px;
-                    margin-bottom: 40px;
+                    gap: 12px;
                 }
-                .ai-call-avatar-wrap {
-                    position: relative;
-                    width: 140px;
-                    height: 140px;
-                    margin-bottom: 12px;
-                }
-                .ai-call-avatar {
-                    width: 100%;
-                    height: 100%;
-                    border-radius: 50%;
-                    border: 4px solid ${isArjun ? '#60a5fa' : '#c084fc'};
-                    box-shadow: 0 0 24px ${isArjun ? 'rgba(96,165,250,0.3)' : 'rgba(192,132,252,0.3)'};
-                    position: relative;
-                    z-index: 2;
-                    object-fit: cover;
-                }
-                .ai-call-avatar-glow {
-                    position: absolute;
-                    inset: -10px;
-                    border-radius: 50%;
-                    background: ${isArjun ? 'rgba(96,165,250,0.15)' : 'rgba(192,132,252,0.15)'};
-                    z-index: 1;
-                }
-                .ai-call-avatar--ringing .ai-call-avatar-glow {
-                    animation: pulse-glow 1.5s infinite;
-                }
-                .ai-call-avatar--speaking .ai-call-avatar {
-                    transform: scale(1.04);
-                    border-color: #22c55e;
-                    box-shadow: 0 0 32px rgba(34,197,94,0.55);
-                    transition: all 0.15s ease;
-                }
-                @keyframes pulse-glow {
-                    0% { transform: scale(0.95); opacity: 0.8; }
-                    50% { transform: scale(1.2); opacity: 0.3; }
-                    100% { transform: scale(1.4); opacity: 0; }
-                }
-                .ai-call-name {
-                    font-size: 24px;
-                    font-weight: 800;
-                    color: #fff;
-                    margin: 0;
-                }
-                .ai-call-status {
-                    font-size: 14px;
-                    color: #9ca3af;
-                    margin: 0;
-                    font-family: monospace;
-                    letter-spacing: 0.5px;
-                }
-                .ai-call-waves {
-                    width: 100%;
-                    max-width: 300px;
-                    margin-top: 20px;
+
+                /* Face card container */
+                .ai-face-card {
                     display: flex;
                     flex-direction: column;
                     align-items: center;
-                    gap: 8px;
+                    gap: 10px;
+                    position: relative;
                 }
-                .ai-call-speaker-indicator {
-                    text-align: center;
-                    height: 20px;
+
+                /* Outer glow ring */
+                .ai-face-ring {
+                    position: absolute;
+                    top: -14px; left: -14px; right: -14px; bottom: -14px;
+                    border-radius: 50%;
+                    pointer-events: none;
+                    transition: all 0.3s ease;
                 }
+                .ai-face-ring--idle {
+                    box-shadow: 0 0 0 3px rgba(255,255,255,0.08);
+                }
+                .ai-face-ring--ringing {
+                    box-shadow: 0 0 0 4px ${isArjun ? 'rgba(96,165,250,0.5)' : 'rgba(192,132,252,0.5)'};
+                    animation: ring-pulse 1.4s ease-in-out infinite;
+                }
+                .ai-face-ring--speaking {
+                    box-shadow: 0 0 0 5px rgba(34,197,94,0.55), 0 0 28px rgba(34,197,94,0.3);
+                    animation: speak-pulse 0.6s ease-in-out infinite alternate;
+                }
+                .ai-face-ring--listening {
+                    box-shadow: 0 0 0 4px rgba(251,191,36,0.5), 0 0 20px rgba(251,191,36,0.2);
+                    animation: listen-pulse 1s ease-in-out infinite alternate;
+                }
+                .ai-face-ring--thinking {
+                    box-shadow: 0 0 0 3px rgba(147,197,253,0.4);
+                    animation: think-spin 2s linear infinite;
+                }
+                @keyframes ring-pulse {
+                    0%,100% { transform: scale(1); opacity: 0.8; }
+                    50% { transform: scale(1.18); opacity: 0.3; }
+                }
+                @keyframes speak-pulse {
+                    from { transform: scale(1); }
+                    to { transform: scale(1.06); }
+                }
+                @keyframes listen-pulse {
+                    from { opacity: 0.5; }
+                    to { opacity: 1; }
+                }
+                @keyframes think-spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+
+                /* Avatar image */
+                .ai-face-avatar-wrap {
+                    position: relative;
+                    width: 168px;
+                    height: 168px;
+                    border-radius: 50%;
+                    overflow: hidden;
+                    border: 3.5px solid ${isArjun ? 'rgba(56,189,248,0.85)' : 'rgba(216,180,254,0.85)'};
+                    box-shadow:
+                        0 0 0 7px ${isArjun ? 'rgba(56,189,248,0.2)' : 'rgba(216,180,254,0.2)'},
+                        0 0 40px ${isArjun ? 'rgba(56,189,248,0.5)' : 'rgba(216,180,254,0.5)'},
+                        0 16px 48px rgba(0,0,0,0.7);
+                    transition: border-color 0.3s, box-shadow 0.3s, transform 0.3s;
+                }
+                .ai-face-avatar-img {
+                    width: 100% !important;
+                    height: 100% !important;
+                    object-fit: cover !important;
+                    border-radius: 50% !important;
+                    transition: transform 0.4s ease;
+                }
+                .ai-face-avatar-wrap:hover .ai-face-avatar-img {
+                    transform: scale(1.05);
+                }
+                .ai-face-scanline {
+                    position: absolute;
+                    inset: 0;
+                    background: linear-gradient(180deg, transparent 0%, rgba(255,255,255,0.2) 50%, transparent 100%);
+                    opacity: 0;
+                    pointer-events: none;
+                }
+                .ai-face-scanline--active {
+                    opacity: 1;
+                    animation: cyber-scan 2.4s linear infinite;
+                }
+                @keyframes cyber-scan {
+                    0% { transform: translateY(-100%); }
+                    100% { transform: translateY(100%); }
+                }
+
+                /* Expression emoji overlay */
+                .ai-face-expression {
+                    position: absolute;
+                    bottom: 6px;
+                    right: 6px;
+                    font-size: 22px;
+                    line-height: 1;
+                    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6));
+                    transition: all 0.25s ease;
+                    animation: expr-pop 0.3s ease;
+                }
+                @keyframes expr-pop {
+                    0% { transform: scale(0.5); opacity: 0; }
+                    70% { transform: scale(1.2); }
+                    100% { transform: scale(1); opacity: 1; }
+                }
+
+                /* Mouth bars */
+                .ai-face-mouth {
+                    display: flex;
+                    align-items: flex-end;
+                    gap: 3px;
+                    height: 22px;
+                    margin-top: 2px;
+                }
+                .ai-face-mouth-bar {
+                    width: 4px;
+                    border-radius: 2px;
+                    background: ${isArjun ? '#60a5fa' : '#c084fc'};
+                    height: 3px;
+                    transition: height 0.1s ease;
+                }
+                .ai-face-mouth--active .ai-face-mouth-bar {
+                    animation: mouth-bar 0.5s ease-in-out infinite alternate;
+                }
+                .ai-face-mouth--active .ai-face-mouth-bar:nth-child(1) { animation-delay: 0s; }
+                .ai-face-mouth--active .ai-face-mouth-bar:nth-child(2) { animation-delay: 0.07s; }
+                .ai-face-mouth--active .ai-face-mouth-bar:nth-child(3) { animation-delay: 0.14s; }
+                .ai-face-mouth--active .ai-face-mouth-bar:nth-child(4) { animation-delay: 0.21s; }
+                .ai-face-mouth--active .ai-face-mouth-bar:nth-child(5) { animation-delay: 0.14s; }
+                .ai-face-mouth--active .ai-face-mouth-bar:nth-child(6) { animation-delay: 0.07s; }
+                .ai-face-mouth--active .ai-face-mouth-bar:nth-child(7) { animation-delay: 0s; }
+                @keyframes mouth-bar {
+                    from { height: 3px; }
+                    to { height: ${() => Math.floor(Math.random()*14+6)}px; }
+                }
+                /* Static heights per bar for natural look */
+                .ai-face-mouth--active .ai-face-mouth-bar:nth-child(1) { animation-name: mouth-b1; }
+                .ai-face-mouth--active .ai-face-mouth-bar:nth-child(2) { animation-name: mouth-b2; }
+                .ai-face-mouth--active .ai-face-mouth-bar:nth-child(3) { animation-name: mouth-b3; }
+                .ai-face-mouth--active .ai-face-mouth-bar:nth-child(4) { animation-name: mouth-b4; }
+                .ai-face-mouth--active .ai-face-mouth-bar:nth-child(5) { animation-name: mouth-b3; }
+                .ai-face-mouth--active .ai-face-mouth-bar:nth-child(6) { animation-name: mouth-b2; }
+                .ai-face-mouth--active .ai-face-mouth-bar:nth-child(7) { animation-name: mouth-b1; }
+                @keyframes mouth-b1 { from{height:3px} to{height:8px} }
+                @keyframes mouth-b2 { from{height:4px} to{height:14px} }
+                @keyframes mouth-b3 { from{height:6px} to{height:18px} }
+                @keyframes mouth-b4 { from{height:8px} to{height:20px} }
+
+                /* Name & status */
+                .ai-call-name {
+                    font-size: 26px;
+                    font-weight: 800;
+                    color: #fff;
+                    margin: 0;
+                    text-shadow: 0 2px 12px rgba(0,0,0,0.5);
+                    letter-spacing: 0.3px;
+                }
+                .ai-call-status {
+                    font-size: 13px;
+                    color: rgba(255,255,255,0.55);
+                    margin: 0;
+                    font-family: monospace;
+                    letter-spacing: 1px;
+                }
+                .ai-call-status--ringing {
+                    color: ${isArjun ? '#93c5fd' : '#d8b4fe'};
+                    animation: blink 1.2s infinite;
+                }
+                @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+                /* State label */
+                .ai-call-state-label {
+                    font-size: 12px;
+                    font-weight: 600;
+                    letter-spacing: 0.5px;
+                    padding: 4px 14px;
+                    border-radius: 20px;
+                    background: rgba(255,255,255,0.07);
+                    backdrop-filter: blur(8px);
+                }
+                .ai-state-speaking { color: #4ade80; }
+                .ai-state-listening { color: #fbbf24; }
+                .ai-state-thinking { color: #93c5fd; animation: blink 1.5s infinite; }
+                .ai-state-idle { color: rgba(255,255,255,0.35); }
+
+                .ai-call-waves {
+                    width: 100%;
+                    max-width: 280px;
+                    margin-top: 4px;
+                }
+
+                /* Controls */
                 .ai-call-controls {
                     display: flex;
                     justify-content: center;
@@ -1453,22 +1676,25 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                     height: 56px;
                     border-radius: 50%;
                     border: none;
-                    background: rgba(255,255,255,0.07);
+                    background: rgba(255,255,255,0.1);
                     color: #e5e7eb;
                     display: flex;
                     align-items: center;
                     justify-content: center;
                     cursor: pointer;
                     transition: all 0.25s;
+                    backdrop-filter: blur(8px);
+                    border: 1px solid rgba(255,255,255,0.1);
                 }
                 .ai-call-btn:hover {
-                    background: rgba(255,255,255,0.15);
+                    background: rgba(255,255,255,0.18);
                     color: #fff;
                     transform: translateY(-2px);
                 }
                 .ai-call-btn--active {
-                    background: #fff;
+                    background: rgba(255,255,255,0.9);
                     color: #111b21;
+                    border-color: transparent;
                 }
                 .ai-call-btn--active:hover {
                     background: #e5e7eb;
@@ -1477,13 +1703,14 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                 .ai-call-btn--danger {
                     background: #ef4444;
                     color: #fff;
-                    width: 64px;
-                    height: 64px;
+                    width: 66px;
+                    height: 66px;
+                    border-color: transparent;
+                    box-shadow: 0 4px 20px rgba(239,68,68,0.45);
                 }
                 .ai-call-btn--danger:hover {
                     background: #dc2626;
-                    color: #fff;
-                    box-shadow: 0 4px 16px rgba(239, 68, 68, 0.4);
+                    box-shadow: 0 6px 24px rgba(239,68,68,0.6);
                 }
                 @keyframes fadeIn {
                     from { opacity: 0; }
@@ -1499,9 +1726,9 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
 
                 <div className="ai-header-avatar">
                     <UserAvatar
-                        src={botInfo?.avatar}
-                        name={botInfo?.name || 'Aria'}
-                        alt={botInfo?.name}
+                        src={botAvatar}
+                        name={botInfo?.name || (isArjun ? 'Arjun' : 'Aria')}
+                        alt={botInfo?.name || (isArjun ? 'Arjun' : 'Aria')}
                     />
                     <span className="ai-header-online" />
                 </div>
@@ -1517,6 +1744,9 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                 </div>
 
                 <div className="ai-header-actions">
+                    <button onClick={() => setShowSaskat(true)} className="ai-icon-btn" title="Saskat AI" style={{ color: '#f59e0b' }}>
+                        <SparklesIcon style={{ width: 18, height: 18 }} />
+                    </button>
                     <button onClick={startVideoCall} className="ai-icon-btn" title="Video Call AI companion" style={{ color: isArjun ? '#60a5fa' : '#c084fc', marginRight: 4 }}>
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: 18, height: 18 }}>
                             <path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3V7.5a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.94-.94 2.56-.27 2.56 1.06v11.38c0 1.33-1.62 2-2.56 1.06z" />
@@ -1566,7 +1796,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                 {streamingText && (
                     <div className="ai-msg-row ai-msg-row--bot">
                         <div className="ai-avatar-sm">
-                            <img src={botInfo?.avatar} alt={botInfo?.name} />
+                            <img src={botAvatar} alt={botInfo?.name || (isArjun ? 'Arjun' : 'Aria')} />
                             <span className="ai-avatar-online" />
                         </div>
                         <div className="ai-bubble ai-bubble--bot">
@@ -1582,7 +1812,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                 {loading && !streamingText && (
                     <div className="ai-msg-row ai-msg-row--bot">
                         <div className="ai-avatar-sm">
-                            <img src={botInfo?.avatar} alt={botInfo?.name} />
+                            <img src={botAvatar} alt={botInfo?.name || (isArjun ? 'Arjun' : 'Aria')} />
                             <span className="ai-avatar-online" />
                         </div>
                         <div className="ai-bubble ai-bubble--bot">
@@ -1673,67 +1903,184 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                 </p>
             </div>
 
+            {/* ─── Saskat AI Overlay ─── */}
+            {showSaskat && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: '#0a0e27' }}>
+                    <Suspense fallback={<div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>Loading…</div>}>
+                        <SaskatAI onClose={() => setShowSaskat(false)} />
+                    </Suspense>
+                </div>
+            )}
+
             {/* ─── Call Overlay Modal ─── */}
             {isCallActive && (
                 <div className="ai-call-overlay">
-                    <div className="ai-call-bg-blur" />
-                    
+                    {/* ── Animated wallpaper background ── */}
+                    <div className="ai-call-wallpaper">
+                        <AiVoiceWallpaper
+                            theme={callWallpaperTheme}
+                            aiSpeaking={aiSpeaking}
+                            userSpeaking={userSpeaking}
+                            loading={loading}
+                            callState={callState}
+                            stream={videoStreamRef.current}
+                        />
+                    </div>
+
                     {isCallVideo && (
                         <div className="ai-call-video-container">
                             <div className="ai-call-video-badge">
-                                <span className="ai-call-video-pulse"></span>
+                                <span className="ai-call-video-pulse" />
                                 AI Vision Active
                             </div>
-                            <video
-                                ref={videoRef}
-                                autoPlay
-                                playsInline
-                                muted
-                                className="ai-call-video-feed"
-                            />
+                            <video ref={videoRef} autoPlay playsInline muted className="ai-call-video-feed" />
                         </div>
                     )}
-                    
+
                     <div className="ai-call-container">
-                        <div className="ai-call-header">
-                            <span className="ai-call-encryption">🔒 Secure HTTPS connection · AI processes this conversation</span>
+                        <div className="ai-call-header flex items-center justify-between px-2">
+                            <span className="ai-call-encryption">🔒 Encrypted AI Call</span>
+                            <div className="relative">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowWpSelector(v => !v)}
+                                    className="flex items-center gap-1.5 rounded-full border border-white/20 bg-black/40 px-3 py-1 text-xs font-semibold text-white/90 backdrop-blur-md transition hover:bg-black/60 hover:border-white/40"
+                                    title="Choose AI Call Wallpaper"
+                                >
+                                    <span>{AI_WALLPAPER_THEMES.find(t => t.id === callWallpaperTheme)?.icon || '🔮'}</span>
+                                    <span>Wallpaper</span>
+                                    <span className="text-[10px] text-white/60">▼</span>
+                                </button>
+
+                                {showWpSelector && (
+                                    <div className="absolute right-0 top-8 z-50 w-60 rounded-2xl border border-white/15 bg-[#0f0b1e]/95 p-2 shadow-2xl backdrop-blur-xl animate-scale-in">
+                                        <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-purple-400">AI Call Wallpapers</p>
+                                        {AI_WALLPAPER_THEMES.map(theme => (
+                                            <button
+                                                key={theme.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    setCallWallpaperTheme(theme.id);
+                                                    localStorage.setItem('ai_call_wallpaper_theme', theme.id);
+                                                    setShowWpSelector(false);
+                                                }}
+                                                className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-xs transition ${
+                                                    callWallpaperTheme === theme.id
+                                                        ? 'bg-purple-600/30 text-white font-bold border border-purple-500/40'
+                                                        : 'text-gray-300 hover:bg-white/10'
+                                                }`}
+                                            >
+                                                <span className="text-base">{theme.icon}</span>
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="truncate font-medium">{theme.name}</div>
+                                                    <div className="truncate text-[10px] text-gray-400">{theme.desc}</div>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         <div className="ai-call-main">
-                            <div className={`ai-call-avatar-wrap ${callState === 'ringing' ? 'ai-call-avatar--ringing' : ''} ${aiSpeaking ? 'ai-call-avatar--speaking' : ''}`}>
-                                <UserAvatar
-                                    src={botInfo?.avatar}
-                                    name={botInfo?.name || 'Aria'}
-                                    alt={botInfo?.name}
-                                    className="ai-call-avatar"
-                                />
-                                <div className="ai-call-avatar-glow" />
+                            {/* ── AI Face Card ── */}
+                            <div className="ai-face-card">
+                                {/* Outer glow ring — pulses when ringing, glows green when speaking */}
+                                <div className={`ai-face-ring ${
+                                    callState === 'ringing' ? 'ai-face-ring--ringing' :
+                                    aiSpeaking ? 'ai-face-ring--speaking' :
+                                    userSpeaking ? 'ai-face-ring--listening' :
+                                    loading ? 'ai-face-ring--thinking' : 'ai-face-ring--idle'
+                                }`} />
+
+                                {/* Avatar */}
+                                <div className="ai-face-avatar-wrap">
+                                    <img
+                                        src={botAvatar}
+                                        alt={botInfo?.name || (isArjun ? 'Arjun' : 'Aria')}
+                                        className="ai-face-avatar-img"
+                                    />
+                                    {/* Cybernetic HUD scan line */}
+                                    <div className={`ai-face-scanline ${aiSpeaking || userSpeaking ? 'ai-face-scanline--active' : ''}`} />
+
+                                    {/* Expression overlay — robotic state */}
+                                    <div className={`ai-face-expression ${
+                                        callState === 'ringing' ? 'ai-face-expr--ringing' :
+                                        aiSpeaking ? 'ai-face-expr--speaking' :
+                                        userSpeaking ? 'ai-face-expr--listening' :
+                                        loading ? 'ai-face-expr--thinking' : 'ai-face-expr--idle'
+                                    }`}>
+                                        {callState === 'ringing' && '📞'}
+                                        {callState === 'connected' && aiSpeaking && '🗣️'}
+                                        {callState === 'connected' && userSpeaking && '👂'}
+                                        {callState === 'connected' && loading && '🤔'}
+                                        {callState === 'connected' && !aiSpeaking && !userSpeaking && !loading && '🤖'}
+                                    </div>
+                                </div>
+
+                                {/* Mouth animation bar — moves when AI speaks */}
+                                {callState === 'connected' && (
+                                    <div className={`ai-face-mouth ${aiSpeaking ? 'ai-face-mouth--active' : ''}`}>
+                                        {[...Array(7)].map((_, i) => (
+                                            <div key={i} className="ai-face-mouth-bar" style={{
+                                                animationDelay: `${i * 0.08}s`,
+                                                height: aiSpeaking ? undefined : 3,
+                                            }} />
+                                        ))}
+                                    </div>
+                                )}
                             </div>
 
-                            <h2 className="ai-call-name">{botInfo?.name || 'Aria'}</h2>
-                            
+                            <div className="text-center">
+                                <h2 className="ai-call-name">{botInfo?.name || (isArjun ? 'Arjun' : 'Aria')}</h2>
+                                <p className="text-[11px] font-semibold text-purple-300/80 tracking-wide uppercase mt-0.5">
+                                    {isArjun ? '⚡ Cybernetic Companion' : '✨ Robotic AI Companion'}
+                                </p>
+                            </div>
+
                             <p className="ai-call-status">
-                                {callState === 'ringing' && 'Ringing...'}
+                                {callState === 'ringing' && (
+                                    <span className="ai-call-status--ringing">Calling…</span>
+                                )}
                                 {callState === 'connected' && formatDuration(callDuration)}
                             </p>
 
-                            {/* Waveforms */}
+                            {/* Status label */}
+                            {callState === 'connected' && (
+                                <div className="ai-call-state-label">
+                                    {loading ? (
+                                        <span className="ai-state-thinking">✦ Thinking…</span>
+                                    ) : aiSpeaking ? (
+                                        <span className="ai-state-speaking">✦ Speaking</span>
+                                    ) : userSpeaking ? (
+                                        <span className="ai-state-listening">✦ Listening</span>
+                                    ) : (
+                                        <span className="ai-state-idle">✦ Say something…</span>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Waveform */}
                             {callState === 'connected' && (
                                 <div className="ai-call-waves">
                                     <WaveformVisualizer
                                         active={aiSpeaking || userSpeaking || loading}
-                                        color={botInfo?.name === 'Arjun' ? '#60a5fa' : '#c084fc'}
+                                        color={isArjun ? '#60a5fa' : '#c084fc'}
                                     />
-                                    <div className="ai-call-speaker-indicator">
-                                        {loading ? (
-                                            <span className="text-white/40 text-[12px] animate-pulse">Thinking...</span>
-                                        ) : aiSpeaking ? (
-                                            <span className="text-white/70 text-[12px]">Speaking...</span>
-                                        ) : userSpeaking ? (
-                                            <span className="text-emerald-400 text-[12px] font-semibold">Listening...</span>
-                                        ) : (
-                                            <span className="text-white/30 text-[12px]">Say something...</span>
-                                        )}
+                                </div>
+                            )}
+
+                            {/* Live Spoken Voice Dialogue Banner */}
+                            {callState === 'connected' && liveSpokenText && (
+                                <div className="mx-auto max-w-sm px-2 text-center">
+                                    <div className={`inline-block rounded-2xl px-4 py-2 text-xs leading-relaxed shadow-lg backdrop-blur-md transition-all ${
+                                        aiSpeaking
+                                            ? 'border border-purple-500/40 bg-purple-950/70 text-purple-200'
+                                            : userSpeaking
+                                            ? 'border border-emerald-500/40 bg-emerald-950/70 text-emerald-200'
+                                            : 'border border-white/10 bg-black/50 text-gray-300'
+                                    }`}>
+                                        <p className="line-clamp-2">{liveSpokenText}</p>
                                     </div>
                                 </div>
                             )}

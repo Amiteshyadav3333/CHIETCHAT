@@ -615,3 +615,54 @@ class SaskatSession(db.Model):
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False, index=True)
     expires_at = db.Column(db.DateTime, nullable=False, index=True)     # created_at + 24h
     user = db.relationship('User')
+
+
+class CollaborationTask(db.Model):
+    __tablename__ = 'collaboration_task'
+    id = db.Column(db.Integer, primary_key=True)
+    chat_id = db.Column(db.Integer, db.ForeignKey('chat.id', ondelete='CASCADE'), nullable=False, index=True)
+    creator_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    assignee_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(32), nullable=False, default='todo')  # todo | in_progress | review | done
+    priority = db.Column(db.String(16), nullable=False, default='medium')  # low | medium | high | urgent
+    due_date = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    chat = db.relationship('Chat')
+    creator = db.relationship('User', foreign_keys=[creator_id])
+    assignee = db.relationship('User', foreign_keys=[assignee_id])
+
+
+class CollaborationNote(db.Model):
+    __tablename__ = 'collaboration_note'
+    id = db.Column(db.Integer, primary_key=True)
+    chat_id = db.Column(db.Integer, db.ForeignKey('chat.id', ondelete='CASCADE'), nullable=False, index=True)
+    creator_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    updated_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    title = db.Column(db.String(255), nullable=False, default='Untitled Note')
+    content = db.Column(db.Text, nullable=False, default='')
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    chat = db.relationship('Chat')
+    creator = db.relationship('User', foreign_keys=[creator_id])
+    updated_by = db.relationship('User', foreign_keys=[updated_by_id])
+
+
+class CollaborationMilestone(db.Model):
+    __tablename__ = 'collaboration_milestone'
+    id = db.Column(db.Integer, primary_key=True)
+    chat_id = db.Column(db.Integer, db.ForeignKey('chat.id', ondelete='CASCADE'), nullable=False, index=True)
+    creator_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    target_date = db.Column(db.DateTime, nullable=True)
+    is_completed = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+
+    chat = db.relationship('Chat')
+    creator = db.relationship('User', foreign_keys=[creator_id])
+

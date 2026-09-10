@@ -14,6 +14,7 @@ from extensions import socketio, socket_users, user_connection_counts
 from models import (
     db, User, Chat, ChatParticipant, Contact, Block, Notification,
     ProfileAudienceAvatar, MediaDeletionTask, UploadAsset,
+    CollaborationTask, CollaborationNote, CollaborationMilestone,
 )
 import cloudinary.uploader
 from observability import report_safe_exception
@@ -394,6 +395,13 @@ def ensure_runtime_compat_schema():
                 'FOREIGN KEY(user_id) REFERENCES user(id))'
             ))
         db.session.commit()
+    # Create collaboration tables if not exists
+    if 'collaboration_task' not in inspector.get_table_names():
+        CollaborationTask.__table__.create(db.engine, checkfirst=True)
+    if 'collaboration_note' not in inspector.get_table_names():
+        CollaborationNote.__table__.create(db.engine, checkfirst=True)
+    if 'collaboration_milestone' not in inspector.get_table_names():
+        CollaborationMilestone.__table__.create(db.engine, checkfirst=True)
     if 'user' in inspector.get_table_names():
         db.session.execute(text(
             "UPDATE \"user\" SET phone_number_privacy = COALESCE(phone_number_privacy, 'nobody'), "

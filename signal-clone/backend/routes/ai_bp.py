@@ -309,17 +309,13 @@ def _call_openai(messages, stream=False, image_data=None):
         return None
 
 
-# Gemini models to try in order (fallback chain) — all confirmed available
+# Gemini models to try in order (ultra-fast low-latency models first)
 _GEMINI_MODELS = [
+    'gemini-3.1-flash-lite',
     'gemini-2.5-flash',
-    'gemini-flash-latest',
-    'gemini-2.5-flash-lite',
-    'gemini-flash-lite-latest',
-    'gemini-3-flash-preview',
-    'gemini-3.5-flash',
 ]
 
-def _call_gemini(messages, stream=False, image_data=None):
+def _call_gemini(messages, stream=False, image_data=None, max_tokens=None):
     if not GEMINI_API_KEY:
         return None
     gemini_contents = []
@@ -338,9 +334,15 @@ def _call_gemini(messages, stream=False, image_data=None):
                 "inlineData": {"mimeType": mime_type, "data": base64_str}
             })
 
+    output_tokens = max_tokens or 400
     payload_dict = {
         "contents": gemini_contents,
-        "generationConfig": {"maxOutputTokens": 512, "temperature": 0.85},
+        "generationConfig": {
+            "maxOutputTokens": output_tokens,
+            "temperature": 0.72,
+            # thinkingBudget 0 disables internal thinking delay, giving ~1s fast chat response
+            "thinkingConfig": {"thinkingBudget": 0}
+        },
         "safetySettings": [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -366,11 +368,10 @@ def _call_gemini(messages, stream=False, image_data=None):
             method="POST"
         )
         try:
-            resp = urllib.request.urlopen(req, timeout=20)
+            resp = urllib.request.urlopen(req, timeout=8)
             return resp
         except urllib.error.HTTPError as e:
             e.read()
-            # 429 = quota exceeded, try next model; other errors also try next
             report_safe_exception(f'gemini_{model}_failed', e)
             continue
         except Exception as e:
@@ -379,10 +380,10 @@ def _call_gemini(messages, stream=False, image_data=None):
     return None
 
 
-def _get_ai_reply(messages, image_data=None):
-    """Gemini (4 model fallback) → Groq → Grok → OpenAI"""
-    # Gemini handles image too — always try first
-    resp = _call_gemini(messages, stream=False, image_data=image_data)
+def _get_ai_reply(messages, image_data=None, max_tokens=None):
+    """Gemini (ultra-fast model fallback) → Groq → Grok → OpenAI"""
+    # Gemini handles image too — always try first with optimized token and zero-thinking budget
+    resp = _call_gemini(messages, stream=False, image_data=image_data, max_tokens=max_tokens)
     if resp:
         try:
             data = json.loads(resp.read().decode())
@@ -587,10 +588,14 @@ def ai_chat():
     ):
         return jsonify({"error": "Camera image is invalid or too large"}), 400
 
-    # Web search trigger
-    search_keywords = ['search', 'latest', 'news', 'today', 'current', 'price', 'weather',
-                       'khoj', 'aaj', 'abhi', 'batao', 'kya hai', 'tell me about']
-    needs_search = any(kw in user_msg.lower() for kw in search_keywords)
+    call_mode = data.get('call_mode')
+    max_tokens = int(data.get('max_tokens') or (80 if call_mode else 350))
+
+    # Targeted web search trigger: only trigger for explicit lookup intent, never for normal chat/talk
+    search_keywords = ['search google', 'google search', 'internet pe search', 'weather in', 'aaj ka weather', 'stock price']
+    needs_search = False
+    if not call_mode and SERPER_API_KEY:
+        needs_search = any(kw in user_msg.lower() for kw in search_keywords)
 
     context_msg = user_msg
     if needs_search:
@@ -607,14 +612,14 @@ def ai_chat():
             "- If uncertain, say what you can actually see and ask the user to bring the object closer or improve lighting; never guess.\n"
             "- Words like 'ye', 'this', 'dekho', 'kya hai' refer to the attached current frame."
         )
-    if data.get('call_mode'):
+    if call_mode:
         messages[0]["content"] += (
             "\n\n📞 Ab live call chal rahi hai: natural spoken language use karo, "
             "markdown/emoji/list mat use karo. Normal chat mein 1-2 short spoken sentences bolo. "
             "Interview mode mein feedback short rakho aur ek time par sirf ek question pucho. "
             "Kabhi-kabhi context ke hisaab se 'hmm', 'achha', 'right', 'I see' use karo, har baar nahi."
         )
-    reply = _get_ai_reply(messages, image_data=image_data)
+    reply = _get_ai_reply(messages, image_data=image_data, max_tokens=max_tokens)
     if not reply:
         return jsonify({"error": "AI service unavailable"}), 503
     _save_turn(user_id, user_msg, reply)
@@ -656,8 +661,8 @@ def ai_chat_stream():
         # the request as idle while the first AI provider establishes a connection.
         yield ": connected\n\n"
 
-        # Gemini streaming (tries all 4 models internally)
-        resp = _call_gemini(messages, stream=True)
+        # Gemini streaming (ultra-fast low-latency streaming)
+        resp = _call_gemini(messages, stream=True, max_tokens=350)
         if resp:
             try:
                 for line in resp:

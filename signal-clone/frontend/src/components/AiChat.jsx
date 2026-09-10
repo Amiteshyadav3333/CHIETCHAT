@@ -77,6 +77,8 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     const ttsAudioRef = useRef(null);
     const videoStreamRef = useRef(null);
     const videoRef = useRef(null);
+    const callSpeechSilenceTimerRef = useRef(null);
+    const callTranscriptAccumulatorRef = useRef('');
 
     // Keep refs in sync
     useEffect(() => { isCallActiveRef.current = isCallActive; }, [isCallActive]);
@@ -284,7 +286,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         }
         const rec = new SpeechRec();
         rec.continuous = false;
-        rec.interimResults = false;
+        rec.interimResults = true; // Real-time interim results for responsive pickup
         rec.lang = recognitionLangRef.current;
 
         rec.onstart = () => {
@@ -293,33 +295,66 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
 
         rec.onend = () => {
             setUserSpeaking(false);
+            if (callSpeechSilenceTimerRef.current) {
+                clearTimeout(callSpeechSilenceTimerRef.current);
+            }
+            const pendingText = callTranscriptAccumulatorRef.current.trim();
+            if (pendingText && isCallActiveRef.current && !aiSpeakingRef.current) {
+                callTranscriptAccumulatorRef.current = '';
+                handleCallUserSpeech(pendingText);
+                return;
+            }
             // Auto restart listening after a brief timeout if call is active and shouldListenRef is true
             setTimeout(() => {
-                if (isCallActiveRef.current && callStateRef.current === 'connected' && !isCallMutedRef.current && shouldListenRef.current) {
+                if (isCallActiveRef.current && callStateRef.current === 'connected' && !isCallMutedRef.current && shouldListenRef.current && !aiSpeakingRef.current) {
                     try {
                         rec.start();
                     } catch(e){}
                 }
-            }, 300);
+            }, 250);
         };
 
         rec.onerror = (e) => {
             console.error("Speech Recognition Error:", e.error);
             setUserSpeaking(false);
-            // Auto restart if shouldListenRef is still true
+            if (callSpeechSilenceTimerRef.current) {
+                clearTimeout(callSpeechSilenceTimerRef.current);
+            }
             setTimeout(() => {
-                if (isCallActiveRef.current && callStateRef.current === 'connected' && !isCallMutedRef.current && shouldListenRef.current) {
+                if (isCallActiveRef.current && callStateRef.current === 'connected' && !isCallMutedRef.current && shouldListenRef.current && !aiSpeakingRef.current) {
                     try {
                         rec.start();
                     } catch(e){}
                 }
-            }, 500);
+            }, 400);
         };
 
         rec.onresult = (event) => {
-            const transcript = event.results[0][0].transcript;
-            if (transcript && transcript.trim()) {
-                handleCallUserSpeech(transcript.trim());
+            let interim = '';
+            let final = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const text = event.results[i][0].transcript;
+                if (event.results[i].isFinal) {
+                    final += text;
+                } else {
+                    interim += text;
+                }
+            }
+            const spoken = (final || interim).trim();
+            if (spoken) {
+                callTranscriptAccumulatorRef.current = spoken;
+                setUserSpeaking(true);
+                if (callSpeechSilenceTimerRef.current) {
+                    clearTimeout(callSpeechSilenceTimerRef.current);
+                }
+                // When speech pauses for 750ms, trigger immediate AI response!
+                callSpeechSilenceTimerRef.current = setTimeout(() => {
+                    const toSend = callTranscriptAccumulatorRef.current.trim();
+                    if (toSend && isCallActiveRef.current && !aiSpeakingRef.current) {
+                        callTranscriptAccumulatorRef.current = '';
+                        handleCallUserSpeech(toSend);
+                    }
+                }, 750);
             }
         };
 
@@ -342,6 +377,9 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
 
     const stopListening = () => {
         shouldListenRef.current = false;
+        if (callSpeechSilenceTimerRef.current) {
+            clearTimeout(callSpeechSilenceTimerRef.current);
+        }
         if (recognitionRef.current) {
             try {
                 recognitionRef.current.stop();
@@ -370,6 +408,9 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     };
 
     const handleCallUserSpeech = async (speechText) => {
+        if (callSpeechSilenceTimerRef.current) {
+            clearTimeout(callSpeechSilenceTimerRef.current);
+        }
         stopListening();
         setLiveSpokenText(`You: "${speechText}"`);
 
@@ -396,11 +437,11 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                 image: frameData,
                 call_mode: isCallVideo ? 'video' : 'voice',
                 language,
-                // Ask for short conversational reply during calls
-                max_tokens: 80,
+                // Fast conversational reply for live call
+                max_tokens: 65,
             }, {
                 headers: { Authorization: `Bearer ${token}` },
-                timeout: 10000,
+                timeout: 7000,
             });
 
             const replyText = res.data.reply;

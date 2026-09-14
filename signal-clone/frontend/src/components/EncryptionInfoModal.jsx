@@ -32,7 +32,11 @@ const EncryptionInfoModal = ({ chat, user, publicKey, onClose }) => {
                 <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-400"><LockClosedIcon className="h-8 w-8" /></span>
                 <h3 className="mt-4 text-xl font-black text-white">Messages and calls are end-to-end encrypted</h3>
                 <p className="mt-2 text-sm leading-6 text-gray-300">Text, photos, videos, voice messages, files and call media are encrypted on your device. CheetChat and the cloud-storage provider cannot read their contents.</p>
-                {isDirect && <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-4 text-left">
+                {isDirect && (!other.publicKey || !publicKey) && <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-4 text-center">
+                    <p className="text-sm font-bold text-white">Encryption key unavailable</p>
+                    <p className="mt-2 text-xs leading-5 text-gray-400">Waiting for {(!publicKey) ? 'you' : other.username} to generate end-to-end encryption keys. Please try refreshing or logging in again.</p>
+                </div>}
+                {isDirect && other.publicKey && publicKey && <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-4 text-left">
                     <div className="flex items-center justify-between gap-3"><p className="text-sm font-bold text-white">Encryption key with {other.username}</p>{verified && <span className="flex items-center gap-1 text-xs font-bold text-emerald-400"><CheckBadgeIcon className="h-5 w-5" /> Verified</span>}</div>
                     <p className="mt-2 select-all break-words font-mono text-sm leading-7 tracking-wider text-emerald-300">{safety?.display || 'Generating security code…'}</p>
                     <p className="mt-3 text-xs leading-5 text-gray-400">Open this screen on both phones and match every number. If both devices show the same code, your end-to-end encryption key is verified.</p>

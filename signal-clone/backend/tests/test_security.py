@@ -512,6 +512,7 @@ class SecurityTests(unittest.TestCase):
             ('POST', '/api/register'), ('POST', '/api/register/verify-otp'),
             ('POST', '/api/login'), ('POST', '/api/login/request-otp'),
             ('POST', '/api/login/verify-otp'), ('POST', '/api/forgot-password'),
+            ('POST', '/api/admin/login'),
             ('POST', '/api/reset-password'), ('POST', '/api/reset-password/key-backup'),
             ('POST', '/api/auth/2fa/login-verify'),
             ('POST', '/api/auth/google/exchange'), ('POST', '/api/auth/google/complete'),

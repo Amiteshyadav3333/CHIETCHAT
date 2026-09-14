@@ -78,16 +78,27 @@ def upload_to_cloudinary(file, folder='chietchat', resource_type='auto'):
         return _save_locally(file)
 
     is_buffer = isinstance(file, (bytes, bytearray))
-    file_data = file if is_buffer else file.stream
-    if not is_buffer:
+    if is_buffer:
+        import io
+        file_data = io.BytesIO(file)
+    else:
+        file_data = file.stream
         file.stream.seek(0)
 
     try:
-        result = cloudinary.uploader.upload(
-            file_data,
-            folder=folder,
-            resource_type=resource_type
-        )
+        if resource_type == 'video' or resource_type == 'raw':
+            result = cloudinary.uploader.upload_large(
+                file_data,
+                folder=folder,
+                resource_type=resource_type,
+                chunk_size=10000000  # 10MB chunks
+            )
+        else:
+            result = cloudinary.uploader.upload(
+                file_data,
+                folder=folder,
+                resource_type=resource_type
+            )
         return result['secure_url']
     except Exception as e:
         err_str = str(e).lower()
@@ -97,7 +108,7 @@ def upload_to_cloudinary(file, folder='chietchat', resource_type='auto'):
             if not is_buffer:
                 file.stream.seek(0)
                 return _save_locally(file, getattr(file, 'filename', 'upload'))
-            return _save_locally(file_data, 'upload')
+            return _save_locally(file, 'upload')
         raise
 
 

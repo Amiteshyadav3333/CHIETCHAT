@@ -693,6 +693,12 @@ def saskat_video_ad():
 @saskat_bp.route('/api/saskat/session/cleanup', methods=['POST'])
 def cleanup_sessions():
     """Delete expired SaskatSession rows. Called by background scheduler."""
+    import os
+    from flask import request
+    cron_secret = os.environ.get('CRON_SECRET')
+    if not cron_secret or request.headers.get('X-Cron-Secret') != cron_secret:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
     from models import SaskatSession
     try:
         expired = SaskatSession.query.filter(SaskatSession.expires_at < utc_now()).all()

@@ -71,24 +71,31 @@ export const useEncryption = (user, token) => {
             }
 
             // First-device setup for legacy accounts that do not have a key yet.
-            const keys = await generateKeys();
+            try {
+                const keys = await generateKeys();
 
-            await saveDevicePrivateKey(user.id, keys.privateKeyString);
-            localStorage.setItem(storageKeyPub, keys.publicKeyString);
+                await saveDevicePrivateKey(user.id, keys.privateKeyString);
+                localStorage.setItem(storageKeyPub, keys.publicKeyString);
 
-            setPrivateKey(keys.privateKey);
-            setPublicKey(keys.publicKeyString);
+                setPrivateKey(keys.privateKey);
+                setPublicKey(keys.publicKeyString);
 
-            // Sync public key with server
-            if (token) {
-                try {
-                    await axios.post('/api/user/key',
-                        { publicKey: keys.publicKeyString },
-                        { headers: { Authorization: `Bearer ${token}` } }
-                    );
-                    console.log("Synced new public key with server");
-                } catch (e) {
-                    console.error("Failed to sync key", e);
+                // Sync public key with server
+                if (token) {
+                    try {
+                        await axios.post('/api/user/key',
+                            { publicKey: keys.publicKeyString },
+                            { headers: { Authorization: `Bearer ${token}` } }
+                        );
+                        console.log("Synced new public key with server");
+                    } catch (e) {
+                        console.error("Failed to sync key", e);
+                    }
+                }
+            } catch (err) {
+                console.error("Encryption initialization failed:", err);
+                if (err.message && err.message.includes('secure context')) {
+                    alert(err.message);
                 }
             }
         };

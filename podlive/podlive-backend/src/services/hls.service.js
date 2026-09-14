@@ -129,6 +129,8 @@ exports.processHLS = async (sessionId, inputPath, baseUrl) => {
                             where: { id: sessionId },
                             data: { is_processing: false }
                         });
+                        try { fs.rmSync(outputDir, { recursive: true, force: true }); } catch (e) { }
+                        try { fs.unlinkSync(inputPath); } catch (e) { }
 
                         reject(s3Error);
                     }
@@ -141,6 +143,8 @@ exports.processHLS = async (sessionId, inputPath, baseUrl) => {
                         where: { id: sessionId },
                         data: { is_processing: false }
                     });
+                    try { fs.rmSync(outputDir, { recursive: true, force: true }); } catch (e) { }
+                    try { fs.unlinkSync(inputPath); } catch (e) { }
 
                     reject(err);
                 })

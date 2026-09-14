@@ -2,6 +2,9 @@
 // RSA-OAEP wraps that key independently for every authorized recipient.
 
 export const generateKeys = async () => {
+    if (!window.crypto || !window.crypto.subtle) {
+        throw new Error("Encryption is disabled. This app requires a secure context (HTTPS or localhost) for End-to-End Encryption to work. Please access the site via HTTPS or localhost.");
+    }
     const keyPair = await window.crypto.subtle.generateKey(
         {
             name: "RSA-OAEP",

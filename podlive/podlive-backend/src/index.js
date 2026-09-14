@@ -71,6 +71,10 @@ app.get('/', (req, res) => {
 const { AccessToken } = require('livekit-server-sdk');
 app.get('/get-token', async (req, res) => {
   try {
+    const secret = req.headers['x-admin-secret'] || req.query.secret;
+    if (!process.env.ADMIN_SECRET || secret !== process.env.ADMIN_SECRET) {
+        return res.status(401).json({ error: 'Unauthorized token generation' });
+    }
     const { room, participant } = req.query;
     if (!room || !participant) {
       return res.status(400).json({ error: 'room and participant are required' });
@@ -101,6 +105,10 @@ const searchRoutes = require('./routes/search.routes');
 
 app.get('/api/admin/db-sync', async (req, res) => {
     try {
+        const secret = req.headers['x-admin-secret'] || req.query.secret;
+        if (!process.env.ADMIN_SECRET || secret !== process.env.ADMIN_SECRET) {
+            return res.status(401).json({ error: 'Unauthorized admin access' });
+        }
         const { exec } = require('child_process');
         exec('npx prisma db push --accept-data-loss', (error, stdout, stderr) => {
             if (error) {

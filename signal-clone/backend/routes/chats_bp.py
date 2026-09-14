@@ -387,8 +387,8 @@ def get_messages(chat_id):
     participant = ChatParticipant.query.filter_by(chat_id=chat_id, user_id=user_id).first()
     p_deleted_at = participant.deleted_at if participant else None
 
-    deleted_msg_ids_subquery = db.session.query(MessageDeletion.message_id).filter(MessageDeletion.user_id == user_id).subquery()
-    query = Message.query.filter(Message.chat_id == chat_id, ~Message.id.in_(deleted_msg_ids_subquery))
+    deleted_msg_ids_query = db.session.query(MessageDeletion.message_id).filter(MessageDeletion.user_id == user_id)
+    query = Message.query.filter(Message.chat_id == chat_id, ~Message.id.in_(deleted_msg_ids_query))
     chat = db.session.get(Chat, chat_id)
     if chat and chat.snap_mode:
         query = query.filter(Message.snap_mode.is_(True))

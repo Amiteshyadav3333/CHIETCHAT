@@ -3,18 +3,18 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from './utils/clientRouter';
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
-import Login from './pages/Login';
-import ResetPassword from './pages/ResetPassword';
-import Home from './pages/Home';
-import LegalPage from './pages/LegalPage';
-import About from './pages/About';
-import ProfileSetup from './pages/ProfileSetup';
-import PublicReel from './pages/PublicReel';
-import RecoveryCode from './pages/RecoveryCode';
-import FounderPage from './pages/FounderPage';
-import SaskatAI from './pages/SaskatAI/SaskatAI';
-import AdminLogin from './pages/AdminLogin';
-import AdminDashboard from './pages/AdminDashboard';
+const Login = React.lazy(() => import('./pages/Login'));
+const ResetPassword = React.lazy(() => import('./pages/ResetPassword'));
+const Home = React.lazy(() => import('./pages/Home'));
+const LegalPage = React.lazy(() => import('./pages/LegalPage'));
+const About = React.lazy(() => import('./pages/About'));
+const ProfileSetup = React.lazy(() => import('./pages/ProfileSetup'));
+const PublicReel = React.lazy(() => import('./pages/PublicReel'));
+const RecoveryCode = React.lazy(() => import('./pages/RecoveryCode'));
+const FounderPage = React.lazy(() => import('./pages/FounderPage'));
+const SaskatAI = React.lazy(() => import('./pages/SaskatAI/SaskatAI'));
+const AdminLogin = React.lazy(() => import('./pages/AdminLogin'));
+const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard'));
 import './index.css';
 import axios from 'axios';
 import { API_BASE_URL } from './utils/apiBaseUrl';
@@ -113,34 +113,36 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <AuthProvider>
                 <AppLanguage />
                 <SocketProvider>
-                    <Routes>
-                        <Route path="/login" element={<Login />} />
-                        <Route path="/signup" element={<Login />} />
-                        <Route path="/reset-password" element={<ResetPassword />} />
-                        <Route path="/terms" element={<LegalPage type="terms" />} />
-                        <Route path="/privacy" element={<LegalPage type="privacy" />} />
-                        <Route path="/about" element={<About />} />
-                        <Route path="/founder" element={<FounderPage />} />
-                        <Route path="/reels/:reelId" element={<PublicReel />} />
-                        <Route path="/setup-profile" element={
-                            <ProtectedRoute>
-                                <ProfileSetup />
-                            </ProtectedRoute>
-                        } />
-                        <Route path="/recovery-code" element={
-                            <ProtectedRoute><RecoveryCode /></ProtectedRoute>
-                        } />
-                        <Route path="/saskat-ai" element={
-                            <ProtectedRoute><SaskatAI onClose={() => window.history.back()} /></ProtectedRoute>
-                        } />
-                        <Route path="/admin/login" element={<AdminLogin />} />
-                        <Route path="/admin/dashboard" element={<AdminDashboard />} />
-                        <Route path="/" element={
-                            <ProtectedRoute>
-                                <Home />
-                            </ProtectedRoute>
-                        } />
-                    </Routes>
+                    <React.Suspense fallback={<SplashScreen />}>
+                        <Routes>
+                            <Route path="/login" element={<Login />} />
+                            <Route path="/signup" element={<Login />} />
+                            <Route path="/reset-password" element={<ResetPassword />} />
+                            <Route path="/terms" element={<LegalPage type="terms" />} />
+                            <Route path="/privacy" element={<LegalPage type="privacy" />} />
+                            <Route path="/about" element={<About />} />
+                            <Route path="/founder" element={<FounderPage />} />
+                            <Route path="/reels/:reelId" element={<PublicReel />} />
+                            <Route path="/setup-profile" element={
+                                <ProtectedRoute>
+                                    <ProfileSetup />
+                                </ProtectedRoute>
+                            } />
+                            <Route path="/recovery-code" element={
+                                <ProtectedRoute><RecoveryCode /></ProtectedRoute>
+                            } />
+                            <Route path="/saskat-ai" element={
+                                <ProtectedRoute><SaskatAI onClose={() => window.history.back()} /></ProtectedRoute>
+                            } />
+                            <Route path="/admin/login" element={<AdminLogin />} />
+                            <Route path="/admin/dashboard" element={<AdminDashboard />} />
+                            <Route path="/" element={
+                                <ProtectedRoute>
+                                    <Home />
+                                </ProtectedRoute>
+                            } />
+                        </Routes>
+                    </React.Suspense>
                 </SocketProvider>
             </AuthProvider>
         </BrowserRouter>

@@ -57,9 +57,9 @@ const readVideoDuration = (file) => new Promise(resolve => {
 });
 
 export const Home = () => {
-    const { user, token, logout, updateUser, privateKey } = useContext(AuthContext);
+    const { user, token, logout, updateUser } = useContext(AuthContext);
     const { socket } = useContext(SocketContext);
-    const { publicKey } = useEncryption();
+    const { publicKey, privateKey } = useEncryption(user, token);
 
     const [chats, setChats] = useState(() => loadChatMetadata(user?.id));
     const [activeChat, setActiveChat] = useState(null);

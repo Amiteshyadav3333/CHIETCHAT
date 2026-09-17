@@ -1,12 +1,9 @@
 import React from 'react';
 import axios from 'axios';
-import PodLiveInviteBridge from '../../../features/podlive/PodLiveInviteBridge';
 
 const Reels = React.lazy(() => import('../../Reels'));
 const socialModulePromise = import('../../Social');
 const Social = React.lazy(() => socialModulePromise);
-const podLiveModulePromise = import('../../PodLiveView');
-const PodLiveView = React.lazy(() => podLiveModulePromise);
 const AiChat = React.lazy(() => import('../../../components/AiChat'));
 const AiSmartSpace = React.lazy(() => import('../../../components/AiSmartSpace'));
 const SaskatAI = React.lazy(() => import('../../SaskatAI/SaskatAI'));
@@ -29,12 +26,6 @@ export const FeatureOverlays = ({
     setSocialDeepLink,
     shareSocialPostToChat,
     openSocialDirectMessage,
-    showPodlive,
-    setShowPodlive,
-    podliveInvite,
-    setPodliveInvite,
-    receivePodliveInvite,
-    updatePodliveLiveCount,
     showSaskatAI,
     setShowSaskatAI,
     showSettings,
@@ -99,79 +90,8 @@ export const FeatureOverlays = ({
                 </div>
             )}
 
-            {/* PodLive Invite Bridge */}
-            <PodLiveInviteBridge
-                active={Boolean(token) && !showPodlive}
-                onInvite={receivePodliveInvite}
-                onLiveStatus={updatePodliveLiveCount}
-            />
+            
 
-            {/* PodLive Overlay */}
-            {showPodlive && (
-                <div className="fixed inset-0 z-50 bg-[#0b0f19]">
-                    <React.Suspense fallback={<FeatureLoader />}>
-                        <PodLiveView
-                            active={showPodlive && !incomingCall && !showCallModal}
-                            onBack={() => setShowPodlive(false)}
-                            token={token}
-                            incomingInvite={podliveInvite}
-                            onInviteConsumed={() => setPodliveInvite(null)}
-                        />
-                    </React.Suspense>
-                </div>
-            )}
-
-            {/* Saskat AI Overlay */}
-            {showSaskatAI && (
-                <div className="fixed inset-0 z-50 bg-[#0a0e27]">
-                    <React.Suspense fallback={<FeatureLoader />}>
-                        <SaskatAI onClose={() => setShowSaskatAI(false)} />
-                    </React.Suspense>
-                </div>
-            )}
-
-            {/* Settings Modal */}
-            {showSettings && (
-                <React.Suspense fallback={<FeatureLoader />}>
-                    <SettingsModal
-                        user={user}
-                        token={token}
-                        onClose={() => setShowSettings(false)}
-                        onLogout={logout}
-                        onUserUpdate={updateUser}
-                        theme={theme}
-                        wallpaper={wallpaper}
-                        onThemeChange={setTheme}
-                        onWallpaperChange={setWallpaper}
-                        onOpenSmartSpace={() => { setShowSettings(false); setShowSmartSpace(true); }}
-                        smartSpaceButtonEnabled={smartSpaceButtonEnabled}
-                        onSmartSpaceButtonChange={(enabled) => {
-                            setSmartSpaceButtonEnabled(enabled);
-                            localStorage.setItem('smart_space_button_enabled', enabled ? '1' : '0');
-                        }}
-                    />
-                </React.Suspense>
-            )}
-
-            {/* AI Chat Overlay */}
-            <div className={`fixed inset-0 z-50 bg-[#0b141a] transition-opacity duration-200 ${showAiChat ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-                {showAiChat && (
-                    <React.Suspense fallback={<FeatureLoader />}>
-                        <AiChat
-                            onBack={() => setShowAiChat(false)}
-                            onClose={() => setShowAiChat(false)}
-                            onActionCall={async (contactName) => {
-                                let targetChat = chats.find(c => {
-                                    if (c.isGroup) {
-                                        return c.name && c.name.toLowerCase().includes(contactName.toLowerCase());
-                                    } else {
-                                        const other = getOtherParticipant(c);
-                                        return other && (
-                                            other.username.toLowerCase().includes(contactName.toLowerCase()) ||
-                                            (other.platform_id && other.platform_id.toLowerCase().includes(contactName.toLowerCase()))
-                                        );
-                                    }
-                                });
 
                                 if (targetChat) {
                                     setShowAiChat(false);

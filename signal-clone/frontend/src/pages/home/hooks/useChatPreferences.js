@@ -71,8 +71,6 @@ export const useChatPreferences = (user) => {
             reelsInterests: 'reels_interests',
             reelsAutoplay: 'reels_autoplay', reelsMuted: 'reels_muted', reelsDataSaver: 'reels_data_saver',
             socialDefaultFeed: 'social_default_feed', socialAutoplayVideos: 'social_autoplay_videos',
-            socialMutedVideos: 'social_muted_videos', podliveAllowCamera: 'podlive_allow_camera',
-            podliveAllowMicrophone: 'podlive_allow_microphone', podliveAutoplay: 'podlive_autoplay'
         };
         Object.entries(storageMap).forEach(([key, storageKey]) => {
             if (saved[key] !== undefined) localStorage.setItem(storageKey, typeof saved[key] === 'boolean' ? (saved[key] ? '1' : '0') : String(saved[key]));

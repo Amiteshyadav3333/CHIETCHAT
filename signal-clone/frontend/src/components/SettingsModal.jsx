@@ -22,7 +22,6 @@ const TITLES = {
     business: 'Business tools', help: 'Help center', password: 'Change password',
     delete: 'Delete account', activity: 'Your Activity', sessions: 'Active Sessions',
     twofactor_setup: 'Enable 2FA', twofactor_disable: 'Disable 2FA', premium: 'CHEETCHAT Premium',
-    reels: 'Reels settings', social: 'Social settings', podlive: 'PodLive settings', language: 'App language',
     about: 'About CHEETCHAT'
 };
 
@@ -109,9 +108,6 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
         reelsDataSaver: serverUi.reelsDataSaver ?? localStorage.getItem('reels_data_saver') === '1',
         socialAutoplayVideos: serverUi.socialAutoplayVideos ?? localStorage.getItem('social_autoplay_videos') === '1',
         socialMutedVideos: serverUi.socialMutedVideos ?? localStorage.getItem('social_muted_videos') !== '0',
-        podliveAllowCamera: serverUi.podliveAllowCamera ?? localStorage.getItem('podlive_allow_camera') !== '0',
-        podliveAllowMicrophone: serverUi.podliveAllowMicrophone ?? localStorage.getItem('podlive_allow_microphone') !== '0',
-        podliveAutoplay: serverUi.podliveAutoplay ?? localStorage.getItem('podlive_autoplay') !== '0',
     }));
     const [reelsDefaultFeed, setReelsDefaultFeed] = useState(() => serverUi.reelsDefaultFeed || localStorage.getItem('reels_default_feed') || 'foryou');
     const [socialDefaultFeed, setSocialDefaultFeed] = useState(() => serverUi.socialDefaultFeed || localStorage.getItem('social_default_feed') || 'for-you');
@@ -570,7 +566,6 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 <SettingsRow icon={<ChatBubbleBottomCenterTextIcon />} title="Chats" subtitle="Appearance, media, privacy, sounds and message behaviour" onClick={() => go('chats')} />
                                 <SettingsRow icon={<FilmIcon />} title="Reels" subtitle="Feed, autoplay, sound and data usage" onClick={() => go('reels')} />
                                 <SettingsRow icon={<UserCircleIcon />} title="Social" subtitle="Default feed and video playback" onClick={() => go('social')} />
-                                <SettingsRow icon={<SparklesIcon />} title="PodLive" subtitle="Camera, microphone and playback permissions" onClick={() => go('podlive')} />
                                 <SettingsRow icon={<BellIcon />} title="Notifications" subtitle="Messages, calls and desktop alerts" onClick={() => go('notifications')} />
                                 <SettingsRow icon={<ComputerDesktopIcon />} title="Storage and data" subtitle="Auto-download and data saver" onClick={() => go('storage')} />
                                 <SettingsRow icon={<ChartBarIcon />} title="Your Activity" subtitle="Likes, comments, blocked accounts" onClick={() => { go('activity'); fetchActivity(); }} />
@@ -884,15 +879,10 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                         </>
                     )}
 
-                    {screen === 'podlive' && (
                         <>
                             <SectionLabel>Live permissions</SectionLabel>
                             <SettingsGroup>
-                                <SettingsToggle icon={<PhotoIcon />} title="Allow camera in PodLive" subtitle="Required when you want to join with video" value={prefs.podliveAllowCamera} onClick={() => togglePref('podliveAllowCamera', 'podlive_allow_camera')} />
-                                <SettingsToggle icon={<BellIcon />} title="Allow microphone in PodLive" subtitle="Required when you want to speak on a live stage" value={prefs.podliveAllowMicrophone} onClick={() => togglePref('podliveAllowMicrophone', 'podlive_allow_microphone')} />
-                                <SettingsToggle icon={<FilmIcon />} title="Allow live autoplay" subtitle="Permit PodLive streams to begin playback automatically" value={prefs.podliveAutoplay} onClick={() => togglePref('podliveAutoplay', 'podlive_autoplay')} />
                             </SettingsGroup>
-                            <InfoRow title="Permission changes" text="Close and reopen PodLive after changing camera or microphone access. Your browser may also ask for device permission." />
                         </>
                     )}
 

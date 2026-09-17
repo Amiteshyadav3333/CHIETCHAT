@@ -44,8 +44,6 @@ const shouldSuppress = (args) => {
         message.includes('502') ||
         message.includes('status code 502') ||
         (message.includes('/api/chats') && (message.includes('404') || message.includes('502'))) ||
-        // PodLive SSO 401 — external service unavailability, not a CHEETCHAT auth error
-        (message.includes('podlive') || message.includes('podlive-api'))
     );
 };
 console.error = function(...args) {

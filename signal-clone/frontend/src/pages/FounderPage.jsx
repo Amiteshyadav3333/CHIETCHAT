@@ -10,7 +10,6 @@ const qualifications = [
 const projects = [
   ['CHEETCHAT', 'An India-first super app connecting private chat, social, reels, calls, AI, communities and creator tools.', '/cheetchat-logo.png', '/login'],
   ['IndiaSearch', 'A multilingual AI voice-search experience created for Indian users.', '/marketing/indiasearch.png', 'https://indiasearch.site/'],
-  ['India PodLive', 'An Indian creator and video-sharing platform for education and entertainment.', '/marketing/podlive.png', 'https://indiapodlive.vercel.app'],
   ['Anuvandini', 'A real-time language translation product designed to make communication more inclusive.', '/marketing/translator.png', 'https://downloader.indiasearch.site/'],
 ];
 

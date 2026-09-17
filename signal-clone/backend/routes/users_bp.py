@@ -708,7 +708,6 @@ def update_ui_preferences():
         'reelsDefaultFeed', 'reelsAutoplay', 'reelsMuted', 'reelsDataSaver',
         'reelsInterests',
         'socialDefaultFeed', 'socialAutoplayVideos', 'socialMutedVideos',
-        'podliveAllowCamera', 'podliveAllowMicrophone', 'podliveAutoplay',
     }
     try:
         current = json.loads(user.ui_preferences or '{}')

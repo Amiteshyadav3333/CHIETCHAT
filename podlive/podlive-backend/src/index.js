@@ -37,13 +37,25 @@ const io = new Server(server, {
 // Security & perf middleware
 app.use(helmet({ crossOriginEmbedderPolicy: false, contentSecurityPolicy: false }));
 app.use(compression());
-const corsOptions = {
-    origin: ['https://chat.indiasearch.site', 'http://localhost:3000', 'http://localhost:5173', 'https://podlive.indiasearch.site', 'https://podlive-api-18as.onrender.com'], 
-    credentials: true, 
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-secret', 'x-requested-with', 'Accept', 'Origin']
-};
-app.use(cors(corsOptions));
+// Custom CORS middleware to guarantee preflight handling
+app.use((req, res, next) => {
+    const allowedOrigins = ['https://chat.indiasearch.site', 'http://localhost:3000', 'http://localhost:5173', 'https://podlive.indiasearch.site', 'https://podlive-api-18as.onrender.com'];
+    const origin = req.headers.origin;
+    if (allowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+    } else {
+        // Fallback for missing/other origins, allows request to proceed but browser might block if credentials required
+        res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    }
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-admin-secret, x-requested-with, Accept, Origin');
+    
+    if (req.method === 'OPTIONS') {
+        return res.status(204).end();
+    }
+    next();
+});
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 

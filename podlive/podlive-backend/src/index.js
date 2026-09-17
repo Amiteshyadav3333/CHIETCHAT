@@ -37,10 +37,12 @@ const io = new Server(server, {
 app.use(helmet({ crossOriginEmbedderPolicy: false, contentSecurityPolicy: false }));
 app.use(compression());
 app.use(cors({ 
-    origin: function(origin, callback) { callback(null, true); }, 
+    origin: ['https://chat.indiasearch.site', 'http://localhost:3000', 'http://localhost:5173', 'https://podlive.indiasearch.site', 'https://podlive-api-18as.onrender.com'], 
     credentials: true, 
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'] 
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-secret', 'x-requested-with', 'Accept', 'Origin']
 }));
+app.options('*', cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 

@@ -2,13 +2,13 @@ from flask import Blueprint, jsonify, request
 from werkzeug.utils import secure_filename
 import json
 import secrets
-from models import db, User, PendingRegistration, Block, Follow, ProfileAudienceAvatar, Notification
+from models import db, User, PendingRegistration, Block, Follow, ProfileAudienceAvatar, Notification, Chat, ChatParticipant, Message
 from extensions import socketio
 from utils import (
     get_current_user_id, get_contact_user_ids, serialize_user, get_json_data,
     normalize_phone, is_valid_phone, add_contact, upload_to_cloudinary,
     emit_to_user_chat_contacts, has_contact, create_notification, iso_utc, utc_now,
-    queue_media_deletion, process_media_deletion_task
+    queue_media_deletion, process_media_deletion_task, find_direct_chat
 )
 from content_moderation import ModerationUnavailable, reject_adult_content
 
@@ -169,6 +169,116 @@ def check_platform_id(handle):
     return jsonify({"available": existing is None, "handle": handle})
 
 
+def ensure_college_lobby_and_welcome(user):
+    """Ensure user is placed into their college lobby, universal freshers lounge,
+    and receives a direct welcome introduction so home screen is never empty."""
+    try:
+        college_clean = (user.college or '').strip()
+        location_clean = (user.location or '').strip()
+
+        # 1. Primary Campus / College Lobby
+        if college_clean:
+            lobby_name = f"{college_clean} Campus Lobby"
+            lobby_desc = f"Official discussion lobby for {college_clean} students on CHEETCHAT. Connect, share notes, and hang out!"
+        elif location_clean:
+            lobby_name = f"{location_clean} Student Hub"
+            lobby_desc = f"Open discussion lobby for students in {location_clean}."
+        else:
+            lobby_name = "Freshers & Campus Lounge 2026"
+            lobby_desc = "Open community lounge for all freshers and students on CHEETCHAT."
+
+        lobby = Chat.query.filter_by(name=lobby_name, is_group=True).first()
+        if not lobby:
+            lobby = Chat(
+                is_group=True,
+                is_public=True,
+                name=lobby_name,
+                description=lobby_desc,
+                avatar=f"https://api.dicebear.com/7.x/identicon/svg?seed={lobby_name.replace(' ', '_')}"
+            )
+            db.session.add(lobby)
+            db.session.flush()
+
+        if not ChatParticipant.query.filter_by(chat_id=lobby.id, user_id=user.id).first():
+            db.session.add(ChatParticipant(chat_id=lobby.id, user_id=user.id))
+            intro_msg = Message(
+                chat_id=lobby.id,
+                sender_id=user.id,
+                content=f"👋 Hello everyone! I just joined from {college_clean or location_clean or 'campus'}. Glad to connect with all of you!"
+            )
+            db.session.add(intro_msg)
+
+        # 2. Universal Freshers Lounge (for broad connection)
+        global_lounge_name = "Freshers & Campus Lounge 2026"
+        if lobby_name != global_lounge_name:
+            global_lounge = Chat.query.filter_by(name=global_lounge_name, is_group=True).first()
+            if not global_lounge:
+                global_lounge = Chat(
+                    is_group=True,
+                    is_public=True,
+                    name=global_lounge_name,
+                    description="Open student lounge connecting freshers across all colleges and cities!",
+                    avatar="https://api.dicebear.com/7.x/identicon/svg?seed=Freshers_Campus_Lounge"
+                )
+                db.session.add(global_lounge)
+                db.session.flush()
+            if not ChatParticipant.query.filter_by(chat_id=global_lounge.id, user_id=user.id).first():
+                db.session.add(ChatParticipant(chat_id=global_lounge.id, user_id=user.id))
+
+        # 3. Direct Welcome Message from System Guide Bot
+        bot = User.query.filter_by(username='CHEETCHAT Campus Guide').first()
+        if not bot:
+            bot = User(
+                username='CHEETCHAT Campus Guide',
+                email='guide@cheetchat.app',
+                phone='0000000000',
+                platform_id='cheetchat_guide',
+                is_verified=True,
+                avatar='https://api.dicebear.com/7.x/bottts/svg?seed=cheetchat_guide',
+                bio='Official CHEETCHAT Campus Guide & Welcome Assistant'
+            )
+            db.session.add(bot)
+            db.session.flush()
+
+        add_contact(user.id, bot.id)
+        add_contact(bot.id, user.id)
+
+        bot_chat = find_direct_chat(user.id, bot.id)
+        if not bot_chat:
+            bot_chat = Chat(is_group=False)
+            db.session.add(bot_chat)
+            db.session.flush()
+            db.session.add(ChatParticipant(chat_id=bot_chat.id, user_id=user.id))
+            db.session.add(ChatParticipant(chat_id=bot_chat.id, user_id=bot.id))
+
+        # Check existing college peers
+        peer_query = User.query.filter(User.id != user.id, User.id != bot.id)
+        if college_clean:
+            peer_query = peer_query.filter(db.func.lower(User.college) == college_clean.lower())
+        elif location_clean:
+            peer_query = peer_query.filter(db.func.lower(User.location) == location_clean.lower())
+        peers = peer_query.limit(3).all()
+
+        peer_handles = [f"@{p.platform_id or p.username}" for p in peers if p.platform_id or p.username]
+        peer_hint = f"\n\n🏫 Aapke college se yeh log bhi hain: {', '.join(peer_handles)} — inhe Hi bolein!" if peer_handles else ""
+
+        welcome_text = (
+            f"👋 Namaste {user.username}! CHEETCHAT Campus Network par aapka swagat hai.\n\n"
+            f"✅ Humne aapko '{lobby_name}' me jod diya hai taaki aap turant classmates aur batchmates se baatein shuru kar sakein.{peer_hint}\n\n"
+            f"🎁 15 Days Free Premium Reward: Apna invite code `{user.referral_code or ensure_referral_code(user)}` share karein ya 'Create Class Group' se doston ko WhatsApp par bulayein!"
+        )
+
+        existing_welcome = Message.query.filter_by(chat_id=bot_chat.id, sender_id=bot.id).first()
+        if not existing_welcome:
+            welcome_msg = Message(chat_id=bot_chat.id, sender_id=bot.id, content=welcome_text)
+            db.session.add(welcome_msg)
+
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"Lobby and welcome error: {e}")
+
+
 @users_bp.route('/api/user/setup-profile', methods=['POST'])
 def setup_profile():
     """First-time profile setup: platform_id (handle), avatar, bio, website."""
@@ -227,11 +337,23 @@ def setup_profile():
             user.bio_expires_at = utc_now() + timedelta(hours=24)
         else:
             user.bio_expires_at = None
+
+    college = (request.form.get('college') or (request.json.get('college') if request.is_json else None) or '').strip()
+    location = (request.form.get('location') or (request.json.get('location') if request.is_json else None) or '').strip()
+
+    if college:
+        user.college = college[:150]
+    if location:
+        user.location = location[:150]
+
     user.website_url = website_url or user.website_url
     user.profile_setup_done = True
     db.session.commit()
     if deletion_task:
         process_media_deletion_task(deletion_task.id)
+
+    # Automatically add to college campus lobby, universal freshers lounge and send welcome intro
+    ensure_college_lobby_and_welcome(user)
 
     payload = serialize_user(user)
     emit_to_user_chat_contacts(user_id, 'user_profile_updated', {"user": payload})
@@ -531,6 +653,10 @@ def update_profile():
     # Gender update
     if 'gender' in data and data['gender'] in ('male', 'female', ''):
         user.gender = data['gender'] or None
+    if 'college' in data:
+        user.college = str(data.get('college') or '').strip()[:150] or None
+    if 'location' in data:
+        user.location = str(data.get('location') or '').strip()[:150] or None
     if 'birthDate' in data:
         from datetime import date
         raw_birth_date = str(data.get('birthDate') or '').strip()
@@ -628,29 +754,155 @@ def toggle_follow(followed_id):
 
 @users_bp.route('/api/users/suggestions', methods=['GET'])
 def suggested_users():
-    """Suggest real accounts the viewer does not already follow."""
+    """Suggest real accounts prioritizing matching college/university and location."""
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
 
-    limit = min(max(request.args.get('limit', 8, type=int), 1), 20)
+    viewer = db.session.get(User, user_id)
+    limit = min(max(request.args.get('limit', 8, type=int), 1), 30)
+    filter_type = request.args.get('filter', 'all').lower()  # 'all', 'college', 'location'
+
     followed_ids = [row.followed_id for row in Follow.query.filter_by(follower_id=user_id).all()]
     excluded_ids = followed_ids + [user_id]
-    users = (
-        User.query
-        .filter(~User.id.in_(excluded_ids))
-        .order_by(User.created_at.desc(), User.id.desc())
-        .limit(limit)
-        .all()
-    )
+
+    viewer_college = (viewer.college or '').strip().lower() if viewer else ''
+    viewer_location = (viewer.location or '').strip().lower() if viewer else ''
+
+    scored_accounts = []
+    seen_ids = set(excluded_ids)
+
+    # 1. College matches (highest priority)
+    if viewer_college and filter_type in ('all', 'college'):
+        college_users = (
+            User.query
+            .filter(
+                ~User.id.in_(list(seen_ids)),
+                db.func.lower(User.college).like(f"%{viewer_college}%")
+            )
+            .order_by(User.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        for u in college_users:
+            scored_accounts.append((u, "college"))
+            seen_ids.add(u.id)
+
+    # 2. Location matches (next priority)
+    if viewer_location and len(scored_accounts) < limit and filter_type in ('all', 'location'):
+        loc_users = (
+            User.query
+            .filter(
+                ~User.id.in_(list(seen_ids)),
+                db.func.lower(User.location).like(f"%{viewer_location}%")
+            )
+            .order_by(User.created_at.desc())
+            .limit(limit - len(scored_accounts))
+            .all()
+        )
+        for u in loc_users:
+            scored_accounts.append((u, "location"))
+            seen_ids.add(u.id)
+
+    # 3. General recent / active users to fill remaining slots (if filter is 'all')
+    if len(scored_accounts) < limit and filter_type == 'all':
+        remaining = (
+            User.query
+            .filter(~User.id.in_(list(seen_ids)))
+            .order_by(User.created_at.desc(), User.id.desc())
+            .limit(limit - len(scored_accounts))
+            .all()
+        )
+        for u in remaining:
+            scored_accounts.append((u, "general"))
+            seen_ids.add(u.id)
+
     payload = []
-    for account in users:
+    for account, reason_type in scored_accounts:
         item = serialize_user(account, viewer_id=user_id)
         item["isFollowing"] = False
+        item["isContact"] = has_contact(user_id, account.id)
+        existing_chat = find_direct_chat(user_id, account.id)
+        item["hasChat"] = bool(existing_chat)
+        item["chatId"] = existing_chat.id if existing_chat else None
         item["followersCount"] = Follow.query.filter_by(followed_id=account.id).count()
-        item["suggestionReason"] = "New on CHEETCHAT" if item["followersCount"] < 3 else "Popular on CHEETCHAT"
+
+        same_college = bool(viewer_college and account.college and viewer_college in (account.college or '').lower())
+        same_loc = bool(viewer_location and account.location and viewer_location in (account.location or '').lower())
+        item["sameCollege"] = same_college
+        item["sameLocation"] = same_loc
+
+        if same_college:
+            item["suggestionReason"] = f"🏫 Same College: {account.college}"
+        elif same_loc:
+            item["suggestionReason"] = f"📍 In your city: {account.location}"
+        elif account.college:
+            item["suggestionReason"] = f"🎓 {account.college}"
+        elif account.location:
+            item["suggestionReason"] = f"📍 {account.location}"
+        elif item["followersCount"] >= 3:
+            item["suggestionReason"] = "Popular on CHEETCHAT"
+        else:
+            item["suggestionReason"] = "New on CHEETCHAT"
+
         payload.append(item)
+
     return jsonify(payload)
+
+
+@users_bp.route('/api/users/<int:target_id>/connect', methods=['POST'])
+def connect_user(target_id):
+    """Send a connection request / add contact and open/create direct chat."""
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if user_id == target_id:
+        return jsonify({"error": "Cannot connect with yourself"}), 400
+
+    target = db.session.get(User, target_id)
+    if not target:
+        return jsonify({"error": "User not found"}), 404
+
+    viewer = db.session.get(User, user_id)
+
+    # Establish mutual contact
+    add_contact(user_id, target_id)
+    add_contact(target_id, user_id)
+
+    # Ensure a direct chat exists so they can talk immediately
+    direct_chat = find_direct_chat(user_id, target_id)
+    if not direct_chat:
+        direct_chat = Chat(is_group=False)
+        db.session.add(direct_chat)
+        db.session.flush()
+        db.session.add(ChatParticipant(chat_id=direct_chat.id, user_id=user_id))
+        db.session.add(ChatParticipant(chat_id=direct_chat.id, user_id=target_id))
+        db.session.commit()
+
+    # Create notification with campus context
+    campus_context = ""
+    if viewer and viewer.college and target.college and viewer.college.lower() == target.college.lower():
+        campus_context = f" from your college ({viewer.college})"
+    elif viewer and viewer.college:
+        campus_context = f" from {viewer.college}"
+    elif viewer and viewer.location:
+        campus_context = f" from {viewer.location}"
+
+    create_notification(
+        recipient_id=target_id,
+        sender_id=user_id,
+        n_type='connect_request',
+        content=f"sent you a connection request and started a chat{campus_context}",
+        target_id=user_id
+    )
+
+    return jsonify({
+        "ok": True,
+        "connected": True,
+        "chatId": direct_chat.id,
+        "message": f"Connected with {target.username}!"
+    }), 200
 
 @users_bp.route('/api/user/privacy', methods=['PUT'])
 def update_privacy_settings():

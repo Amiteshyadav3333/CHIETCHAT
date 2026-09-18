@@ -336,9 +336,15 @@ def ensure_runtime_compat_schema():
         'premium_unlocked_at': db.DateTime(),
         'premium_expires_at': db.DateTime(),
         'cover_url': db.String(500),
+        'college': db.String(150),
+        'location': db.String(150),
     })
     inspector = inspect(db.engine)
-    add_missing_columns(inspector, 'pending_registration', {'referral_code': db.String(16)})
+    add_missing_columns(inspector, 'pending_registration', {
+        'referral_code': db.String(16),
+        'college': db.String(150),
+        'location': db.String(150),
+    })
     inspector = inspect(db.engine)
     add_missing_columns(inspector, 'chat', {
         'avatar': db.String(500), 'description': db.String(500),
@@ -951,7 +957,9 @@ def serialize_user(user, viewer_id=None):
         "phoneNumberPrivacy": user.phone_number_privacy,
         "twoFactorEnabled": bool(user.two_factor_enabled),
         "recoveryKeyEnabled": bool(user.encrypted_recovery_key) if viewer_id == user.id else None,
-        "gender": getattr(user, 'gender', None) or ""
+        "gender": getattr(user, 'gender', None) or "",
+        "college": getattr(user, 'college', None) or "",
+        "location": getattr(user, 'location', None) or ""
     }
 
 def emit_to_user_chat_contacts(user_id, event, payload):

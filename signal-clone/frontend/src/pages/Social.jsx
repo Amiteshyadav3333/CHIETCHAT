@@ -474,37 +474,68 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
 const WhoToFollow = ({ token, onOpenProfile, onFollow }) => {
     const [suggestions, setSuggestions] = useState([]);
     const [busyIds, setBusyIds] = useState({});
+    const [connectedIds, setConnectedIds] = useState({});
+
     useEffect(() => {
         if (!token) return;
-        axios.get('/api/users/suggestions?limit=5', { headers: authHeaders(token) })
+        axios.get('/api/users/suggestions?limit=6', { headers: authHeaders(token) })
             .then(res => setSuggestions(res.data))
             .catch(() => {});
     }, [token]);
+
     if (!suggestions.length) return null;
+
     return (
         <div style={{ borderRadius: 16, overflow: 'hidden', background: '#16181c' }}>
-            <h2 style={{ padding: '12px 16px', fontWeight: 800, fontSize: 20 }}>Who to follow</h2>
-            <div style={{ maxHeight: 300, overflowY: 'auto', overscrollBehavior: 'contain' }}>{suggestions.map(u => (
-                <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderTop: '1px solid #2f3336' }}
+            <h2 style={{ padding: '12px 16px', fontWeight: 800, fontSize: 18, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span>🎓 Campus & Friends</span>
+            </h2>
+            <div style={{ maxHeight: 360, overflowY: 'auto', overscrollBehavior: 'contain' }}>{suggestions.map(u => (
+                <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderTop: '1px solid #2f3336' }}
                     onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                     <button onClick={() => onOpenProfile(u.id)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', flexShrink: 0 }}>
-                        <img src={u.avatar} alt="" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} />
+                        <img src={u.avatar} alt="" style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover' }} />
                     </button>
                     <button onClick={() => onOpenProfile(u.id)} style={{ flex: 1, minWidth: 0, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' }}>
-                        <p style={{ fontWeight: 700, fontSize: 14, color: '#e7e9ea', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.username}</p>
-                        <p style={{ fontSize: 14, color: '#71767b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{u.platformId || (u.username || '').toLowerCase().replace(/\s+/g, '_')}</p>
-                        <p style={{ fontSize: 11, color: '#536471' }}>{u.suggestionReason}</p>
+                        <p style={{ fontWeight: 700, fontSize: 13, color: '#e7e9ea', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.username}</p>
+                        <p style={{ fontSize: 12, color: '#71767b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{u.platformId || (u.username || '').toLowerCase().replace(/\s+/g, '_')}</p>
+                        {u.college ? (
+                            <p style={{ fontSize: 11, color: '#25d366', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                🏫 {u.college}
+                            </p>
+                        ) : (u.location ? (
+                            <p style={{ fontSize: 11, color: '#a78bfa', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                📍 {u.location}
+                            </p>
+                        ) : (
+                            <p style={{ fontSize: 11, color: '#536471' }}>{u.suggestionReason}</p>
+                        ))}
                     </button>
-                    <button disabled={busyIds[u.id]} onClick={async () => {
-                        setBusyIds(x => ({ ...x, [u.id]: true }));
-                        const result = await onFollow(u.id);
-                        if (result?.isFollowing) setSuggestions(list => list.filter(x => x.id !== u.id));
-                        setBusyIds(x => ({ ...x, [u.id]: false }));
-                    }}
-                        style={{ padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, background: '#e7e9ea', color: '#0f1419', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
-                        {busyIds[u.id] ? '…' : 'Follow'}
-                    </button>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+                        <button disabled={busyIds[u.id]} onClick={async () => {
+                            setBusyIds(x => ({ ...x, [u.id]: true }));
+                            const result = await onFollow(u.id);
+                            if (result?.isFollowing) setSuggestions(list => list.filter(x => x.id !== u.id));
+                            setBusyIds(x => ({ ...x, [u.id]: false }));
+                        }}
+                            style={{ padding: '4px 12px', borderRadius: 9999, fontWeight: 700, fontSize: 12, background: '#e7e9ea', color: '#0f1419', border: 'none', cursor: 'pointer' }}>
+                            {busyIds[u.id] ? '…' : 'Follow'}
+                        </button>
+                        <button disabled={busyIds[u.id] || connectedIds[u.id]} onClick={async () => {
+                            setBusyIds(x => ({ ...x, [u.id]: true }));
+                            try {
+                                await axios.post(`/api/users/${u.id}/connect`, {}, { headers: authHeaders(token) });
+                                setConnectedIds(x => ({ ...x, [u.id]: true }));
+                            } catch (e) {
+                                console.error('Connect failed', e);
+                            }
+                            setBusyIds(x => ({ ...x, [u.id]: false }));
+                        }}
+                            style={{ padding: '4px 12px', borderRadius: 9999, fontWeight: 700, fontSize: 11, background: connectedIds[u.id] ? 'rgba(37,211,102,0.15)' : '#25d366', color: connectedIds[u.id] ? '#25d366' : '#000', border: 'none', cursor: 'pointer' }}>
+                            {connectedIds[u.id] ? '✓ Connected' : 'Connect'}
+                        </button>
+                    </div>
                 </div>
             ))}</div>
         </div>

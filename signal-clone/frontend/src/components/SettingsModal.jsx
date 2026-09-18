@@ -23,7 +23,7 @@ const TITLES = {
     business: 'Business tools', help: 'Help center', password: 'Change password',
     delete: 'Delete account', activity: 'Your Activity', sessions: 'Active Sessions',
     twofactor_setup: 'Enable 2FA', twofactor_disable: 'Disable 2FA', premium: 'CHEETCHAT Premium',
-    about: 'About CHEETCHAT'
+    about: 'About CHEETCHAT', guide: 'App Feature Guide & Tour'
 };
 
 const timeAgo = (dateStr) => {
@@ -70,7 +70,16 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     const [businessTitle, setBusinessTitle] = useState('Business tools');
     const [referralStatus, setReferralStatus] = useState(null);
     const [referralInput, setReferralInput] = useState('');
-    const [profile, setProfile] = useState({ username: user?.username || '', bio: user?.bio || '', websiteUrl: user?.websiteUrl || '', platformId: user?.platformId || '', gender: user?.gender || '', birthDate: user?.birthDate || '' });
+    const [profile, setProfile] = useState({
+        username: user?.username || '',
+        bio: user?.bio || '',
+        websiteUrl: user?.websiteUrl || '',
+        platformId: user?.platformId || '',
+        gender: user?.gender || '',
+        birthDate: user?.birthDate || '',
+        college: user?.college || '',
+        location: user?.location || ''
+    });
     const [passwords, setPasswords] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
     
     // Sessions and 2FA states
@@ -561,6 +570,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 <ChevronRightIcon className="h-5 w-5 text-gray-500" />
                             </button>
                             <SettingsGroup>
+                                <SettingsRow icon={<SparklesIcon className="text-[#25d366]" />} title="App Feature Guide & Tour" subtitle="UI व सभी सेटिंग्स से परिचित हों — इंटरैक्टिव ग्रीन गाइड" onClick={() => go('guide')} />
                                 <SettingsRow icon={<SparklesIcon />} title="CHEETCHAT Premium" subtitle={user?.isPremium ? 'Active — all creator features unlocked' : 'Invite 7 verified users to unlock every creator feature'} onClick={openPremium} />
                                 <SettingsRow icon={<span className="text-xl">文</span>} title="App language" subtitle={INDIAN_LANGUAGES.find(item => item[0] === appLanguage)?.[1] || 'English'} onClick={() => go('language')} />
                                 <SettingsRow icon={<KeyIcon />} title="Account" subtitle="Password, security and account controls" onClick={() => go('account')} />
@@ -619,6 +629,8 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 </label>
                             </div>
                             <Field label="Bio" value={profile.bio} onChange={value => setProfile({ ...profile, bio: value })} />
+                            <Field label="University / College" value={profile.college} onChange={value => setProfile({ ...profile, college: value })} placeholder="e.g. Delhi University, IIT Bombay, Amity..." />
+                            <Field label="Location / City" value={profile.location} onChange={value => setProfile({ ...profile, location: value })} placeholder="e.g. New Delhi, Mumbai, Bengaluru..." />
                             <Field label="Website" value={profile.websiteUrl} onChange={value => setProfile({ ...profile, websiteUrl: value })} placeholder="https://example.com" />
                             <label className="block"><span className="mb-2 block text-sm font-medium text-gray-200">Birthday</span><input type="date" value={profile.birthDate} max={new Date().toISOString().slice(0, 10)} onChange={e => setProfile({ ...profile, birthDate: e.target.value })} className="w-full rounded-lg border border-gray-700 bg-[#202c33] px-4 py-3 text-sm text-white outline-none focus:border-violet-500" /><p className="mt-1 text-xs text-gray-500">Your exact birth date stays private. Contacts only see a reminder on your birthday.</p></label>
                             <div>
@@ -994,6 +1006,111 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                     )}
 
                     {screen === 'about' && <AboutCheetChat compact />}
+
+                    {screen === 'guide' && (
+                        <div className="p-5 space-y-6">
+                            <div className="rounded-3xl border border-[#25d366]/40 bg-gradient-to-br from-[#25d366]/15 via-[#111b21] to-[#162923] p-6 text-center shadow-xl shadow-[#25d366]/10">
+                                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#25d366]/20 border border-[#25d366]/40 text-[#25d366] mb-4">
+                                    <SparklesIcon className="h-8 w-8" />
+                                </div>
+                                <h3 className="text-xl font-black text-white">Interactive UI Feature Tour</h3>
+                                <p className="mt-2 text-xs leading-relaxed text-gray-300">
+                                    ऐप के सभी फीचर्स और सेटिंग्स को एक-एक करके <strong>ग्रीन बटन</strong> से क्लिक करके लाइव स्क्रीन पर समझें।
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        onClose();
+                                        setTimeout(() => {
+                                            window.dispatchEvent(new CustomEvent('cheetchat-start-tour'));
+                                        }, 150);
+                                    }}
+                                    className="mt-5 w-full flex items-center justify-center gap-2 rounded-xl bg-[#25d366] hover:bg-[#20bd5a] text-[#07090c] font-black py-3.5 px-6 text-sm uppercase tracking-wider shadow-lg shadow-[#25d366]/30 ring-4 ring-[#25d366]/20 transition-all hover:scale-[1.01]"
+                                >
+                                    <span>🎯 Live Green-Button Tour शुरू करें</span>
+                                </button>
+                            </div>
+
+                            <div>
+                                <h4 className="text-sm font-black text-[#25d366] uppercase tracking-wider mb-3">
+                                    सारे सेटिंग्स और फीचर्स की सम्पूर्ण जानकारी (Settings & Features Guide)
+                                </h4>
+                                <div className="space-y-3">
+                                    <div className="rounded-2xl border border-white/5 bg-[#182229] p-4">
+                                        <h5 className="text-sm font-bold text-white flex items-center gap-2">
+                                            <span>💬 1. Chats & Snap Secret Mode</span>
+                                        </h5>
+                                        <p className="mt-1 text-xs text-gray-400 leading-relaxed">
+                                            <strong>क्या होता है:</strong> एंड-टू-एंड एन्क्रिप्टेड चैट, ऑडियो नोट्स, डाक्यूमेंट्स व मीडिया शेयरिंग। सीक्रेट चैट के लिए स्नैप मोड ऑन करके ऑटो-डिलीट मैसेज भेज सकते हैं।
+                                        </p>
+                                    </div>
+
+                                    <div className="rounded-2xl border border-white/5 bg-[#182229] p-4">
+                                        <h5 className="text-sm font-bold text-white flex items-center gap-2">
+                                            <span>🎬 2. Reels & Short Videos</span>
+                                        </h5>
+                                        <p className="mt-1 text-xs text-gray-400 leading-relaxed">
+                                            <strong>क्या होता है:</strong> कॉलेज और देशभर के ट्रेंडिंग वीडियो देखें, लाइक व शेयर करें और अपनी खुद की रील्स अपलोड करें।
+                                        </p>
+                                    </div>
+
+                                    <div className="rounded-2xl border border-white/5 bg-[#182229] p-4">
+                                        <h5 className="text-sm font-bold text-white flex items-center gap-2">
+                                            <span>🌐 3. Social Feed & Campus Hub</span>
+                                        </h5>
+                                        <p className="mt-1 text-xs text-gray-400 leading-relaxed">
+                                            <strong>क्या होता है:</strong> कॉलेज कम्युनिटी पोस्ट्स, पोल्स और विचार साझा करें। यहाँ से आप अपने कॉलेज और शहर के नए साथियों को फॉलो व कनेक्ट कर सकते हैं।
+                                        </p>
+                                    </div>
+
+                                    <div className="rounded-2xl border border-white/5 bg-[#182229] p-4">
+                                        <h5 className="text-sm font-bold text-white flex items-center gap-2">
+                                            <span>🎙️ 4. PodLive Voice Rooms</span>
+                                        </h5>
+                                        <p className="mt-1 text-xs text-gray-400 leading-relaxed">
+                                            <strong>क्या होता है:</strong> लाइव ऑडियो रूम्स में ग्रुप डिस्कशन, डिबेट या बातचीत में भाग लें या अपना रूम होस्ट करें।
+                                        </p>
+                                    </div>
+
+                                    <div className="rounded-2xl border border-white/5 bg-[#182229] p-4">
+                                        <h5 className="text-sm font-bold text-white flex items-center gap-2">
+                                            <span>✨ 5. Saskat AI Assistant</span>
+                                        </h5>
+                                        <p className="mt-1 text-xs text-gray-400 leading-relaxed">
+                                            <strong>क्या होता है:</strong> आपका 24x7 स्मार्ट एआई साथी — पढ़ाई, नोट्स, कोडिंग, सवाल-जवाब और इमेज जेनरेशन के लिए।
+                                        </p>
+                                    </div>
+
+                                    <div className="rounded-2xl border border-white/5 bg-[#182229] p-4">
+                                        <h5 className="text-sm font-bold text-white flex items-center gap-2">
+                                            <span>👤 6. Profile & Campus Settings</span>
+                                        </h5>
+                                        <p className="mt-1 text-xs text-gray-400 leading-relaxed">
+                                            <strong>क्या होता है:</strong> प्रोफाइल फोटो, नाम, बायो, University/College और City/Location सेटिंग्स से कभी भी अपडेट कर सकते हैं ताकि सही लोग आपको खोज सकें।
+                                        </p>
+                                    </div>
+
+                                    <div className="rounded-2xl border border-white/5 bg-[#182229] p-4">
+                                        <h5 className="text-sm font-bold text-white flex items-center gap-2">
+                                            <span>🔒 7. Privacy & Security (2FA)</span>
+                                        </h5>
+                                        <p className="mt-1 text-xs text-gray-400 leading-relaxed">
+                                            <strong>क्या होता है:</strong> Last Seen, Online Status, Profile Photo व Read Receipts को अपनी इच्छानुसार छुपाएं। टू-फैक्टर ऑथेंटिकेशन ऑन करके अकाउंट सुरक्षित रखें।
+                                        </p>
+                                    </div>
+
+                                    <div className="rounded-2xl border border-white/5 bg-[#182229] p-4">
+                                        <h5 className="text-sm font-bold text-white flex items-center gap-2">
+                                            <span>🎨 8. Chats Appearance & Wallpapers</span>
+                                        </h5>
+                                        <p className="mt-1 text-xs text-gray-400 leading-relaxed">
+                                            <strong>क्या होता है:</strong> कस्टम वॉलपेपर, बबल कलर्स, डार्क मोड और फॉन्ट स्टाइल को अपनी पसंद के अनुसार कस्टमाइज़ करें।
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {screen === 'help' && (
                         <>

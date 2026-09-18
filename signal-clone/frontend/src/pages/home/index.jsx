@@ -38,6 +38,7 @@ import { FeatureOverlays } from './components/FeatureOverlays';
 import { HomeModalsContainer } from './components/HomeModalsContainer';
 import ImageCropperModal from '../../components/cropper/ImageCropperModal';
 import { useBackHandler } from '../../utils/backNavigation';
+import AppFeatureTour from '../../components/AppFeatureTour';
 
 import {
     ChatBubbleLeftRightIcon, PlayIcon, PhotoIcon,
@@ -87,6 +88,13 @@ export const Home = () => {
     const [sidebarSearchQuery, setSidebarSearchQuery] = useState('');
     const [showSidebarEmoji, setShowSidebarEmoji] = useState(false);
     const [storyUserIds, setStoryUserIds] = useState([]);
+    const [showFeatureTour, setShowFeatureTour] = useState(() => localStorage.getItem('cheetchat_tour_completed') !== '1');
+
+    useEffect(() => {
+        const handleStartTour = () => setShowFeatureTour(true);
+        window.addEventListener('cheetchat-start-tour', handleStartTour);
+        return () => window.removeEventListener('cheetchat-start-tour', handleStartTour);
+    }, []);
 
     // Search Modal States
     const [showSearchModal, setShowSearchModal] = useState(false);
@@ -1843,6 +1851,17 @@ export const Home = () => {
                 setPodliveInvite={nav.setPodliveInvite}
                 receivePodliveInvite={nav.receivePodliveInvite}
                 updatePodliveLiveCount={nav.updatePodliveLiveCount}
+            />
+
+            <AppFeatureTour
+                isOpen={showFeatureTour}
+                onClose={() => setShowFeatureTour(false)}
+                onOpenSettings={() => {
+                    setShowNotifications(false);
+                    setShowSearchModal(false);
+                    nav.setShowSettings(true);
+                }}
+                user={user}
             />
         </div>
     );

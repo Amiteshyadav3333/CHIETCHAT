@@ -343,3 +343,125 @@ def track_ad_interaction(ad_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/api/admin/users', methods=['GET'])
+def get_admin_users():
+    if not verify_admin_token():
+        return jsonify({'error': 'Unauthorized'}), 401
+    college_filter = request.args.get('college', '').strip().lower()
+    location_filter = request.args.get('location', '').strip().lower()
+    q = User.query
+    if college_filter:
+        q = q.filter(db.func.lower(User.college).like(f"%{college_filter}%"))
+    if location_filter:
+        q = q.filter(db.func.lower(User.location).like(f"%{location_filter}%"))
+    users = q.order_by(User.created_at.desc()).limit(200).all()
+    return jsonify({
+        'users': [{
+            'id': u.id,
+            'username': u.username,
+            'platformId': u.platform_id,
+            'email': u.email,
+            'phone': u.phone if not str(u.phone or '').startswith('google:') else '',
+            'college': u.college or '',
+            'location': u.location or '',
+            'isVerified': u.is_verified,
+            'isPremium': u.is_premium,
+            'avatar': u.avatar,
+            'createdAt': u.created_at.isoformat() if u.created_at else None
+        } for u in users]
+    }), 200
+
+
+@admin_bp.route('/api/admin/users/<int:target_id>/message', methods=['POST'])
+def admin_message_user(target_id):
+    if not verify_admin_token():
+        return jsonify({'error': 'Unauthorized'}), 401
+    data = get_json_data()
+    content = str(data.get('content') or '').strip()
+    if not content:
+        return jsonify({'error': 'Message content is required'}), 400
+
+    target = db.session.get(User, target_id)
+    if not target:
+        return jsonify({'error': 'User not found'}), 404
+
+    # Ensure Campus Guide bot exists
+    bot = User.query.filter_by(username='CHEETCHAT Campus Guide').first()
+    if not bot:
+        bot = User(
+            username='CHEETCHAT Campus Guide',
+            email='guide@cheetchat.app',
+            phone='0000000000',
+            platform_id='cheetchat_guide',
+            is_verified=True,
+            avatar='https://api.dicebear.com/7.x/bottts/svg?seed=cheetchat_guide',
+            bio='Official CHEETCHAT Campus Guide & Welcome Assistant'
+        )
+        db.session.add(bot)
+        db.session.flush()
+
+    from utils import add_contact, find_direct_chat
+    from models import Chat, ChatParticipant, Message
+
+    add_contact(bot.id, target.id)
+    add_contact(target.id, bot.id)
+
+    chat = find_direct_chat(bot.id, target.id)
+    if not chat:
+        chat = Chat(is_group=False)
+        db.session.add(chat)
+        db.session.flush()
+        db.session.add(ChatParticipant(chat_id=chat.id, user_id=bot.id))
+        db.session.add(ChatParticipant(chat_id=chat.id, user_id=target.id))
+
+    msg = Message(chat_id=chat.id, sender_id=bot.id, content=content)
+    db.session.add(msg)
+    db.session.commit()
+    return jsonify({'ok': True, 'message': f'Message sent to {target.username}!'}), 200
+
+
+@admin_bp.route('/api/admin/users/introduce', methods=['POST'])
+def admin_introduce_users():
+    if not verify_admin_token():
+        return jsonify({'error': 'Unauthorized'}), 401
+    data = get_json_data()
+    user_a_id = data.get('userAId')
+    user_b_id = data.get('userBId')
+    note = str(data.get('note') or '').strip()
+
+    if not user_a_id or not user_b_id or user_a_id == user_b_id:
+        return jsonify({'error': 'Select two distinct users to introduce'}), 400
+
+    user_a = db.session.get(User, user_a_id)
+    user_b = db.session.get(User, user_b_id)
+    if not user_a or not user_b:
+        return jsonify({'error': 'Users not found'}), 404
+
+    from utils import add_contact, find_direct_chat, create_notification
+    from models import Chat, ChatParticipant, Message
+
+    add_contact(user_a.id, user_b.id)
+    add_contact(user_b.id, user_a.id)
+
+    chat = find_direct_chat(user_a.id, user_b.id)
+    if not chat:
+        chat = Chat(is_group=False)
+        db.session.add(chat)
+        db.session.flush()
+        db.session.add(ChatParticipant(chat_id=chat.id, user_id=user_a.id))
+        db.session.add(ChatParticipant(chat_id=chat.id, user_id=user_b.id))
+
+    campus_text = f" from {user_a.college}" if user_a.college and user_a.college == user_b.college else ""
+    intro_content = note or f"👋 Hi @{user_a.username} and @{user_b.username}! You've been introduced as batchmates{campus_text} on CHEETCHAT. Say hi!"
+    
+    # Send system intro message into direct chat
+    msg = Message(chat_id=chat.id, sender_id=user_a.id, content=intro_content)
+    db.session.add(msg)
+
+    create_notification(recipient_id=user_b.id, sender_id=user_a.id, n_type='connect_request', content=f"connected with you{campus_text}", target_id=user_a.id)
+    create_notification(recipient_id=user_a.id, sender_id=user_b.id, n_type='connect_request', content=f"connected with you{campus_text}", target_id=user_b.id)
+    
+    db.session.commit()
+    return jsonify({'ok': True, 'message': f'Successfully introduced {user_a.username} and {user_b.username}!'}), 200

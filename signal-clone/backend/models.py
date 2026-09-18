@@ -44,6 +44,8 @@ class User(db.Model):
     bio_expires_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now)
     gender = db.Column(db.String(10), nullable=True)  # 'male' | 'female' | None
+    college = db.Column(db.String(150), nullable=True)  # University or College name
+    location = db.Column(db.String(150), nullable=True)  # City / Region
     is_premium = db.Column(db.Boolean, nullable=False, default=False)
     is_verified = db.Column(db.Boolean, nullable=False, default=False)
     birth_date = db.Column(db.Date, nullable=True)
@@ -62,6 +64,8 @@ class PendingRegistration(db.Model):
     encrypted_private_key = db.Column(db.Text, nullable=True)
     encrypted_recovery_key = db.Column(db.Text, nullable=True)
     referral_code = db.Column(db.String(16), nullable=True)
+    college = db.Column(db.String(150), nullable=True)
+    location = db.Column(db.String(150), nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now)
 
 class Chat(db.Model):

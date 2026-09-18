@@ -33,9 +33,16 @@ export const HomeNavigationRail = ({
                 <nav className="mt-7 flex flex-col gap-1">
                     {navItems.map(item => {
                         const Icon = item.icon;
+                        const tourKey = item.tourId || (
+                            item.label === 'New' ? 'new-chat' :
+                            item.label === 'Notify' ? 'notify' :
+                            item.label === 'AI' ? 'ai' :
+                            item.label.toLowerCase()
+                        );
                         return (
                             <button
                                 key={item.label}
+                                data-tour={tourKey}
                                 onClick={() => {
                                     item.action();
                                     setNavPeekOpen(false);
@@ -90,6 +97,7 @@ export const MobileBottomNavigation = ({
                 <button
                     key={tab.id}
                     type="button"
+                    data-tour-mobile={tab.id}
                     onClick={() => { setMobileHomeTab(tab.id); if (setShowArchive) setShowArchive(false); }}
                     className={`relative flex flex-col items-center gap-0.5 rounded-xl py-2 text-[11px] font-semibold transition ${
                         mobileHomeTab === tab.id ? 'text-[#25d366]' : 'text-gray-400'

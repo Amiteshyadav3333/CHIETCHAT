@@ -36,6 +36,8 @@ import { ChatInfoDrawer } from './components/ChatInfoDrawer';
 import { CallOverlayContainer } from './components/CallOverlayContainer';
 import { FeatureOverlays } from './components/FeatureOverlays';
 import { HomeModalsContainer } from './components/HomeModalsContainer';
+import ImageCropperModal from '../../components/cropper/ImageCropperModal';
+import { useBackHandler } from '../../utils/backNavigation';
 
 import {
     ChatBubbleLeftRightIcon, PlayIcon, PhotoIcon,
@@ -127,6 +129,34 @@ export const Home = () => {
     const [topInfoMessage, setTopInfoMessage] = useState(null);
     const [uploadProgress, setUploadProgress] = useState(null);
     const [showEncryptionInfo, setShowEncryptionInfo] = useState(false);
+    const [pendingCropImg, setPendingCropImg] = useState(null);
+
+    // ─── Step-by-Step Back Button Handling (1-1 step back only) ───
+    useBackHandler(Boolean(pendingCropImg), () => setPendingCropImg(null), 'crop-img');
+    useBackHandler(Boolean(showChatDraw), () => setShowChatDraw(false), 'draw-studio');
+    useBackHandler(Boolean(showMessageSearch), () => setShowMessageSearch(false), 'msg-search');
+    useBackHandler(Boolean(showTopDropdown), () => setShowTopDropdown(false), 'top-dropdown');
+    useBackHandler(Boolean(showTopReactions), () => setShowTopReactions(false), 'top-reactions');
+    useBackHandler(Boolean(showSearchModal), () => setShowSearchModal(false), 'search-modal');
+    useBackHandler(Boolean(showInfoPanel), () => setShowInfoPanel(false), 'info-panel');
+    useBackHandler(Boolean(showNotifications), () => setShowNotifications(false), 'notifications');
+    useBackHandler(Boolean(nav.navPeekOpen), () => nav.setNavPeekOpen(false), 'nav-peek');
+    useBackHandler(Boolean(showLinkPhoneModal), () => setShowLinkPhoneModal(false), 'link-phone');
+    useBackHandler(Boolean(showEncryptionInfo), () => setShowEncryptionInfo(false), 'encryption-info');
+    useBackHandler(Boolean(editingMessage), () => setEditingMessage(null), 'edit-msg');
+    useBackHandler(Boolean(forwardMessage), () => setForwardMessage(null), 'fwd-msg');
+    useBackHandler(Boolean(msgToDelete), () => setMsgToDelete(null), 'del-msg');
+    useBackHandler(Boolean(chatToDelete), () => setChatToDelete(null), 'del-chat');
+    useBackHandler(Boolean(prefs.showArchive), () => prefs.setShowArchive(false), 'show-archive');
+    useBackHandler(Boolean(nav.showSmartSpace), () => nav.setShowSmartSpace(false), 'smart-space');
+    useBackHandler(Boolean(nav.showSaskatAI), () => nav.setShowSaskatAI(false), 'saskat-ai');
+    useBackHandler(Boolean(nav.showAiChat), () => nav.setShowAiChat(false), 'ai-chat');
+    useBackHandler(Boolean(nav.showSettings), () => nav.setShowSettings(false), 'settings');
+    useBackHandler(Boolean(nav.showReels), () => nav.setShowReels(false), 'reels');
+    useBackHandler(Boolean(nav.showSocial), () => nav.setShowSocial(false), 'social');
+    useBackHandler(Boolean(nav.showPodlive), () => nav.setShowPodlive(false), 'podlive');
+    useBackHandler(Boolean(activeChat), () => { setActiveChat(null); localStorage.removeItem('activeChatId'); }, 'active-chat');
+    useBackHandler(Boolean(nav.isMobile && nav.mobileHomeTab !== 'chats'), () => nav.setMobileHomeTab('chats'), 'mobile-tab');
 
     // Computed Chat State
     const visibleActiveChat = activeChat
@@ -1362,40 +1392,53 @@ export const Home = () => {
         }
     };
 
-    const handleAvatarChange = async (e) => {
+    const handleAvatarChange = (e) => {
         const file = e.target.files[0];
+        e.target.value = '';
         if (!file) return;
-        const formData = new FormData();
-        formData.append('avatar', file);
-        try {
-            const res = await axios.post('/api/user/avatar', formData, {
-                headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` }
-            });
-            updateUser(res.data.user);
-            await fetchChats();
-        } catch (err) {
-            console.error(err);
-            alert(err.response?.data?.error || "Could not update profile photo");
-        } finally {
-            e.target.value = '';
-        }
+        if (!file.type.startsWith('image/')) return alert('Please select an image file.');
+        const reader = new FileReader();
+        reader.onload = () => setPendingCropImg({ type: 'avatar', src: reader.result });
+        reader.readAsDataURL(file);
     };
 
-    const handleContactDpChange = async (event, contactId) => {
+    const handleContactDpChange = (event, contactId) => {
         const file = event.target.files?.[0];
         event.target.value = '';
         if (!file || !contactId) return;
         if (!file.type.startsWith('image/')) return alert('Please select an image file.');
+        const reader = new FileReader();
+        reader.onload = () => setPendingCropImg({ type: 'contact-dp', src: reader.result, contactId });
+        reader.readAsDataURL(file);
+    };
+
+    const uploadCroppedImage = async (file) => {
+        if (!pendingCropImg) return;
         const formData = new FormData();
         formData.append('avatar', file);
-        try {
-            const res = await axios.post(`/api/user/contact-avatar/${contactId}`, formData, {
-                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
-            });
-            setChats(prev => prev.map(chat => chat.id === activeChatRef.current?.id
-                ? { ...chat, myAvatarForContact: res.data.avatar, hasCustomAvatarForContact: true } : chat));
-            setActiveChat(prev => prev ? { ...prev, myAvatarForContact: res.data.avatar, hasCustomAvatarForContact: true } : prev);
-        } catch (err) { alert(err.response?.data?.error || 'Could not set contact-specific DP.'); }
+
+        if (pendingCropImg.type === 'avatar') {
+            try {
+                const res = await axios.post('/api/user/avatar', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` }
+                });
+                updateUser(res.data.user);
+                await fetchChats();
+            } catch (err) {
+                console.error(err);
+                alert(err.response?.data?.error || "Could not update profile photo");
+            }
+        } else if (pendingCropImg.type === 'contact-dp') {
+            try {
+                const res = await axios.post(`/api/user/contact-avatar/${pendingCropImg.contactId}`, formData, {
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
+                });
+                setChats(prev => prev.map(chat => chat.id === activeChatRef.current?.id
+                    ? { ...chat, myAvatarForContact: res.data.avatar, hasCustomAvatarForContact: true } : chat));
+                setActiveChat(prev => prev ? { ...prev, myAvatarForContact: res.data.avatar, hasCustomAvatarForContact: true } : prev);
+            } catch (err) { alert(err.response?.data?.error || 'Could not set contact-specific DP.'); }
+        }
+        setPendingCropImg(null);
     };
 
     const resetContactDp = async (contactId) => {
@@ -1438,20 +1481,21 @@ export const Home = () => {
         {
             label: 'Chats',
             icon: ChatBubbleLeftRightIcon,
-            active: !nav.showSocial && !nav.showReels,
+            active: !nav.showSocial && !nav.showReels && !nav.showPodlive,
             action: () => {
                 nav.hideAppNavForFeature();
                 nav.setShowReels(false);
                 nav.setShowSocial(false);
+                nav.setShowPodlive(false);
                
                 setActiveChat(null);
                 localStorage.removeItem('activeChatId');
             }
         },
-        { label: 'Reels', icon: PlayIcon, active: nav.showReels, action: () => { nav.hideAppNavForFeature(); nav.setShowSocial(false); nav.setShowReels(true); nav.setShowAiChat(false); } },
-        { label: 'Social', icon: PhotoIcon, active: nav.showSocial, action: () => { nav.hideAppNavForFeature(); nav.setShowReels(false); nav.setShowSocial(true); nav.setShowAiChat(false); } },
-        },
-        { label: 'AI', icon: SparklesIcon, active: nav.showAiChat, action: () => { nav.hideAppNavForFeature(); nav.setShowReels(false); nav.setShowSocial(false); nav.setShowAiChat(true); nav.setShowSaskatAI(false); } },
+        { label: 'Reels', icon: PlayIcon, active: nav.showReels, action: () => { nav.hideAppNavForFeature(); nav.setShowSocial(false); nav.setShowPodlive(false); nav.setShowReels(true); nav.setShowAiChat(false); } },
+        { label: 'Social', icon: PhotoIcon, active: nav.showSocial, action: () => { nav.hideAppNavForFeature(); nav.setShowReels(false); nav.setShowPodlive(false); nav.setShowSocial(true); nav.setShowAiChat(false); } },
+        { label: 'PodLive', icon: MicrophoneIcon, active: nav.showPodlive, action: () => { nav.hideAppNavForFeature(); nav.setShowReels(false); nav.setShowSocial(false); nav.setShowPodlive(true); nav.setShowAiChat(false); }, badge: nav.podliveLiveCount || 0 },
+        { label: 'AI', icon: SparklesIcon, active: nav.showAiChat, action: () => { nav.hideAppNavForFeature(); nav.setShowReels(false); nav.setShowSocial(false); nav.setShowPodlive(false); nav.setShowAiChat(true); nav.setShowSaskatAI(false); } },
         { label: 'Notify', icon: BellIcon, active: showNotifications, action: openNotifications, badge: unreadCount },
         { label: 'New', icon: PlusIcon, active: showSearchModal || showLinkPhoneModal, action: openNewChat },
         { label: 'Settings', icon: Cog6ToothIcon, active: nav.showSettings, action: () => { setShowNotifications(false); setShowSearchModal(false); nav.setShowSettings(true); } }
@@ -1491,6 +1535,13 @@ export const Home = () => {
 
     return (
         <div className="flex h-[100dvh] bg-signal-bg overflow-hidden text-gray-100 font-sans relative">
+            {pendingCropImg && (
+                <ImageCropperModal
+                    imageSrc={pendingCropImg.src}
+                    onCropDone={uploadCroppedImage}
+                    onCancel={() => setPendingCropImg(null)}
+                />
+            )}
             <HomeModalsContainer
                 snapNotice={snapNotice}
                 setSnapNotice={setSnapNotice}
@@ -1786,6 +1837,12 @@ export const Home = () => {
                 handleBirthdayWish={handleBirthdayWish}
                 incomingCall={calls.incomingCall}
                 showCallModal={calls.showCallModal}
+                showPodlive={nav.showPodlive}
+                setShowPodlive={nav.setShowPodlive}
+                podliveInvite={nav.podliveInvite}
+                setPodliveInvite={nav.setPodliveInvite}
+                receivePodliveInvite={nav.receivePodliveInvite}
+                updatePodliveLiveCount={nav.updatePodliveLiveCount}
             />
         </div>
     );

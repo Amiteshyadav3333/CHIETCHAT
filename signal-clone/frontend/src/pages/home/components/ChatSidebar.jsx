@@ -43,10 +43,10 @@ export const ChatSidebar = ({
                 <div className="flex items-center gap-3">
                     <div className="relative group cursor-pointer" title="Change profile photo">
                         <AvatarZoom src={user?.avatar} name={user?.username} size="w-10 h-10" />
-                        <div className="absolute inset-0 hidden group-hover:flex flex-col items-center justify-center rounded-full bg-black/70 z-10 cursor-pointer gap-0.5">
-                            <span onClick={() => avatarInputRef.current?.click()} className="text-[9px] text-white leading-tight">Edit</span>
+                        <div className="absolute inset-0 hidden group-hover:flex flex-col items-center justify-center rounded-full bg-black/70 z-10 pointer-events-none gap-0.5">
+                            <span onClick={(e) => { e.stopPropagation(); avatarInputRef.current?.click(); }} className="text-[9px] text-white leading-tight pointer-events-auto cursor-pointer hover:text-[#00a884] transition-colors p-1">Edit</span>
                             {user?.avatar && !user.avatar.includes('dicebear') && (
-                                <span onClick={handleDeleteAvatar} className="text-[9px] text-red-400 leading-tight">Delete</span>
+                                <span onClick={(e) => { e.stopPropagation(); handleDeleteAvatar(e); }} className="text-[9px] text-red-400 leading-tight pointer-events-auto cursor-pointer hover:text-red-300 transition-colors px-1">Delete</span>
                             )}
                         </div>
                     </div>

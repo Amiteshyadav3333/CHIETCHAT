@@ -12,6 +12,7 @@ import { EMOJIS, MessageBubble, TypingDots, WaveformVisualizer, renderMarkdown }
 import AiVoiceWallpaper, { AI_WALLPAPER_THEMES } from './AiVoiceWallpaper';
 import HumanoidAiAvatar from './HumanoidAiAvatar';
 import { API_BASE_URL } from '../utils/apiBaseUrl';
+import { useBackHandler } from '../utils/backNavigation';
 
 const SaskatAI = lazy(() => import('../pages/SaskatAI/SaskatAI'));
 
@@ -441,7 +442,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                 max_tokens: 65,
             }, {
                 headers: { Authorization: `Bearer ${token}` },
-                timeout: 7000,
+                timeout: 20000,
             });
 
             const replyText = res.data.reply;
@@ -675,6 +676,9 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
 
         stopListening();
     };
+
+    useBackHandler(Boolean(showSaskat), () => setShowSaskat(false), 'aichat-saskat');
+    useBackHandler(Boolean(isCallActive), () => endCall(), 'aichat-call');
 
     useEffect(() => {
         return () => {

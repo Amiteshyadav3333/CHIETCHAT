@@ -8,6 +8,7 @@ import ReelProfile from '../components/ReelProfile';
 import ReelReactor from '../components/ReelReactor';
 import { loadReelCache, saveReelCache } from '../utils/reelCache';
 import { REEL_CATEGORIES } from '../utils/reelCategories';
+import { useBackHandler } from '../utils/backNavigation';
 
 const Reels = ({ active, onBack, onShareToChat }) => {
     const { user, token } = useContext(AuthContext);
@@ -34,6 +35,13 @@ const Reels = ({ active, onBack, onShareToChat }) => {
     const [showFeedCustomizer, setShowFeedCustomizer] = useState(false);
     const [savingFeed, setSavingFeed] = useState(false);
     const hasFetched = useRef(false);
+
+    useBackHandler(Boolean(showFeedCustomizer), () => setShowFeedCustomizer(false), 'reels-feed-customizer');
+    useBackHandler(Boolean(showSuggestions), () => setShowSuggestions(false), 'reels-suggestions');
+    useBackHandler(Boolean(showUploader), () => setShowUploader(false), 'reels-uploader');
+    useBackHandler(Boolean(reactingToReel), () => setReactingToReel(null), 'reels-reacting');
+    useBackHandler(Boolean(selectedProfileReel), () => setSelectedProfileReel(null), 'reels-profile-reel');
+    useBackHandler(Boolean(selectedProfileUserId), () => setSelectedProfileUserId(null), 'reels-profile-user');
 
     useEffect(() => {
         const updatePreferences = (event) => setPlaybackPrefs(current => ({

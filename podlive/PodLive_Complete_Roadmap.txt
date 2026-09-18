@@ -1,0 +1,984 @@
+🎙️  PODLIVE
+Next-Generation Live Podcast Platform
+Complete End-to-End Development Roadmap
+Version
+1.0 — Draft
+Prepared For
+Antigravity Development Team
+Type
+Web + Mobile Application
+
+1.  PROJECT OVERVIEW
+
+▶  1.1  Platform ka Vision
+PodLive ek next-generation live podcast platform hai jo existing platforms (YouTube Live, Instagram Live, Hotstar) se fundamentally alag hai. Is platform ki sabse badi khasiyat yeh hai ki host real-time mein kisi bhi registered viewer ko directly stage pe invite kar sakta hai — exactly jaise ek phone call receive hoti hai.
+
+▶  1.2  Platform ki Unique Features
+	•	Ultra-Low Latency Live Streaming (300–800ms) — Hotstar/YouTube se 10x faster
+	•	Unique User ID System — Instagram jaise har user ka ek custom handle
+	•	Stage Invite Feature — Host kisi bhi viewer ko live call mein add kar sakta hai
+	•	Viewer Accept/Reject Button — Bilkul phone call ki tarah
+	•	Lakhon concurrent viewers — Industrial grade scalability
+	•	Auto-Recording + Auto-Upload — Live khatam hone ke baad profile pe automatically aa jaaye
+	•	Cross-Platform — Web browser + Android + iOS
+
+▶  1.3  Competitors se Comparison
+
+Feature
+YouTube Live
+Instagram Live
+Hotstar
+PodLive (Hamara)
+Latency
+3–8 sec
+2–4 sec
+5–10 sec
+300–800ms ✅
+Viewer Stage Invite
+❌ Nahi
+❌ Nahi
+❌ Nahi
+✅ Haan
+Unique User ID
+✅ Haan
+✅ Haan
+❌ Nahi
+✅ Haan
+Auto-Upload Recording
+Manual
+Manual
+❌ Nahi
+✅ Automatic
+Lakh+ Viewers
+✅ Haan
+Limited
+✅ Haan
+✅ Haan
+Custom Platform
+❌
+❌
+❌
+✅ Aapka apna
+
+
+2.  COMPLETE TECHNOLOGY STACK
+
+⚡ Ye platform WebRTC + SFU Architecture use karega jisse latency 300ms tak aa jaati hai — yahi is platform ka superpower hai.
+
+▶  2.1  Frontend Technologies
+
+Layer
+Technology
+Version
+Kaam kya karega
+UI Framework
+Next.js (React)
+14.x
+Poora web app — pages, routing, SSR
+Language
+TypeScript
+5.x
+Type-safe code — less bugs
+Mobile App
+React Native + Expo
+Latest
+Android & iOS ek hi codebase se
+Styling
+Tailwind CSS
+3.x
+Fast beautiful UI design
+State Management
+Zustand
+4.x
+Global state — user data, live state
+Real-time Client
+LiveKit Client SDK
+Latest
+WebRTC connection manage karna
+Video Player
+Video.js + HLS.js
+Latest
+Viewer ke liye low-latency player
+Icons
+Lucide React
+Latest
+Beautiful icons
+Animations
+Framer Motion
+Latest
+Smooth UI transitions
+
+▶  2.2  Backend Technologies
+
+Layer
+Technology
+Version
+Kaam kya karega
+Runtime
+Node.js
+20 LTS
+Server runtime
+Framework
+Express.js / Fastify
+Latest
+REST API + WebSocket server
+Real-time Server
+LiveKit Server
+Latest
+WebRTC SFU — audio/video route karna
+WebSocket
+Socket.io
+4.x
+Signaling — stage invite, notifications
+Authentication
+JWT + bcrypt
+Latest
+Login, token management
+ORM
+Prisma
+5.x
+Database queries easy banana
+File Upload
+Multer + Sharp
+Latest
+Profile pictures, thumbnails
+Job Queue
+BullMQ
+Latest
+Recording processing queue
+Email Service
+Nodemailer + SMTP
+Latest
+OTP, notifications
+
+▶  2.3  Database Technologies
+
+Database
+Technology
+Purpose
+Kyon use karein
+Primary DB
+PostgreSQL 16
+Users, podcasts, sessions
+ACID compliance, relations ke liye best
+Cache / Session
+Redis 7
+Live room state, online users
+Ultra-fast in-memory storage
+Search
+Elasticsearch
+User search by unique ID
+Fast fuzzy search
+File Storage
+AWS S3 / Cloudflare R2
+Videos, thumbnails, recordings
+Cost-effective, globally distributed
+CDN
+Cloudflare CDN
+Static assets delivery
+Fast global delivery
+
+▶  2.4  Real-Time Infrastructure — WebRTC + SFU
+
+SFU (Selective Forwarding Unit) kya hota hai?
+Jab host broadcast karta hai, uski stream sirf ek jagah (SFU server) jaati hai. Server phir wahi stream lakho viewers ko forward karta hai. Isse host ke device pe load nahi padta aur latency minimum rehti hai. Ye EXACTLY wahi technology hai jo Discord, Zoom, aur professional broadcast systems use karte hain.
+
+Component
+Technology
+Detail
+SFU Server
+LiveKit (Open Source)
+Self-hosted ya LiveKit Cloud pe deploy kar sakte hain
+TURN Server
+coturn
+Firewall ke peeche viewers ke liye connection relay
+STUN Server
+Google STUN / custom
+IP discovery ke liye
+Recording
+LiveKit Egress
+Live stream ko MP4/WebM mein convert karta hai
+Stream Distribution
+WebRTC + HLS fallback
+WebRTC — low latency, HLS — very large scale
+
+▶  2.5  DevOps & Infrastructure
+
+Layer
+Technology
+Kaam
+Cloud Provider
+AWS / DigitalOcean / Hetzner
+Servers hosting
+Containers
+Docker + Docker Compose
+App packaging
+Orchestration
+Kubernetes (K8s)
+Auto-scaling for lakhs of users
+CI/CD
+GitHub Actions
+Automatic deploy on code push
+Reverse Proxy
+Nginx
+SSL termination, load balancing
+SSL/TLS
+Let's Encrypt / Cloudflare
+HTTPS — WebRTC needs it
+Monitoring
+Grafana + Prometheus
+Server health dashboard
+Logging
+ELK Stack (Elasticsearch, Logstash, Kibana)
+Error tracking
+Media Processing
+FFmpeg
+Recording compress aur convert karna
+
+
+3.  DATABASE SCHEMA DESIGN
+
+▶  3.1  Users Table
+Yeh platform ka sabse core table hai. Har registered user iska ek row hoga.
+
+Column
+Type
+Description
+id
+UUID (Primary Key)
+Internal unique identifier
+unique_handle
+VARCHAR(30) UNIQUE
+@username — Instagram jaise public ID
+email
+VARCHAR(255) UNIQUE
+Login email
+password_hash
+VARCHAR(255)
+bcrypt hashed password
+display_name
+VARCHAR(100)
+Profile pe dikhne wala naam
+avatar_url
+TEXT
+Profile photo URL (S3)
+bio
+TEXT
+User ka description
+follower_count
+INTEGER
+Followers
+following_count
+INTEGER
+Following
+is_verified
+BOOLEAN
+Verified badge
+created_at
+TIMESTAMP
+Registration time
+last_seen
+TIMESTAMP
+Last active time
+
+▶  3.2  Live Sessions Table
+
+Column
+Type
+Description
+id
+UUID (Primary Key)
+Session ID
+host_user_id
+UUID (FK → users)
+Kaun podcast kar raha hai
+title
+VARCHAR(200)
+Podcast ka title
+description
+TEXT
+Podcast ka description
+thumbnail_url
+TEXT
+Cover image URL
+status
+ENUM(scheduled/live/ended)
+Current status
+livekit_room_name
+VARCHAR(100)
+LiveKit room identifier
+viewer_count_peak
+INTEGER
+Maximum concurrent viewers
+recording_url
+TEXT
+Auto-upload ke baad recording URL
+started_at
+TIMESTAMP
+Live shuru hone ka time
+ended_at
+TIMESTAMP
+Live khatam hone ka time
+category
+VARCHAR(50)
+Music, Tech, Comedy, etc.
+
+▶  3.3  Stage Invites Table
+Yahi is platform ka unique feature hai — host jab kisi viewer ko stage pe bulata hai.
+
+Column
+Type
+Description
+id
+UUID
+Invite ID
+session_id
+UUID (FK → live_sessions)
+Kaunsi live mein
+host_id
+UUID (FK → users)
+Host ne invite kiya
+invitee_id
+UUID (FK → users)
+Jisko invite kiya
+status
+ENUM(pending/accepted/rejected/ended)
+Invite ka status
+invited_at
+TIMESTAMP
+Invite ka time
+accepted_at
+TIMESTAMP
+Accept kiya kab
+left_at
+TIMESTAMP
+Stage chhoda kab
+
+
+4.  SYSTEM ARCHITECTURE — HOW IT ALL WORKS
+
+▶  4.1  Complete Flow — Host Live Shuru Karne Se Khatam Tak
+
+	•	Host apna account se login karta hai — JWT token milta hai
+	•	Host 'Go Live' button dabata hai — Backend ek naya Live Session create karta hai PostgreSQL mein
+	•	Backend LiveKit server se ek unique Room token generate karta hai
+	•	Host ka browser/app LiveKit Room mein join karta hai — WebRTC connection establish
+	•	LiveKit server host ki video/audio stream receive karta hai
+	•	Viewers ko real-time notification Socket.io se milti hai ki live shuru hua
+	•	Viewers apne browser mein join karte hain — WebRTC ya HLS player se stream dekhte hain
+	•	LiveKit Egress background mein recording shuru kar deta hai automatically
+	•	Host kisi viewer ki Unique ID type karta hai — Stage Invite bhejta hai
+	•	Viewer ke device pe mic icon appear hota hai (phone call jaise)
+	•	Viewer accept kare — uska audio/video bhi room mein add ho jaata hai
+	•	Host live end karta hai — LiveKit room close hota hai
+	•	FFmpeg recording ko process karta hai — MP4 mein convert
+	•	Recording AWS S3 pe upload hoti hai
+	•	Host ki profile pe automatically podcast video appear ho jaata hai
+
+▶  4.2  Stage Invite ka Technical Flow — MOST IMPORTANT
+
+Stage Invite Flow (WebSocket + WebRTC)
+Step 1: Host dashboard mein viewer ka unique_handle type karta hai
+Step 2: Backend us user ka user_id fetch karta hai database se
+Step 3: Socket.io se us user ke active connection pe 'stage_invite' event emit hota hai
+Step 4: Viewer ke screen pe modal aata hai — 'Aapko stage pe bulaya ja raha hai — Accept / Reject'
+Step 5: Accept pe — Backend LiveKit se viewer ke liye ek participant token generate karta hai
+Step 6: Viewer ka browser LiveKit room mein join karta hai
+Step 7: Ab host aur viewer dono real-time mein baat kar sakte hain
+Step 8: Baaki viewers yeh conversation bhi sun sakte hain
+
+▶  4.3  Scalability Architecture — Lakh+ Viewers
+
+Ek instance mein itne viewers handle karna possible nahi. Isliye hum horizontal scaling use karenge:
+
+Component
+Scaling Strategy
+Capacity per Instance
+LiveKit SFU
+Multiple SFU nodes behind load balancer
+2,000–5,000 WebRTC viewers each
+HLS Fallback
+CDN pe distribute — infinite scale
+Unlimited viewers (3-5 sec latency)
+API Server
+Kubernetes auto-scaling
+10,000 req/sec per pod
+WebSocket Server
+Redis pub/sub — multiple nodes
+100,000 concurrent connections
+Database
+PostgreSQL primary + read replicas
+Millions of records
+Cache
+Redis Cluster
+Millions of sessions in-memory
+
+Smart Strategy: Pehle 10,000 viewers WebRTC se serve karo (ultra-low latency). 10,000+ ke baad automatically HLS CDN pe switch karo. Isse 90% viewers ko low-latency mile aur platform crash bhi na kare.
+
+
+5.  FEATURE SPECIFICATIONS — DETAIL MEIN
+
+▶  5.1  User Authentication System
+
+◆  Registration Flow
+	•	Email + Password se register
+	•	OTP email verification
+	•	Unique Handle choose karna (@ se shuru, 3-30 characters, alphanumeric + underscore)
+	•	Display name, avatar set karna (optional)
+
+◆  Login Flow
+	•	Email + Password → JWT Access Token (15 min expiry) + Refresh Token (30 days)
+	•	'Remember Me' option
+	•	OAuth option (Google Login) — Phase 2 mein
+	•	Forgot Password — Email OTP se reset
+
+◆  Unique ID Rules
+	•	Format: @username (e.g., @rahul_podcaster, @tech_host_1)
+	•	Once set, username change karne ki limit: 1 baar/90 days
+	•	Prohibited words filter — offensive names block
+	•	Case-insensitive unique check — @Rahul aur @rahul ek hi maana jaayega
+
+▶  5.2  Host Dashboard
+
+◆  Pre-Live Setup
+	•	Podcast Title (max 200 chars)
+	•	Description (max 2000 chars)
+	•	Category select — Music, Tech, Comedy, Sports, Education, etc.
+	•	Thumbnail upload ya auto-generate
+	•	Scheduled live option — future time set kar sako
+
+◆  Live Dashboard Controls
+	•	Viewer count real-time
+	•	Stage invite panel — unique ID search + invite button
+	•	Currently on stage — list of active guests
+	•	Guest remove button — kisi bhi guest ko stage se hata sako
+	•	Chat moderation — comments pin karo, ban karo
+	•	Audio/Video mute controls
+	•	End Live button — confirmation ke saath
+
+▶  5.3  Viewer Experience
+
+◆  Viewing Screen
+	•	Full-screen video player
+	•	Live viewer count
+	•	Live chat sidebar
+	•	Follow host button
+	•	Share button
+
+◆  Stage Invite Receive Flow
+	•	Poori screen pe modal popup — 'Aapko stage pe invite kiya gaya hai'
+	•	Host ka naam aur photo dikhega
+	•	2 buttons: GREEN (Accept - Mic icon) aur RED (Decline)
+	•	30 second timeout — decline na karo to auto-decline
+	•	Accept karne ke baad: mic permission maanga jaata hai device se
+	•	Connect hone ke baad: viewer ka naam stage list mein dikhta hai
+
+▶  5.4  Auto-Recording & Upload System
+
+Yeh feature fully automatic hai — host ko kuch nahi karna:
+
+	•	Live shuru hote hi LiveKit Egress recording shuru kar deta hai server pe
+	•	Recording chunks mein S3 pe save hoti rehti hai (har 30 sec ka chunk)
+	•	Live khatam hote hi BullMQ job queue mein ek 'process-recording' job aata hai
+	•	FFmpeg sab chunks ko merge karta hai ek final MP4 mein
+	•	MP4 ko compress karta hai (1080p/720p/480p multiple qualities)
+	•	Thumbnail auto-generate hoti hai video ke first frame se
+	•	Final video + thumbnail S3 pe upload hoti hai
+	•	Database mein host ki profile pe 'recordings' table mein entry aa jaati hai
+	•	Host ko notification milti hai — 'Aapka podcast upload ho gaya!'
+
+
+6.  API DESIGN — ENDPOINTS
+
+▶  6.1  Authentication APIs
+
+Method
+Endpoint
+Description
+POST
+/api/auth/register
+Naya user register karo
+POST
+/api/auth/login
+Login — JWT token milega
+POST
+/api/auth/refresh
+Access token refresh karo
+POST
+/api/auth/logout
+Logout — token invalidate
+POST
+/api/auth/forgot-password
+Password reset OTP bhejo
+POST
+/api/auth/verify-otp
+OTP verify karo
+GET
+/api/auth/check-handle/:handle
+Unique handle available hai ya nahi
+
+▶  6.2  Live Session APIs
+
+Method
+Endpoint
+Description
+POST
+/api/live/create
+Naya live session create karo
+POST
+/api/live/:id/start
+Live shuru karo — LiveKit token milega
+POST
+/api/live/:id/end
+Live khatam karo
+GET
+/api/live/:id/token
+Viewer ke liye join token
+GET
+/api/live/active
+Sabhi active lives ki list
+GET
+/api/live/:id/stats
+Viewer count, duration, etc.
+
+▶  6.3  Stage Invite APIs
+
+Method
+Endpoint
+Description
+POST
+/api/stage/invite
+Viewer ko stage pe invite karo
+POST
+/api/stage/invite/:id/accept
+Invite accept karo
+POST
+/api/stage/invite/:id/reject
+Invite decline karo
+DELETE
+/api/stage/guest/:userId
+Guest ko stage se hataao
+GET
+/api/stage/:sessionId/guests
+Current guests ki list
+
+▶  6.4  User Profile APIs
+
+Method
+Endpoint
+Description
+GET
+/api/users/:handle
+User profile by unique handle
+PUT
+/api/users/me
+Apna profile update karo
+GET
+/api/users/:handle/recordings
+User ke saved podcasts
+POST
+/api/users/:id/follow
+Follow karo
+DELETE
+/api/users/:id/follow
+Unfollow karo
+GET
+/api/users/search?q=query
+Users search karo by handle
+
+
+7.  DEVELOPMENT PHASES — ROADMAP
+
+▶  Phase 1: Foundation (Weeks 1–4)
+
+Phase 1 Goal
+Core infrastructure set up karna — authentication, basic UI, database design
+
+◆  Backend Tasks
+	•	PostgreSQL database setup with all tables
+	•	Node.js + Express project structure
+	•	User Registration + Login API (JWT)
+	•	Unique Handle validation + assignment
+	•	Redis setup for session management
+	•	AWS S3 bucket configuration
+
+◆  Frontend Tasks
+	•	Next.js project setup with TypeScript + Tailwind
+	•	Registration page UI
+	•	Login page UI
+	•	User Profile page UI
+	•	Home feed layout
+	•	React Native app skeleton (Android + iOS)
+
+◆  Deliverables
+	•	Working registration + login
+	•	User can set unique handle
+	•	Profile page visible
+
+▶  Phase 2: Live Core (Weeks 5–9)
+
+Phase 2 Goal
+LiveKit integration + basic live streaming — without stage invite
+
+◆  Infrastructure Tasks
+	•	LiveKit server deploy karo (Docker)
+	•	TURN/STUN server setup (coturn)
+	•	Nginx reverse proxy + SSL setup
+	•	LiveKit Egress (recording) configure karo
+
+◆  Backend Tasks
+	•	Live Session CRUD APIs
+	•	LiveKit room creation + token generation
+	•	Socket.io server setup
+	•	Real-time viewer count tracking
+	•	Live session state management in Redis
+
+◆  Frontend Tasks
+	•	Host Dashboard UI — Go Live screen
+	•	LiveKit SDK integration — Host video publish
+	•	Viewer page — video player + live chat
+	•	Active lives home feed
+
+◆  Deliverables
+	•	Host live shuru kar sakta hai
+	•	Multiple viewers same time pe dekh sakte hain
+	•	Basic chat functionality
+
+▶  Phase 3: Stage Invite Feature (Weeks 10–13)
+
+Phase 3 Goal — MOST IMPORTANT PHASE
+Is platform ka main USP — viewer ko live mein add karna
+
+◆  Backend Tasks
+	•	Stage Invite API endpoints
+	•	Socket.io events: 'stage_invite_sent', 'stage_invite_accepted', 'stage_invite_rejected'
+	•	LiveKit participant role upgrade (viewer → speaker)
+	•	Guest tracking in Redis + PostgreSQL
+	•	Host controls — guest mute/remove
+
+◆  Frontend Tasks
+	•	Host Dashboard mein 'Invite to Stage' panel
+	•	Unique handle search with real-time suggestions
+	•	Viewer side — invite modal (phone call UI)
+	•	Accept/Decline buttons with animations
+	•	Stage indicator — who is currently on stage
+	•	Guest audio/video display in live stream
+
+◆  Deliverables
+	•	Host kisi bhi viewer ko unique ID se stage pe bula sakta hai
+	•	Viewer phone call jaise accept/decline kar sakta hai
+	•	Real-time 2-way conversation visible to all viewers
+
+▶  Phase 4: Recording + Upload System (Weeks 14–16)
+
+◆  Tasks
+	•	LiveKit Egress recording pipeline
+	•	FFmpeg processing job setup (BullMQ)
+	•	Multi-quality video encoding (1080p, 720p, 480p)
+	•	S3 upload pipeline
+	•	Auto-thumbnail generation
+	•	Host profile recordings page
+	•	Push notification when upload complete
+
+▶  Phase 5: Polish + Scale (Weeks 17–20)
+
+◆  Performance Tasks
+	•	Load testing (simulate 1 lakh viewers)
+	•	Kubernetes auto-scaling configure karna
+	•	CDN setup for static assets
+	•	HLS fallback for 10,000+ viewer scenario
+	•	Database query optimization
+	•	Redis caching layer
+
+◆  Product Polish Tasks
+	•	Push notifications (Firebase FCM)
+	•	Follow system + notifications
+	•	Discover page — trending lives
+	•	Search by unique handle + name
+	•	Report/Block user functionality
+	•	App Store + Play Store submission
+
+
+8.  PROJECT FOLDER STRUCTURE
+
+▶  8.1  Backend (Node.js)
+
+podlive-backend/ — Complete Folder Structure
+src/
+  controllers/          → Request handlers (auth, live, stage, user)
+  services/             → Business logic (livekit.service, recording.service)
+  routes/               → API route definitions
+  middleware/           → Auth middleware, rate limiting, error handling
+  models/               → Prisma database models
+  sockets/              → Socket.io event handlers
+  jobs/                 → BullMQ background jobs (recording processing)
+  utils/                → Helper functions
+  config/               → Environment variables, constants
+prisma/
+  schema.prisma         → Database schema definition
+  migrations/           → Database migration files
+docker/
+  Dockerfile
+  docker-compose.yml
+.env                    → Environment variables (never commit to git!)
+
+▶  8.2  Frontend (Next.js)
+
+podlive-web/ — Complete Folder Structure
+src/
+  app/                  → Next.js 14 App Router pages
+    (auth)/             → Login, Register pages
+    live/[id]/          → Live viewing page
+    dashboard/          → Host dashboard
+    profile/[handle]/   → User profile + recordings
+  components/
+    live/               → LivePlayer, ChatPanel, StageInviteModal
+    ui/                 → Reusable UI components (Button, Input, Modal)
+    layout/             → Navbar, Sidebar, Footer
+  hooks/                → Custom React hooks (useAuth, useLive, useSocket)
+  stores/               → Zustand global state
+  lib/                  → API client, LiveKit utils
+  types/                → TypeScript type definitions
+
+
+9.  ENVIRONMENT VARIABLES & CONFIGURATION
+
+▶  9.1  Backend .env File
+
+Variable
+Description
+Example
+DATABASE_URL
+PostgreSQL connection string
+postgresql://user:pass@localhost:5432/podlive
+REDIS_URL
+Redis connection
+redis://localhost:6379
+JWT_ACCESS_SECRET
+JWT signing secret (32+ chars)
+random-secure-string-here
+JWT_REFRESH_SECRET
+Refresh token secret
+another-random-string
+LIVEKIT_API_KEY
+LiveKit server API key
+APIxxxxxxxx
+LIVEKIT_API_SECRET
+LiveKit server API secret
+secret_xxxxxxxxxx
+LIVEKIT_HOST
+LiveKit server URL
+wss://livekit.yourserver.com
+AWS_ACCESS_KEY_ID
+AWS S3 access key
+AKIAxxxxxxxx
+AWS_SECRET_ACCESS_KEY
+AWS S3 secret
+xxxxxxxxxxxxxxxxxx
+AWS_S3_BUCKET
+S3 bucket name
+podlive-recordings
+SMTP_HOST
+Email server
+smtp.gmail.com
+SMTP_USER
+Email username
+noreply@podlive.com
+SMTP_PASS
+Email password
+app-specific-password
+
+
+10.  INFRASTRUCTURE COST ESTIMATE
+
+▶  10.1  Monthly Server Costs (Initial Phase — Up to 10,000 Users)
+
+Service
+Provider
+Spec
+Monthly Cost (USD)
+API Server
+DigitalOcean / AWS EC2
+2 vCPU, 4GB RAM
+$20–40
+LiveKit SFU
+LiveKit Cloud
+Pay per usage
+$50–200
+PostgreSQL Database
+Supabase / RDS
+1 vCPU, 2GB
+$25–50
+Redis Cache
+Upstash / ElastiCache
+256MB cache
+$10–20
+File Storage (S3)
+AWS S3 / Cloudflare R2
+100GB recordings
+$3–10
+CDN
+Cloudflare Free Plan
+—
+$0
+Email Service
+Resend.com / SendGrid
+Up to 10,000 emails
+$0–20
+Total Estimate
+—
+—
+$108–340/month
+
+Note: Lakh+ concurrent users ke liye infrastructure cost $1,000–5,000/month tak ja sakti hai. LiveKit ke multiple SFU nodes aur CDN bandwidth sabse bada cost factor hoga.
+
+
+11.  SECURITY CHECKLIST
+
+▶  Authentication Security
+	•	Passwords bcrypt (12 rounds) se hash karo — kabhi plain text nahi
+	•	JWT tokens short expiry (15 min access, 30 day refresh)
+	•	Rate limiting on login API — brute force attack protection
+	•	OTP expiry — 10 minute ke baad invalid
+
+▶  API Security
+	•	HTTPS everywhere — HTTP pe redirect karo
+	•	CORS properly configure karo — sirf apna domain allow karo
+	•	Input validation — SQL injection, XSS prevent karo
+	•	Helmet.js — security headers
+	•	Rate limiting — har API pe
+
+▶  Live Stream Security
+	•	LiveKit tokens — har user ke liye unique, short-lived tokens
+	•	Room access control — sirf authorized users join kar sakein
+	•	Stage invite tokens — one-time use tokens
+	•	Recording access — private URL with expiry (S3 presigned URLs)
+
+
+12.  THIRD-PARTY SERVICES — SIGN-UP LIST
+
+Antigravity team ko ye sabhi accounts setup karne honge:
+
+Service
+Purpose
+Website
+Pricing
+LiveKit Cloud (ya self-host)
+WebRTC SFU server
+livekit.io
+Free tier available
+AWS S3 (ya Cloudflare R2)
+File/video storage
+aws.amazon.com / r2.dev
+Pay per use
+Supabase (ya AWS RDS)
+PostgreSQL database
+supabase.com
+Free tier available
+Upstash
+Managed Redis
+upstash.com
+Free tier available
+Resend.com
+Email sending (OTP)
+resend.com
+Free: 3000 emails/month
+Firebase (optional)
+Push notifications
+firebase.google.com
+Free tier
+Cloudflare
+CDN + DNS + SSL
+cloudflare.com
+Free plan
+GitHub
+Code repository + CI/CD
+github.com
+Free
+Sentry (optional)
+Error tracking
+sentry.io
+Free tier
+
+
+13.  SUCCESS METRICS & TESTING
+
+▶  13.1  Performance Benchmarks
+
+Metric
+Target
+Measurement Tool
+Live Stream Latency
+< 800ms end-to-end
+Manual testing + WebRTC stats
+Stage Invite Delivery
+< 200ms
+Socket.io timing logs
+API Response Time
+< 100ms (P99)
+Postman + load testing
+Concurrent Viewers (initial)
+10,000+
+k6 / Artillery load test
+App Load Time
+< 2 seconds
+Lighthouse audit
+Recording Upload Time
+< 5 min for 1hr podcast
+Automated test
+Uptime
+99.9%
+UptimeRobot monitoring
+
+▶  13.2  Testing Strategy
+
+◆  Unit Testing
+	•	Jest — backend service functions test karo
+	•	React Testing Library — frontend components
+
+◆  Integration Testing
+	•	Postman collections — sabhi APIs
+	•	WebSocket event testing
+	•	LiveKit connection testing
+
+◆  Load Testing
+	•	k6 / Artillery — 10,000 concurrent connections simulate karo
+	•	Stress test stage invite feature — 100 simultaneous invites
+
+
+14.  COMPLETE TIMELINE SUMMARY
+
+Phase
+Duration
+Key Deliverable
+Status
+Phase 1: Foundation
+Weeks 1–4
+Auth system + DB + Basic UI
+Pending
+Phase 2: Live Core
+Weeks 5–9
+Working live stream
+Pending
+Phase 3: Stage Invite
+Weeks 10–13
+Viewer invite feature
+Pending
+Phase 4: Recording
+Weeks 14–16
+Auto-upload system
+Pending
+Phase 5: Scale + Polish
+Weeks 17–20
+Production-ready launch
+Pending
+TOTAL
+~20 Weeks
+Full Platform Launch
+~5 Months
+
+Realistic Timeline: Agar Antigravity 3-4 developers lagaaye to 4-5 months mein MVP launch ho sakta hai. Full feature-complete version 6-8 months.
+
+
+— Document Ends Here —
+PodLive Platform — Har Awaaz Ko Ek Stage!

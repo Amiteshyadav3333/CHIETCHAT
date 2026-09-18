@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/solid';
 import UserAvatar from './UserAvatar';
+import { useBackHandler } from '../utils/backNavigation';
 
 const AvatarZoom = ({ src, name, size = 'w-10 h-10', className = '', onClick }) => {
     const [open, setOpen] = useState(false);
+    useBackHandler(open, () => setOpen(false), 'avatar-zoom');
     const handleClick = (e) => {
         e.stopPropagation();
         if (onClick) { onClick(e); return; }

@@ -15,6 +15,7 @@ import { deleteDevicePrivateKey, loadDevicePrivateKey } from '../utils/secureKey
 import AvatarCreator from './AvatarCreator';
 import { INDIAN_LANGUAGES } from './AppLanguage';
 import AboutCheetChat from './AboutCheetChat';
+import { useBackHandler } from '../utils/backNavigation';
 
 const TITLES = {
     settings: 'Settings', profile: 'Profile', account: 'Account', privacy: 'Privacy',
@@ -509,21 +510,22 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
         finally { setBusy(false); }
     };
 
+    const handleSubscreenBack = () => {
+        if (['password', 'delete', 'sessions', 'twofactor_setup', 'twofactor_disable'].includes(screen)) {
+            go('account');
+        } else {
+            go('settings');
+        }
+    };
+    useBackHandler(screen !== 'settings', handleSubscreenBack, 'settings-subscreen');
+
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-0 backdrop-blur-sm sm:p-4">
             <div className="flex h-[100dvh] w-full max-w-3xl flex-col overflow-hidden bg-[#111b21] shadow-2xl sm:h-[88vh] sm:rounded-xl sm:border sm:border-gray-800">
                 <header className="flex h-16 shrink-0 items-center gap-3 border-b border-white/5 bg-[#202c33] px-4">
                     {screen !== 'settings' && (
                         <button 
-                            onClick={() => {
-                                if (['password', 'delete', 'sessions', 'twofactor_setup', 'twofactor_disable'].includes(screen)) {
-                                    go('account');
-                                } else if (screen === 'activity') {
-                                    go('settings');
-                                } else {
-                                    go('settings');
-                                }
-                            }} 
+                            onClick={handleSubscreenBack} 
                             title="Back" 
                             className="rounded-full p-2 text-gray-300 hover:bg-white/10"
                         >
@@ -876,13 +878,6 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 <SettingsToggle icon={<BellIcon />} title="Start social videos muted" subtitle="Video sound stays off until you enable it in the player" value={prefs.socialMutedVideos} onClick={() => togglePref('socialMutedVideos', 'social_muted_videos')} />
                             </SettingsGroup>
                             <InfoRow title="Content safety" text="Social photo and video uploads are checked before publishing; explicit adult content scoring 90% or higher is rejected." />
-                        </>
-                    )}
-
-                        <>
-                            <SectionLabel>Live permissions</SectionLabel>
-                            <SettingsGroup>
-                            </SettingsGroup>
                         </>
                     )}
 

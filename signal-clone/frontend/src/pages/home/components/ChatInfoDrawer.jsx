@@ -1,6 +1,6 @@
 import React from 'react';
 import TelegramGroupInfo from '../../../components/TelegramGroupInfo';
-import UserAvatar from '../../../components/UserAvatar';
+import AvatarZoom from '../../../components/AvatarZoom';
 import ChatPreferences from '../../../components/ChatPreferences';
 import { XMarkIcon, TrashIcon, NoSymbolIcon } from '@heroicons/react/24/outline';
 
@@ -70,11 +70,11 @@ export const ChatInfoDrawer = ({
                     <h2 className="text-white font-bold text-lg">Contact Info</h2>
                 </div>
                 <div className="flex flex-col items-center py-6 gap-2 border-b border-gray-800">
-                    <UserAvatar
+                    <AvatarZoom
                         src={visibleActiveChat.avatar || other?.avatar}
                         name={visibleActiveChat.name || other?.username}
-                        className="w-24 h-24 rounded-full object-cover border-2 border-gray-700"
-                        alt=""
+                        size="w-24 h-24"
+                        className="border-2 border-gray-700"
                     />
                     <h3 className="text-white font-bold text-xl">{other?.username || visibleActiveChat.name}</h3>
                     {other && <p className="text-violet-400 text-sm font-semibold">@{other.platformId || `user_${other.id}`}</p>}
@@ -88,10 +88,11 @@ export const ChatInfoDrawer = ({
                         {other && (
                             <div className="mb-2 rounded-xl border border-violet-500/20 bg-violet-500/5 p-3">
                                 <div className="flex items-center gap-3">
-                                    <img
+                                    <AvatarZoom
                                         src={visibleActiveChat.myAvatarForContact || user?.avatar}
-                                        className="h-12 w-12 rounded-full border-2 border-violet-400 object-cover"
-                                        alt="Your DP for this contact"
+                                        name="Your DP for this contact"
+                                        size="w-12 h-12"
+                                        className="border-2 border-violet-400"
                                     />
                                     <div className="min-w-0 flex-1">
                                         <p className="text-sm font-semibold text-white">Your DP for {other.username}</p>

@@ -44,9 +44,9 @@ const Login = () => {
             const pendingNav = sessionStorage.getItem('pending_nav');
             if (pendingNav) {
                 sessionStorage.removeItem('pending_nav');
-                navigate(pendingNav);
+                navigate(pendingNav, { replace: true });
             } else {
-                navigate('/');
+                navigate('/', { replace: true });
             }
         }
     }, [token, navigate]);

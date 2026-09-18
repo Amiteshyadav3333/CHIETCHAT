@@ -66,12 +66,7 @@ def _detect_language(text: str) -> str:
 
 
 def _response_language_instruction(text: str, language_code: str | None) -> str:
-    """Prefer the current message's language; use the UI choice only for ambiguous turns."""
-    detected = _detect_language(text)
-    if detected == 'devanagari':
-        detected = 'Marathi (Devanagari script)' if language_code == 'mr-IN' else 'Hindi (Devanagari script)'
-    if detected:
-        return detected
+    """Strictly use the UI selected language so TTS works correctly."""
     return SUPPORTED_LANGUAGES.get(language_code, 'the language used in the current message')
 
 
@@ -120,8 +115,8 @@ def _conversation_style_hint(history) -> str:
         language = "English ya mixed language"
     length = "bahut chhote replies" if avg_words <= 7 else "short conversational replies"
     return (
-        f"Recent messages se user ka preferred style: {language}, {length}. "
-        "Isi script, vocabulary, slang aur formality ko mirror karo; language achanak mat badlo."
+        f"Recent messages se user ka preferred style: {length}. "
+        "User ka mood, pace, slang aur formality level mirror karo, but ALWAYS use the language specified in CURRENT TURN."
     )
 
 
@@ -161,7 +156,7 @@ def _build_system_prompt(user_gender: str, user_name: str) -> str:
 - Bilkul WhatsApp chat jaisa reply kar — 1-2 lines max, chhote natural sentences.
 - Koi paragraph nahi, koi lecture nahi, koi "How can I help" nahi.
 - Lowercase preferred: 'ha', 'nhi', 'yrr', 'achha', 'hmm', 'ohh', 'sahi', 'fir?'
-- User ki language exactly mirror kar — Hinglish ka Hinglish, Hindi ka Hindi, English ka English.
+- Reply only in the language defined in the CURRENT TURN instructions. Do NOT mirror the user's input language.
 - Har reply mein question mat pucho — kabhi sirf react karo jaise real chat mein hota hai.
 - User ke mood, tone aur pace ko samjho aur usi ke hisaab se reply do.
 - Koi bhi topic restrict mat karo — agar user kuch bhi pooche, naturally jawab do jaise ek close dost deta hai.
@@ -476,9 +471,9 @@ def _build_messages(user_id, new_user_msg, user_gender=None, user_name=None, lan
     system_prompt = _build_system_prompt(user_gender or 'unknown', user_name or 'User')
     system_prompt += f"\n\n🎯 LIVE STYLE MEMORY:\n{_conversation_style_hint(history)}"
     system_prompt += (
-        f"\n\nCURRENT TURN:\n- Language: {current_language}. Reply only in the language and script of "
-        "the user's CURRENT message. The saved language preference is only a fallback for emoji-only "
-        "or otherwise ambiguous messages; never let it override clear current-message language."
+        f"\n\nCURRENT TURN:\n- Language: {current_language}. You MUST reply ONLY in this selected language and script. "
+        "Do NOT reply in the language the user types in if it differs from this selected language. "
+        "This is critical because the Text-to-Speech engine is locked to the selected language, and will break if you use another language."
         f"\n- Conversation mode: {mode}."
     )
     system_prompt += (

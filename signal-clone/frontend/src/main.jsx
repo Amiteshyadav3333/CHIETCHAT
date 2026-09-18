@@ -43,7 +43,7 @@ const shouldSuppress = (args) => {
         (message.includes('/api/auth/me') && message.includes('401')) ||
         message.includes('502') ||
         message.includes('status code 502') ||
-        (message.includes('/api/chats') && (message.includes('404') || message.includes('502'))) ||
+        (message.includes('/api/chats') && (message.includes('404') || message.includes('502')))
     );
 };
 console.error = function(...args) {

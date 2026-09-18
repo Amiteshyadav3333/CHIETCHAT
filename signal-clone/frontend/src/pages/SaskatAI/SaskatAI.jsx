@@ -5,6 +5,8 @@ import VideoAdOverlay from './components/VideoAdOverlay';
 import SideAdBanner from './components/SideAdBanner';
 import './SaskatAI.css';
 
+import axios from 'axios';
+
 const MODELS = [
     { id: 'groq', label: 'Groq Llama', icon: '⚡' },
     { id: 'gemini', label: 'Gemini 2.5', icon: '✨' },
@@ -12,14 +14,20 @@ const MODELS = [
     { id: 'grok', label: 'Grok 2', icon: '🚀' },
 ];
 
-const getCsrf = () => sessionStorage.getItem('cheetchat_csrf_token') || '';
-
-const apiFetch = (url, body) =>
-    fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCsrf() },
-        body: JSON.stringify(body),
-    });
+const apiFetch = async (url, body) => {
+    try {
+        const res = await axios.post(url, body);
+        return {
+            ok: true,
+            json: async () => res.data
+        };
+    } catch (error) {
+        return {
+            ok: false,
+            json: async () => error.response?.data || { error: error.message }
+        };
+    }
+};
 
 const SaskatAI = ({ onClose }) => {
     const { user } = useContext(AuthContext);
@@ -59,13 +67,8 @@ const SaskatAI = ({ onClose }) => {
         const fetchVideoAd = async () => {
             if (!user) return;
             try {
-                const res = await fetch('/api/saskat/ads/video', {
-                    headers: { 'X-CSRF-Token': getCsrf() },
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.ad) setVideoAd(data.ad);
-                }
+                const res = await axios.get('/api/saskat/ads/video');
+                if (res.data?.ad) setVideoAd(res.data.ad);
             } catch { /* silent */ }
         };
 
@@ -200,10 +203,10 @@ const SaskatAI = ({ onClose }) => {
         setIsGeneratingImg(true);
         setGeneratedImg(null);
         try {
-            const res = await apiFetch('/api/ai/image/generate', { prompt: imgPrompt });
+            const res = await apiFetch('/api/ai/image', { prompt: imgPrompt });
             const data = await res.json();
-            if (res.ok && data.images?.[0]?.url) {
-                setGeneratedImg(data.images[0].url);
+            if (res.ok && (data.url || data.images?.[0]?.url)) {
+                setGeneratedImg(data.url || data.images[0].url);
             }
         } catch {
             alert('Image generation failed');

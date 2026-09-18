@@ -407,6 +407,7 @@ def ensure_runtime_compat_schema():
             ))
         db.session.commit()
     # Create collaboration tables if not exists
+    db.session.commit()
     if 'collaboration_task' not in inspector.get_table_names():
         CollaborationTask.__table__.create(db.engine, checkfirst=True)
     if 'collaboration_note' not in inspector.get_table_names():

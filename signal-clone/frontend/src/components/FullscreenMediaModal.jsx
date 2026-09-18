@@ -4,6 +4,7 @@ import { XMarkIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { formatDuration } from '../utils/mediaCompressor';
 import { getSafeMediaUrl, openSafeExternal } from '../utils/safeUrl';
 import { saveMediaToDevice } from '../utils/mediaDownload';
+import { useBackHandler } from '../utils/backNavigation';
 
 /* ═══════════════════════════════════════════════════════════════
    ROOT PORTAL — renders directly on <body> so fixed/z-index works
@@ -14,6 +15,8 @@ const Portal = ({ children }) => ReactDOM.createPortal(children, document.body);
    MAIN EXPORT — dispatch to right viewer
    ═══════════════════════════════════════════════════════════════ */
 const FullscreenMediaModal = ({ src, type, onClose, referenceSrc = null }) => {
+    useBackHandler(Boolean(src), () => onClose?.(), 'fullscreen-media');
+
     useEffect(() => {
         if (!src) return;
         // Prevent body scroll while open

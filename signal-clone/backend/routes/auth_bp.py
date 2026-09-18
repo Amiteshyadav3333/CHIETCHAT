@@ -204,32 +204,6 @@ def mask_email(email):
         return 'your registered email'
     return f"{local[:2]}{'*' * max(2, len(local) - 2)}@{domain}"
 
-def post(path, payload):
-        body = json.dumps(payload).encode()
-        req = urllib.request.Request(
-            f'{api_url}{path}', data=body,
-            headers={'Content-Type': 'application/json'}, method='POST',
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=3) as response:
-                return response.status, json.loads(response.read().decode())
-        except urllib.error.HTTPError as error:
-            try:
-                return error.code, json.loads(error.read().decode())
-            except Exception:
-                return error.code, {}
-
-    try:
-        status, payload = post('/api/auth/login', login_payload)
-        if status == 200:
-            return payload
-        handle = (user.platform_id or f'cheetchat_{user.id}')[:30]
-        status, payload = post('/api/auth/register', {
-            **login_payload, 'unique_handle': handle, 'display_name': user.username,
-        })
-        return payload if status in (200, 201) else None
-    except Exception as error:
-        return None
 
 def finalize_login(user):
     user.last_seen = utc_now()
@@ -295,6 +269,58 @@ def validate_current_session():
             'lastActiveAt': session.created_at.isoformat() + 'Z' if session and session.created_at else None,
         },
     })
+
+@auth_bp.route('/api/auth/podlive-sso', methods=['POST'])
+def create_podlive_sso_ticket():
+    """Issue a short-lived identity ticket; the CHEETCHAT password never leaves this service."""
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({'error': 'Unauthorized'}), 401
+    now = datetime.datetime.now(datetime.timezone.utc)
+    ticket = jwt.encode({
+        'iss': 'cheetchat', 'aud': 'podlive', 'purpose': 'podlive_sso',
+        'sub': str(user.id), 'email': user.email,
+        'handle': user.platform_id or f'cheetchat_{user.id}',
+        'name': user.username, 'avatar': user.avatar or '',
+        'iat': now, 'exp': now + datetime.timedelta(seconds=60),
+        'jti': secrets.token_urlsafe(24),
+    }, current_app.config['JWT_SECRET_KEY'], algorithm='HS256')
+    return jsonify({
+        'ticket': ticket,
+        'url': current_app.config.get('PODLIVE_URL', 'https://podlive.indiasearch.site'),
+        'expiresIn': 60,
+    })
+
+@auth_bp.route('/api/auth/podlive-sso/verify', methods=['POST'])
+def verify_podlive_sso_ticket():
+    """Verify a PodLive ticket server-to-server and consume it once."""
+    ticket = str(get_json_data().get('ticket') or '')
+    if not ticket:
+        return jsonify({'error': 'SSO ticket is required'}), 401
+    try:
+        identity = jwt.decode(
+            ticket, current_app.config['JWT_SECRET_KEY'], algorithms=['HS256'],
+            issuer='cheetchat', audience='podlive', options={'require': ['exp', 'iat', 'jti', 'sub']},
+        )
+        if identity.get('purpose') != 'podlive_sso':
+            raise jwt.InvalidTokenError('Invalid ticket purpose')
+        redis_client = current_app.extensions.get('cheetchat_redis')
+        if redis_client is not None:
+            consumed = redis_client.set(f"podlive:sso:{identity['jti']}", '1', nx=True, ex=90)
+            if not consumed:
+                return jsonify({'error': 'SSO ticket was already used'}), 409
+        return jsonify({
+            'sub': identity['sub'], 'email': identity.get('email', ''),
+            'handle': identity.get('handle', ''), 'name': identity.get('name', ''),
+            'avatar': identity.get('avatar', ''), 'jti': identity['jti'],
+        })
+    except jwt.ExpiredSignatureError:
+        return jsonify({'error': 'SSO ticket expired'}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({'error': 'Invalid SSO ticket'}), 401
 
 @auth_bp.route('/api/auth/csrf', methods=['GET'])
 def get_csrf_token():

@@ -20,6 +20,7 @@ import LinkifiedText from '../components/LinkifiedText';
 import { getSafeWebsiteUrl } from '../utils/safeUrl';
 import SocialShareSheet from '../components/SocialShareSheet';
 import ProCameraStudio from '../components/ProCameraStudio';
+import { useBackHandler } from '../utils/backNavigation';
 
 const authHeaders = (token) => ({ Authorization: `Bearer ${token}` });
 
@@ -609,6 +610,7 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
     const avatarInputRef = useRef(null);
     const coverInputRef = useRef(null);
     const isOwnProfile = userId === (currentUser && currentUser.id);
+    useBackHandler(editMode, () => setEditMode(false), 'social-edit-profile');
 
     const fetchProfile = useCallback(async () => {
         setLoading(true);
@@ -822,6 +824,10 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
     const [profileView, setProfileView] = useState(null);
     const [highlightedPostId, setHighlightedPostId] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
+
+    useBackHandler(Boolean(showChannelForm), () => setShowChannelForm(false), 'social-channel-form');
+    useBackHandler(Boolean(selectedChannel), () => setSelectedChannel(null), 'social-channel');
+    useBackHandler(Boolean(profileView), () => setProfileView(null), 'social-profile');
     const fileRef = useRef(null);
     const coverRef = useRef(null);
     const highlightedRef = useRef(null);

@@ -125,25 +125,32 @@ export default function HumanoidAiAvatar({
               Aspect-Ratio Locked Stage (682:1024)
               Ensures the portrait fills the screen while keeping eye & mouth landmarks 100% pixel-locked
             */}
-            <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
-                <div
-                    className={`relative overflow-hidden transition-transform duration-300 ${
-                        aiSpeaking
-                            ? 'humanoid-speaking-sway'
-                            : userSpeaking
-                            ? 'humanoid-listening-tilt'
-                            : 'humanoid-idle-breathe'
-                    }`}
+            <div className="absolute inset-0 overflow-hidden">
+                <div 
+                    className="absolute"
                     style={{
+                        top: '28%',
+                        left: '50%',
+                        transform: 'translate(-50%, -28%)',
                         width: 'max(100vw, 100vh * (682 / 1024))',
                         height: 'max(100vh, 100vw * (1024 / 682))',
-                        aspectRatio: '682 / 1024',
-                        transformOrigin: '57% 30%',
-                        transform: aiSpeaking
-                            ? `rotate(${headNod * 0.4}deg) translateY(${headNod * 1.5}px)`
-                            : undefined,
                     }}
                 >
+                    <div
+                        className={`relative w-full h-full overflow-hidden transition-transform duration-300 ${
+                            aiSpeaking
+                                ? 'humanoid-speaking-sway'
+                                : userSpeaking
+                                ? 'humanoid-listening-tilt'
+                                : 'humanoid-idle-breathe'
+                        }`}
+                        style={{
+                            transformOrigin: '57% 30%',
+                            transform: aiSpeaking
+                                ? `rotate(${headNod * 0.4}deg) translateY(${headNod * 1.5}px)`
+                                : undefined,
+                        }}
+                    >
                     {/* 1. Pristine Base Portrait (Full Screen) */}
                     <img
                         src={avatarUrl}
@@ -238,6 +245,7 @@ export default function HumanoidAiAvatar({
                             />
                         </div>
                     )}
+                </div>
                 </div>
             </div>
 

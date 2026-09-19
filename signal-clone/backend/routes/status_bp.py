@@ -148,10 +148,20 @@ def create_status():
 
     music_asset_id = request.form.get('musicAssetId')
     try:
-        duration = min(max(int(request.form.get('duration', 15)), 1), 15)
+        # Expiry lifetime between 1 second and 24 hours (86400 seconds)
+        expires_in = int(request.form.get('expiresIn') or request.form.get('expires_in') or 86400)
+        expires_in = min(max(expires_in, 1), 86400)
     except (TypeError, ValueError):
-        duration = 15
-    expires_at = utc_now() + datetime.timedelta(hours=24)
+        expires_in = 86400
+
+    try:
+        # Slide display duration between 1 second and min(expires_in, 86400)
+        duration = int(request.form.get('duration', 15))
+        duration = min(max(duration, 1), expires_in)
+    except (TypeError, ValueError):
+        duration = min(15, expires_in)
+
+    expires_at = utc_now() + datetime.timedelta(seconds=expires_in)
 
     status = Status(
         user_id=user_id,

@@ -1,4 +1,5 @@
 import os
+import datetime
 os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
 os.environ['TESTING'] = '1'
 
@@ -94,3 +95,41 @@ def test_campus_suggestions_and_connect():
                 assert notif is not None
                 assert notif.type == 'connect_request'
                 assert 'IIT Delhi' in notif.content
+
+
+def test_status_duration_and_customizable_timer():
+    from models import Status
+    from utils import utc_now
+    with app.app_context():
+        db.create_all()
+        u = User(username='story_user', email='story@test.com', phone='9555555555')
+        db.session.add(u)
+        db.session.commit()
+
+        # Custom 1s slide & 30s lifespan
+        s_fast = Status(
+            user_id=u.id,
+            media_url='https://example.com/fast.jpg',
+            media_type='image',
+            duration=1,
+            expires_at=utc_now() + datetime.timedelta(seconds=30)
+        )
+        # Custom 60s slide & 24h lifespan (86400s)
+        s_standard = Status(
+            user_id=u.id,
+            media_url='https://example.com/standard.jpg',
+            media_type='image',
+            duration=60,
+            expires_at=utc_now() + datetime.timedelta(seconds=86400)
+        )
+        db.session.add_all([s_fast, s_standard])
+        db.session.commit()
+
+        fetched_fast = db.session.get(Status, s_fast.id)
+        assert fetched_fast.duration == 1
+        assert (fetched_fast.expires_at - utc_now()).total_seconds() <= 35
+
+        fetched_standard = db.session.get(Status, s_standard.id)
+        assert fetched_standard.duration == 60
+        assert (fetched_standard.expires_at - utc_now()).total_seconds() > 86000
+

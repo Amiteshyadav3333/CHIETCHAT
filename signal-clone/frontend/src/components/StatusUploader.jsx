@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { XMarkIcon, MusicalNoteIcon, PhotoIcon, MagnifyingGlassIcon, PlayIcon, PauseIcon } from '@heroicons/react/24/solid';
+import { XMarkIcon, MusicalNoteIcon, PhotoIcon, MagnifyingGlassIcon, PlayIcon, PauseIcon, ClockIcon, AdjustmentsHorizontalIcon } from '@heroicons/react/24/solid';
 import axios from 'axios';
 import { INDIAN_MUSIC_CATEGORIES } from '../utils/indianMusic';
 
@@ -43,6 +43,13 @@ const StatusUploader = ({ user, token, onClose, onUploaded }) => {
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState('');
     const [videoDuration, setVideoDuration] = useState(null);
+    const [slideDuration, setSlideDuration] = useState(15); // 1s to 60s or custom
+    const [storyLifespan, setStoryLifespan] = useState(86400); // in seconds, default 24h (86400s)
+    const [timerSettingsOpen, setTimerSettingsOpen] = useState(false);
+    const [customExpiryHours, setCustomExpiryHours] = useState(24);
+    const [customExpiryMinutes, setCustomExpiryMinutes] = useState(0);
+    const [customExpirySeconds, setCustomExpirySeconds] = useState(0);
+    const [customDurationValue, setCustomDurationValue] = useState(15);
     const [audienceOpen, setAudienceOpen] = useState(false);
     const [storyPrivacy, setStoryPrivacy] = useState(user?.storyPrivacy || localStorage.getItem('story_privacy') || 'contacts');
     const [storyExceptions, setStoryExceptions] = useState(user?.storyPrivacyExceptions || localStorage.getItem('story_privacy_exceptions') || '');
@@ -81,11 +88,13 @@ const StatusUploader = ({ user, token, onClose, onUploaded }) => {
             const vid = document.createElement('video');
             vid.src = url;
             vid.onloadedmetadata = () => {
-                if (vid.duration > 15) {
-                    setError('Video must be max 15 seconds');
+                if (vid.duration > 60) {
+                    setError('Video must be max 60 seconds');
                     return;
                 }
-                setVideoDuration(Math.ceil(vid.duration));
+                const vSec = Math.ceil(vid.duration);
+                setVideoDuration(vSec);
+                setSlideDuration(vSec);
                 setFile(f);
                 setPreview(url);
                 setMediaType('video');
@@ -209,10 +218,12 @@ const StatusUploader = ({ user, token, onClose, onUploaded }) => {
         setError('');
 
         try {
+            const finalDuration = videoDuration || Math.max(1, Math.min(slideDuration, storyLifespan));
             const formData = new FormData();
             formData.append('media', statusFile);
             formData.append('caption', caption || textStatus);
-            formData.append('duration', videoDuration || 15);
+            formData.append('duration', String(finalDuration));
+            formData.append('expiresIn', String(storyLifespan));
 
             if (selectedSong?.previewUrl) {
                 formData.append('musicUrl', selectedSong.previewUrl);
@@ -481,6 +492,192 @@ const StatusUploader = ({ user, token, onClose, onUploaded }) => {
                     </div>
                     <input ref={musicRef} type="file" accept="audio/*" className="hidden" onChange={handleMusicSelect} />
 
+                    {/* Story Timer & Expiration Section */}
+                    <div className="space-y-2 pt-1 border-t border-white/5">
+                        <button
+                            type="button"
+                            onClick={() => setTimerSettingsOpen(v => !v)}
+                            className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-left text-xs hover:bg-white/10 transition-colors"
+                        >
+                            <span className="flex items-center gap-2">
+                                <ClockIcon className="w-4 h-4 text-emerald-400" />
+                                <span>
+                                    <span className="block font-semibold text-white">Story Timer & Expiration</span>
+                                    <span className="mt-0.5 block text-[10px] text-gray-400">
+                                        Slide: {slideDuration}s · Visible for: {formatLifespanSummary(storyLifespan)}
+                                    </span>
+                                </span>
+                            </span>
+                            <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 font-bold text-emerald-300 text-[11px] flex items-center gap-1">
+                                <AdjustmentsHorizontalIcon className="w-3.5 h-3.5" />
+                                {timerSettingsOpen ? 'Close' : 'Adjust'}
+                            </span>
+                        </button>
+
+                        {timerSettingsOpen && (
+                            <div className="space-y-3.5 rounded-2xl border border-emerald-500/30 bg-[#0d1617] p-3.5 shadow-xl animate-fade-in">
+                                {/* Slide View Duration */}
+                                <div>
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <label className="text-xs font-bold text-white flex items-center gap-1.5">
+                                            <span>⏱️ Slide Duration</span>
+                                            <span className="text-[10px] text-gray-400 font-normal">(Display timer per story)</span>
+                                        </label>
+                                        <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">
+                                            {slideDuration}s
+                                        </span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5 mb-2">
+                                        {[1, 3, 5, 10, 15, 30, 60].map(s => (
+                                            <button
+                                                key={s}
+                                                type="button"
+                                                onClick={() => {
+                                                    setSlideDuration(s);
+                                                    setCustomDurationValue(s);
+                                                }}
+                                                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                                                    slideDuration === s
+                                                        ? 'bg-emerald-500 text-black shadow-md font-bold'
+                                                        : 'bg-gray-800/90 text-gray-300 hover:bg-gray-700'
+                                                }`}
+                                            >
+                                                {s}s
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="flex items-center gap-2 bg-black/40 p-2 rounded-xl border border-white/5">
+                                        <span className="text-[10px] text-gray-400">Custom (1s - 60s):</span>
+                                        <input
+                                            type="range"
+                                            min="1"
+                                            max="60"
+                                            value={slideDuration}
+                                            onChange={e => {
+                                                const val = Number(e.target.value);
+                                                setSlideDuration(val);
+                                                setCustomDurationValue(val);
+                                            }}
+                                            className="flex-1 accent-emerald-500 cursor-pointer h-1.5 bg-gray-700 rounded-lg"
+                                        />
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            max="86400"
+                                            value={slideDuration}
+                                            onChange={e => {
+                                                const val = Math.max(1, Math.min(Number(e.target.value) || 1, 86400));
+                                                setSlideDuration(val);
+                                                setCustomDurationValue(val);
+                                            }}
+                                            className="w-14 bg-gray-900 border border-gray-700 text-white rounded px-1.5 py-0.5 text-xs text-center font-mono outline-none focus:border-emerald-400"
+                                        />
+                                        <span className="text-[10px] text-gray-400">sec</span>
+                                    </div>
+                                </div>
+
+                                {/* Story Lifespan / Expiry (1s to 24 hours) */}
+                                <div className="border-t border-white/10 pt-3">
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <label className="text-xs font-bold text-white flex items-center gap-1.5">
+                                            <span>⏳ Story Expiration</span>
+                                            <span className="text-[10px] text-gray-400 font-normal">(1s to 24 hours)</span>
+                                        </label>
+                                        <span className="text-[11px] font-mono font-bold text-cyan-300 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-800">
+                                            {formatLifespanSummary(storyLifespan)}
+                                        </span>
+                                    </div>
+
+                                    {/* Preset Lifespans */}
+                                    <div className="flex flex-wrap gap-1.5 mb-2.5">
+                                        {[
+                                            { label: '30s', sec: 30 },
+                                            { label: '5m', sec: 300 },
+                                            { label: '15m', sec: 900 },
+                                            { label: '1h', sec: 3600 },
+                                            { label: '6h', sec: 21600 },
+                                            { label: '12h', sec: 43200 },
+                                            { label: '24h (Standard)', sec: 86400 },
+                                        ].map(preset => (
+                                            <button
+                                                key={preset.sec}
+                                                type="button"
+                                                onClick={() => {
+                                                    setStoryLifespan(preset.sec);
+                                                    setCustomExpiryHours(Math.floor(preset.sec / 3600));
+                                                    setCustomExpiryMinutes(Math.floor((preset.sec % 3600) / 60));
+                                                    setCustomExpirySeconds(preset.sec % 60);
+                                                }}
+                                                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                                                    storyLifespan === preset.sec
+                                                        ? 'bg-cyan-500 text-black shadow-md font-bold'
+                                                        : 'bg-gray-800/90 text-gray-300 hover:bg-gray-700'
+                                                }`}
+                                            >
+                                                {preset.label}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {/* Precise Custom Inputs (Hours, Minutes, Seconds) */}
+                                    <div className="bg-black/50 p-2.5 rounded-xl border border-white/10 space-y-2">
+                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Set Exact Custom Time (1 sec - 24 hrs):</p>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            <div>
+                                                <label className="block text-[10px] text-gray-400 mb-0.5">Hours (0-24)</label>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    max="24"
+                                                    value={customExpiryHours}
+                                                    onChange={e => {
+                                                        const h = Math.max(0, Math.min(Number(e.target.value) || 0, 24));
+                                                        setCustomExpiryHours(h);
+                                                        const total = Math.min(86400, Math.max(1, (h * 3600) + (customExpiryMinutes * 60) + customExpirySeconds));
+                                                        setStoryLifespan(total);
+                                                    }}
+                                                    className="w-full bg-gray-900 border border-gray-700 rounded-lg px-2 py-1 text-xs text-white text-center font-mono outline-none focus:border-cyan-400"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] text-gray-400 mb-0.5">Mins (0-59)</label>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    max="59"
+                                                    value={customExpiryMinutes}
+                                                    onChange={e => {
+                                                        const m = Math.max(0, Math.min(Number(e.target.value) || 0, 59));
+                                                        setCustomExpiryMinutes(m);
+                                                        const total = Math.min(86400, Math.max(1, (customExpiryHours * 3600) + (m * 60) + customExpirySeconds));
+                                                        setStoryLifespan(total);
+                                                    }}
+                                                    className="w-full bg-gray-900 border border-gray-700 rounded-lg px-2 py-1 text-xs text-white text-center font-mono outline-none focus:border-cyan-400"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] text-gray-400 mb-0.5">Secs (0-59)</label>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    max="59"
+                                                    value={customExpirySeconds}
+                                                    onChange={e => {
+                                                        const s = Math.max(0, Math.min(Number(e.target.value) || 0, 59));
+                                                        setCustomExpirySeconds(s);
+                                                        const total = Math.min(86400, Math.max(1, (customExpiryHours * 3600) + (customExpiryMinutes * 60) + s));
+                                                        setStoryLifespan(total);
+                                                    }}
+                                                    className="w-full bg-gray-900 border border-gray-700 rounded-lg px-2 py-1 text-xs text-white text-center font-mono outline-none focus:border-cyan-400"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     <button type="button" onClick={() => setAudienceOpen(v => !v)} className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-left text-xs hover:bg-white/10"><span><span className="block font-semibold text-white">Audience</span><span className="mt-0.5 block text-[10px] text-gray-400">Control exactly who can see your story</span></span><span className="rounded-full bg-[#25d366]/15 px-3 py-1 font-bold text-[#25d366]">{STORY_AUDIENCES.find(item => item.id === storyPrivacy)?.label}</span></button>
                     {audienceOpen && <div className="space-y-3 rounded-2xl border border-white/10 bg-[#111b21] p-3">
                         <p className="text-sm font-bold text-white">Story privacy</p>
@@ -535,5 +732,18 @@ const createTextStatusImage = (text, colors) => new Promise((resolve) => {
     lines.slice(0, 8).forEach((item, idx) => ctx.fillText(item, canvas.width / 2, startY + idx * 92));
     canvas.toBlob(blob => resolve(new File([blob], `text-status-${Date.now()}.png`, { type: 'image/png' })), 'image/png');
 });
+
+const formatLifespanSummary = (seconds) => {
+    const sec = Number(seconds) || 86400;
+    if (sec < 60) return `${sec}s`;
+    const mins = Math.floor(sec / 60);
+    if (mins < 60) {
+        const remainingSec = sec % 60;
+        return remainingSec > 0 ? `${mins}m ${remainingSec}s` : `${mins}m`;
+    }
+    const hrs = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    return remMins > 0 ? `${hrs}h ${remMins}m` : `${hrs}h`;
+};
 
 export default StatusUploader;

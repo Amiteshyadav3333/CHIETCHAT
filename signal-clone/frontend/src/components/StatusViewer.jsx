@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { XMarkIcon, ChevronLeftIcon, ChevronRightIcon, MusicalNoteIcon, EyeIcon, TrashIcon, PaperAirplaneIcon } from '@heroicons/react/24/solid';
+import { XMarkIcon, ChevronLeftIcon, ChevronRightIcon, MusicalNoteIcon, EyeIcon, TrashIcon, PaperAirplaneIcon, ClockIcon } from '@heroicons/react/24/solid';
 import { EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import { encryptForRecipients } from '../utils/encryption';
@@ -89,7 +89,7 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, curr
         }, interval);
 
         return () => clearInterval(timerRef.current);
-    }, [currentStatus?.id, groupIndex]);
+    }, [currentStatus?.id, currentStatus?.duration, duration, groupIndex]);
 
     // Video sync
     useEffect(() => {
@@ -211,7 +211,23 @@ const StatusViewer = ({ statusGroups, initialGroupIndex = 0, currentUserId, curr
                         <img src={currentGroup.user.avatar} alt="" className="w-9 h-9 rounded-full border-2 border-white object-cover" />
                         <div>
                             <p className="text-white text-sm font-semibold">{currentGroup.user.username}</p>
-                            <p className="text-white/60 text-[10px]">{timeAgo(currentStatus.createdAt)}</p>
+                            <div className="flex items-center gap-1.5 text-[10px] text-white/60">
+                                <span>{timeAgo(currentStatus.createdAt)}</span>
+                                {currentStatus.duration && (
+                                    <>
+                                        <span>•</span>
+                                        <span className="flex items-center gap-0.5 text-emerald-300 font-mono font-medium">
+                                            <ClockIcon className="w-3 h-3 text-emerald-400" />
+                                            {currentStatus.duration}s
+                                        </span>
+                                    </>
+                                )}
+                                {currentStatus.expiresAt && (
+                                    <span className="hidden sm:inline-block text-cyan-300/80">
+                                        ({timeLeft(currentStatus.expiresAt)})
+                                    </span>
+                                )}
+                            </div>
                         </div>
                         {currentStatus.musicName && (
                             <div className="ml-3 flex items-center gap-1 bg-black/40 px-2.5 py-0.5 rounded-full border border-white/10 max-w-[140px] md:max-w-[200px] overflow-hidden truncate">
@@ -442,6 +458,19 @@ const timeAgo = (iso) => {
     const hrs = Math.floor(mins / 60);
     if (hrs < 24) return `${hrs}h ago`;
     return `${Math.floor(hrs / 24)}d ago`;
+};
+
+const timeLeft = (iso) => {
+    if (!iso) return '';
+    const diff = new Date(iso).getTime() - Date.now();
+    if (diff <= 0) return 'expired';
+    const secs = Math.floor(diff / 1000);
+    if (secs < 60) return `${secs}s left`;
+    const mins = Math.floor(secs / 60);
+    if (mins < 60) return `${mins}m left`;
+    const hrs = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    return remMins > 0 ? `${hrs}h ${remMins}m left` : `${hrs}h left`;
 };
 
 export default StatusViewer;

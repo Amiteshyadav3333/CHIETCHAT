@@ -24,6 +24,7 @@ const POPULAR_COLLEGES = [
     'Delhi University',
     'IIT Delhi',
     'IIT Bombay',
+    'IIT Madras',
     'Amity University',
     'Mumbai University',
     'NIT Trichy',
@@ -32,7 +33,13 @@ const POPULAR_COLLEGES = [
     'VIT Vellore',
     'Chandigarh University',
     'JNU Delhi',
-    'SRM University'
+    'SRM University',
+    'BITS Pilani',
+    'LPU Punjab',
+    'Manipal University',
+    'Pune University',
+    'DU SOL',
+    'IGNOU'
 ];
 
 const POPULAR_LOCATIONS = [
@@ -40,12 +47,18 @@ const POPULAR_LOCATIONS = [
     'Mumbai',
     'Bengaluru',
     'Pune',
-    'Patna',
     'Hyderabad',
+    'Chennai',
     'Kolkata',
     'Jaipur',
     'Lucknow',
-    'Chandigarh'
+    'Patna',
+    'Ahmedabad',
+    'Chandigarh',
+    'Indore',
+    'Bhopal',
+    'Noida',
+    'Gurugram'
 ];
 
 const ProfileSetup = () => {
@@ -222,15 +235,15 @@ const ProfileSetup = () => {
     };
 
     return (
-        <div className="min-h-[100dvh] bg-[#07090c] flex items-center justify-center p-3 sm:p-5 relative overflow-x-hidden">
+        <div className="h-[100dvh] w-full bg-[#07090c] flex flex-col items-center justify-start sm:justify-center p-3 sm:p-6 relative overflow-y-auto overscroll-y-contain">
             <div className="pointer-events-none absolute inset-0 overflow-hidden">
                 <div className="absolute -top-40 -left-40 h-[500px] w-[500px] rounded-full bg-emerald-600/10 blur-[120px] animate-pulse" style={{ animationDuration: '8s' }} />
                 <div className="absolute -bottom-40 -right-40 h-[500px] w-[500px] rounded-full bg-violet-500/10 blur-[120px] animate-pulse" style={{ animationDuration: '10s' }} />
             </div>
 
-            <div className="relative w-full max-w-xl my-4">
+            <div className="relative w-full max-w-xl my-auto py-3 sm:py-6">
                 {/* Brand Logo */}
-                <div className="mb-5 flex items-center justify-center gap-3">
+                <div className="mb-4 flex items-center justify-center gap-3">
                     <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#25d366] to-[#00a884] shadow-lg shadow-[#25d366]/20">
                         <ShieldCheckIcon className="h-6 w-6 text-black" />
                     </div>
@@ -241,7 +254,7 @@ const ProfileSetup = () => {
                 </div>
 
                 {/* Step Progress Indicators */}
-                <div className="mb-5 flex items-center justify-center gap-3">
+                <div className="mb-4 flex items-center justify-center gap-3">
                     <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold transition-all ${step === 1 ? 'bg-[#25d366]/20 text-[#25d366] border border-[#25d366]/40' : 'bg-white/5 text-gray-400'}`}>
                         <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#25d366] text-black font-black text-[10px]">1</span>
                         <span>College Info</span>
@@ -253,42 +266,44 @@ const ProfileSetup = () => {
                     </div>
                 </div>
 
-                <div className="rounded-3xl border border-white/[0.08] bg-[#111b21]/95 backdrop-blur-2xl shadow-2xl shadow-black/80 overflow-hidden">
+                <div className="rounded-3xl border border-white/[0.08] bg-[#111b21]/95 backdrop-blur-2xl shadow-2xl shadow-black/80 overflow-hidden flex flex-col max-h-[86vh]">
                     {/* STEP 1: College & Profile Details */}
                     {step === 1 && (
-                        <div>
-                            <div className="border-b border-white/[0.06] bg-white/[0.02] px-6 py-6 sm:px-8">
-                                <span className="rounded-full bg-[#25d366]/15 border border-[#25d366]/30 px-3 py-1 text-[11px] font-bold text-[#25d366] uppercase tracking-wider inline-block mb-2">
+                        <div className="flex flex-col h-full overflow-hidden">
+                            {/* Card Header (Fixed) */}
+                            <div className="shrink-0 border-b border-white/[0.06] bg-white/[0.02] px-6 py-5 sm:px-8">
+                                <span className="rounded-full bg-[#25d366]/15 border border-[#25d366]/30 px-3 py-0.5 text-[11px] font-bold text-[#25d366] uppercase tracking-wider inline-block mb-1.5">
                                     Step 1 of 2
                                 </span>
-                                <h1 className="text-2xl font-bold text-white tracking-tight">
+                                <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
                                     Welcome, {user?.username || 'Student'}! 👋
                                 </h1>
-                                <p className="mt-1 text-sm text-gray-300">
-                                    Which college or university are you from? Enter your campus details so we can instantly link you with your batchmates.
+                                <p className="mt-1 text-xs sm:text-sm text-gray-300">
+                                    Which college or university are you from? Select or type your campus so we can instantly link you with your batchmates.
                                 </p>
                             </div>
 
-                            <div className="px-6 py-6 sm:px-8 space-y-5">
+                            {/* Card Scrollable Body */}
+                            <div className="flex-1 overflow-y-auto overscroll-contain px-6 py-5 sm:px-8 space-y-5">
                                 {/* Avatar */}
                                 <div className="flex flex-col items-center gap-2">
                                     <div className="relative group">
                                         <div
                                             onClick={() => avatarInputRef.current?.click()}
-                                            className="h-24 w-24 rounded-full overflow-hidden border-[3px] border-white/10 cursor-pointer ring-4 ring-[#25d366]/0 transition-all duration-300 hover:ring-[#25d366]/30 hover:border-[#25d366]/40 hover:scale-105"
+                                            className="h-20 w-20 sm:h-24 sm:w-24 rounded-full overflow-hidden border-[3px] border-white/10 cursor-pointer ring-4 ring-[#25d366]/0 transition-all duration-300 hover:ring-[#25d366]/30 hover:border-[#25d366]/40 hover:scale-105"
                                         >
                                             {avatarPreview ? (
                                                 <img src={avatarPreview} alt="Avatar preview" className="h-full w-full object-cover" />
                                             ) : (
                                                 <div className="h-full w-full bg-gradient-to-br from-white/5 to-white/[0.02] flex items-center justify-center">
-                                                    <UserCircleIcon className="h-16 w-16 text-gray-500" />
+                                                    <UserCircleIcon className="h-14 w-14 text-gray-500" />
                                                 </div>
                                             )}
                                         </div>
                                         <button
                                             type="button"
                                             onClick={() => avatarInputRef.current?.click()}
-                                            className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-[#25d366] text-[#07090c] border-2 border-[#111b21] shadow-lg hover:bg-[#20bd5a] transition-all hover:scale-110"
+                                            className="absolute bottom-0 right-0 flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full bg-[#25d366] text-[#07090c] border-2 border-[#111b21] shadow-lg hover:bg-[#20bd5a] transition-all hover:scale-110"
                                         >
                                             <CameraIcon className="h-4 w-4" />
                                         </button>
@@ -306,72 +321,155 @@ const ProfileSetup = () => {
                                     </span>
                                 </div>
 
-                                {/* College / University Input */}
-                                <div className="space-y-2">
-                                    <label className="block text-sm font-bold text-white flex items-center gap-2">
-                                        <AcademicCapIcon className="h-5 w-5 text-[#25d366]" />
-                                        <span>University / College Name</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={college}
-                                        onChange={(e) => setCollege(e.target.value)}
-                                        placeholder="e.g. Delhi University, IIT Delhi, Amity University..."
-                                        className="w-full rounded-xl border border-gray-700 bg-[#202c33] px-4 py-3.5 text-sm text-white placeholder-gray-500 outline-none focus:border-[#25d366] ring-1 ring-transparent focus:ring-[#25d366]/20 transition"
-                                    />
-                                    {/* Popular College Chips */}
-                                    <div className="pt-1">
-                                        <p className="text-[11px] text-gray-400 mb-1.5 font-medium">Quick Select (Popular Campuses):</p>
-                                        <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
-                                            {POPULAR_COLLEGES.map((c) => (
-                                                <button
-                                                    key={c}
-                                                    type="button"
-                                                    onClick={() => setCollege(c)}
-                                                    className={`rounded-lg px-2.5 py-1 text-xs transition ${
-                                                        college === c
-                                                            ? 'bg-[#25d366] text-black font-bold'
-                                                            : 'bg-white/5 text-gray-300 hover:bg-white/10'
-                                                    }`}
-                                                >
-                                                    {c}
-                                                </button>
-                                            ))}
+                                {/* College / University Section with Clean Selection Buttons */}
+                                <div className="space-y-3 rounded-2xl bg-[#141f26] border border-white/[0.08] p-4 sm:p-5">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-sm font-black text-white flex items-center gap-2">
+                                            <AcademicCapIcon className="h-5 w-5 text-[#25d366]" />
+                                            <span>University / College</span>
+                                        </label>
+                                        {college ? (
+                                            <span className="text-[11px] font-bold text-[#25d366] bg-[#25d366]/15 border border-[#25d366]/30 px-2.5 py-0.5 rounded-full flex items-center gap-1 truncate max-w-[200px]">
+                                                <CheckIcon className="h-3 w-3 shrink-0" /> Selected
+                                            </span>
+                                        ) : (
+                                            <span className="text-[11px] text-gray-400">Choose or type</span>
+                                        )}
+                                    </div>
+
+                                    {/* Input field with icon and clear button */}
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            value={college}
+                                            onChange={(e) => setCollege(e.target.value)}
+                                            placeholder="Type your University or College name..."
+                                            className="w-full rounded-xl border border-gray-700/80 bg-[#1c2830] pl-10 pr-10 py-3 text-sm text-white placeholder-gray-500 outline-none focus:border-[#25d366] focus:bg-[#22303a] ring-2 ring-transparent focus:ring-[#25d366]/20 transition-all font-medium"
+                                        />
+                                        <AcademicCapIcon className="h-5 w-5 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                        {college && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setCollege('')}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1 rounded-full hover:bg-white/10 transition"
+                                                title="Clear college"
+                                            >
+                                                <span className="text-xs font-black">✕</span>
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Suggestion Buttons */}
+                                    <div>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                                                Tap to Choose Popular Campus:
+                                            </span>
+                                            <span className="text-[10px] text-gray-500">Or type custom above</span>
                                         </div>
+                                        <div className="flex flex-wrap gap-1.5 sm:gap-2 max-h-36 overflow-y-auto p-0.5">
+                                            {POPULAR_COLLEGES.map((c) => {
+                                                const isSelected = college.trim().toLowerCase() === c.toLowerCase();
+                                                return (
+                                                    <button
+                                                        key={c}
+                                                        type="button"
+                                                        onClick={() => setCollege(isSelected ? '' : c)}
+                                                        className={`rounded-xl px-3 py-1.5 sm:py-2 text-xs font-semibold transition-all flex items-center gap-1.5 active:scale-95 ${
+                                                            isSelected
+                                                                ? 'bg-[#25d366] text-black font-black border border-[#25d366] shadow-[0_0_12px_rgba(37,211,102,0.35)]'
+                                                                : 'bg-[#1e2a32] hover:bg-[#253641] text-gray-300 border border-white/10 hover:border-white/20'
+                                                        }`}
+                                                    >
+                                                        {isSelected ? (
+                                                            <CheckIcon className="h-3.5 w-3.5 stroke-[3]" />
+                                                        ) : (
+                                                            <span className="text-[11px] opacity-60">🎓</span>
+                                                        )}
+                                                        <span>{c}</span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        <p className="mt-2 text-[11px] text-gray-400 flex items-center gap-1.5">
+                                            <span>✍️ Can't find your college in the list? Simply type its name in the box above — all universities are supported!</span>
+                                        </p>
                                     </div>
                                 </div>
 
-                                {/* Location / City Input */}
-                                <div className="space-y-2">
-                                    <label className="block text-sm font-bold text-white flex items-center gap-2">
-                                        <MapPinIcon className="h-5 w-5 text-emerald-400" />
-                                        <span>Location / City</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={location}
-                                        onChange={(e) => setLocation(e.target.value)}
-                                        placeholder="e.g. New Delhi, Mumbai, Bengaluru, Patna, Pune..."
-                                        className="w-full rounded-xl border border-gray-700 bg-[#202c33] px-4 py-3.5 text-sm text-white placeholder-gray-500 outline-none focus:border-[#25d366] ring-1 ring-transparent focus:ring-[#25d366]/20 transition"
-                                    />
-                                    {/* Popular Location Chips */}
-                                    <div className="pt-1">
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {POPULAR_LOCATIONS.map((loc) => (
-                                                <button
-                                                    key={loc}
-                                                    type="button"
-                                                    onClick={() => setLocation(loc)}
-                                                    className={`rounded-lg px-2.5 py-1 text-xs transition ${
-                                                        location === loc
-                                                            ? 'bg-emerald-400 text-black font-bold'
-                                                            : 'bg-white/5 text-gray-300 hover:bg-white/10'
-                                                    }`}
-                                                >
-                                                    {loc}
-                                                </button>
-                                            ))}
+                                {/* Location / City Section with Clean Selection Buttons */}
+                                <div className="space-y-3 rounded-2xl bg-[#141f26] border border-white/[0.08] p-4 sm:p-5">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-sm font-black text-white flex items-center gap-2">
+                                            <MapPinIcon className="h-5 w-5 text-emerald-400" />
+                                            <span>Location / City</span>
+                                        </label>
+                                        {location ? (
+                                            <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 rounded-full flex items-center gap-1 truncate max-w-[200px]">
+                                                <CheckIcon className="h-3 w-3 shrink-0" /> Selected
+                                            </span>
+                                        ) : (
+                                            <span className="text-[11px] text-gray-400">Choose or type</span>
+                                        )}
+                                    </div>
+
+                                    {/* Input field with icon and clear button */}
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            value={location}
+                                            onChange={(e) => setLocation(e.target.value)}
+                                            placeholder="Type your City or Town..."
+                                            className="w-full rounded-xl border border-gray-700/80 bg-[#1c2830] pl-10 pr-10 py-3 text-sm text-white placeholder-gray-500 outline-none focus:border-emerald-400 focus:bg-[#22303a] ring-2 ring-transparent focus:ring-emerald-400/20 transition-all font-medium"
+                                        />
+                                        <MapPinIcon className="h-5 w-5 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                        {location && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setLocation('')}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1 rounded-full hover:bg-white/10 transition"
+                                                title="Clear location"
+                                            >
+                                                <span className="text-xs font-black">✕</span>
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Suggestion Buttons */}
+                                    <div>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                                                Tap to Choose Popular City:
+                                            </span>
+                                            <span className="text-[10px] text-gray-500">Or type custom above</span>
                                         </div>
+                                        <div className="flex flex-wrap gap-1.5 sm:gap-2 max-h-32 overflow-y-auto p-0.5">
+                                            {POPULAR_LOCATIONS.map((loc) => {
+                                                const isSelected = location.trim().toLowerCase() === loc.toLowerCase();
+                                                return (
+                                                    <button
+                                                        key={loc}
+                                                        type="button"
+                                                        onClick={() => setLocation(isSelected ? '' : loc)}
+                                                        className={`rounded-xl px-3 py-1.5 sm:py-2 text-xs font-semibold transition-all flex items-center gap-1.5 active:scale-95 ${
+                                                            isSelected
+                                                                ? 'bg-emerald-400 text-black font-black border border-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.35)]'
+                                                                : 'bg-[#1e2a32] hover:bg-[#253641] text-gray-300 border border-white/10 hover:border-white/20'
+                                                        }`}
+                                                    >
+                                                        {isSelected ? (
+                                                            <CheckIcon className="h-3.5 w-3.5 stroke-[3]" />
+                                                        ) : (
+                                                            <span className="text-[11px] opacity-60">📍</span>
+                                                        )}
+                                                        <span>{loc}</span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        <p className="mt-2 text-[11px] text-gray-400 flex items-center gap-1.5">
+                                            <span>✍️ Living elsewhere? Simply type your city name in the box above.</span>
+                                        </p>
                                     </div>
                                 </div>
 
@@ -380,13 +478,16 @@ const ProfileSetup = () => {
                                         {error}
                                     </div>
                                 )}
+                            </div>
 
+                            {/* Card Sticky Footer (Fixed at bottom) */}
+                            <div className="shrink-0 border-t border-white/[0.06] bg-[#141f26]/90 backdrop-blur-md p-4 sm:p-5">
                                 <button
                                     id="profile-step1-continue-btn"
                                     type="button"
                                     onClick={handleFormSubmit}
                                     disabled={submitting}
-                                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#25d366] hover:bg-[#20bd5a] py-4 font-black text-[#07090c] text-sm uppercase tracking-wider shadow-lg shadow-[#25d366]/25 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60"
+                                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#25d366] hover:bg-[#20bd5a] py-3.5 sm:py-4 font-black text-[#07090c] text-sm uppercase tracking-wider shadow-lg shadow-[#25d366]/25 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60"
                                 >
                                     {submitting ? (
                                         <>
@@ -406,8 +507,9 @@ const ProfileSetup = () => {
 
                     {/* STEP 2: Force First Connection, Lobby & Instant Group */}
                     {step === 2 && (
-                        <div>
-                            <div className="border-b border-white/[0.06] bg-white/[0.02] px-6 py-5 sm:px-8">
+                        <div className="flex flex-col h-full overflow-hidden">
+                            {/* Card Header (Fixed) */}
+                            <div className="shrink-0 border-b border-white/[0.06] bg-white/[0.02] px-6 py-5 sm:px-8">
                                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#25d366] mb-1">
                                     <SparklesIcon className="h-4 w-4" />
                                     <span>Instant Campus Connections & Lobby</span>
@@ -420,7 +522,8 @@ const ProfileSetup = () => {
                                 </p>
                             </div>
 
-                            <div className="px-6 py-5 sm:px-8 space-y-5 max-h-[72vh] overflow-y-auto">
+                            {/* Card Scrollable Body */}
+                            <div className="flex-1 overflow-y-auto overscroll-contain px-6 py-5 sm:px-8 space-y-5">
                                 {/* Automatic Campus Lobby Notice */}
                                 <div className="rounded-2xl border border-[#25d366]/30 bg-[#25d366]/10 p-4 flex items-start gap-3">
                                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#25d366] text-black font-black">
@@ -599,21 +702,21 @@ const ProfileSetup = () => {
                                         </button>
                                     </div>
                                 </div>
+                            </div>
 
-                                {/* Finish & Start Feature Tour */}
-                                <div className="pt-2">
-                                    <button
-                                        type="button"
-                                        id="finish-to-tour-btn"
-                                        onClick={handleFinish}
-                                        className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#25d366] hover:bg-[#20bd5a] py-4 px-6 font-black text-[#07090c] text-sm uppercase tracking-wider shadow-xl shadow-[#25d366]/30 ring-4 ring-[#25d366]/20 transition-all hover:scale-[1.01] active:scale-[0.99]"
-                                    >
-                                        <span>Enter CHEETCHAT & Start Feature Tour →</span>
-                                    </button>
-                                    <p className="mt-2 text-center text-xs text-gray-400">
-                                        Your Campus Lobby and Campus Guide are waiting for you
-                                    </p>
-                                </div>
+                            {/* Card Sticky Footer (Fixed at bottom) */}
+                            <div className="shrink-0 border-t border-white/[0.06] bg-[#141f26]/90 backdrop-blur-md p-4 sm:p-5">
+                                <button
+                                    type="button"
+                                    id="finish-to-tour-btn"
+                                    onClick={handleFinish}
+                                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#25d366] hover:bg-[#20bd5a] py-3.5 sm:py-4 px-6 font-black text-[#07090c] text-sm uppercase tracking-wider shadow-xl shadow-[#25d366]/30 ring-4 ring-[#25d366]/20 transition-all hover:scale-[1.01] active:scale-[0.99]"
+                                >
+                                    <span>Enter CHEETCHAT & Start Feature Tour →</span>
+                                </button>
+                                <p className="mt-1.5 text-center text-xs text-gray-400">
+                                    Your Campus Lobby and Campus Guide are waiting for you
+                                </p>
                             </div>
                         </div>
                     )}

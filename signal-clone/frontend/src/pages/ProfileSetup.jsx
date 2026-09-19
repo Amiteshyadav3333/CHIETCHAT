@@ -265,7 +265,7 @@ const ProfileSetup = () => {
                                     Welcome, {user?.username || 'Student'}! 👋
                                 </h1>
                                 <p className="mt-1 text-sm text-gray-300">
-                                    आप किस कॉलेज या यूनिवर्सिटी से हैं? अपनी संस्था बताएं ताकि आपके क्लासमेट्स और बैचमेट्स से तुरंत कनेक्शन बनाया जा सके।
+                                    Which college or university are you from? Enter your campus details so we can instantly link you with your batchmates.
                                 </p>
                             </div>
 
@@ -302,7 +302,7 @@ const ProfileSetup = () => {
                                         id="avatar-input"
                                     />
                                     <span className="text-[11px] text-gray-400">
-                                        {avatarFile ? '✓ Photo चुनी गई' : 'Profile photo जोड़ें (Optional)'}
+                                        {avatarFile ? '✓ Photo Selected' : 'Add Profile Photo (Optional)'}
                                     </span>
                                 </div>
 
@@ -310,18 +310,18 @@ const ProfileSetup = () => {
                                 <div className="space-y-2">
                                     <label className="block text-sm font-bold text-white flex items-center gap-2">
                                         <AcademicCapIcon className="h-5 w-5 text-[#25d366]" />
-                                        <span>आपकी University / College का नाम</span>
+                                        <span>University / College Name</span>
                                     </label>
                                     <input
                                         type="text"
                                         value={college}
                                         onChange={(e) => setCollege(e.target.value)}
-                                        placeholder="Jaise: Delhi University, IIT Delhi, Amity University..."
+                                        placeholder="e.g. Delhi University, IIT Delhi, Amity University..."
                                         className="w-full rounded-xl border border-gray-700 bg-[#202c33] px-4 py-3.5 text-sm text-white placeholder-gray-500 outline-none focus:border-[#25d366] ring-1 ring-transparent focus:ring-[#25d366]/20 transition"
                                     />
                                     {/* Popular College Chips */}
                                     <div className="pt-1">
-                                        <p className="text-[11px] text-gray-400 mb-1.5 font-medium">Quick Select (लोकप्रिय कॉलेज):</p>
+                                        <p className="text-[11px] text-gray-400 mb-1.5 font-medium">Quick Select (Popular Campuses):</p>
                                         <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
                                             {POPULAR_COLLEGES.map((c) => (
                                                 <button
@@ -345,13 +345,13 @@ const ProfileSetup = () => {
                                 <div className="space-y-2">
                                     <label className="block text-sm font-bold text-white flex items-center gap-2">
                                         <MapPinIcon className="h-5 w-5 text-emerald-400" />
-                                        <span>Location / आपका शहर (City)</span>
+                                        <span>Location / City</span>
                                     </label>
                                     <input
                                         type="text"
                                         value={location}
                                         onChange={(e) => setLocation(e.target.value)}
-                                        placeholder="Jaise: New Delhi, Mumbai, Bengaluru, Patna, Pune..."
+                                        placeholder="e.g. New Delhi, Mumbai, Bengaluru, Patna, Pune..."
                                         className="w-full rounded-xl border border-gray-700 bg-[#202c33] px-4 py-3.5 text-sm text-white placeholder-gray-500 outline-none focus:border-[#25d366] ring-1 ring-transparent focus:ring-[#25d366]/20 transition"
                                     />
                                     {/* Popular Location Chips */}
@@ -410,13 +410,13 @@ const ProfileSetup = () => {
                             <div className="border-b border-white/[0.06] bg-white/[0.02] px-6 py-5 sm:px-8">
                                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#25d366] mb-1">
                                     <SparklesIcon className="h-4 w-4" />
-                                    <span>Force First Connection & Campus Lobby</span>
+                                    <span>Instant Campus Connections & Lobby</span>
                                 </div>
                                 <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
                                     {college ? `${college} Hub` : 'Campus Friends'}
                                 </h1>
                                 <p className="mt-1 text-xs sm:text-sm text-gray-300">
-                                    खाली होम स्क्रीन नहीं! आपके लिए कैंपस लॉबी और साथी तैयार हैं। 1 क्लिक में कनेक्ट करें या अपनी क्लास का ग्रुप बनाएं।
+                                    No empty home screen! Your campus lobby and batchmates are ready. Connect in 1 click or create your class group.
                                 </p>
                             </div>
 
@@ -428,13 +428,13 @@ const ProfileSetup = () => {
                                     </div>
                                     <div className="min-w-0 flex-1">
                                         <p className="text-xs font-bold uppercase tracking-wider text-[#25d366]">
-                                            College Lobby Ready (अकेलापन नहीं)
+                                            College Campus Lobby Ready
                                         </p>
                                         <p className="text-sm font-bold text-white mt-0.5">
                                             {college ? `${college} Campus Lobby` : 'Freshers & Campus Lounge 2026'}
                                         </p>
                                         <p className="text-xs text-gray-300 mt-1 leading-relaxed">
-                                            आपको कॉलेज लॉबी में जोड़ दिया गया है ताकि आप तुरंत अन्य छात्रों से लाइव बात कर सकें।
+                                            You have been automatically added to your college lobby so you can chat live with fellow students immediately.
                                         </p>
                                     </div>
                                 </div>
@@ -444,7 +444,7 @@ const ProfileSetup = () => {
                                     <div className="flex items-center justify-between mb-2.5">
                                         <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
                                             <UserPlusIcon className="h-4 w-4 text-[#25d366]" />
-                                            <span>इन छात्रों को Request भेजें (Campus Members)</span>
+                                            <span>Suggested Batchmates (Send Request)</span>
                                         </h3>
                                         <span className="text-[11px] text-gray-400">1-Click Connect</span>
                                     </div>
@@ -456,7 +456,7 @@ const ProfileSetup = () => {
                                         </div>
                                     ) : suggestions.length === 0 ? (
                                         <div className="p-4 rounded-xl bg-white/5 text-center text-xs text-gray-400">
-                                            अभी इस कॉलेज से आप पहले सदस्य हैं! नीचे दिए बटन से अपने क्लास ग्रुप को यहाँ लाएं।
+                                            You are the first pioneer from this campus! Use the button below to bring your class group here.
                                         </div>
                                     ) : (
                                         <div className="space-y-2.5">
@@ -520,13 +520,13 @@ const ProfileSetup = () => {
                                     )}
                                 </div>
 
-                                {/* Feature 2: Instant Class Group Creation ("अपनी क्लास/ग्रुप को यहाँ लाओ") */}
+                                {/* Feature 2: Instant Class Group Creation */}
                                 <div className="rounded-2xl border border-violet-500/30 bg-violet-500/10 p-4 space-y-3">
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                             <UserGroupIcon className="h-5 w-5 text-violet-400" />
                                             <h3 className="text-sm font-black text-white">
-                                                अपनी क्लास/ग्रुप को यहाँ लाओ (Instant Class Group)
+                                                Bring Your Class Group Here (Instant Group)
                                             </h3>
                                         </div>
                                         <span className="rounded bg-violet-500/20 text-violet-300 px-2 py-0.5 text-[10px] font-bold">
@@ -534,7 +534,7 @@ const ProfileSetup = () => {
                                         </span>
                                     </div>
                                     <p className="text-xs text-gray-300 leading-relaxed">
-                                        ग्रुप बनाएं और WhatsApp पर 1-क्लिक शेयर करें। 3 सहपाठी जुड़ते ही <strong>15 दिन Premium Free + Creator Badge</strong>!
+                                        Create your batch group and 1-click share to WhatsApp. When 3 classmates join, get <strong>15 Days Free Premium + Creator Badge</strong>!
                                     </p>
                                     <div className="flex flex-col sm:flex-row gap-2">
                                         <input
@@ -561,7 +561,7 @@ const ProfileSetup = () => {
                                         <div className="flex items-center gap-2">
                                             <GiftIcon className="h-5 w-5 text-[#25d366]" />
                                             <h3 className="text-sm font-black text-white">
-                                                Strong Invite Incentive (आमंत्रण इनाम)
+                                                Invite Rewards & Classmate Perks
                                             </h3>
                                         </div>
                                         <span className="rounded-full bg-[#25d366] text-black px-2 py-0.5 text-[10px] font-black">
@@ -571,7 +571,7 @@ const ProfileSetup = () => {
                                     <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-300">
                                         <div className="rounded-lg bg-black/25 p-2 border border-white/5">
                                             <p className="font-bold text-[#25d366]">✓ 1 Friend Joins</p>
-                                            <p className="text-[10px] text-gray-400">दोनों को 15 दिन Premium Free</p>
+                                            <p className="text-[10px] text-gray-400">15 Days Free Premium for both</p>
                                         </div>
                                         <div className="rounded-lg bg-black/25 p-2 border border-white/5">
                                             <p className="font-bold text-violet-300">✓ 3 Friends Join</p>
@@ -587,7 +587,7 @@ const ProfileSetup = () => {
                                             className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-[#25d366] hover:bg-[#20bd5a] text-[#07090c] font-black py-3 px-4 text-xs uppercase tracking-wider shadow-lg shadow-[#25d366]/20 transition active:scale-95"
                                         >
                                             <ShareIcon className="h-4 w-4" />
-                                            <span>WhatsApp से दोस्तों को Invite करें</span>
+                                            <span>Invite Classmates via WhatsApp</span>
                                         </button>
                                         <button
                                             type="button"
@@ -608,10 +608,10 @@ const ProfileSetup = () => {
                                         onClick={handleFinish}
                                         className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#25d366] hover:bg-[#20bd5a] py-4 px-6 font-black text-[#07090c] text-sm uppercase tracking-wider shadow-xl shadow-[#25d366]/30 ring-4 ring-[#25d366]/20 transition-all hover:scale-[1.01] active:scale-[0.99]"
                                     >
-                                        <span>होम स्क्रीन पर जाएं (Enter App & Take Tour) →</span>
+                                        <span>Enter CHEETCHAT & Start Feature Tour →</span>
                                     </button>
                                     <p className="mt-2 text-center text-xs text-gray-400">
-                                        आपकी कॉलेज लॉबी और कैंपस गाइड आपका इंतज़ार कर रहे हैं
+                                        Your Campus Lobby and Campus Guide are waiting for you
                                     </p>
                                 </div>
                             </div>

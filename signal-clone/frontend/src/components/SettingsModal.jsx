@@ -570,7 +570,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 <ChevronRightIcon className="h-5 w-5 text-gray-500" />
                             </button>
                             <SettingsGroup>
-                                <SettingsRow icon={<SparklesIcon className="text-[#25d366]" />} title="App Feature Guide & Tour" subtitle="UI व सभी सेटिंग्स से परिचित हों — इंटरैक्टिव ग्रीन गाइड" onClick={() => go('guide')} />
+                                <SettingsRow icon={<SparklesIcon className="text-[#25d366]" />} title="App Feature Guide & Tour" subtitle="Interactive UI & Settings Tour — Learn every feature" onClick={() => go('guide')} />
                                 <SettingsRow icon={<SparklesIcon />} title="CHEETCHAT Premium" subtitle={user?.isPremium ? 'Active — all creator features unlocked' : 'Invite 7 verified users to unlock every creator feature'} onClick={openPremium} />
                                 <SettingsRow icon={<span className="text-xl">文</span>} title="App language" subtitle={INDIAN_LANGUAGES.find(item => item[0] === appLanguage)?.[1] || 'English'} onClick={() => go('language')} />
                                 <SettingsRow icon={<KeyIcon />} title="Account" subtitle="Password, security and account controls" onClick={() => go('account')} />
@@ -1010,12 +1010,15 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                     {screen === 'guide' && (
                         <div className="p-5 space-y-6">
                             <div className="rounded-3xl border border-[#25d366]/40 bg-gradient-to-br from-[#25d366]/15 via-[#111b21] to-[#162923] p-6 text-center shadow-xl shadow-[#25d366]/10">
-                                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#25d366]/20 border border-[#25d366]/40 text-[#25d366] mb-4">
+                                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#25d366]/20 border border-[#25d366]/40 text-[#25d366] mb-4 shadow-lg shadow-[#25d366]/20">
                                     <SparklesIcon className="h-8 w-8" />
                                 </div>
-                                <h3 className="text-xl font-black text-white">Interactive UI Feature Tour</h3>
-                                <p className="mt-2 text-xs leading-relaxed text-gray-300">
-                                    ऐप के सभी फीचर्स और सेटिंग्स को एक-एक करके <strong>ग्रीन बटन</strong> से क्लिक करके लाइव स्क्रीन पर समझें।
+                                <span className="inline-block rounded-full bg-[#25d366]/15 border border-[#25d366]/30 px-3 py-1 text-[11px] font-black text-[#25d366] uppercase tracking-wider mb-2">
+                                    Interactive Walkthrough
+                                </span>
+                                <h3 className="text-xl font-black text-white">Live Feature & Settings Tour</h3>
+                                <p className="mt-2 text-xs leading-relaxed text-gray-300 max-w-md mx-auto">
+                                    Experience an interactive walkthrough of all features and settings on your live screen with targeted reticles and the prominent <strong>Got it!</strong> action button.
                                 </p>
                                 <button
                                     type="button"
@@ -1025,23 +1028,23 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                             window.dispatchEvent(new CustomEvent('cheetchat-start-tour'));
                                         }, 150);
                                     }}
-                                    className="mt-5 w-full flex items-center justify-center gap-2 rounded-xl bg-[#25d366] hover:bg-[#20bd5a] text-[#07090c] font-black py-3.5 px-6 text-sm uppercase tracking-wider shadow-lg shadow-[#25d366]/30 ring-4 ring-[#25d366]/20 transition-all hover:scale-[1.01]"
+                                    className="mt-5 w-full flex items-center justify-center gap-2 rounded-xl bg-[#25d366] hover:bg-[#20bd5a] text-[#07090c] font-black py-4 px-6 text-sm uppercase tracking-wider shadow-[0_0_25px_rgba(37,211,102,0.35)] ring-4 ring-[#25d366]/20 transition-all hover:scale-[1.01]"
                                 >
-                                    <span>🎯 Live Green-Button Tour शुरू करें</span>
+                                    <span>🎯 Start Live "Got it!" Tour Now</span>
                                 </button>
                             </div>
 
                             <div>
-                                <h4 className="text-sm font-black text-[#25d366] uppercase tracking-wider mb-3">
-                                    सारे सेटिंग्स और फीचर्स की सम्पूर्ण जानकारी (Settings & Features Guide)
+                                <h4 className="text-xs font-black text-[#25d366] uppercase tracking-wider mb-3 flex items-center gap-2">
+                                    <span>⚡ Complete Feature & Settings Directory</span>
                                 </h4>
                                 <div className="space-y-3">
                                     <div className="rounded-2xl border border-white/5 bg-[#182229] p-4">
                                         <h5 className="text-sm font-bold text-white flex items-center gap-2">
                                             <span>💬 1. Chats & Snap Secret Mode</span>
                                         </h5>
-                                        <p className="mt-1 text-xs text-gray-400 leading-relaxed">
-                                            <strong>क्या होता है:</strong> एंड-टू-एंड एन्क्रिप्टेड चैट, ऑडियो नोट्स, डाक्यूमेंट्स व मीडिया शेयरिंग। सीक्रेट चैट के लिए स्नैप मोड ऑन करके ऑटो-डिलीट मैसेज भेज सकते हैं।
+                                        <p className="mt-1.5 text-xs text-gray-300 leading-relaxed">
+                                            <strong>Capabilities:</strong> End-to-end encrypted private messages, audio clips, documents, and media. Enable Snap Mode for self-destructing confidential conversations.
                                         </p>
                                     </div>
 
@@ -1049,17 +1052,17 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                         <h5 className="text-sm font-bold text-white flex items-center gap-2">
                                             <span>🎬 2. Reels & Short Videos</span>
                                         </h5>
-                                        <p className="mt-1 text-xs text-gray-400 leading-relaxed">
-                                            <strong>क्या होता है:</strong> कॉलेज और देशभर के ट्रेंडिंग वीडियो देखें, लाइक व शेयर करें और अपनी खुद की रील्स अपलोड करें।
+                                        <p className="mt-1.5 text-xs text-gray-300 leading-relaxed">
+                                            <strong>Capabilities:</strong> Discover campus and nationwide viral video trends, like, comment, and publish your own clips with music soundtracks.
                                         </p>
                                     </div>
 
                                     <div className="rounded-2xl border border-white/5 bg-[#182229] p-4">
                                         <h5 className="text-sm font-bold text-white flex items-center gap-2">
-                                            <span>🌐 3. Social Feed & Campus Hub</span>
+                                            <span>🌐 3. Campus Social & Feeds</span>
                                         </h5>
-                                        <p className="mt-1 text-xs text-gray-400 leading-relaxed">
-                                            <strong>क्या होता है:</strong> कॉलेज कम्युनिटी पोस्ट्स, पोल्स और विचार साझा करें। यहाँ से आप अपने कॉलेज और शहर के नए साथियों को फॉलो व कनेक्ट कर सकते हैं।
+                                        <p className="mt-1.5 text-xs text-gray-300 leading-relaxed">
+                                            <strong>Capabilities:</strong> Share college thoughts, student discussions, and launch community polls. Follow and connect with classmates in 1 click.
                                         </p>
                                     </div>
 
@@ -1067,44 +1070,44 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                         <h5 className="text-sm font-bold text-white flex items-center gap-2">
                                             <span>🎙️ 4. PodLive Voice Rooms</span>
                                         </h5>
-                                        <p className="mt-1 text-xs text-gray-400 leading-relaxed">
-                                            <strong>क्या होता है:</strong> लाइव ऑडियो रूम्स में ग्रुप डिस्कशन, डिबेट या बातचीत में भाग लें या अपना रूम होस्ट करें।
+                                        <p className="mt-1.5 text-xs text-gray-300 leading-relaxed">
+                                            <strong>Capabilities:</strong> Drop in or host live voice lounges, late-night campus debates, and group study rooms with stage speaker management.
                                         </p>
                                     </div>
 
                                     <div className="rounded-2xl border border-white/5 bg-[#182229] p-4">
                                         <h5 className="text-sm font-bold text-white flex items-center gap-2">
-                                            <span>✨ 5. Saskat AI Assistant</span>
+                                            <span>✨ 5. Saskat AI Copilot</span>
                                         </h5>
-                                        <p className="mt-1 text-xs text-gray-400 leading-relaxed">
-                                            <strong>क्या होता है:</strong> आपका 24x7 स्मार्ट एआई साथी — पढ़ाई, नोट्स, कोडिंग, सवाल-जवाब और इमेज जेनरेशन के लिए।
+                                        <p className="mt-1.5 text-xs text-gray-300 leading-relaxed">
+                                            <strong>Capabilities:</strong> 24/7 intelligent study tutor, coding mentor, and creative AI generator for essays, notes, and wallpapers.
                                         </p>
                                     </div>
 
                                     <div className="rounded-2xl border border-white/5 bg-[#182229] p-4">
                                         <h5 className="text-sm font-bold text-white flex items-center gap-2">
-                                            <span>👤 6. Profile & Campus Settings</span>
+                                            <span>👤 6. Campus Profile Settings</span>
                                         </h5>
-                                        <p className="mt-1 text-xs text-gray-400 leading-relaxed">
-                                            <strong>क्या होता है:</strong> प्रोफाइल फोटो, नाम, बायो, University/College और City/Location सेटिंग्स से कभी भी अपडेट कर सकते हैं ताकि सही लोग आपको खोज सकें।
+                                        <p className="mt-1.5 text-xs text-gray-300 leading-relaxed">
+                                            <strong>Capabilities:</strong> Update your University / College, City, Avatar, Bio, and unique @handle anytime so classmates can find you.
                                         </p>
                                     </div>
 
                                     <div className="rounded-2xl border border-white/5 bg-[#182229] p-4">
                                         <h5 className="text-sm font-bold text-white flex items-center gap-2">
-                                            <span>🔒 7. Privacy & Security (2FA)</span>
+                                            <span>🔒 7. Privacy & Two-Factor Security (2FA)</span>
                                         </h5>
-                                        <p className="mt-1 text-xs text-gray-400 leading-relaxed">
-                                            <strong>क्या होता है:</strong> Last Seen, Online Status, Profile Photo व Read Receipts को अपनी इच्छानुसार छुपाएं। टू-फैक्टर ऑथेंटिकेशन ऑन करके अकाउंट सुरक्षित रखें।
+                                        <p className="mt-1.5 text-xs text-gray-300 leading-relaxed">
+                                            <strong>Capabilities:</strong> Hide Last Seen, Online Status, Profile Photo, and Read Receipts. Activate 2FA to keep your account fully protected.
                                         </p>
                                     </div>
 
                                     <div className="rounded-2xl border border-white/5 bg-[#182229] p-4">
                                         <h5 className="text-sm font-bold text-white flex items-center gap-2">
-                                            <span>🎨 8. Chats Appearance & Wallpapers</span>
+                                            <span>🎨 8. Chat Appearance & Wallpapers</span>
                                         </h5>
-                                        <p className="mt-1 text-xs text-gray-400 leading-relaxed">
-                                            <strong>क्या होता है:</strong> कस्टम वॉलपेपर, बबल कलर्स, डार्क मोड और फॉन्ट स्टाइल को अपनी पसंद के अनुसार कस्टमाइज़ करें।
+                                        <p className="mt-1.5 text-xs text-gray-300 leading-relaxed">
+                                            <strong>Capabilities:</strong> Personalize chat bubble colors, dark mode themes, font sizing, and custom high-resolution wallpapers.
                                         </p>
                                     </div>
                                 </div>

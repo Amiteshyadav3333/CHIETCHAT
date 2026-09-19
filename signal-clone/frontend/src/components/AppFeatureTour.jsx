@@ -12,131 +12,140 @@ import {
     ArrowRightIcon,
     CheckCircleIcon,
     ShieldCheckIcon,
-    AcademicCapIcon
+    AcademicCapIcon,
+    LightBulbIcon,
+    HandThumbUpIcon
 } from '@heroicons/react/24/outline';
 
 export const TOUR_STEPS = [
     {
         id: 'chats',
-        title: '1. Chats & End-to-End Encryption (संदेश और बातचीत)',
-        subtitle: 'Secure, private, and instant communication',
-        badge: 'Private & Encrypted',
+        title: '1. Chats & Encrypted Messaging',
+        subtitle: 'Military-grade end-to-end encryption with instant media',
+        badge: 'COMMUNICATIONS CORE',
         icon: ChatBubbleLeftRightIcon,
         targetSelector: '[data-tour="chats"], [data-tour-mobile="chats"]',
-        description: 'यहाँ आप अपने दोस्तों, कॉलेज मेट्स और ग्रुप्स से सुरक्षित बातचीत कर सकते हैं।',
-        details: [
-            'End-to-End Encryption: आपके मैसेज केवल आप और सामने वाला व्यक्ति ही पढ़ सकता है।',
-            'Media & Documents: फ़ोटो, वीडियो, वॉइस नोट्स और डाक्यूमेंट्स तेज़ी से शेयर करें।',
-            'Disappearing Messages & Snap Mode: सीक्रेट चैट के लिए ऑटो-डिलीट मैसेज ऑन करें।'
+        whatItDoes: 'Your secure hub for private 1-on-1 chats, study groups, and campus team conversations.',
+        keyPowers: [
+            '🔒 End-to-End Encryption: Only you and the recipient have the cryptographic keys to read your messages.',
+            '⏱️ Ephemeral Snap Mode: Enable self-destructing messages that vanish instantly after being viewed.',
+            '🎙️ Voice Notes & HD Media: Send studio-quality voice clips, lecture PDFs, videos, and full-resolution photos.'
         ],
-        buttonText: 'अगला फीचर देखें → (Next Feature)'
+        proTip: 'Double tap any message to react with emojis, or swipe right to quote-reply instantly.',
+        buttonText: 'Got it! Next →'
     },
     {
         id: 'reels',
-        title: '2. Reels & Short Videos (रील्स और वीडियो)',
-        subtitle: 'Watch, create and discover campus trends',
-        badge: 'Entertainment & Viral',
+        title: '2. Reels & Short Videos',
+        subtitle: 'Campus trends, creator studio, and viral moments',
+        badge: 'VIRAL ENTERTAINMENT',
         icon: PlayIcon,
         targetSelector: '[data-tour="reels"], [data-tour-mobile="stories"]',
-        description: 'ट्रेंडिंग रील्स और शॉर्ट वीडियो का आनंद लें, लाइक करें और अपनी रील्स शेयर करें।',
-        details: [
-            'For You Feed: आपकी पसंद और कॉलेज से जुड़े ट्रेंडिंग वीडियो।',
-            'Creator Tools: अपनी आवाज़, म्यूजिक और फ़िल्टर के साथ रील्स बनाएं।',
-            'Interact: दोस्तों के साथ रील्स शेयर करें और कमेंट्स में चर्चा करें।'
+        whatItDoes: 'Watch, create, and share short viral video clips trending across your college and nationwide.',
+        keyPowers: [
+            '🎬 For-You Campus Feed: Algorithmic video stream tuned specifically for student humor, talents, and trends.',
+            '🎵 Creator Studio: Record with background music tracks, audio filters, and video effects.',
+            '💬 Social Synergy: Share your favorite reels directly into your batch group with a single tap.'
         ],
-        buttonText: 'अगला फीचर देखें → (Next Feature)'
+        proTip: 'Swipe up to transition to the next reel, or tap the sound badge to browse other videos using the same audio track.',
+        buttonText: 'Got it! Next →'
     },
     {
         id: 'social',
-        title: '3. Social Feed & Campus Hub (सोशल व कैंपस हब)',
-        subtitle: 'College community posts, polls & thoughts',
-        badge: 'Community & Networking',
+        title: '3. Campus Social & Feeds',
+        subtitle: 'College community posts, student thoughts & live polls',
+        badge: 'CAMPUS RADAR',
         icon: PhotoIcon,
         targetSelector: '[data-tour="social"]',
-        description: 'आपके कॉलेज और दोस्तों के पोस्ट, पोल्स, विचार और अपडेट्स का मुख्य केंद्र।',
-        details: [
-            'Campus Friends: अपनी यूनिवर्सिटी या शहर के नए लोगों को फॉलो करें।',
-            'Interactive Polls: ओपिनियन पोल्स बनाकर राय जानें।',
-            'Connect & Message: किसी भी पोस्ट से सीधे प्रोफाइल देखें और बातचीत शुरू करें।'
+        whatItDoes: 'The town square of your college — discover posts, ask batch questions, and launch student polls.',
+        keyPowers: [
+            '🎓 Campus Timeline: Filter feeds to view updates and announcements strictly from your university or city.',
+            '📊 Interactive Polls: Ask the campus community questions and gather real-time student sentiment.',
+            '🤝 1-Click Connect: Instantly follow or send contact requests to peers without awkward introductions.'
         ],
-        buttonText: 'अगला फीचर देखें → (Next Feature)'
+        proTip: 'Link your college in profile settings to unlock the verified campus badge next to your posts.',
+        buttonText: 'Got it! Next →'
     },
     {
         id: 'podlive',
-        title: '4. PodLive Voice Rooms (पॉडलाइव ऑडियो रूम)',
-        subtitle: 'Live audio discussions and campus stages',
-        badge: 'Live Audio',
+        title: '4. PodLive Voice Rooms',
+        subtitle: 'Drop-in audio stages, study lounges & live debates',
+        badge: 'LIVE AUDIO STAGE',
         icon: MicrophoneIcon,
         targetSelector: '[data-tour="podlive"], [data-tour-mobile="calls"]',
-        description: 'लाइव वॉइस रूम्स में हिस्सा लें या अपना खुद का लाइव ऑडियो रूम होस्ट करें।',
-        details: [
-            'Live Hangouts: ग्रुप स्टडी, डिबेट या बातचीत के लिए वॉइस रूम।',
-            'Raise Hand: स्टेज पर आकर बोलने के लिए हाथ उठाएं।',
-            'Listen & Chill: बैकग्राउंड में सुनते हुए बाकी काम भी कर सकते हैं।'
+        whatItDoes: 'Host or join live interactive audio stages — perfect for group study sessions, debates, or casual hangouts.',
+        keyPowers: [
+            '🎙️ Drop-in Audio: Jump into active voice rooms with crystal clear latency-free audio.',
+            '✋ Raise Hand: Request permission from hosts to step onto the stage and speak to the room.',
+            '🎧 Background Mode: Audio stays playing seamlessly while you multitask or browse other apps.'
         ],
-        buttonText: 'अगला फीचर देखें → (Next Feature)'
+        proTip: 'Start a private PodLive room with your study group right before exams for live problem solving.',
+        buttonText: 'Got it! Next →'
     },
     {
         id: 'ai',
-        title: '5. Saskat AI Assistant (स्मार्ट एआई साथी)',
-        subtitle: 'Your 24/7 personal study & query buddy',
-        badge: 'Artificial Intelligence',
+        title: '5. Saskat AI Copilot',
+        subtitle: 'Your 24/7 intelligent study tutor, coding mentor & creator',
+        badge: 'INTELLIGENCE SUITE',
         icon: SparklesIcon,
         targetSelector: '[data-tour="ai"]',
-        description: 'आपका स्मार्ट पर्सनल असिस्टेंट — कॉलेज स्टडी, कोडिंग, सवाल-जवाब और इमेज जेनरेशन के लिए।',
-        details: [
-            'Study & Homework: किसी भी टॉपिक का सरल स्पष्टीकरण और नोट्स पाएं।',
-            'Smart Search & Ideas: रोज़मर्रा के सवालों और राइटिंग में मदद लें।',
-            'Voice & Wallpaper AI: चैट अनुभव को पर्सनलाइज़ करने वाले एआई टूल्स।'
+        whatItDoes: 'A personalized AI companion built to help you ace homework, debug code, write essays, and make art.',
+        keyPowers: [
+            '📚 Homework & Math Solver: Ask complex questions and get step-by-step conceptual breakdowns.',
+            '💻 Code Mentor: Debug scripts, learn algorithms, and prep for technical placement interviews.',
+            '🎨 AI Wallpapers & Art: Generate customized imagery and personalized chat backgrounds.'
         ],
-        buttonText: 'अगला फीचर देखें → (Next Feature)'
+        proTip: 'Type "@saskat summarize" inside group chats to get instant lecture note summaries.',
+        buttonText: 'Got it! Next →'
     },
     {
         id: 'notify',
-        title: '6. Notifications (सूचनाएं और अलर्ट्स)',
-        subtitle: 'Stay updated with requests and activity',
-        badge: 'Alerts',
+        title: '6. Notifications & Alerts',
+        subtitle: 'Real-time campus connection requests and urgent updates',
+        badge: 'SYSTEM RADAR',
         icon: BellIcon,
         targetSelector: '[data-tour="notify"]',
-        description: 'कॉलेज कनेक्शन रिक्वेस्ट, नए फॉलोअर्स, मेंशन्स और लाइक्स के अलर्ट्स यहाँ मिलेंगे।',
-        details: [
-            'Connection Requests: कॉलेज साथियों की चैट व फॉलो रिक्वेस्ट तुरंत स्वीकार करें।',
-            'Unread Badge: बिना मिस किए सभी जरूरी अपडेट्स एक क्लिक में देखें।',
-            'Custom Alerts: नोटिफिकेशन साउंड्स और वाइब्रेशन को कस्टमाइज़ करें।'
+        whatItDoes: 'Never miss an important event — track classmate connection requests, mentions, and replies in real time.',
+        keyPowers: [
+            '🔔 Peer Requests: Review and accept connection requests from new classmates in 1 tap.',
+            '⚡ Live Activity Feed: Stay alerted whenever someone comments on your reel or mentions you.',
+            '🔕 Quiet Hours: Configure custom notification sounds or silent hours during study periods.'
         ],
-        buttonText: 'अगला फीचर देखें → (Next Feature)'
+        proTip: 'Tap directly on any notification badge to jump straight into the corresponding conversation.',
+        buttonText: 'Got it! Next →'
     },
     {
         id: 'new-chat',
-        title: '7. New Chat & Add Contacts (नया चैट और संपर्क खोजें)',
-        subtitle: 'Find classmates and start conversations',
-        badge: 'Connect',
+        title: '7. New Chat & Campus Search',
+        subtitle: 'Find classmates by @handle or phone number in seconds',
+        badge: 'FAST CONNECT',
         icon: PlusIcon,
         targetSelector: '[data-tour="new-chat"]',
-        description: 'अपने कॉलेज के साथियों को उनके @ID या फोन नंबर से खोजें और तुरंत चैट शुरू करें।',
-        details: [
-            'Search by @Handle or Phone: 10 अंकों का फोन नंबर या @ID डालें।',
-            'Direct Connect: संपर्क जुड़ते ही तुरंत सुरक्षित चैट विंडो खुल जाती है।',
-            'Create Groups: कॉलेज प्रोजेक्ट्स या स्टडी के लिए ग्रुप बनाएं।'
+        whatItDoes: 'Start a conversation with anyone on campus using their unique @platform ID or 10-digit mobile number.',
+        keyPowers: [
+            '🔍 Zero-Friction Lookup: Find any classmate instantly without needing their personal contact card.',
+            '👥 Class Group Builder: Create project, batch, or club groups with up to thousands of members.',
+            '🔗 Shareable Invite Links: Generate instant WhatsApp join links for your class group.'
         ],
-        buttonText: 'अगला फीचर: सेटिंग्स समझें → (Next: Settings)'
+        proTip: 'Use 10-digit mobile number search to quickly check if an old friend has already joined CHEETCHAT.',
+        buttonText: 'Got it! Next: Settings →'
     },
     {
         id: 'settings',
-        title: '8. Settings & Privacy (सेटिंग्स और गोपनीयता)',
-        subtitle: 'Master control center for privacy, themes & profile',
-        badge: 'Control Center',
+        title: '8. Settings & Privacy Master Hub',
+        subtitle: 'Master control center for privacy locks, 2FA, and campus identity',
+        badge: 'CONTROL VAULT',
         icon: Cog6ToothIcon,
         targetSelector: '[data-tour="settings"]',
-        description: 'ऐप का सबसे महत्वपूर्ण हिस्सा — यहाँ से आप प्राइवेसी, कॉलेज/लोकेशन, थीम्स और सुरक्षा सेट कर सकते हैं।',
-        details: [
-            '👤 Profile: फ़ोटो, नाम, बायो, University/College और Location अपडेट करें।',
-            '🔒 Privacy: Last Seen, Online Status, Profile Photo व Read Receipts छुपाएं।',
-            '🎨 Chats & Wallpapers: चैट थीम्स, कस्टम वॉलपेपर और फॉन्ट साइज़ बदलें।',
-            '🛡️ 2FA Security: टू-फैक्टर ऑथेंटिकेशन ऑन करके अकाउंट सुरक्षित रखें।',
-            '🌐 App Language: हिंदी सहित कई भारतीय भाषाओं में ऐप का उपयोग करें।'
+        whatItDoes: 'The command center for your CHEETCHAT account — configure privacy locks, college identity, and security.',
+        keyPowers: [
+            '👤 Campus Identity: Update your University, Department, Location, Avatar, and Bio anytime.',
+            '🔒 Privacy Shield: Hide your Last Seen, Online Status, Profile Photo, and Read Receipts.',
+            '🛡️ 2-Factor Authentication: Safeguard your conversations with biometric and PIN-based 2FA security.',
+            '🎨 Custom Themes: Choose custom dark mode aesthetics, bubble colors, and wallpapers.'
         ],
-        buttonText: 'सेटिंग्स खोलकर देखें (Open Settings) ✓',
+        proTip: 'Head to Settings > Privacy to make your online presence completely invisible to non-contacts.',
+        buttonText: 'Got it! Open Settings ⚙️',
         isFinal: true
     }
 ];
@@ -149,11 +158,14 @@ export const AppFeatureTour = ({
 }) => {
     const [currentStepIndex, setCurrentStepIndex] = useState(0);
     const [spotlightRect, setSpotlightRect] = useState(null);
+    const [isAnimating, setIsAnimating] = useState(false);
 
+    const totalSteps = TOUR_STEPS.length;
     const step = TOUR_STEPS[currentStepIndex] || TOUR_STEPS[0];
     const Icon = step.icon;
+    const progressPercent = Math.round(((currentStepIndex + 1) / totalSteps) * 100);
 
-    // Calculate spotlight position
+    // Calculate spotlight position dynamically
     useEffect(() => {
         if (!isOpen) return;
 
@@ -186,17 +198,21 @@ export const AppFeatureTour = ({
 
     if (!isOpen) return null;
 
-    const handleNext = () => {
-        if (currentStepIndex < TOUR_STEPS.length - 1) {
-            setCurrentStepIndex(i => i + 1);
-        } else {
-            // Completed
-            localStorage.setItem('cheetchat_tour_completed', '1');
-            onClose();
-            if (onOpenSettings) {
-                onOpenSettings();
+    const handleGotIt = () => {
+        setIsAnimating(true);
+        setTimeout(() => {
+            setIsAnimating(false);
+            if (currentStepIndex < totalSteps - 1) {
+                setCurrentStepIndex(i => i + 1);
+            } else {
+                // Completed tutorial quest
+                localStorage.setItem('cheetchat_tour_completed', '1');
+                onClose();
+                if (onOpenSettings) {
+                    onOpenSettings();
+                }
             }
-        }
+        }, 150);
     };
 
     const handlePrev = () => {
@@ -211,87 +227,134 @@ export const AppFeatureTour = ({
     };
 
     return (
-        <div className="fixed inset-0 z-[120] overflow-y-auto flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-md transition-all">
+        <div className="fixed inset-0 z-[120] overflow-y-auto flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md transition-all select-none">
             {/* Spotlight cut-out ring if target element exists */}
             {spotlightRect && (
-                <div
-                    style={{
-                        position: 'fixed',
-                        top: Math.max(0, spotlightRect.top - 8),
-                        left: Math.max(0, spotlightRect.left - 8),
-                        width: spotlightRect.width + 16,
-                        height: spotlightRect.height + 16,
-                        pointerEvents: 'none',
-                        zIndex: 121,
-                        borderRadius: '18px',
-                        boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.75), 0 0 25px 5px #25d366'
-                    }}
-                    className="animate-pulse"
-                />
+                <>
+                    <div
+                        style={{
+                            position: 'fixed',
+                            top: Math.max(0, spotlightRect.top - 8),
+                            left: Math.max(0, spotlightRect.left - 8),
+                            width: spotlightRect.width + 16,
+                            height: spotlightRect.height + 16,
+                            pointerEvents: 'none',
+                            zIndex: 121,
+                            borderRadius: '16px',
+                            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.82), 0 0 30px 6px #25d366'
+                        }}
+                        className="animate-pulse"
+                    />
+                    {/* Targeting Reticle Label */}
+                    <div
+                        style={{
+                            position: 'fixed',
+                            top: Math.max(8, spotlightRect.top - 34),
+                            left: Math.max(8, spotlightRect.left),
+                            zIndex: 122,
+                            pointerEvents: 'none'
+                        }}
+                        className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#25d366] text-black font-black text-[10px] tracking-wider uppercase shadow-lg shadow-[#25d366]/40"
+                    >
+                        <span className="h-1.5 w-1.5 rounded-full bg-black animate-ping" />
+                        <span>TARGET ACTIVE</span>
+                    </div>
+                </>
             )}
 
-            {/* Tour card */}
-            <div className="relative z-[130] w-full max-w-lg rounded-3xl border-2 border-[#25d366]/40 bg-[#111b21] shadow-2xl shadow-[#25d366]/20 overflow-hidden text-white animate-in fade-in zoom-in-95 duration-200">
-                {/* Header banner */}
-                <div className="bg-gradient-to-r from-[#0b141a] via-[#162923] to-[#00a884]/30 px-6 pt-6 pb-5 border-b border-white/10 relative">
+            {/* Modern Gaming HUD Card */}
+            <div className={`relative z-[130] w-full max-w-lg rounded-3xl border-2 border-[#25d366]/50 bg-[#0d151a]/95 backdrop-blur-xl shadow-[0_0_50px_rgba(37,211,102,0.2)] overflow-hidden text-white transition-transform duration-200 ${
+                isAnimating ? 'scale-[0.98] opacity-90' : 'scale-100 opacity-100'
+            }`}>
+                {/* Gaming HUD Top Bar: Mission Progress & XP */}
+                <div className="bg-gradient-to-r from-[#0b141a] via-[#14261f] to-[#00a884]/25 px-6 pt-5 pb-4 border-b border-white/10">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                            <span className="flex h-3 w-3 relative">
+                            <span className="flex h-2.5 w-2.5 relative">
                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#25d366] opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-3 w-3 bg-[#25d366]"></span>
+                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#25d366]"></span>
                             </span>
-                            <span className="text-xs font-black uppercase tracking-widest text-[#25d366]">
-                                CHEETCHAT UI TOUR & SETTINGS GUIDE
+                            <span className="text-[11px] font-black uppercase tracking-widest text-[#25d366]">
+                                TUTORIAL MISSION • LEVEL {currentStepIndex + 1} OF {totalSteps}
                             </span>
                         </div>
                         <button
                             onClick={handleSkip}
                             className="rounded-full p-1.5 text-gray-400 hover:text-white hover:bg-white/10 transition"
-                            title="Skip Tour"
+                            title="Skip Tutorial"
                         >
                             <XMarkIcon className="h-5 w-5" />
                         </button>
                     </div>
 
+                    {/* Animated XP Progress Bar */}
+                    <div className="mt-3">
+                        <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 mb-1">
+                            <span>EXPLORATION PROGRESS</span>
+                            <span className="text-[#25d366]">{progressPercent}% COMPLETE</span>
+                        </div>
+                        <div className="h-2 w-full rounded-full bg-black/60 border border-white/10 overflow-hidden p-0.5">
+                            <div
+                                className="h-full rounded-full bg-gradient-to-r from-[#10b981] to-[#25d366] shadow-[0_0_12px_#25d366] transition-all duration-300"
+                                style={{ width: `${progressPercent}%` }}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Feature Badge & Icon Header */}
                     <div className="mt-4 flex items-center gap-4">
-                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#25d366]/20 border border-[#25d366]/40 text-[#25d366] shadow-lg shadow-[#25d366]/10">
+                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#25d366]/20 border border-[#25d366]/50 text-[#25d366] shadow-lg shadow-[#25d366]/20">
                             <Icon className="h-8 w-8" />
                         </div>
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <span className="rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-bold text-gray-300 uppercase">
-                                    {step.badge}
-                                </span>
-                                <span className="text-xs font-semibold text-emerald-400">
-                                    Feature {currentStepIndex + 1} of {TOUR_STEPS.length}
-                                </span>
-                            </div>
-                            <h2 className="mt-1 text-lg sm:text-xl font-black text-white leading-snug">
+                        <div className="min-w-0">
+                            <span className="inline-block rounded-md bg-[#25d366]/15 border border-[#25d366]/30 px-2 py-0.5 text-[10px] font-black text-[#25d366] uppercase tracking-wider mb-1">
+                                {step.badge}
+                            </span>
+                            <h2 className="text-lg sm:text-xl font-black text-white leading-snug truncate">
                                 {step.title}
                             </h2>
+                            <p className="text-xs text-gray-400 truncate">
+                                {step.subtitle}
+                            </p>
                         </div>
                     </div>
                 </div>
 
-                {/* Body Content */}
+                {/* HUD Body Content */}
                 <div className="p-6 space-y-4">
-                    <p className="text-sm font-medium text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3.5 py-2.5">
-                        {step.description}
-                    </p>
+                    {/* What it does */}
+                    <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/25 p-3.5">
+                        <p className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1">
+                            What this feature does:
+                        </p>
+                        <p className="text-xs sm:text-sm font-medium text-gray-200 leading-relaxed">
+                            {step.whatItDoes}
+                        </p>
+                    </div>
 
-                    <div className="space-y-2 rounded-2xl bg-[#182229] border border-white/5 p-4">
-                        <p className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
+                    {/* Key Powers / Mechanics */}
+                    <div className="space-y-2 rounded-2xl bg-[#141f26] border border-white/10 p-4">
+                        <p className="text-xs font-black uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
                             <ShieldCheckIcon className="h-4 w-4 text-[#25d366]" />
-                            इस फीचर / सेटिंग से क्या होता है (What this does):
+                            <span>Core Powers & Capabilities:</span>
                         </p>
                         <ul className="space-y-2 pt-1">
-                            {step.details.map((detail, idx) => (
+                            {step.keyPowers.map((power, idx) => (
                                 <li key={idx} className="flex items-start gap-2.5 text-xs sm:text-sm text-gray-300 leading-relaxed">
-                                    <span className="text-[#25d366] font-bold shrink-0 mt-0.5">✓</span>
-                                    <span>{detail}</span>
+                                    <span className="text-[#25d366] font-bold shrink-0 mt-0.5">⚡</span>
+                                    <span>{power}</span>
                                 </li>
                             ))}
                         </ul>
+                    </div>
+
+                    {/* Pro Gamer / Power Tip */}
+                    <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 px-3.5 py-2.5 flex items-start gap-2 text-xs text-amber-200">
+                        <LightBulbIcon className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
+                        <div>
+                            <strong className="text-amber-300">Pro Tip: </strong>
+                            <span>{step.proTip}</span>
+                        </div>
                     </div>
 
                     {user?.college && (
@@ -301,41 +364,42 @@ export const AppFeatureTour = ({
                         </div>
                     )}
 
-                    {/* Progress dots */}
-                    <div className="flex items-center justify-center gap-1.5 pt-2">
+                    {/* Step Navigation Dots */}
+                    <div className="flex items-center justify-center gap-1.5 pt-1">
                         {TOUR_STEPS.map((_, i) => (
                             <button
                                 key={i}
                                 onClick={() => setCurrentStepIndex(i)}
                                 className={`h-2 rounded-full transition-all ${
                                     i === currentStepIndex
-                                        ? 'w-6 bg-[#25d366]'
+                                        ? 'w-7 bg-[#25d366]'
                                         : 'w-2 bg-gray-600 hover:bg-gray-400'
                                 }`}
-                                title={`Go to step ${i + 1}`}
+                                title={`Jump to mission step ${i + 1}`}
                             />
                         ))}
                     </div>
 
-                    {/* Action buttons */}
-                    <div className="flex flex-col sm:flex-row items-center gap-3 pt-3">
+                    {/* Interactive Action Buttons */}
+                    <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
                         {currentStepIndex > 0 && (
                             <button
                                 type="button"
                                 onClick={handlePrev}
                                 className="w-full sm:w-auto px-4 py-3.5 rounded-xl border border-white/15 bg-white/5 text-gray-300 text-sm font-semibold hover:bg-white/10 transition"
                             >
-                                ← पिछला (Back)
+                                ← Back
                             </button>
                         )}
 
-                        {/* Prominent Green Button as requested by user */}
+                        {/* Modern Game Style "Got it!" Green Button */}
                         <button
                             type="button"
                             id="tour-green-action-btn"
-                            onClick={handleNext}
-                            className="flex-1 w-full flex items-center justify-center gap-2 rounded-xl bg-[#25d366] hover:bg-[#20bd5a] text-[#07090c] font-black py-3.5 px-6 text-sm tracking-wide uppercase shadow-lg shadow-[#25d366]/30 ring-4 ring-[#25d366]/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                            onClick={handleGotIt}
+                            className="flex-1 w-full flex items-center justify-center gap-2 rounded-xl bg-[#25d366] hover:bg-[#20bd5a] text-[#07090c] font-black py-4 px-6 text-sm sm:text-base tracking-wide uppercase shadow-[0_0_25px_rgba(37,211,102,0.4)] ring-4 ring-[#25d366]/25 transition-all hover:scale-[1.02] active:scale-[0.97]"
                         >
+                            <HandThumbUpIcon className="h-5 w-5" />
                             <span>{step.buttonText}</span>
                             {step.isFinal ? (
                                 <CheckCircleIcon className="h-5 w-5" />
@@ -350,9 +414,9 @@ export const AppFeatureTour = ({
                             onClick={handleSkip}
                             className="hover:text-gray-200 underline decoration-gray-600 underline-offset-2"
                         >
-                            टूर छोड़ें (Skip Tour)
+                            Skip Tutorial
                         </button>
-                        <span>बाद में सेटिंग्स से कभी भी देख सकते हैं</span>
+                        <span>You can replay this tutorial anytime from Settings</span>
                     </div>
                 </div>
             </div>

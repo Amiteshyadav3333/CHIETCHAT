@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { clearPodLiveSession, ensurePodLiveSession } from './auth/usePodLiveSession';
-import { PODLIVE_API_URL, PODLIVE_STORAGE } from './config';
+import { PODLIVE_API_URL, PODLIVE_SOCKET_URL, PODLIVE_STORAGE } from './config';
 
 // Keeps the PodLive identity reachable while the user is anywhere in CHEETCHAT.
 // Without this bridge, stage invites only arrive after PodLive is already open.
@@ -65,7 +65,7 @@ export default function PodLiveInviteBridge({ active, onInvite, onLiveStatus }) 
             if (cancelled || !user?.id) return;
             const token = localStorage.getItem(PODLIVE_STORAGE.token);
             if (!token) return;
-            socket = io(PODLIVE_API_URL, { auth: { token }, transports: ['websocket', 'polling'] });
+            socket = io(PODLIVE_SOCKET_URL, { auth: { token }, transports: ['websocket', 'polling'] });
             socket.on('connect', () => {
                 socket.emit('register_user', user.id);
                 refreshAll();

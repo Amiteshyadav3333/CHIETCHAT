@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
-import { PODLIVE_API_URL, PODLIVE_STORAGE } from '../config';
+import { PODLIVE_SOCKET_URL, PODLIVE_STORAGE } from '../config';
 
 export default function usePodLiveSocket(sessionId, user) {
     const [viewerCount, setViewerCount] = useState(0);
@@ -12,7 +12,7 @@ export default function usePodLiveSocket(sessionId, user) {
     useEffect(() => {
         const token = localStorage.getItem(PODLIVE_STORAGE.token);
         if (!token || !user?.id) return undefined;
-        const socket = io(PODLIVE_API_URL, { auth: { token }, transports: ['websocket', 'polling'] });
+        const socket = io(PODLIVE_SOCKET_URL, { auth: { token }, transports: ['websocket', 'polling'] });
         socketRef.current = socket;
         const join = () => {
             socket.emit('register_user', user.id);

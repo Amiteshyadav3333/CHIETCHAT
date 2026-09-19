@@ -17,8 +17,15 @@ const saveSession = (data) => {
     return data.user;
 };
 
-const exchangeCheetchatSession = async () => {
-    const { data: ticketData } = await axios.post('/api/auth/podlive-sso');
+const exchangeCheetchatSession = async (cheetchatToken) => {
+    const headers = {};
+    const effectiveToken = cheetchatToken && cheetchatToken !== 'cookie-session'
+        ? cheetchatToken
+        : (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('cheetchat_legacy_token') : null);
+    if (effectiveToken && effectiveToken !== 'cookie-session') {
+        headers.Authorization = `Bearer ${effectiveToken}`;
+    }
+    const { data: ticketData } = await axios.post('/api/auth/podlive-sso', {}, { headers, timeout: 15000 });
     const { data } = await axios.post(
         `${PODLIVE_API_URL}/api/auth/sso/cheetchat`,
         { ticket: ticketData.ticket },
@@ -27,7 +34,7 @@ const exchangeCheetchatSession = async () => {
     return saveSession(data);
 };
 
-export const ensurePodLiveSession = ({ validate = false } = {}) => {
+export const ensurePodLiveSession = ({ validate = false, cheetchatToken = null } = {}) => {
     if (pendingSession) return pendingSession;
     pendingSession = (async () => {
         const token = localStorage.getItem(PODLIVE_STORAGE.token);
@@ -45,26 +52,30 @@ export const ensurePodLiveSession = ({ validate = false } = {}) => {
                 clearPodLiveSession();
             }
         }
-        return exchangeCheetchatSession();
+        return exchangeCheetchatSession(cheetchatToken);
     })().finally(() => { pendingSession = null; });
     return pendingSession;
 };
 
-export const primePodLiveSession = () => ensurePodLiveSession().catch(() => null);
+export const primePodLiveSession = (cheetchatToken) => ensurePodLiveSession({ cheetchatToken }).catch(() => null);
 
-export default function usePodLiveSession(active) {
+export default function usePodLiveSession(active, cheetchatToken = null) {
     const cachedUser = readUser();
     const [state, setState] = useState({ loading: !cachedUser, user: cachedUser, error: '' });
     const connect = useCallback(async () => {
         setState((current) => ({ ...current, loading: !current.user, error: '' }));
         try {
-            const user = await ensurePodLiveSession({ validate: true });
+            const user = await ensurePodLiveSession({ validate: true, cheetchatToken });
             setState({ loading: false, user, error: '' });
         } catch (error) {
             clearPodLiveSession();
-            setState({ loading: false, user: null, error: error?.response?.data?.error || 'PodLive could not connect to your CHEETCHAT account.' });
+            const message = error?.response?.data?.error
+                || (error?.code === 'ERR_NETWORK' ? 'Network or connection error reaching PodLive. Please try again.' : '')
+                || error?.message
+                || 'PodLive could not connect to your CHEETCHAT account.';
+            setState({ loading: false, user: null, error: message });
         }
-    }, []);
+    }, [cheetchatToken]);
     useEffect(() => { if (active) connect(); }, [active, connect]);
     return { ...state, retry: connect };
 }

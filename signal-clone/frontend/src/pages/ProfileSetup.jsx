@@ -182,7 +182,7 @@ const ProfileSetup = () => {
     };
 
     const handleCreateClassGroup = async () => {
-        const groupName = classGroupName.trim() || `${college || 'Campus'} Freshers 2026`;
+        const groupName = classGroupName.trim() || `${college || 'Campus'} Study & Coding Group`;
         setCreatingGroup(true);
         try {
             const res = await axios.post('/api/chats/create', {
@@ -195,7 +195,7 @@ const ProfileSetup = () => {
             const chatId = res.data.id;
             const referralCode = user?.referralCode || '';
             const inviteUrl = `${window.location.origin}/signup?ref=${referralCode}&group=${chatId}`;
-            const shareText = `🎓 Hey classmates! Maine hamari class/batch ka official group '${groupName}' banaya hai CHEETCHAT par.\n\nSabhi log yahan jud jao:\n${inviteUrl}\n\n🎁 Join karne par sabko 15 Din Free Premium milega!`;
+            const shareText = `💻 Hey! Maine CHEETCHAT par hamara study & coding group '${groupName}' banaya hai taaki hum coding problems solve kar sakein aur batchmates se connect karein.\n\nSabhi log yahan jud jao:\n${inviteUrl}\n\n🎁 Join karne par sabko 15 Din Free Premium + Aria & Arjun AI assistant milega!`;
 
             window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
             setGroupCreated(true);
@@ -210,8 +210,16 @@ const ProfileSetup = () => {
         const referralCode = user?.referralCode || '';
         const inviteUrl = `${window.location.origin}/signup?ref=${referralCode}`;
         const campusText = college ? `apne college (${college})` : 'campus';
-        const shareText = `Hey! Mai ${campusText} ke classmates ke saath CHEETCHAT par jud gaya hoon. Tum bhi join karo aur free 15 din Premium pao:\n${inviteUrl}`;
+        const shareText = `Hey! Mai ${campusText} ke classmates ke saath CHEETCHAT par jud gaya hoon. Yahan apna group banayein, coding problems solve karein aur Aria & Arjun AI se baat karein! Tum bhi judo aur 15 din Free Premium pao:\n${inviteUrl}`;
         window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
+    };
+
+    const handleShareTelegram = () => {
+        const referralCode = user?.referralCode || '';
+        const inviteUrl = `${window.location.origin}/signup?ref=${referralCode}`;
+        const campusText = college ? `apne college (${college})` : 'campus';
+        const shareText = `Hey! Mai ${campusText} ke classmates ke saath CHEETCHAT par jud gaya hoon. Yahan apna group banayein, coding problems solve karein aur Aria & Arjun AI se baat karein! Tum bhi judo aur 15 din Free Premium pao:\n${inviteUrl}`;
+        window.open(`https://t.me/share/url?url=${encodeURIComponent(inviteUrl)}&text=${encodeURIComponent(shareText)}`, '_blank');
     };
 
     const handlePickContacts = async () => {
@@ -623,13 +631,13 @@ const ProfileSetup = () => {
                                     )}
                                 </div>
 
-                                {/* Feature 2: Instant Class Group Creation */}
+                                {/* Feature 2: Instant Study & Coding Group Creation */}
                                 <div className="rounded-2xl border border-violet-500/30 bg-violet-500/10 p-4 space-y-3">
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                             <UserGroupIcon className="h-5 w-5 text-violet-400" />
                                             <h3 className="text-sm font-black text-white">
-                                                Bring Your Class Group Here (Instant Group)
+                                                Create Study & Coding Group (Solve Problems Together)
                                             </h3>
                                         </div>
                                         <span className="rounded bg-violet-500/20 text-violet-300 px-2 py-0.5 text-[10px] font-bold">
@@ -637,14 +645,14 @@ const ProfileSetup = () => {
                                         </span>
                                     </div>
                                     <p className="text-xs text-gray-300 leading-relaxed">
-                                        Create your batch group and 1-click share to WhatsApp. When 3 classmates join, get <strong>15 Days Free Premium + Creator Badge</strong>!
+                                        Build your coding or batch group, solve programming problems together, and get instant answers from <strong>Aria & Arjun AI</strong>. Invite friends via WhatsApp & Telegram to earn <strong>15 Days Free Premium</strong>!
                                     </p>
                                     <div className="flex flex-col sm:flex-row gap-2">
                                         <input
                                             type="text"
                                             value={classGroupName}
                                             onChange={(e) => setClassGroupName(e.target.value)}
-                                            placeholder="Group Name: e.g. DU B.Com Batch 2026"
+                                            placeholder="Group Name: e.g. DU CS Coding & DSA Batch 2026"
                                             className="flex-1 rounded-xl border border-gray-700 bg-[#202c33] px-3.5 py-2.5 text-xs text-white outline-none focus:border-violet-400"
                                         />
                                         <button
@@ -682,7 +690,7 @@ const ProfileSetup = () => {
                                         </div>
                                     </div>
 
-                                    {/* Big WhatsApp / Contacts Buttons */}
+                                    {/* Big WhatsApp / Telegram / Contacts Buttons */}
                                     <div className="flex flex-col sm:flex-row gap-2 pt-1">
                                         <button
                                             type="button"
@@ -690,7 +698,17 @@ const ProfileSetup = () => {
                                             className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-[#25d366] hover:bg-[#20bd5a] text-[#07090c] font-black py-3 px-4 text-xs uppercase tracking-wider shadow-lg shadow-[#25d366]/20 transition active:scale-95"
                                         >
                                             <ShareIcon className="h-4 w-4" />
-                                            <span>Invite Classmates via WhatsApp</span>
+                                            <span>WhatsApp</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={handleShareTelegram}
+                                            className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-[#229ED9] hover:bg-[#1d8dc4] text-white font-black py-3 px-4 text-xs uppercase tracking-wider shadow-lg shadow-[#229ED9]/20 transition active:scale-95"
+                                        >
+                                            <svg className="h-4 w-4 fill-current" viewBox="0 0 24 24">
+                                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.52 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .37z" />
+                                            </svg>
+                                            <span>Telegram</span>
                                         </button>
                                         <button
                                             type="button"
@@ -698,7 +716,7 @@ const ProfileSetup = () => {
                                             className="flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 text-white font-bold py-3 px-4 text-xs transition active:scale-95"
                                         >
                                             <PhoneIcon className="h-4 w-4 text-gray-300" />
-                                            <span>Phone Contacts</span>
+                                            <span>Contacts</span>
                                         </button>
                                     </div>
                                 </div>

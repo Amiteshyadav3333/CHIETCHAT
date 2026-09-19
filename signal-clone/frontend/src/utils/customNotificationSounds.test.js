@@ -85,4 +85,18 @@ describe('customNotificationSounds', () => {
         expect(setting.presetId).toBe('default');
         expect(setting.hasCustomAudio).toBe(false);
     });
+
+    it('supports global sound settings and presets', () => {
+        const { getGlobalSoundSetting, setGlobalSoundPreset } = require('./customNotificationSounds');
+        const initial = getGlobalSoundSetting('msg');
+        expect(initial.presetId).toBe('default');
+
+        setGlobalSoundPreset('msg', 'chime');
+        const updated = getGlobalSoundSetting('msg');
+        expect(updated.presetId).toBe('chime');
+
+        setGlobalSoundPreset('call', 'zen');
+        const callUpdated = getGlobalSoundSetting('call');
+        expect(callUpdated.presetId).toBe('zen');
+    });
 });

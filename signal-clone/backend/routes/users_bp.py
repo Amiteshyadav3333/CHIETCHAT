@@ -262,10 +262,13 @@ def ensure_college_lobby_and_welcome(user):
         peer_handles = [f"@{p.platform_id or p.username}" for p in peers if p.platform_id or p.username]
         peer_hint = f"\n\n🏫 Aapke college se yeh log bhi hain: {', '.join(peer_handles)} — inhe Hi bolein!" if peer_handles else ""
 
+        invite_code = user.referral_code or ensure_referral_code(user)
         welcome_text = (
             f"👋 Namaste {user.username}! CHEETCHAT Campus Network par aapka swagat hai.\n\n"
             f"✅ Humne aapko '{lobby_name}' me jod diya hai taaki aap turant classmates aur batchmates se baatein shuru kar sakein.{peer_hint}\n\n"
-            f"🎁 15 Days Free Premium Reward: Apna invite code `{user.referral_code or ensure_referral_code(user)}` share karein ya 'Create Class Group' se doston ko WhatsApp par bulayein!"
+            f"🎁 15 Days Free Premium Reward: Doston ko WhatsApp aur Telegram se CHEETCHAT par bulayein (Invite Code: `{invite_code}`).\n\n"
+            f"💻 Apna group banayein aur coding problems solve karein!\n"
+            f"✨ Aria aur Arjun AI se baat karein aur instant help paayein!"
         )
 
         existing_welcome = Message.query.filter_by(chat_id=bot_chat.id, sender_id=bot.id).first()

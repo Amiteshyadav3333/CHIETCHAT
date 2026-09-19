@@ -116,6 +116,42 @@ export async function saveCustomAudioFile(chatId, type, file) {
 }
 
 /**
+ * Save global custom audio (song/tone) for message or call ringtone
+ */
+export async function saveGlobalCustomAudio(type, file) {
+    if (!file) return null;
+    return saveCustomAudioFile('global', type, file);
+}
+
+/**
+ * Get global custom audio data URL
+ */
+export async function getGlobalCustomAudio(type) {
+    return getStoredAudioData('global', type);
+}
+
+/**
+ * Get global sound setting
+ */
+export function getGlobalSoundSetting(type) {
+    return getSoundSetting('global', type);
+}
+
+/**
+ * Remove global custom audio
+ */
+export async function removeGlobalCustomAudio(type) {
+    return removeCustomAudio('global', type);
+}
+
+/**
+ * Set global sound preset
+ */
+export function setGlobalSoundPreset(type, presetId) {
+    return setSoundPreset('global', type, presetId);
+}
+
+/**
  * Remove custom audio for a chat
  */
 export async function removeCustomAudio(chatId, type) {
@@ -410,16 +446,22 @@ export async function playMessageNotification(chatId, { isMuted = false } = {}) 
         return;
     }
 
-    // 3. Fallback to global custom audio if set in Settings
-    const globalAudio = typeof localStorage !== 'undefined' ? localStorage.getItem('custom_notification_audio') : null;
+    // 3. Fallback to global custom audio (IndexedDB or localStorage) if set in Settings
+    const globalAudio = (await getGlobalCustomAudio('msg')) || (typeof localStorage !== 'undefined' ? localStorage.getItem('custom_notification_audio') : null);
     if (globalAudio) {
         try {
             const audio = new Audio(globalAudio);
             await audio.play();
             return;
         } catch {
-            // fall through to default synth
+            // fall through to global preset or default
         }
+    }
+
+    const globalSetting = getGlobalSoundSetting('msg');
+    if (globalSetting.presetId && globalSetting.presetId !== 'default' && globalSetting.presetId !== 'custom') {
+        synthesizeMessagePreset(globalSetting.presetId);
+        return;
     }
 
     // 4. Default synth tone
@@ -476,8 +518,42 @@ export function startCallRingtone(chatId, { playSound = true } = {}) {
         return controller;
     }
 
-    // Otherwise play synthesized call ringtone preset
-    activePlayer = synthesizeCallPreset(setting.presetId || 'default');
+    // Check if per-chat preset is set
+    if (setting.presetId && setting.presetId !== 'default' && setting.presetId !== 'custom') {
+        activePlayer = synthesizeCallPreset(setting.presetId);
+        return controller;
+    }
+
+    // Otherwise check global custom call ringtone song
+    const globalSetting = getGlobalSoundSetting('call');
+    if (globalSetting.hasCustomAudio) {
+        getGlobalCustomAudio('call').then((audioData) => {
+            if (stopped) return;
+            if (audioData) {
+                try {
+                    const audio = new Audio(audioData);
+                    audio.loop = true;
+                    audio.play().catch(() => {
+                        if (!stopped) activePlayer = synthesizeCallPreset(globalSetting.presetId || 'default');
+                    });
+                    activePlayer = audio;
+                    return;
+                } catch {
+                    // fall back
+                }
+            }
+            if (!stopped) activePlayer = synthesizeCallPreset(globalSetting.presetId || 'default');
+        });
+        return controller;
+    }
+
+    if (globalSetting.presetId && globalSetting.presetId !== 'default' && globalSetting.presetId !== 'custom') {
+        activePlayer = synthesizeCallPreset(globalSetting.presetId);
+        return controller;
+    }
+
+    // Otherwise play synthesized default call ringtone preset
+    activePlayer = synthesizeCallPreset('default');
     return controller;
 }
 

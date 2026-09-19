@@ -941,8 +941,14 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         setIsRecording(false);
     };
 
-    // Quick prompt suggestions based on AI gender
-    const quickPrompts = ["hmm", "kya kar rhe ho?", "suno na", "interview ki taiyari kara do", "aaj mood off hai"];
+    // Quick prompt suggestions based on coding, study and companionship
+    const quickPrompts = [
+        "💻 Coding problem solve kara do",
+        "Python / Java bug explain karo",
+        "DSA / Algorithm logic samjhao",
+        "kya kar rhe ho?",
+        "interview ki taiyari kara do"
+    ];
 
     const storedGender = (userGender || user?.gender || localStorage.getItem('user_gender') || '').toLowerCase();
     const isFemaleUser = storedGender === 'female';
@@ -1818,6 +1824,61 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                 <button className="ai-mode-btn ai-mode-btn--active" onClick={() => inputRef.current?.focus()}>💬 Chat</button>
                 <button className="ai-mode-btn" onClick={startCall}><PhoneIcon style={{ width: 15, height: 15 }} /> Voice call</button>
                 <button className="ai-mode-btn" onClick={startVideoCall}>📹 Video call</button>
+
+                {/* Switch between Aria & Arjun */}
+                <div style={{ display: 'inline-flex', alignItems: 'center', background: 'rgba(255,255,255,0.08)', borderRadius: 20, padding: '2px 4px', gap: 2 }}>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setBotInfo(prev => ({
+                                ...(prev || {}),
+                                name: 'Aria',
+                                avatar: '/ai/aria-royal.jpg',
+                                bio: 'Main Aria hoon — teri apni AI companion ✨'
+                            }));
+                            setUserGender('male');
+                        }}
+                        style={{
+                            border: 'none',
+                            background: !isArjun ? '#c084fc' : 'transparent',
+                            color: !isArjun ? '#000' : '#d1d5db',
+                            fontWeight: 700,
+                            fontSize: 11,
+                            padding: '3px 8px',
+                            borderRadius: 14,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                        }}
+                    >
+                        ✨ Aria
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setBotInfo(prev => ({
+                                ...(prev || {}),
+                                name: 'Arjun',
+                                avatar: '/ai/arjun-royal.jpg',
+                                bio: 'Tera dost Arjun — hamesha yahan hoon tere liye 💙'
+                            }));
+                            setUserGender('female');
+                        }}
+                        style={{
+                            border: 'none',
+                            background: isArjun ? '#60a5fa' : 'transparent',
+                            color: isArjun ? '#000' : '#d1d5db',
+                            fontWeight: 700,
+                            fontSize: 11,
+                            padding: '3px 8px',
+                            borderRadius: 14,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                        }}
+                    >
+                        💙 Arjun
+                    </button>
+                </div>
+
                 <select className="ai-language-select" value={language} onChange={event => setLanguage(event.target.value)} aria-label="AI response language">
                     {AI_LANGUAGES.map(item => <option key={item.code} value={item.code}>{item.label}</option>)}
                 </select>

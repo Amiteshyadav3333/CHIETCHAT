@@ -16,6 +16,16 @@ import AvatarCreator from './AvatarCreator';
 import { INDIAN_LANGUAGES } from './AppLanguage';
 import AboutCheetChat from './AboutCheetChat';
 import { useBackHandler } from '../utils/backNavigation';
+import {
+    MESSAGE_SOUND_PRESETS,
+    CALL_RINGTONE_PRESETS,
+    getGlobalSoundSetting,
+    saveGlobalCustomAudio,
+    removeGlobalCustomAudio,
+    setGlobalSoundPreset,
+    previewSound,
+    getGlobalCustomAudio,
+} from '../utils/customNotificationSounds';
 
 const TITLES = {
     settings: 'Settings', profile: 'Profile', account: 'Account', privacy: 'Privacy',
@@ -130,6 +140,88 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     const [phonePrivacy, setPhonePrivacy] = useState(() => user?.phoneNumberPrivacy || 'nobody');
     const [customFont, setCustomFont] = useState(() => serverUi.customFont || localStorage.getItem('chat_custom_font') || 'system');
     const [notificationSoundName, setNotificationSoundName] = useState(() => localStorage.getItem('custom_notification_name') || '');
+    const [globalMsgSound, setGlobalMsgSound] = useState(() => getGlobalSoundSetting('msg'));
+    const [globalCallSound, setGlobalCallSound] = useState(() => getGlobalSoundSetting('call'));
+    const [soundPreviewType, setSoundPreviewType] = useState(null);
+    const soundPreviewRef = React.useRef(null);
+
+    useEffect(() => {
+        const handleSoundUpdate = (e) => {
+            if (e.detail?.chatId === 'global') {
+                if (e.detail.type === 'msg') setGlobalMsgSound(getGlobalSoundSetting('msg'));
+                if (e.detail.type === 'call') setGlobalCallSound(getGlobalSoundSetting('call'));
+            }
+        };
+        window.addEventListener('cheetchat-sound-config-updated', handleSoundUpdate);
+        return () => {
+            window.removeEventListener('cheetchat-sound-config-updated', handleSoundUpdate);
+            if (soundPreviewRef.current) {
+                try { soundPreviewRef.current.stop(); } catch {}
+                soundPreviewRef.current = null;
+            }
+        };
+    }, []);
+
+    const stopSoundPreview = () => {
+        if (soundPreviewRef.current) {
+            try { soundPreviewRef.current.stop(); } catch {}
+            soundPreviewRef.current = null;
+        }
+        setSoundPreviewType(null);
+    };
+
+    const handlePreviewGlobalSound = async (type) => {
+        if (soundPreviewType === type) {
+            stopSoundPreview();
+            return;
+        }
+        stopSoundPreview();
+
+        const config = type === 'msg' ? globalMsgSound : globalCallSound;
+        let customAudio = null;
+        if (config.hasCustomAudio) {
+            customAudio = await getGlobalCustomAudio(type);
+        }
+
+        const controller = previewSound(type, config.presetId, customAudio);
+        soundPreviewRef.current = controller;
+        setSoundPreviewType(type);
+
+        setTimeout(() => {
+            if (soundPreviewRef.current === controller) {
+                stopSoundPreview();
+            }
+        }, type === 'msg' ? 1500 : 7000);
+    };
+
+    const handleUploadGlobalSong = async (type, file) => {
+        if (!file) return;
+        if (!file.type.startsWith('audio/') && !/\.(mp3|wav|m4a|aac|ogg|opus|flac)$/i.test(file.name)) {
+            setMessage({ type: 'error', text: 'Please choose a valid audio or song file (MP3, M4A, WAV, etc.)' });
+            return;
+        }
+        try {
+            stopSoundPreview();
+            await saveGlobalCustomAudio(type, file);
+            const updated = getGlobalSoundSetting(type);
+            if (type === 'msg') setGlobalMsgSound(updated);
+            else setGlobalCallSound(updated);
+            setMessage({ type: 'success', text: `${type === 'msg' ? 'Message sound' : 'Call ringtone'} song updated to "${file.name}"!` });
+        } catch (err) {
+            console.error('Failed to save audio file', err);
+            setMessage({ type: 'error', text: 'Could not save audio file.' });
+        }
+    };
+
+    const handleRemoveGlobalSong = async (type) => {
+        stopSoundPreview();
+        await removeGlobalCustomAudio(type);
+        const updated = getGlobalSoundSetting(type);
+        if (type === 'msg') setGlobalMsgSound(updated);
+        else setGlobalCallSound(updated);
+        setMessage({ type: 'success', text: `${type === 'msg' ? 'Message sound' : 'Call ringtone'} song removed. Restored to default.` });
+    };
+
     const [businessData, setBusinessData] = useState(() => businessDefaults(user));
     const [businessAnalytics, setBusinessAnalytics] = useState(null);
     const [newProduct, setNewProduct] = useState({ name: '', description: '', price: '', imageUrl: '', inStock: true });
@@ -900,24 +992,170 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 <SettingsToggle icon={<ComputerDesktopIcon />} title="Desktop alerts" subtitle="Show notifications while using the app" value={prefs.desktopAlerts} onClick={() => togglePref('desktopAlerts', 'desktop_alerts')} />
                                 <SettingsToggle icon={<BellIcon />} title="Call sounds" subtitle="Play a ringtone for incoming calls" value={prefs.callSounds} onClick={() => togglePref('callSounds', 'call_sounds')} />
                             </SettingsGroup>
-                            <label className="m-5 block rounded-xl border border-gray-800 bg-[#202c33] p-4">
-                                <span className="block text-sm font-semibold text-white">Personal notification sound</span>
-                                <span className="mb-3 block text-xs text-gray-400">{notificationSoundName || 'Choose an audio file from this device'}</span>
-                                <input type="file" accept="audio/*" className="text-xs text-gray-300" onChange={e => {
-                                    const file = e.target.files?.[0];
-                                    if (!file) return;
-                                    setNotificationSoundName(file.name);
-                                    localStorage.setItem('custom_notification_name', file.name);
-                                    if (file.size <= 1024 * 1024) {
-                                        const reader = new FileReader();
-                                        reader.onload = () => localStorage.setItem('custom_notification_audio', String(reader.result));
-                                        reader.readAsDataURL(file);
-                                    } else {
-                                        localStorage.removeItem('custom_notification_audio');
-                                        setMessage({ type: 'error', text: 'Custom sound must be 1 MB or smaller to persist on this device.' });
-                                    }
-                                }} />
-                            </label>
+
+                            {/* Special Message Sound / Song Upload */}
+                            <div className="m-5 rounded-2xl border border-gray-800 bg-[#202c33] p-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <BellIcon className="h-5 w-5 text-emerald-400" />
+                                        <span className="text-sm font-semibold text-white">Special Message Sound / Song</span>
+                                    </div>
+                                    {globalMsgSound.hasCustomAudio ? (
+                                        <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[11px] font-bold text-emerald-300">
+                                            Custom Song Active
+                                        </span>
+                                    ) : (
+                                        <span className="rounded-full bg-gray-700/50 px-2.5 py-0.5 text-[11px] text-gray-300">
+                                            Preset Sound
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-xs text-gray-400">
+                                    Choose an inbuilt alert tone or upload any MP3/music song from your device to play whenever a new message arrives.
+                                </p>
+
+                                {globalMsgSound.hasCustomAudio && (
+                                    <div className="flex items-center justify-between rounded-xl bg-black/30 px-3 py-2 text-xs text-gray-300 border border-emerald-500/20">
+                                        <span className="truncate pr-2 font-medium text-emerald-300">
+                                            🎵 {globalMsgSound.fileName || 'Custom message song'}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRemoveGlobalSong('msg')}
+                                            className="text-gray-400 hover:text-rose-400 p-1 transition"
+                                            title="Remove custom song"
+                                        >
+                                            <TrashIcon className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                )}
+
+                                <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2 pt-1">
+                                    <select
+                                        value={globalMsgSound.hasCustomAudio ? 'custom' : globalMsgSound.presetId}
+                                        onChange={(e) => {
+                                            if (e.target.value !== 'custom') {
+                                                stopSoundPreview();
+                                                setGlobalSoundPreset('msg', e.target.value);
+                                                setGlobalMsgSound(getGlobalSoundSetting('msg'));
+                                                previewSound('msg', e.target.value, null);
+                                            }
+                                        }}
+                                        className="rounded-xl border border-gray-700 bg-[#111b21] px-3 py-2.5 text-xs text-white outline-none focus:border-emerald-500"
+                                    >
+                                        {MESSAGE_SOUND_PRESETS.map((p) => (
+                                            <option key={p.id} value={p.id}>{p.name} ({p.duration})</option>
+                                        ))}
+                                        {globalMsgSound.hasCustomAudio && (
+                                            <option value="custom">★ Custom Song: {globalMsgSound.fileName}</option>
+                                        )}
+                                    </select>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => handlePreviewGlobalSound('msg')}
+                                        className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
+                                            soundPreviewType === 'msg'
+                                                ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20'
+                                                : 'bg-white/10 hover:bg-white/15 text-white'
+                                        }`}
+                                    >
+                                        {soundPreviewType === 'msg' ? '⏹ Stop' : '▶ Test'}
+                                    </button>
+
+                                    <label className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-emerald-600/20 transition active:scale-95">
+                                        <span>📁 Upload Song</span>
+                                        <input
+                                            type="file"
+                                            accept="audio/*"
+                                            className="hidden"
+                                            onChange={(e) => handleUploadGlobalSong('msg', e.target.files?.[0])}
+                                        />
+                                    </label>
+                                </div>
+                            </div>
+
+                            {/* Call Ringtone Song Upload */}
+                            <div className="m-5 rounded-2xl border border-gray-800 bg-[#202c33] p-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-lg">🎶</span>
+                                        <span className="text-sm font-semibold text-white">Call Ringtone (Custom Song)</span>
+                                    </div>
+                                    {globalCallSound.hasCustomAudio ? (
+                                        <span className="rounded-full bg-cyan-500/20 px-2.5 py-0.5 text-[11px] font-bold text-cyan-300">
+                                            Custom Song Active
+                                        </span>
+                                    ) : (
+                                        <span className="rounded-full bg-gray-700/50 px-2.5 py-0.5 text-[11px] text-gray-300">
+                                            Preset Ringtone
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-xs text-gray-400">
+                                    Upload your favorite music track or song directly from your phone/gallery to ring during incoming voice and video calls.
+                                </p>
+
+                                {globalCallSound.hasCustomAudio && (
+                                    <div className="flex items-center justify-between rounded-xl bg-black/30 px-3 py-2 text-xs text-gray-300 border border-cyan-500/20">
+                                        <span className="truncate pr-2 font-medium text-cyan-300">
+                                            🎶 {globalCallSound.fileName || 'Custom call ringtone song'}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRemoveGlobalSong('call')}
+                                            className="text-gray-400 hover:text-rose-400 p-1 transition"
+                                            title="Remove custom song"
+                                        >
+                                            <TrashIcon className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                )}
+
+                                <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2 pt-1">
+                                    <select
+                                        value={globalCallSound.hasCustomAudio ? 'custom' : globalCallSound.presetId}
+                                        onChange={(e) => {
+                                            if (e.target.value !== 'custom') {
+                                                stopSoundPreview();
+                                                setGlobalSoundPreset('call', e.target.value);
+                                                setGlobalCallSound(getGlobalSoundSetting('call'));
+                                                previewSound('call', e.target.value, null);
+                                            }
+                                        }}
+                                        className="rounded-xl border border-gray-700 bg-[#111b21] px-3 py-2.5 text-xs text-white outline-none focus:border-cyan-500"
+                                    >
+                                        {CALL_RINGTONE_PRESETS.map((p) => (
+                                            <option key={p.id} value={p.id}>{p.name} ({p.tempo})</option>
+                                        ))}
+                                        {globalCallSound.hasCustomAudio && (
+                                            <option value="custom">★ Custom Song: {globalCallSound.fileName}</option>
+                                        )}
+                                    </select>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => handlePreviewGlobalSound('call')}
+                                        className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
+                                            soundPreviewType === 'call'
+                                                ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/20'
+                                                : 'bg-white/10 hover:bg-white/15 text-white'
+                                        }`}
+                                    >
+                                        {soundPreviewType === 'call' ? '⏹ Stop' : '▶ Play Ringtone'}
+                                    </button>
+
+                                    <label className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-cyan-600/20 transition active:scale-95">
+                                        <span>📁 Upload Ringtone Song</span>
+                                        <input
+                                            type="file"
+                                            accept="audio/*"
+                                            className="hidden"
+                                            onChange={(e) => handleUploadGlobalSong('call', e.target.files?.[0])}
+                                        />
+                                    </label>
+                                </div>
+                            </div>
                         </>
                     )}
 

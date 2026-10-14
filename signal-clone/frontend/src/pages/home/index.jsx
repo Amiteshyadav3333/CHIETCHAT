@@ -572,7 +572,7 @@ export const Home = () => {
                 playMessageNotification(readableMsg.chatId, { isMuted });
                 if (localStorage.getItem('desktop_alerts') !== '0' && 'Notification' in window && Notification.permission === 'granted' && document.hidden) {
                     const chat = chatsRef.current.find(item => item.id === readableMsg.chatId);
-                    new Notification(chat?.name || 'CHEETCHAT', {
+                    new Notification(chat?.name || 'Ducor', {
                         body: readableMsg.type === 'text' || readableMsg.type === 'business_auto_reply' ? readableMsg.content : `New ${readableMsg.type || 'message'}`,
                         icon: '/icons/icon-192.png', tag: `chat-${readableMsg.chatId}`
                     });
@@ -852,7 +852,7 @@ export const Home = () => {
             id: tempId,
             chatId: activeChat.id,
             senderId: user.id,
-            senderName: user.username || 'CHEETCHAT user',
+            senderName: user.username || 'Ducor user',
             content: text,
             type,
             status: 'sending',
@@ -1124,6 +1124,17 @@ export const Home = () => {
             return;
         }
         setShowSearchModal(true);
+    };
+
+    const [openComposerRequest, setOpenComposerRequest] = useState(0);
+    const openContentPublisher = () => {
+        setShowNotifications(false);
+        setShowSearchModal(false);
+        nav.setShowSettings(false);
+        nav.setShowReels(false); nav.setShowPodlive(false);
+        nav.setShowAiChat(false); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false);
+        nav.setShowSocial(true);
+        setOpenComposerRequest(value => value + 1);
     };
 
     const handleLinkPhone = async (event) => {
@@ -1550,7 +1561,7 @@ export const Home = () => {
         { label: 'PodLive', icon: MicrophoneIcon, active: nav.showPodlive, action: () => { nav.hideAppNavForFeature(); nav.setShowReels(false); nav.setShowSocial(false); nav.setShowPodlive(true); nav.setShowAiChat(false); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false); }, badge: nav.podliveLiveCount || 0 },
         { label: 'AI', icon: SparklesIcon, active: nav.showAiChat, action: () => { nav.hideAppNavForFeature(); nav.setShowReels(false); nav.setShowSocial(false); nav.setShowPodlive(false); nav.setShowAiChat(true); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false); } },
         { label: 'Notify', icon: BellIcon, active: showNotifications, action: openNotifications, badge: unreadCount },
-        { label: 'New', icon: PlusIcon, active: showSearchModal || showLinkPhoneModal, action: openNewChat },
+        { label: 'Publish', icon: PlusIcon, active: nav.showSocial, action: openContentPublisher },
         { label: 'Settings', icon: Cog6ToothIcon, active: nav.showSettings, action: () => { setShowNotifications(false); setShowSearchModal(false); nav.setShowSettings(true); } }
     ];
 
@@ -1604,7 +1615,7 @@ export const Home = () => {
                 token={token}
                 chats={chats}
                 onMenu={() => nav.isMobile ? nav.setNavPeekOpen(value => !value) : nav.setNavCollapsed(value => !value)}
-                onCreate={openNewChat}
+                onCreate={openContentPublisher}
                 onNotifications={openNotifications}
                 onProfile={() => nav.setShowSettings(true)}
                 onSelectSearchResult={handleGlobalSearchResult}
@@ -1859,6 +1870,7 @@ export const Home = () => {
 
             {/* Heavy Feature Overlays */}
             <FeatureOverlays
+                openComposerRequest={openComposerRequest}
                 showReels={nav.showReels}
                 setShowReels={nav.setShowReels}
                 shareReelToChat={shareReelToChat}

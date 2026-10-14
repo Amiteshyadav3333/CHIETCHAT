@@ -147,7 +147,7 @@ const Login = () => {
                 }
             }
             if (!devicePrivateKey && recoveryKeyBackup) {
-                const enteredRecoveryCode = window.prompt('Enter your CHEETCHAT recovery code to restore encrypted chats on this device:');
+                const enteredRecoveryCode = window.prompt('Enter your Ducor recovery code to restore encrypted chats on this device:');
                 if (enteredRecoveryCode?.trim()) {
                     try {
                         devicePrivateKey = await restorePrivateKeyWithPassword(recoveryKeyBackup, enteredRecoveryCode.trim());
@@ -164,7 +164,7 @@ const Login = () => {
                     await axios.post('/api/user/key-backup', { encryptedPrivateKey }, { headers: { Authorization: `Bearer ${authToken}` } });
                 }
             } else if (userData.publicKey) {
-                throw new Error('This device needs your CHEETCHAT recovery code before encrypted chats can be opened.');
+                throw new Error('This device needs your Ducor recovery code before encrypted chats can be opened.');
             }
         }
         if (recoveryCode) {
@@ -325,7 +325,7 @@ const Login = () => {
     return (
         <div className="h-[100dvh] overflow-y-auto overscroll-contain bg-[#08090b] text-signal-text scroll-smooth">
             <header className="auth-header">
-                <a href="#auth-top" className="auth-header-brand"><img src="/cheetchat-logo.png" alt="CHEETCHAT logo"/><span>CHEET<strong>CHAT</strong></span></a>
+                <a href="#auth-top" className="auth-header-brand"><img src="/ducor-mark.svg" alt="Ducor logo"/><span>Ducor</span></a>
                 <nav className="auth-header-nav"><a href="#features">Features</a><a href="#security">Security</a><a href="/founder">Founder</a><a href="#projects">Projects</a><a href="#pricing">Pricing</a><a href="#legal">Legal</a></nav>
                 <div className="auth-header-actions">
                     <div className="auth-language" aria-label="Website language"><button type="button" className={siteLanguage === 'en' ? 'active' : ''} onClick={() => changeSiteLanguage('en')}>EN</button><button type="button" className={siteLanguage === 'hi' ? 'active' : ''} onClick={() => changeSiteLanguage('hi')}>हिं</button></div>
@@ -340,24 +340,24 @@ const Login = () => {
             <section id="auth-top" className="auth-stage">
             {!authOpen && <div className="auth-welcome">
                 <div className="auth-welcome-copy">
-                    <span className="auth-welcome-badge">🇮🇳 Super All-in-One Platform · Made in India</span>
-                    <h1>Chat. Create. Connect.<br/><strong>Everything in one place.</strong></h1>
-                    <p>Private messaging, social communities, reels, HD calls, Indian-language translation and intelligent AI tools—built for students, creators and businesses.</p>
+                    <span className="auth-welcome-badge">A social platform for India</span>
+                    <h1>Discover. Share. Belong.<br/><strong>Your community starts here.</strong></h1>
+                    <p>Discover news, ideas and useful resources. Share your perspective, publish stories and connect with communities across India.</p>
                     <div className="auth-welcome-actions">
                         <a href="/signup" className="auth-welcome-primary">Create free account</a>
                         <a href="/login?mode=login" className="auth-welcome-secondary">Log in</a>
                     </div>
                     <a href="https://github.com/Amiteshyadav3333/CHIETCHAT-ANDROID/releases/tag/v1.0.0" target="_blank" rel="noopener noreferrer" className="android-download-link">
-                        <span className="android-mark">↧</span><span><small>DOWNLOAD THE ANDROID APP</small><strong>CHEETCHAT v1.0.0</strong></span><b>Get app ↗</b>
+                        <span className="android-mark">↧</span><span><small>DOWNLOAD THE ANDROID APP</small><strong>Ducor v1.0.0</strong></span><b>Get app ↗</b>
                     </a>
                 </div>
                 <div className="auth-google-center">
                     <div className="auth-preview-stack" aria-hidden="true"><div className="auth-preview-phone preview-back"><img src="/marketing/social.jpg" alt=""/></div><div className="auth-preview-phone preview-front"><img src="/marketing/chat.jpg" alt=""/></div><div className="auth-preview-glow"/></div>
                     <div className="auth-google-card">
-                        <div className="auth-google-logo"><img src="/cheetchat-logo.png" alt="CHEETCHAT"/></div>
+                        <div className="auth-google-logo"><img src="/ducor-mark.svg" alt="Ducor"/></div>
                         <span>Fast, secure account access</span>
-                        <h2>Enter CHEETCHAT</h2>
-                        <p>One account for private chat, social, reels, calls, AI and creator tools.</p>
+                        <h2>Enter Ducor</h2>
+                        <p>Join conversations, discover useful resources and publish stories with your communities.</p>
                         <button type="button" onClick={startGoogleLogin} disabled={googleLoading} className="auth-main-google">
                             <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3Z"/><path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.5l-3.2-2.5c-.9.6-2 1-3.4 1a5.8 5.8 0 0 1-5.4-4H3.3v2.6A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.6 14a6 6 0 0 1 0-3.9V7.5H3.3a10 10 0 0 0 0 9.1L6.6 14Z"/><path fill="#EA4335" d="M12 6a5.4 5.4 0 0 1 3.8 1.5l2.9-2.8A9.6 9.6 0 0 0 12 2a10 10 0 0 0-8.7 5.5l3.3 2.6A5.8 5.8 0 0 1 12 6Z"/></svg>
                             {googleLoading ? 'Connecting…' : 'Continue with Google'}
@@ -372,17 +372,17 @@ const Login = () => {
                 <div className="hidden min-h-[640px] border-r border-white/10 bg-[#0d1117] p-8 md:flex md:flex-col md:justify-between">
                     <div>
                         <div className="mb-10 flex items-center gap-3">
-                            <img src="/cheetchat-logo.png" alt="CHEETCHAT logo" className="h-11 w-11 rounded-lg object-cover" />
+                            <img src="/ducor-mark.svg" alt="Ducor logo" className="h-11 w-11 rounded-lg object-cover" />
                             <div>
-                                <h1 className="text-2xl font-bold tracking-normal">CHEETCHAT</h1>
-                                <p className="text-sm text-gray-400">Super All-in-One Platform</p>
+                                <h1 className="text-2xl font-bold tracking-normal">Ducor</h1>
+                                <p className="text-sm text-gray-400">A Social Platform for India</p>
                             </div>
                         </div>
                         <div className="space-y-5">
                             <h2 className="text-4xl font-semibold leading-tight tracking-normal">
                                 Private chats with verified access.
                             </h2>
-                            <p className="text-base leading-7 text-gray-400">Chat, calls, payments, social and business tools—your work in one app. Designed and developed in India 🇮🇳.</p>
+                                <p className="text-base leading-7 text-gray-400">Discover news and resources, publish stories and connect with communities across India.</p>
                         </div>
                     </div>
                     <div className="grid grid-cols-2 gap-3 text-sm">
@@ -399,9 +399,9 @@ const Login = () => {
 
                 <div className="p-6 sm:p-8">
                     <div className="mb-7 md:hidden">
-                        <img src="/cheetchat-logo.png" alt="CHEETCHAT logo" className="mb-3 h-11 w-11 rounded-lg object-cover" />
-                        <h1 className="text-3xl font-bold tracking-normal">CHEETCHAT</h1>
-                        <p className="text-sm text-gray-400">Super All-in-One Platform · Made in India</p>
+                        <img src="/ducor-mark.svg" alt="Ducor logo" className="mb-3 h-11 w-11 rounded-lg object-cover" />
+                        <h1 className="text-3xl font-bold tracking-normal">Ducor</h1>
+                        <p className="text-sm text-gray-400">Social platform · Made in India</p>
                     </div>
 
                     <div className="mb-6 grid grid-cols-2 rounded-lg bg-[#0c0f14] p-1">
@@ -558,7 +558,7 @@ const Login = () => {
                 </div>
             </div>
             </div>}
-            <a href="#features" className="auth-scroll-cue" aria-label="Explore CHEETCHAT features"><span>Explore CHEETCHAT</span><b>↓</b></a>
+            <a href="#features" className="auth-scroll-cue" aria-label="Explore Ducor features"><span>Explore Ducor</span><b>↓</b></a>
             </section>
             {!authOnly && <MarketingLanding />}
         </div>

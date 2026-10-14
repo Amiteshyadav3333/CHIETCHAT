@@ -39,7 +39,7 @@ export const useEncryption = (user, token) => {
                         headers: { Authorization: `Bearer ${token}` }
                     });
                     if (response.data.recoveryKeyBackup) {
-                        const recoveryCode = window.prompt('Enter your CHEETCHAT recovery code to restore encrypted chats on this device:');
+                        const recoveryCode = window.prompt('Enter your Ducor recovery code to restore encrypted chats on this device:');
                         if (recoveryCode?.trim()) {
                             const restoredPrivateKey = await restorePrivateKeyWithPassword(response.data.recoveryKeyBackup, recoveryCode.trim());
                             await saveDevicePrivateKey(user.id, restoredPrivateKey);

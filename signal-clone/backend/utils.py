@@ -290,7 +290,7 @@ def add_missing_columns(inspector, table_name, columns):
 # Bump this marker whenever models gain columns or tables. Production runs
 # ensure_database_schema() in the pre-deploy step and skips versions it has
 # already applied.
-SCHEMA_VERSION = '20260901_27_manual_premium_approval'
+SCHEMA_VERSION = '20261014_28_ducor_articles'
 
 def ensure_runtime_compat_schema():
     """Repair columns required by the currently deployed models.
@@ -306,6 +306,9 @@ def ensure_runtime_compat_schema():
     # Gunicorn binds its port. Create only the new runtime-critical table.
     inspector = inspect(db.engine)
     if 'social_post' in inspector.get_table_names() and db.engine.dialect.name == 'postgresql':
+        caption_column = next((column for column in inspector.get_columns('social_post') if column['name'] == 'caption'), None)
+        if caption_column and getattr(caption_column['type'], 'length', None) is not None:
+            db.session.execute(text('ALTER TABLE social_post ALTER COLUMN caption TYPE TEXT'))
         db.session.execute(text(
             'CREATE TABLE IF NOT EXISTS social_poll_vote ('
             'id SERIAL PRIMARY KEY, post_id INTEGER NOT NULL REFERENCES social_post(id), '
@@ -472,6 +475,10 @@ def ensure_database_schema(force=False):
             return
         db.create_all()
         inspector = inspect(db.engine)
+        if 'social_post' in inspector.get_table_names() and db.engine.dialect.name == 'postgresql':
+            caption_column = next((column for column in inspector.get_columns('social_post') if column['name'] == 'caption'), None)
+            if caption_column and getattr(caption_column['type'], 'length', None) is not None:
+                db.session.execute(text('ALTER TABLE social_post ALTER COLUMN caption TYPE TEXT'))
         
         # Notification table is created by create_all(), but we check other tables' columns
         add_missing_columns(inspector, 'notification', {

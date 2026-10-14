@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { clearPodLiveSession, ensurePodLiveSession } from './auth/usePodLiveSession';
 import { PODLIVE_API_URL, PODLIVE_SOCKET_URL, PODLIVE_STORAGE } from './config';
 
-// Keeps the PodLive identity reachable while the user is anywhere in CHEETCHAT.
+// Keeps the PodLive identity reachable while the user is anywhere in Ducor.
 // Without this bridge, stage invites only arrive after PodLive is already open.
 export default function PodLiveInviteBridge({ active, onInvite, onLiveStatus }) {
     // Persists across re-renders — once 404 is seen, stop polling forever this session

@@ -10,7 +10,7 @@ const RecoveryCode = () => {
 
     const download = () => {
         const blob = new Blob([
-            `CHEETCHAT RECOVERY CODE\n\n${code}\n\nKeep this offline. Anyone with this code and access to your account recovery email may restore your encrypted chats.`,
+            `Ducor RECOVERY CODE\n\n${code}\n\nKeep this offline. Anyone with this code and access to your account recovery email may restore your encrypted chats.`,
         ], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
@@ -33,7 +33,7 @@ const RecoveryCode = () => {
             <section className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#121418] p-7 shadow-2xl">
                 <ShieldCheckIcon className="mb-4 h-12 w-12 text-emerald-400" />
                 <h1 className="text-2xl font-black">Save your recovery code</h1>
-                <p className="mt-2 text-sm leading-6 text-gray-400">Use this code to restore old encrypted chats if you forget your password. CHEETCHAT cannot show this code again.</p>
+                <p className="mt-2 text-sm leading-6 text-gray-400">Use this code to restore old encrypted chats if you forget your password. Ducor cannot show this code again.</p>
                 <div className="my-6 break-all rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-4 text-center font-mono text-lg font-bold tracking-wider text-emerald-200">{code}</div>
                 <div className="grid grid-cols-2 gap-3">
                     <button onClick={async () => { await navigator.clipboard.writeText(code); setCopied(true); }} className="flex items-center justify-center gap-2 rounded-xl bg-white/10 px-3 py-3 text-sm font-bold"><ClipboardDocumentIcon className="h-5 w-5" />{copied ? 'Copied' : 'Copy'}</button>

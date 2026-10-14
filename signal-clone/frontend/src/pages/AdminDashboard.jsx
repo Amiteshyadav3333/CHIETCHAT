@@ -449,7 +449,7 @@ const AdminDashboard = () => {
                                             💬 Message {messageModalUser.username}
                                         </h3>
                                         <p style={{ margin: '0 0 1rem 0', color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem' }}>
-                                            This message will be delivered from <strong>CHEETCHAT Campus Guide</strong> bot directly to their inbox.
+                                            This message will be delivered from <strong>Ducor Campus Guide</strong> bot directly to their inbox.
                                         </p>
                                         <textarea
                                             rows={4}

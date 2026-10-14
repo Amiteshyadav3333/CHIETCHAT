@@ -72,7 +72,7 @@ export default function usePodLiveSession(active, cheetchatToken = null) {
             const message = error?.response?.data?.error
                 || (error?.code === 'ERR_NETWORK' ? 'Network or connection error reaching PodLive. Please try again.' : '')
                 || error?.message
-                || 'PodLive could not connect to your CHEETCHAT account.';
+                || 'PodLive could not connect to your Ducor account.';
             setState({ loading: false, user: null, error: message });
         }
     }, [cheetchatToken]);

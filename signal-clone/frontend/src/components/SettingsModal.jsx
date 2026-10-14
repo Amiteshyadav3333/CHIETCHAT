@@ -32,8 +32,8 @@ const TITLES = {
     chats: 'Chats', notifications: 'Notifications', storage: 'Storage and data',
     business: 'Business tools', help: 'Help center', password: 'Change password',
     delete: 'Delete account', activity: 'Your Activity', sessions: 'Active Sessions',
-    twofactor_setup: 'Enable 2FA', twofactor_disable: 'Disable 2FA', premium: 'CHEETCHAT Premium',
-    about: 'About CHEETCHAT', guide: 'App Feature Guide & Tour'
+    twofactor_setup: 'Enable 2FA', twofactor_disable: 'Disable 2FA', premium: 'Ducor Premium',
+    about: 'About Ducor', guide: 'App Feature Guide & Tour'
 };
 
 const timeAgo = (dateStr) => {
@@ -657,13 +657,13 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                     {user?.platformId && (
                                         <p className="text-xs font-medium text-violet-400">@{user.platformId}</p>
                                     )}
-                                    <p className="truncate text-sm text-gray-400">{user?.bio || 'Hey there! I am using CHEETCHAT.'}</p>
+                                    <p className="truncate text-sm text-gray-400">{user?.bio || 'Hey there! I am using Ducor.'}</p>
                                 </div>
                                 <ChevronRightIcon className="h-5 w-5 text-gray-500" />
                             </button>
                             <SettingsGroup>
                                 <SettingsRow icon={<SparklesIcon className="text-[#25d366]" />} title="App Feature Guide & Tour" subtitle="Interactive UI & Settings Tour — Learn every feature" onClick={() => go('guide')} />
-                                <SettingsRow icon={<SparklesIcon />} title="CHEETCHAT Premium" subtitle={user?.isPremium ? 'Active — all creator features unlocked' : 'Invite 7 verified users to unlock every creator feature'} onClick={openPremium} />
+                                <SettingsRow icon={<SparklesIcon />} title="Ducor Premium" subtitle={user?.isPremium ? 'Active — all creator features unlocked' : 'Invite 7 verified users to unlock every creator feature'} onClick={openPremium} />
                                 <SettingsRow icon={<span className="text-xl">文</span>} title="App language" subtitle={INDIAN_LANGUAGES.find(item => item[0] === appLanguage)?.[1] || 'English'} onClick={() => go('language')} />
                                 <SettingsRow icon={<KeyIcon />} title="Account" subtitle="Password, security and account controls" onClick={() => go('account')} />
                                 <SettingsRow icon={<LockClosedIcon />} title="Privacy" subtitle="Story, profile photo, last seen and online visibility" onClick={() => go('privacy')} />
@@ -683,14 +683,14 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                             </SettingsGroup>
                             <SectionLabel>Help</SectionLabel>
                             <SettingsGroup>
-                                <SettingsRow icon={<InformationCircleIcon />} title="About CHEETCHAT" subtitle="Features, technology, community and founder" onClick={() => go('about')} />
+                                <SettingsRow icon={<InformationCircleIcon />} title="About Ducor" subtitle="Features, technology, community and founder" onClick={() => go('about')} />
                                 <SettingsRow icon={<QuestionMarkCircleIcon />} title="Help center" subtitle="Password, deletion and support" onClick={() => go('help')} />
                                 <SettingsRow icon={<ShieldCheckIcon />} title="Terms and Conditions" subtitle="Open in a new tab" onClick={() => openLegal('/terms')} />
                                 <SettingsRow icon={<ShieldCheckIcon />} title="Privacy Policy" subtitle="Open in a new tab" onClick={() => openLegal('/privacy')} />
                             </SettingsGroup>
                             <div className="mx-5 my-6 grid gap-3 sm:grid-cols-2">
                                 <button onClick={() => setShowDownloadPopup(true)} className="flex items-center justify-center gap-3 rounded-lg border border-[#00a884]/35 bg-[#00a884]/10 py-3 text-sm font-semibold text-[#53d8b3] transition hover:bg-[#00a884]/20">
-                                    <ArrowDownTrayIcon className="h-5 w-5" /> Download CheetChat
+                                    <ArrowDownTrayIcon className="h-5 w-5" /> Download Ducor
                                 </button>
                                 <button onClick={onLogout} className="flex items-center justify-center gap-3 rounded-lg border border-red-500/25 py-3 text-sm font-semibold text-red-400 transition hover:bg-red-500/10">
                                 <ArrowRightOnRectangleIcon className="h-5 w-5" /> Log out
@@ -830,7 +830,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                     }}
                                     options={[["nobody", "Nobody (username only)"], ["contacts", "My Contacts"], ["everyone", "Everyone"]]}
                                 />
-                                <InfoRow title="Groups stay private" text="Your phone number is never displayed in group member lists. Members see only your username and unique CHEETCHAT ID." />
+                                <InfoRow title="Groups stay private" text="Your phone number is never displayed in group member lists. Members see only your username and unique Ducor ID." />
                                 <SettingsRow icon={<ShieldCheckIcon />} title="Read Privacy Policy" subtitle="Scrollable details about your data and privacy controls" onClick={() => window.open('/privacy', '_blank', 'noopener,noreferrer')} />
                             </SettingsGroup>
                             
@@ -1161,7 +1161,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
 
                     {screen === 'storage' && (
                         <>
-                            <Hero icon={<ComputerDesktopIcon />} title="Storage and network" text="Choose how CHEETCHAT uses bandwidth on this device." />
+                            <Hero icon={<ComputerDesktopIcon />} title="Storage and network" text="Choose how Ducor uses bandwidth on this device." />
                             <SettingsGroup>
                                 <SettingsToggle icon={<ComputerDesktopIcon />} title="Media auto-download" subtitle="Automatically download received media" value={prefs.mediaAutoDownload} onClick={() => togglePref('mediaAutoDownload', 'media_auto_download')} />
                                 <SettingsToggle icon={<ChartBarIcon />} title="Data saver" subtitle="Reduce media quality on limited networks" value={prefs.dataSaver} onClick={() => togglePref('dataSaver', 'data_saver')} />
@@ -1411,7 +1411,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#00a884] text-white shadow-lg shadow-[#00a884]/20">
                                 <ArrowDownTrayIcon className="h-8 w-8" />
                             </div>
-                            <h3 id="download-cheetchat-title" className="mt-4 text-2xl font-black text-white">Get CheetChat</h3>
+                            <h3 id="download-cheetchat-title" className="mt-4 text-2xl font-black text-white">Get Ducor</h3>
                             <p className="mt-2 text-sm leading-6 text-gray-300">Download the latest Android app and stay connected with chat, calls, reels, games and more.</p>
                         </div>
                         <div className="space-y-3 p-5">
@@ -1419,7 +1419,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 <ArrowDownTrayIcon className="h-5 w-5" /> Download APK
                             </a>
                             <a href="https://dashing-stroopwafel-898bd9.netlify.app/#app" target="_blank" rel="noopener noreferrer" className="block w-full rounded-xl border border-white/10 px-4 py-3 text-center text-sm font-semibold text-gray-200 transition hover:bg-white/5">
-                                Open CheetChat download page
+                                Open Ducor download page
                             </a>
                             <p className="text-center text-[11px] leading-4 text-gray-500">Android may ask you to allow installation from your browser. Install only if you trust the source.</p>
                         </div>

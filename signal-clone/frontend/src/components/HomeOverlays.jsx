@@ -3,8 +3,8 @@ import AvatarZoom from './AvatarZoom';
 export const AppLockOverlay = ({ error, onPinChange, onSubmit, pin }) => (
     <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-[#050914] p-4">
         <form onSubmit={onSubmit} className="w-full max-w-sm rounded-3xl border border-blue-500/20 bg-[#0c1526] p-6 text-center shadow-2xl">
-            <img src="/cheetchat-logo.png" alt="CHEETCHAT" className="mx-auto h-20 w-20 rounded-2xl object-cover" />
-            <h2 className="mt-4 text-xl font-black text-white">CHEETCHAT locked</h2>
+            <img src="/ducor-mark.svg" alt="Ducor" className="mx-auto h-20 w-20 rounded-2xl object-cover" />
+            <h2 className="mt-4 text-xl font-black text-white">Ducor locked</h2>
             <p className="mt-1 text-xs text-gray-400">Enter this browser's device PIN</p>
             <input autoFocus type="password" inputMode="numeric" maxLength={6} value={pin} onChange={event => onPinChange(event.target.value.replace(/\D/g, ''))} className="mt-5 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-center text-2xl tracking-[0.5em] text-white outline-none focus:border-blue-500" />
             {error && <p className="mt-2 text-xs text-red-400">{error}</p>}

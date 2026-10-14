@@ -239,13 +239,13 @@ def ensure_college_lobby_and_welcome(user):
         # 1. Primary Campus / College Lobby
         if college_clean:
             lobby_name = f"{college_clean} Campus Lobby"
-            lobby_desc = f"Official discussion lobby for {college_clean} students on CHEETCHAT. Connect, share notes, and hang out!"
+            lobby_desc = f"Official discussion lobby for {college_clean} students on Ducor. Connect, share notes, and hang out!"
         elif location_clean:
             lobby_name = f"{location_clean} Student Hub"
             lobby_desc = f"Open discussion lobby for students in {location_clean}."
         else:
             lobby_name = "Freshers & Campus Lounge 2026"
-            lobby_desc = "Open community lounge for all freshers and students on CHEETCHAT."
+            lobby_desc = "Open community lounge for all freshers and students on Ducor."
 
         lobby = Chat.query.filter_by(name=lobby_name, is_group=True).first()
         if not lobby:
@@ -286,16 +286,19 @@ def ensure_college_lobby_and_welcome(user):
                 db.session.add(ChatParticipant(chat_id=global_lounge.id, user_id=user.id))
 
         # 3. Direct Welcome Message from System Guide Bot
-        bot = User.query.filter_by(username='CHEETCHAT Campus Guide').first()
+        bot = User.query.filter(User.username.in_(['Ducor Campus Guide', 'CHEETCHAT Campus Guide'])).first()
+        if bot and bot.username != 'Ducor Campus Guide':
+            bot.username = 'Ducor Campus Guide'
+            bot.bio = 'Official Ducor Campus Guide & Welcome Assistant'
         if not bot:
             bot = User(
-                username='CHEETCHAT Campus Guide',
+                username='Ducor Campus Guide',
                 email='guide@cheetchat.app',
                 phone='0000000000',
                 platform_id='cheetchat_guide',
                 is_verified=True,
                 avatar='https://api.dicebear.com/7.x/bottts/svg?seed=cheetchat_guide',
-                bio='Official CHEETCHAT Campus Guide & Welcome Assistant'
+                bio='Official Ducor Campus Guide & Welcome Assistant'
             )
             db.session.add(bot)
             db.session.flush()
@@ -324,9 +327,9 @@ def ensure_college_lobby_and_welcome(user):
 
         invite_code = user.referral_code or ensure_referral_code(user)
         welcome_text = (
-            f"👋 Namaste {user.username}! CHEETCHAT Campus Network par aapka swagat hai.\n\n"
+            f"👋 Namaste {user.username}! Ducor Campus Network par aapka swagat hai.\n\n"
             f"✅ Humne aapko '{lobby_name}' me jod diya hai taaki aap turant classmates aur batchmates se baatein shuru kar sakein.{peer_hint}\n\n"
-            f"🎁 15 Days Free Premium Reward: Doston ko WhatsApp aur Telegram se CHEETCHAT par bulayein (Invite Code: `{invite_code}`).\n\n"
+            f"🎁 15 Days Free Premium Reward: Doston ko WhatsApp aur Telegram se Ducor par bulayein (Invite Code: `{invite_code}`).\n\n"
             f"💻 Apna group banayein aur coding problems solve karein!\n"
             f"✨ Aria aur Arjun AI se baat karein aur instant help paayein!"
         )
@@ -904,9 +907,9 @@ def suggested_users():
         elif account.location:
             item["suggestionReason"] = f"📍 {account.location}"
         elif item["followersCount"] >= 3:
-            item["suggestionReason"] = "Popular on CHEETCHAT"
+            item["suggestionReason"] = "Popular on Ducor"
         else:
-            item["suggestionReason"] = "New on CHEETCHAT"
+            item["suggestionReason"] = "New on Ducor"
 
         payload.append(item)
 

@@ -105,7 +105,7 @@ export const GlobalSearchBar = ({ token, chats = [], onSelectResult, onMessageUs
                             <span>Search results for <strong className="font-semibold text-gray-300">{normalizedQuery}</strong></span>
                             {!loading && <span>{resultCount} found</span>}
                         </div>
-                        {error ? <p className="px-3 py-5 text-center text-sm text-rose-300">{error}</p> : loading && resultCount === 0 ? <p className="px-3 py-5 text-center text-sm text-gray-400">Searching across CheetChat…</p> : null}
+                        {error ? <p className="px-3 py-5 text-center text-sm text-rose-300">{error}</p> : loading && resultCount === 0 ? <p className="px-3 py-5 text-center text-sm text-gray-400">Searching across Ducor…</p> : null}
                         {!loading && !error && resultCount === 0 && <p className="px-3 py-6 text-center text-sm text-gray-400">No matches yet. Try a different name or keyword.</p>}
                         {categories.map(([key, label, Icon]) => results[key]?.length > 0 && (
                             <section key={key} className="pb-1">
@@ -113,7 +113,7 @@ export const GlobalSearchBar = ({ token, chats = [], onSelectResult, onMessageUs
                                 {results[key].map(item => {
                                     const id = `${key}-${item.id}`;
                                     if (key === 'chats') return <SearchRow key={id} icon={ChatBubbleLeftRightIcon} image={item.avatar} title={item.title} subtitle={item.isGroup ? 'Group chat' : 'Direct chat'} onClick={() => select('chat', item)} />;
-                                    if (key === 'users') return <SearchRow key={id} icon={UserIcon} image={item.avatar} title={item.username} subtitle={`${item.platformId ? `@${item.platformId} · ` : ''}${item.bio || 'CheetChat member'}`} onClick={() => select('profile', item)} action={() => { setOpen(false); setQuery(''); onMessageUser(item); }} actionLabel="Message" />;
+                                    if (key === 'users') return <SearchRow key={id} icon={UserIcon} image={item.avatar} title={item.username} subtitle={`${item.platformId ? `@${item.platformId} · ` : ''}${item.bio || 'Ducor member'}`} onClick={() => select('profile', item)} action={() => { setOpen(false); setQuery(''); onMessageUser(item); }} actionLabel="Message" />;
                                     if (key === 'reels') return <SearchRow key={id} icon={PlayIcon} title={item.caption || 'Video'} subtitle={`${item.user?.username || 'Creator'} · ${item.category || 'Reel'}`} onClick={() => select('reel', item)} />;
                                     if (key === 'posts') return <SearchRow key={id} icon={ChatBubbleLeftRightIcon} image={item.mediaType === 'image' ? item.mediaUrl : null} title={item.articleTitle || item.caption || 'Post'} subtitle={`${item.user?.username || 'Member'} · Social post`} onClick={() => select('post', item)} />;
                                     return <SearchRow key={id} icon={UsersIcon} image={item.avatar} title={item.name} subtitle={`${item.type === 'channel' ? 'Channel' : 'Public group'} · ${item.description || 'Community'}`} onClick={() => select('community', item)} />;

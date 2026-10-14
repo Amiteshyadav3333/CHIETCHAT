@@ -368,7 +368,7 @@ const MessageInput = ({
         if (!trimmed) return;
         if (localStorage.getItem('spam_detection') !== '0') {
             const suspicious = /(bit\.ly|tinyurl\.com|t\.me\/|free\s*(gift|money)|share\s*(your\s*)?(otp|pin|password)|urgent\s*payment)/i.test(trimmed);
-            if (suspicious && !window.confirm('CHEETCHAT safety: This message may contain a risky link or request for sensitive information. Send anyway?')) return;
+            if (suspicious && !window.confirm('Ducor safety: This message may contain a risky link or request for sensitive information. Send anyway?')) return;
         }
 
         let finalWord = showAiFeature ? await requestGrammarFix(trimmed) : trimmed;

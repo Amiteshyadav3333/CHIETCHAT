@@ -127,7 +127,7 @@ export const TOUR_STEPS = [
             '👥 Class Group Builder: Create project, batch, or club groups with up to thousands of members.',
             '🔗 Shareable Invite Links: Generate instant WhatsApp join links for your class group.'
         ],
-        proTip: 'Use 10-digit mobile number search to quickly check if an old friend has already joined CHEETCHAT.',
+        proTip: 'Use 10-digit mobile number search to quickly check if an old friend has already joined Ducor.',
         buttonText: 'Got it! Next: Settings →'
     },
     {
@@ -137,7 +137,7 @@ export const TOUR_STEPS = [
         badge: 'CONTROL VAULT',
         icon: Cog6ToothIcon,
         targetSelector: '[data-tour="settings"]',
-        whatItDoes: 'The command center for your CHEETCHAT account — configure privacy locks, college identity, and security.',
+        whatItDoes: 'The command center for your Ducor account — configure privacy locks, college identity, and security.',
         keyPowers: [
             '👤 Campus Identity: Update your University, Department, Location, Avatar, and Bio anytime.',
             '🔒 Privacy Shield: Hide your Last Seen, Online Status, Profile Photo, and Read Receipts.',

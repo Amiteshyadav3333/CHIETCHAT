@@ -58,7 +58,7 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('push', (event) => {
     let payload = {};
     try { payload = event.data?.json() || {}; } catch { payload = { body: event.data?.text() || 'New activity' }; }
-    event.waitUntil(self.registration.showNotification(payload.title || 'CHEETCHAT', {
+    event.waitUntil(self.registration.showNotification(payload.title || 'Ducor', {
         body: payload.body || 'New activity',
         icon: payload.icon || '/icons/icon-192.png',
         badge: '/icons/icon-192.png',

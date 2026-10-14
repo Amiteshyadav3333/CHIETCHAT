@@ -466,13 +466,13 @@ class SocialPost(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     channel_id = db.Column(db.Integer, db.ForeignKey('channel.id'), nullable=True)
-    caption = db.Column(db.String(1000), nullable=True)
+    caption = db.Column(db.Text, nullable=True)
     media_url = db.Column(db.String(500), nullable=True)
     media_type = db.Column(db.String(20), nullable=True)  # image | video
     media_items = db.Column(db.Text, nullable=True)  # JSON [{url, type}], up to 4 images
     retweet_of_id = db.Column(db.Integer, db.ForeignKey('social_post.id'), nullable=True)
     share_count = db.Column(db.Integer, default=0)
-    post_kind = db.Column(db.String(20), nullable=False, default='standard')  # standard | community
+    post_kind = db.Column(db.String(20), nullable=False, default='standard')  # standard | community | article
     poll_options = db.Column(db.Text, nullable=True)  # JSON string array
     article_title = db.Column(db.String(200), nullable=True)
     is_monetized = db.Column(db.Boolean, nullable=False, default=False)

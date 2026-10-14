@@ -388,16 +388,19 @@ def admin_message_user(target_id):
         return jsonify({'error': 'User not found'}), 404
 
     # Ensure Campus Guide bot exists
-    bot = User.query.filter_by(username='CHEETCHAT Campus Guide').first()
+    bot = User.query.filter(User.username.in_(['Ducor Campus Guide', 'CHEETCHAT Campus Guide'])).first()
+    if bot and bot.username != 'Ducor Campus Guide':
+        bot.username = 'Ducor Campus Guide'
+        bot.bio = 'Official Ducor Campus Guide & Welcome Assistant'
     if not bot:
         bot = User(
-            username='CHEETCHAT Campus Guide',
+            username='Ducor Campus Guide',
             email='guide@cheetchat.app',
             phone='0000000000',
             platform_id='cheetchat_guide',
             is_verified=True,
             avatar='https://api.dicebear.com/7.x/bottts/svg?seed=cheetchat_guide',
-            bio='Official CHEETCHAT Campus Guide & Welcome Assistant'
+            bio='Official Ducor Campus Guide & Welcome Assistant'
         )
         db.session.add(bot)
         db.session.flush()
@@ -454,7 +457,7 @@ def admin_introduce_users():
         db.session.add(ChatParticipant(chat_id=chat.id, user_id=user_b.id))
 
     campus_text = f" from {user_a.college}" if user_a.college and user_a.college == user_b.college else ""
-    intro_content = note or f"👋 Hi @{user_a.username} and @{user_b.username}! You've been introduced as batchmates{campus_text} on CHEETCHAT. Say hi!"
+    intro_content = note or f"👋 Hi @{user_a.username} and @{user_b.username}! You've been introduced as batchmates{campus_text} on Ducor. Say hi!"
     
     # Send system intro message into direct chat
     msg = Message(chat_id=chat.id, sender_id=user_a.id, content=intro_content)

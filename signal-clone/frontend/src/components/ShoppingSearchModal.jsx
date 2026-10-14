@@ -42,7 +42,7 @@ const ShoppingSearchModal = ({ onClose }) => {
                     <button onClick={() => openExternal('https://www.amazon.in/')} className="mt-4 w-full rounded-xl border border-[#ff9900]/50 py-3 text-sm font-bold text-[#ffb84d] hover:bg-[#ff9900]/10">
                         Open Amazon India ↗
                     </button>
-                    <p className="mt-3 text-center text-[10px] text-gray-500">Amazon opens in a new tab. CHEETCHAT does not process purchases.</p>
+                    <p className="mt-3 text-center text-[10px] text-gray-500">Amazon opens in a new tab. Ducor does not process purchases.</p>
                 </div>
             </div>
         </div>

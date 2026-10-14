@@ -1235,7 +1235,7 @@ const ChatBubble = ({
                         )}
                         <div>
                             <button
-                                onClick={() => alert(`CHEETCHAT payment ID: ${payment.id}\nProvider payment ID: ${payment.providerPaymentId || 'Pending'}\nStatus: ${payment.status || (payment.verified ? 'verified' : 'pending')}\nCHEETCHAT does not store your UPI PIN or card details.`)}
+                                onClick={() => alert(`Ducor payment ID: ${payment.id}\nProvider payment ID: ${payment.providerPaymentId || 'Pending'}\nStatus: ${payment.status || (payment.verified ? 'verified' : 'pending')}\nDucor does not store your UPI PIN or card details.`)}
                                 className="w-full py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold transition"
                             >
                                 Details

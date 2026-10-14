@@ -69,12 +69,12 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
 }
 
 const WhiteCheetChatMark = () => (
-    <div className="flex flex-col items-center" aria-label="CHEETCHAT">
+    <div className="flex flex-col items-center" aria-label="Ducor">
         <svg viewBox="0 0 72 72" className="h-24 w-24 text-white" role="img" aria-hidden="true">
             <path fill="currentColor" d="M36 7C19.98 7 7 18.64 7 33c0 7.25 3.31 13.8 8.65 18.52L12.8 64l13.48-6.12A32.2 32.2 0 0 0 36 59c16.02 0 29-11.64 29-26S52.02 7 36 7Z" />
             <path fill="#000" d="M45.8 25.2c-2.35-2.18-5.26-3.27-8.74-3.27-6.92 0-11.67 4.7-11.67 11.3 0 6.63 4.7 11.34 11.67 11.34 3.5 0 6.43-1.1 8.78-3.3l-3.54-3.7a7.1 7.1 0 0 1-4.93 1.86c-3.84 0-6.4-2.55-6.4-6.2 0-3.62 2.56-6.15 6.4-6.15 1.9 0 3.53.62 4.9 1.84l3.53-3.72Z" />
         </svg>
-        <span className="mt-4 text-xl font-black tracking-[0.28em] text-white">CHEETCHAT</span>
+        <span className="mt-4 text-xl font-black tracking-[0.28em] text-white">Ducor</span>
     </div>
 );
 

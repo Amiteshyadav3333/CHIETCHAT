@@ -68,7 +68,7 @@ const ReelShareSheet = ({ reel, token, onClose, onShareToChat, onShared }) => {
     const options = [
         { label: 'WhatsApp', color: 'bg-[#25D366]', icon: 'WA', action: () => openTarget(targets.whatsapp) },
         { label: 'Snapchat', color: 'bg-[#FFFC00] text-black', icon: '👻', action: () => openTarget(targets.snapchat) },
-        { label: 'CHEETCHAT', color: 'bg-blue-600', icon: <ChatBubbleOvalLeftIcon className="h-7 w-7" />, action: shareToChat },
+        { label: 'Ducor', color: 'bg-blue-600', icon: <ChatBubbleOvalLeftIcon className="h-7 w-7" />, action: shareToChat },
         { label: 'Your story', color: 'bg-gradient-to-br from-fuchsia-500 to-orange-400', icon: '＋', action: shareToStory },
         { label: 'Copy link', color: 'bg-gray-700', icon: <ClipboardIcon className="h-7 w-7" />, action: copyLink },
         { label: 'Share', color: 'bg-gray-700', icon: <ShareIcon className="h-7 w-7" />, action: nativeShare },

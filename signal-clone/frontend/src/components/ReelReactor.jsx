@@ -550,7 +550,7 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
             ctx.fillStyle = 'rgba(255,255,255,0.85)';
             ctx.font = '700 20px system-ui, sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText('CHEETCHAT MEME CLIP', canvas.width / 2, canvas.height - 32);
+            ctx.fillText('Ducor MEME CLIP', canvas.width / 2, canvas.height - 32);
 
             if (progress < 1) {
                 requestAnimationFrame(draw);

@@ -195,7 +195,7 @@ const ProfileSetup = () => {
             const chatId = res.data.id;
             const referralCode = user?.referralCode || '';
             const inviteUrl = `${window.location.origin}/signup?ref=${referralCode}&group=${chatId}`;
-            const shareText = `💻 Hey! Maine CHEETCHAT par hamara study & coding group '${groupName}' banaya hai taaki hum coding problems solve kar sakein aur batchmates se connect karein.\n\nSabhi log yahan jud jao:\n${inviteUrl}\n\n🎁 Join karne par sabko 15 Din Free Premium + Aria & Arjun AI assistant milega!`;
+            const shareText = `💻 Hey! Maine Ducor par hamara study & coding group '${groupName}' banaya hai taaki hum coding problems solve kar sakein aur batchmates se connect karein.\n\nSabhi log yahan jud jao:\n${inviteUrl}\n\n🎁 Join karne par sabko 15 Din Free Premium + Aria & Arjun AI assistant milega!`;
 
             window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
             setGroupCreated(true);
@@ -210,7 +210,7 @@ const ProfileSetup = () => {
         const referralCode = user?.referralCode || '';
         const inviteUrl = `${window.location.origin}/signup?ref=${referralCode}`;
         const campusText = college ? `apne college (${college})` : 'campus';
-        const shareText = `Hey! Mai ${campusText} ke classmates ke saath CHEETCHAT par jud gaya hoon. Yahan apna group banayein, coding problems solve karein aur Aria & Arjun AI se baat karein! Tum bhi judo aur 15 din Free Premium pao:\n${inviteUrl}`;
+        const shareText = `Hey! Mai ${campusText} ke classmates ke saath Ducor par jud gaya hoon. Yahan apna group banayein, coding problems solve karein aur Aria & Arjun AI se baat karein! Tum bhi judo aur 15 din Free Premium pao:\n${inviteUrl}`;
         window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
     };
 
@@ -218,7 +218,7 @@ const ProfileSetup = () => {
         const referralCode = user?.referralCode || '';
         const inviteUrl = `${window.location.origin}/signup?ref=${referralCode}`;
         const campusText = college ? `apne college (${college})` : 'campus';
-        const shareText = `Hey! Mai ${campusText} ke classmates ke saath CHEETCHAT par jud gaya hoon. Yahan apna group banayein, coding problems solve karein aur Aria & Arjun AI se baat karein! Tum bhi judo aur 15 din Free Premium pao:\n${inviteUrl}`;
+        const shareText = `Hey! Mai ${campusText} ke classmates ke saath Ducor par jud gaya hoon. Yahan apna group banayein, coding problems solve karein aur Aria & Arjun AI se baat karein! Tum bhi judo aur 15 din Free Premium pao:\n${inviteUrl}`;
         window.open(`https://t.me/share/url?url=${encodeURIComponent(inviteUrl)}&text=${encodeURIComponent(shareText)}`, '_blank');
     };
 
@@ -256,7 +256,7 @@ const ProfileSetup = () => {
                         <ShieldCheckIcon className="h-6 w-6 text-black" />
                     </div>
                     <div>
-                        <span className="text-xl font-black tracking-tight text-white block">CHEETCHAT</span>
+                        <span className="text-xl font-black tracking-tight text-white block">Ducor</span>
                         <span className="text-[10px] text-[#25d366] tracking-wider uppercase font-bold">Campus & Student Network</span>
                     </div>
                 </div>
@@ -583,7 +583,7 @@ const ProfileSetup = () => {
                                                     >
                                                         <div className="flex items-center gap-2.5 min-w-0">
                                                             <img
-                                                                src={u.avatar || "https://api.dicebear.com/7.x/avataaars/svg?seed=CHEETCHAT"}
+                                                                src={u.avatar || "https://api.dicebear.com/7.x/avataaars/svg?seed=Ducor"}
                                                                 alt=""
                                                                 className="h-10 w-10 rounded-full object-cover shrink-0 border border-white/10"
                                                             />
@@ -730,7 +730,7 @@ const ProfileSetup = () => {
                                     onClick={handleFinish}
                                     className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#25d366] hover:bg-[#20bd5a] py-3.5 sm:py-4 px-6 font-black text-[#07090c] text-sm uppercase tracking-wider shadow-xl shadow-[#25d366]/30 ring-4 ring-[#25d366]/20 transition-all hover:scale-[1.01] active:scale-[0.99]"
                                 >
-                                    <span>Enter CHEETCHAT & Start Feature Tour →</span>
+                                    <span>Enter Ducor & Start Feature Tour →</span>
                                 </button>
                                 <p className="mt-1.5 text-center text-xs text-gray-400">
                                     Your Campus Lobby and Campus Guide are waiting for you

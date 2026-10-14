@@ -14,7 +14,7 @@ import {
     shouldUseEqualCallGrid, useCallInvitations,
 } from '../features/calls';
 
-// WebRTC requires DTLS-SRTP for every audio/video stream. CHEETCHAT does not
+// WebRTC requires DTLS-SRTP for every audio/video stream. Ducor does not
 // claim identity-verifying media E2EE until authenticated insertable-stream
 // key exchange is implemented across all supported browsers.
 

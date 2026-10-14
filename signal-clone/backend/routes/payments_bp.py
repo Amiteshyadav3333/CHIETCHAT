@@ -181,7 +181,7 @@ def create_premium_order():
         return jsonify({'payment': payment_payload(existing), 'checkout': {'keyId': key_id}})
     pending = PaymentOrder(
         payer_id=payer_id, amount_paise=PREMIUM_PRICE_PAISE, currency='INR',
-        description='CHEETCHAT Premium lifetime access', purpose='premium',
+        description='Ducor Premium lifetime access', purpose='premium',
         provider_order_id=f'pending-{os.urandom(12).hex()}', status='creating',
         client_request_id=client_request_id,
     )
@@ -238,7 +238,7 @@ def create_payment_order():
         return jsonify({'error': 'Payer and payee must belong to this chat'}), 403
     if not BusinessProfile.query.filter_by(user_id=payee_id).first():
         return jsonify({'error': 'Verified checkout is currently available only for business profiles'}), 400
-    description = str(data.get('description') or 'CHEETCHAT business payment').strip()[:160]
+    description = str(data.get('description') or 'Ducor business payment').strip()[:160]
     existing = PaymentOrder.query.filter_by(
         payer_id=payer_id, client_request_id=client_request_id,
     ).first()

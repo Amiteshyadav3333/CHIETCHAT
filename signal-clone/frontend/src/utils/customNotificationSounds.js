@@ -1,4 +1,4 @@
-// Custom Notification Sounds & Call Ringtones Engine for CHEETCHAT
+// Custom Notification Sounds & Call Ringtones Engine for Ducor
 // Supports built-in ~1s message sound presets, melodic call ringtone presets,
 // and custom audio uploads stored safely in IndexedDB (avoiding localStorage 5MB quota).
 

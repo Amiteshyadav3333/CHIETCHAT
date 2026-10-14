@@ -72,7 +72,7 @@ const VerifiedPaymentComposer = ({ open, onClose, chatId, payeeId, payeeName, on
                 key: checkout.keyId,
                 amount: Math.round(payment.amount * 100),
                 currency: payment.currency,
-                name: 'CHEETCHAT Pay',
+                name: 'Ducor Pay',
                 description: payment.description || `Payment to ${payeeName || 'business'}`,
                 order_id: payment.providerOrderId,
                 handler: async providerResult => {
@@ -107,7 +107,7 @@ const VerifiedPaymentComposer = ({ open, onClose, chatId, payeeId, payeeName, on
             <form onSubmit={startPayment} onClick={event => event.stopPropagation()} className="w-full max-w-md overflow-hidden rounded-3xl border border-emerald-400/20 bg-[#101d19] shadow-2xl">
                 <div className="bg-gradient-to-br from-emerald-500 to-teal-700 p-5 text-white">
                     <div className="flex items-start justify-between">
-                        <div><span className="rounded-full bg-white/20 px-2 py-1 text-[10px] font-black uppercase tracking-widest">Provider verified</span><h3 className="mt-3 text-2xl font-black">CHEETCHAT Pay</h3><p className="text-xs text-emerald-50/80">Secure Razorpay checkout</p></div>
+                        <div><span className="rounded-full bg-white/20 px-2 py-1 text-[10px] font-black uppercase tracking-widest">Provider verified</span><h3 className="mt-3 text-2xl font-black">Ducor Pay</h3><p className="text-xs text-emerald-50/80">Secure Razorpay checkout</p></div>
                         <button type="button" onClick={onClose} className="rounded-full bg-black/15 p-2"><XMarkIcon className="h-5 w-5" /></button>
                     </div>
                 </div>
@@ -118,7 +118,7 @@ const VerifiedPaymentComposer = ({ open, onClose, chatId, payeeId, payeeName, on
                     {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</p>}
                     <button type="submit" disabled={starting} className="w-full rounded-xl bg-emerald-500 py-3.5 text-sm font-black text-black hover:bg-emerald-400 disabled:opacity-60">{starting ? 'Starting secure checkout…' : 'Pay securely'}</button>
                     <p className="rounded-lg bg-emerald-500/10 px-3 py-2 text-center text-[10px] leading-4 text-emerald-200">The receipt is sent only after server signature verification and provider reconciliation.</p>
-                    <p className="text-center text-[10px] leading-4 text-gray-500">CHEETCHAT never stores your UPI PIN, card number or bank credentials.</p>
+                    <p className="text-center text-[10px] leading-4 text-gray-500">Ducor never stores your UPI PIN, card number or bank credentials.</p>
                 </div>
             </form>
         </div>

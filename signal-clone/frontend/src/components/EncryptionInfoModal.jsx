@@ -31,7 +31,7 @@ const EncryptionInfoModal = ({ chat, user, publicKey, onClose }) => {
             <div className="p-6 text-center">
                 <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-400"><LockClosedIcon className="h-8 w-8" /></span>
                 <h3 className="mt-4 text-xl font-black text-white">Messages and calls are end-to-end encrypted</h3>
-                <p className="mt-2 text-sm leading-6 text-gray-300">Text, photos, videos, voice messages, files and call media are encrypted on your device. CheetChat and the cloud-storage provider cannot read their contents.</p>
+                <p className="mt-2 text-sm leading-6 text-gray-300">Text, photos, videos, voice messages, files and call media are encrypted on your device. Ducor and the cloud-storage provider cannot read their contents.</p>
                 {isDirect && (!other.publicKey || !publicKey) && <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-4 text-center">
                     <p className="text-sm font-bold text-white">Encryption key unavailable</p>
                     <p className="mt-2 text-xs leading-5 text-gray-400">Waiting for {(!publicKey) ? 'you' : other.username} to generate end-to-end encryption keys. Please try refreshing or logging in again.</p>

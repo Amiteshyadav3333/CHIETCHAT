@@ -69,6 +69,7 @@ export const FeatureOverlays = ({
     navCollapsed = false,
     initialReel = null,
     onInitialReelConsumed,
+    openComposerRequest = 0,
 }) => {
     const featurePosition = 'reddit-feature-overlay fixed inset-x-0 bottom-0 top-16 z-30 bg-[#0b141b]';
     const featureStyle = {
@@ -103,6 +104,7 @@ export const FeatureOverlays = ({
                             onDeepLinkConsumed={() => setSocialDeepLink(null)}
                             onShareToChat={shareSocialPostToChat}
                             onDirectMessage={openSocialDirectMessage}
+                            openComposerRequest={openComposerRequest}
                         />
                     </React.Suspense>
                 </div>

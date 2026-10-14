@@ -96,7 +96,7 @@ const PublicReel = () => {
 
     const handleShare = async () => {
         const shareData = {
-            title: 'Check out this Reel on CHEETCHAT!',
+            title: 'Check out this Reel on Ducor!',
             text: reel?.caption || 'Watch this amazing reel',
             url: window.location.href
         };
@@ -134,7 +134,7 @@ const PublicReel = () => {
                         onClick={() => navigate('/login')}
                         className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-bold text-sm hover:from-blue-500 hover:to-purple-500 transition-all shadow-lg shadow-blue-500/25"
                     >
-                        Explore CHEETCHAT
+                        Explore Ducor
                     </button>
                 </div>
             </div>
@@ -178,7 +178,7 @@ const PublicReel = () => {
                         <ShieldCheckIcon className="h-5 w-5 text-white" />
                     </div>
                     <div>
-                        <h1 className="text-white font-bold text-base tracking-wide leading-tight">CHEETCHAT</h1>
+                        <h1 className="text-white font-bold text-base tracking-wide leading-tight">Ducor</h1>
                         <p className="text-white/40 text-[10px] font-medium">Reels</p>
                     </div>
                 </div>
@@ -282,7 +282,7 @@ const PublicReel = () => {
                                     <ShieldCheckIcon className="w-5 h-5 text-white" />
                                 </div>
                                 <div>
-                                    <p className="text-white font-bold text-sm">Join CHEETCHAT</p>
+                                    <p className="text-white font-bold text-sm">Join Ducor</p>
                                     <p className="text-white/70 text-xs">Sign up to see more reels & connect</p>
                                 </div>
                             </div>
@@ -309,7 +309,7 @@ const PublicReel = () => {
                             <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
                                 <ShieldCheckIcon className="w-8 h-8 text-white" />
                             </div>
-                            <h2 className="text-white text-xl font-bold mb-2">Join CHEETCHAT</h2>
+                            <h2 className="text-white text-xl font-bold mb-2">Join Ducor</h2>
                             <p className="text-gray-400 text-sm leading-relaxed max-w-xs mx-auto">
                                 Sign up to discover unlimited reels, like, comment, follow creators, and share your own videos.
                             </p>

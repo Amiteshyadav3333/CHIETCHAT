@@ -27,7 +27,7 @@ describe('PodLive session isolation', () => {
         expect(localStorage.getItem('cheetchat_other_setting')).toBe('keep');
     });
 
-    it('uses one CHEETCHAT exchange for simultaneous mobile startup calls', async () => {
+    it('uses one Ducor exchange for simultaneous mobile startup calls', async () => {
         axios.post
             .mockResolvedValueOnce({ data: { ticket: 'one-time-ticket' } })
             .mockResolvedValueOnce({ data: { accessToken: 'pod-token', refreshToken: 'refresh', user: { id: 'p1' } } });
@@ -38,7 +38,7 @@ describe('PodLive session isolation', () => {
         expect(localStorage.getItem(PODLIVE_STORAGE.token)).toBe('pod-token');
     });
 
-    it('automatically replaces an expired PodLive token through CHEETCHAT SSO', async () => {
+    it('automatically replaces an expired PodLive token through Ducor SSO', async () => {
         localStorage.setItem(PODLIVE_STORAGE.token, 'expired');
         localStorage.setItem(PODLIVE_STORAGE.user, JSON.stringify({ id: 'old' }));
         axios.get.mockRejectedValueOnce({ response: { status: 401 } });

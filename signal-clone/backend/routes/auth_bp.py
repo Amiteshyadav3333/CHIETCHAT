@@ -171,7 +171,7 @@ def verified_google_identity(access_token):
     return supabase_user, subject, email
 
 def available_platform_id(display_name):
-    reserved = {'admin', 'support', 'official', 'cheetchat', 'system', 'security'}
+    reserved = {'admin', 'support', 'official', 'cheetchat', 'ducor', 'ducor campus guide', 'system', 'security'}
     base = re.sub(r'[^a-z0-9]+', '_', str(display_name or '').lower()).strip('_')[:24] or 'user'
     if len(base) < 3 or base in reserved:
         base = f'user_{base}'[:24]
@@ -380,7 +380,7 @@ def exchange_google_session():
 
         # Auto-create user and log them directly in
         metadata = supabase_user.get('user_metadata') or {}
-        display_name = str(metadata.get('full_name') or metadata.get('name') or email.split('@')[0]).strip()[:80] or 'CHEETCHAT user'
+        display_name = str(metadata.get('full_name') or metadata.get('name') or email.split('@')[0]).strip()[:80] or 'Ducor user'
         avatar_url = str(metadata.get('avatar_url') or metadata.get('picture') or '').strip()
         phone = f"google:{hashlib.sha256(subject.encode()).hexdigest()[:12]}"
         
@@ -426,7 +426,7 @@ def complete_google_registration():
         if existing_google:
             return finalize_login(existing_google)
         if User.query.filter(db.func.lower(User.email) == email).first():
-            return jsonify({'error': 'This email already has a CHEETCHAT account'}), 409
+            return jsonify({'error': 'This email already has a Ducor account'}), 409
         phone = normalize_phone(data.get('phone'))
         if phone:
             if not is_valid_phone(phone):
@@ -445,7 +445,7 @@ def complete_google_registration():
         if not isinstance(encrypted_recovery_key, str) or not 50 <= len(encrypted_recovery_key) <= 20000:
             return jsonify({'error': 'Recovery key setup is required'}), 400
         metadata = supabase_user.get('user_metadata') or {}
-        display_name = str(metadata.get('full_name') or metadata.get('name') or email.split('@')[0]).strip()[:80] or 'CHEETCHAT user'
+        display_name = str(metadata.get('full_name') or metadata.get('name') or email.split('@')[0]).strip()[:80] or 'Ducor user'
         avatar_url = str(metadata.get('avatar_url') or metadata.get('picture') or '').strip()
         use_google_avatar = data.get('useGoogleAvatar') is True and avatar_url.startswith('https://')
         user = User(

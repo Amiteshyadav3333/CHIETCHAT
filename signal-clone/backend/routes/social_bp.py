@@ -1,11 +1,13 @@
 import datetime
 import json
+import re
+from collections import Counter
 from flask import Blueprint, current_app, jsonify, request
 from sqlalchemy import or_
 from werkzeug.utils import secure_filename
 
 from models import (
-    db, User, Follow, SocialPost, SocialPostLike, SocialPostShare, SocialPostComment, SocialPollVote,
+    db, User, Follow, Reel, SocialPost, SocialPostLike, SocialPostShare, SocialPostComment, SocialPollVote,
     Channel, ChannelMembership, CommentReply, Status, UserReport
 )
 from utils import (
@@ -23,7 +25,6 @@ FEED_MAX_LIMIT = 50
 COMMENT_DEFAULT_LIMIT = 50
 COMMENT_MAX_LIMIT = 100
 MAX_POST_CAPTION_LENGTH = 1000
-MAX_ARTICLE_LENGTH = 10000
 MAX_COMMENT_LENGTH = 1000
 MAX_CHANNEL_QUERY_LENGTH = 100
 FREE_DAILY_POST_LIMIT = 3
@@ -185,7 +186,9 @@ def get_social_posts():
 
     feed = request.args.get('feed', 'all')
     query = SocialPost.query.filter_by(channel_id=None)
-    if feed == 'community':
+    if feed == 'news':
+        query = query.filter(SocialPost.post_kind == 'article')
+    elif feed == 'community':
         query = query.filter(SocialPost.post_kind == 'community')
     else:
         query = query.filter(or_(SocialPost.post_kind == 'standard', SocialPost.post_kind.is_(None)))
@@ -199,6 +202,25 @@ def get_social_posts():
         bounded_limit(FEED_DEFAULT_LIMIT, FEED_MAX_LIMIT)
     ).all()
     return jsonify([serialize_post(post, user_id) for post in posts])
+
+
+@social_bp.route('/api/social/trends', methods=['GET'])
+def get_social_trends():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    cutoff = utc_now() - datetime.timedelta(days=30)
+    recent_posts = SocialPost.query.filter(
+        SocialPost.channel_id.is_(None), SocialPost.created_at >= cutoff
+    ).order_by(SocialPost.created_at.desc()).limit(1000).all()
+    recent_reels = Reel.query.filter(Reel.created_at >= cutoff).order_by(Reel.created_at.desc()).limit(1000).all()
+    counts = Counter()
+    for content in [*recent_posts, *recent_reels]:
+        text = ' '.join(filter(None, [getattr(content, 'caption', ''), getattr(content, 'article_title', '')]))
+        tags = {tag.lower() for tag in re.findall(r'(?<!\w)#([\w]{2,40})', text, flags=re.UNICODE)}
+        counts.update(tags)
+    return jsonify([{"tag": f"#{tag}", "posts": count} for tag, count in counts.most_common(8)])
 
 @social_bp.route('/api/social/posts', methods=['POST'])
 def create_social_post():
@@ -215,8 +237,8 @@ def create_social_post():
     premium_active = bool(user.is_premium and (not user.premium_expires_at or user.premium_expires_at > utc_now()))
     is_monetized = request.form.get('isMonetized', 'false').lower() == 'true'
     article_title = request.form.get('articleTitle', '').strip()[:200]
-    if (post_kind == 'article' or is_monetized) and not premium_active:
-        return jsonify({"error": "Premium membership is required for articles and paid posts"}), 403
+    if is_monetized and not premium_active:
+        return jsonify({"error": "Premium membership is required for paid posts"}), 403
     if post_kind == 'article' and not article_title:
         return jsonify({"error": "Article title is required"}), 400
     raw_poll_options = request.form.get('pollOptions', '')
@@ -227,9 +249,8 @@ def create_social_post():
             return jsonify({"error": "Invalid poll options"}), 400
         if len(poll_options) < 2 or len(poll_options) > 4:
             return jsonify({"error": "A poll needs 2 to 4 options"}), 400
-    caption_limit = MAX_ARTICLE_LENGTH if post_kind == 'article' else MAX_POST_CAPTION_LENGTH
-    if len(caption) > caption_limit:
-        return jsonify({"error": f"Caption must be {caption_limit} characters or less"}), 400
+    if post_kind != 'article' and len(caption) > MAX_POST_CAPTION_LENGTH:
+        return jsonify({"error": f"Caption must be {MAX_POST_CAPTION_LENGTH} characters or less"}), 400
     channel_id = request.form.get('channelId')
     channel = None
     if channel_id:
@@ -238,7 +259,7 @@ def create_social_post():
         if role not in {'owner', 'approved'}:
             return jsonify({"error": "Channel approval required before posting"}), 403
 
-    if not premium_active:
+    if not premium_active and post_kind != 'article':
         # Serialize quota checks per user in PostgreSQL so parallel requests
         # cannot both pass the count and create a fourth free post.
         user = User.query.filter_by(id=user_id).with_for_update().one()
@@ -269,6 +290,16 @@ def create_social_post():
         if not detected_type:
             return jsonify({"error": "Upload image or video only"}), 400
         typed_files.append((file, detected_type))
+    if any(kind == 'video' for _, kind in typed_files):
+        try:
+            media_duration = float(request.form.get('mediaDuration', 0))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid video duration"}), 400
+        if media_duration > 150 and not premium_active:
+            return jsonify({
+                "error": "Videos longer than 2 minutes 30 seconds require Premium.",
+                "code": "PREMIUM_VIDEO_LENGTH_REQUIRED",
+            }), 403
     if len(typed_files) > 1 and any(kind != 'image' for _, kind in typed_files):
         return jsonify({"error": "Multiple selection supports photos only; upload a video by itself"}), 400
     try:
@@ -406,7 +437,7 @@ def share_post_to_story(post_id):
         return jsonify({"error": "Unauthorized"}), 401
     post = db.get_or_404(SocialPost, post_id)
     source = post.retweet_of if post.retweet_of_id and post.retweet_of else post
-    media_url = source.media_url or f"{current_app.config['FRONTEND_URL'].rstrip('/')}/cheetchat-logo.png"
+    media_url = source.media_url or f"{current_app.config['FRONTEND_URL'].rstrip('/')}/ducor-mark.svg"
     media_type = source.media_type if source.media_url else 'image'
     caption = (source.caption or f"Post by @{source.user.username}").strip()[:300]
     status = Status(

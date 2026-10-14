@@ -73,7 +73,7 @@ const ResetPassword = () => {
                     </div>
                     <h1 className="text-2xl font-bold tracking-normal">Set new password</h1>
                     <p className="mt-2 text-sm leading-6 text-gray-400">
-                        Create a new password for your CHEETCHAT account.
+                        Create a new password for your Ducor account.
                     </p>
                 </div>
 
@@ -109,13 +109,13 @@ const ResetPassword = () => {
                         <div>
                             <input
                                 type="password"
-                                placeholder="CHEETCHAT recovery code"
+                                placeholder="Ducor recovery code"
                                 value={recoveryCode}
                                 onChange={event => setRecoveryCode(event.target.value)}
                                 className="w-full rounded-lg border border-emerald-500/30 bg-signal-input px-4 py-3 text-white outline-none transition focus:border-emerald-400"
                                 required
                             />
-                            <p className="mt-2 text-xs leading-5 text-gray-400">This code decrypts your chat key locally. It is never sent to CHEETCHAT.</p>
+                            <p className="mt-2 text-xs leading-5 text-gray-400">This code decrypts your chat key locally. It is never sent to Ducor.</p>
                         </div>
                     )}
                     <button

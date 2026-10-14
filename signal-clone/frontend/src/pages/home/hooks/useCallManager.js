@@ -65,7 +65,7 @@ export const useCallManager = ({ socket, user, chats, activeChat, setActiveChat,
             setCallType(type);
             socket.emit('notify_ring', {
                 chatId: chat.id,
-                callerName: user.username || 'CHEETCHAT user',
+                callerName: user.username || 'Ducor user',
                 callerId: user.id,
                 participants: participants.map(participant => participant.id),
                 callType: type

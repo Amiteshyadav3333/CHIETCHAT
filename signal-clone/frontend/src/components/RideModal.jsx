@@ -127,7 +127,7 @@ const RideModal = ({ onClose, onSend }) => {
                             <>Open Uber & share plan</>
                         )}
                     </button>
-                    <p className="mt-2 text-center text-[10px] leading-4 text-gray-400">Prices and arrival times shown above are examples. Booking and payment happen in the partner service and are not verified by CHEETCHAT.</p>
+                    <p className="mt-2 text-center text-[10px] leading-4 text-gray-400">Prices and arrival times shown above are examples. Booking and payment happen in the partner service and are not verified by Ducor.</p>
                 </div>
             </div>
         </div>

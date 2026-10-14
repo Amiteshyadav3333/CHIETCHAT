@@ -7,12 +7,12 @@ export const AppTopBar = ({ user, token, chats, onMenu, onCreate, onNotification
     <header className="reddit-topbar relative z-[55] flex h-16 shrink-0 items-center gap-3 border-b px-3 sm:px-5">
         <button type="button" onClick={onMenu} className="reddit-topbar-icon rounded-full p-2.5" aria-label="Toggle navigation"><Bars3Icon className="h-5 w-5" /></button>
         <button type="button" onClick={onMenu} className="flex shrink-0 items-center gap-2" aria-label="Open navigation">
-            <img src="/cheetchat-logo.png" alt="" className="h-8 w-8 rounded-xl object-cover" />
-            <span className="reddit-brand hidden text-lg font-black tracking-tight sm:inline">CHEETCHAT</span>
+            <img src="/ducor-mark.svg" alt="" className="h-8 w-8 rounded-xl object-cover" />
+            <span className="reddit-brand hidden text-lg font-black tracking-tight sm:inline">Ducor</span>
         </button>
         <GlobalSearchBar token={token} chats={chats} onSelectResult={onSelectSearchResult} onMessageUser={onMessageUser} />
         <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
-            <button type="button" onClick={onCreate} className="reddit-topbar-action flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold"><PlusIcon className="h-5 w-5" /><span className="hidden lg:inline">New chat</span></button>
+            <button type="button" onClick={onCreate} className="reddit-topbar-action flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold"><PlusIcon className="h-5 w-5" /><span className="hidden lg:inline">Publish</span></button>
             <button type="button" onClick={onNotifications} className="reddit-topbar-icon relative rounded-full p-2.5" aria-label="Notifications"><BellIcon className="h-5 w-5" />{unreadCount > 0 && <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-[#ff6533] ring-2 ring-[#11171b]" />}</button>
             <button type="button" onClick={onProfile} className="hidden items-center gap-2 rounded-full p-1.5 sm:flex" aria-label={`Open settings for ${user?.username || 'user'}`}><AvatarZoom src={user?.avatar} name={user?.username} size="w-8 h-8" /><ChevronDownIcon className="h-4 w-4 text-gray-400" /></button>
         </div>
@@ -41,8 +41,8 @@ export const HomeNavigationRail = ({
                 : `reddit-nav relative z-[40] hidden md:flex ${navCollapsed ? 'w-[76px]' : 'w-[220px] xl:w-[250px]'} shrink-0 flex-col border-r px-2 py-4 transition-[width] duration-200`
             }>
                 <div className={`h-10 px-2 flex items-center ${navCollapsed && !navPeekOpen ? 'justify-center' : ''}`}>
-                    <img src="/cheetchat-logo.png" alt="CHEETCHAT" className="h-9 w-9 rounded-xl object-cover" />
-                    <span className={`reddit-brand ml-2 text-xl font-black tracking-tight ${navCollapsed && !navPeekOpen ? 'hidden' : 'inline'}`}>CHEETCHAT</span>
+                    <img src="/ducor-mark.svg" alt="Ducor" className="h-9 w-9 rounded-xl object-cover" />
+                    <span className={`reddit-brand ml-2 text-xl font-black tracking-tight ${navCollapsed && !navPeekOpen ? 'hidden' : 'inline'}`}>Ducor</span>
                 </div>
                 <nav className="reddit-nav-items mt-5 flex flex-col gap-1 overflow-y-auto">
                     {navItems.map((item, index) => {

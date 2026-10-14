@@ -1,8 +1,8 @@
 export const getSocialShareData = (post, origin = window.location.origin) => {
     const displayPost = post.isRetweet && post.originalPost ? post.originalPost : post;
     const url = `${origin}/?post=${post.id}`;
-    const text = displayPost.caption?.trim() || `See @${displayPost.user?.username || 'CHEETCHAT'}'s post`;
-    return { title: 'CHEETCHAT Post', text, url, message: `${text}\n${url}` };
+    const text = displayPost.caption?.trim() || `See @${displayPost.user?.username || 'Ducor'}'s post`;
+    return { title: 'Ducor Post', text, url, message: `${text}\n${url}` };
 };
 
 export const getSocialShareTargets = (shareData) => ({

@@ -101,7 +101,7 @@ export const ChatWindowView = ({
     if (!visibleActiveChat) {
         return (
             <div className="hidden md:flex flex-1 items-center justify-center flex-col text-gray-500">
-                <h2 className="text-2xl font-bold mb-2">Welcome to CHEETCHAT</h2>
+                <h2 className="text-2xl font-bold mb-2">Welcome to Ducor</h2>
                 <p>Select a chat or click + to start messaging.</p>
             </div>
         );

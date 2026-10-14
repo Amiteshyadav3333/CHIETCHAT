@@ -140,7 +140,7 @@ const GiftModal = ({ onClose, onSend }) => {
                 ) : (
                     <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6 text-center">
                         <div className="px-4 py-3 bg-[#111b21] border-b border-white/5 flex items-center justify-between shrink-0">
-                            <span className="text-xs text-gray-400">Myntra opens as a separate service. CHEETCHAT cannot verify purchases made there.</span>
+                            <span className="text-xs text-gray-400">Myntra opens as a separate service. Ducor cannot verify purchases made there.</span>
                         </div>
                         <div className="text-6xl">🛍️</div>
                         <input value={couponCode} onChange={event => setCouponCode(event.target.value.replace(/[^a-z0-9-]/gi, '').slice(0, 32))} placeholder="Enter Myntra coupon code" autoCapitalize="characters" className="w-full rounded-xl border border-pink-500/30 bg-[#202c33] px-4 py-3 text-center font-mono text-base uppercase tracking-widest text-white outline-none focus:border-pink-400" />

@@ -1,7 +1,7 @@
 export const getReelShareData = (reel, origin = window.location.origin) => {
     const url = `${origin}/reels/${reel.id}`;
-    const text = reel.caption?.trim() || `Watch @${reel.user?.username || 'CHEETCHAT'}'s Reel`;
-    return { title: 'CHEETCHAT Reel', text, url, message: `${text}\n${url}` };
+    const text = reel.caption?.trim() || `Watch @${reel.user?.username || 'Ducor'}'s Reel`;
+    return { title: 'Ducor Reel', text, url, message: `${text}\n${url}` };
 };
 
 export const getReelShareTargets = (shareData) => ({

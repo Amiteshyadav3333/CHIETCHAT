@@ -24,7 +24,7 @@ export const saveMediaToDevice = async (sourceUrl) => {
     const isAppleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent || '');
 
     if (isAppleMobile && navigator.share && navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'Save CHEETCHAT media' });
+        await navigator.share({ files: [file], title: 'Save Ducor media' });
         return 'shared';
     }
 

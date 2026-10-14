@@ -119,7 +119,7 @@ export const HomeModalsContainer = ({
                         <button type="button" onClick={() => setShowLinkPhoneModal(false)} className="float-right text-sm text-gray-400 hover:text-white">Close</button>
                         <div className="text-4xl">📱</div>
                         <h2 className="mt-4 text-xl font-black text-white">Link your number and find your friends</h2>
-                        <p className="mt-2 text-sm leading-6 text-gray-400">Add your mobile number to discover friends and let them find you on CHEETCHAT.</p>
+                        <p className="mt-2 text-sm leading-6 text-gray-400">Add your mobile number to discover friends and let them find you on Ducor.</p>
                         <input autoFocus value={linkPhone} onChange={event => setLinkPhone(event.target.value.replace(/\D/g, '').slice(0, 10))} inputMode="numeric" pattern="\d{10}" maxLength={10} placeholder="10-digit mobile number" className="mt-5 w-full rounded-xl border border-white/10 bg-[#202c33] px-4 py-3 text-white outline-none focus:border-[#00a884]" required />
                         {linkPhoneError && <p className="mt-2 text-sm text-red-400">{linkPhoneError}</p>}
                         <button type="submit" disabled={linkingPhone} className="mt-5 w-full rounded-xl bg-[#00a884] py-3 text-sm font-black text-white disabled:opacity-60">{linkingPhone ? 'Linking…' : 'Link number'}</button>
@@ -131,7 +131,7 @@ export const HomeModalsContainer = ({
                 <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
                     <div className="bg-signal-secondary w-full max-w-sm rounded-2xl p-6 shadow-2xl border border-gray-700">
                         <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-xl font-bold text-white">CheetChat Search</h2>
+                            <h2 className="text-xl font-bold text-white">Ducor Search</h2>
                             <button onClick={() => setShowSearchModal(false)} className="text-gray-400 hover:text-white">Close</button>
                         </div>
 

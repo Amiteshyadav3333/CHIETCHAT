@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from werkzeug.security import check_password_hash
 import jwt
 import os
@@ -92,7 +92,7 @@ def admin_login():
         'admin_email': email,
         'admin': True,
         'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=2)
-    }, os.environ.get('JWT_SECRET_KEY', 'admin-secret-key'), algorithm='HS256')
+    }, current_app.config['JWT_SECRET_KEY'], algorithm='HS256')
 
     return jsonify({
         'token': token,
@@ -109,7 +109,7 @@ def verify_admin_token():
 
     token = auth_header.split(' ', 1)[1].strip()
     try:
-        payload = jwt.decode(token, os.environ.get('JWT_SECRET_KEY', 'admin-secret-key'), algorithms=['HS256'])
+        payload = jwt.decode(token, current_app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
         config = admin_config()
         if not payload.get('admin') or not config['email'] or not hmac.compare_digest(payload.get('admin_email', ''), config['email']):
             return None

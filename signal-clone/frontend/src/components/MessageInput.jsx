@@ -1,12 +1,11 @@
 import React, { useRef, useState } from 'react';
 import axios from 'axios';
 import { 
-    PaperAirplaneIcon, FaceSmileIcon, PaperClipIcon, MicrophoneIcon, 
+    PaperAirplaneIcon, PaperClipIcon, MicrophoneIcon,
     StopIcon, XMarkIcon, ChartBarIcon, MapPinIcon, DocumentIcon,
     MusicalNoteIcon, PhotoIcon, CameraIcon, VideoCameraIcon, UserCircleIcon
 } from '@heroicons/react/24/solid';
 import { ArrowUturnLeftIcon, GiftIcon, ShoppingBagIcon } from '@heroicons/react/24/outline';
-import EmojiPicker from 'emoji-picker-react';
 import RideModal from './RideModal';
 import GiftModal from './GiftModal';
 import BirthdayModal from './BirthdayModal';
@@ -60,12 +59,6 @@ const GlobeIcon = ({ className }) => (
     </svg>
 );
 
-const STICKERS = [
-    '😀', '😂', '🥰', '😍', '😎', '🥳', '🤩',
-    '🤗', '🤔', '😴', '😭', '😡', '🤯', '😇',
-    '👍', '👏', '🙏', '💪', '❤️', '💯', '🔥',
-    '🎉', '🎂', '🎁', '✨', '🌟', '🫶', '🚀',
-];
 const apiUrl = API_BASE_URL;
 const cleanBaseUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
 
@@ -84,7 +77,6 @@ const MessageInput = ({
 }) => {
     const [text, setText] = useState('');
     const [showEmoji, setShowEmoji] = useState(false);
-    const [pickerTab, setPickerTab] = useState('emoji');
     const [gifSearch, setGifSearch] = useState('');
     const [gifs, setGifs] = useState([]);
     const [loadingGifs, setLoadingGifs] = useState(false);
@@ -253,14 +245,14 @@ const MessageInput = ({
     }, [drawSource]);
 
     React.useEffect(() => {
-        if (pickerTab === 'gif' && gifs.length === 0) {
+        if (showEmoji && gifs.length === 0) {
             setLoadingGifs(true);
             fetch(`${cleanBaseUrl}/api/gifs?q=trending`)
                 .then(res => res.json())
                 .then(data => { setGifs(data.gifs || []); setLoadingGifs(false); })
                 .catch(() => { setGifs([]); setLoadingGifs(false); });
         }
-    }, [pickerTab, gifs.length]);
+    }, [showEmoji, gifs.length]);
 
     React.useEffect(() => {
         const handleClickOutside = (e) => {
@@ -396,11 +388,6 @@ const MessageInput = ({
             e.preventDefault();
             handleSubmit(e);
         }
-    };
-
-    const handleEmojiClick = (emojiData) => {
-        setText(prev => prev + emojiData.emoji);
-        inputRef.current?.focus();
     };
 
     const handleFileChange = (e) => {
@@ -650,43 +637,10 @@ const MessageInput = ({
                 </div>
             )}
 
-            {/* Emoji / GIF / Sticker Picker */}
+            {/* GIF picker */}
             {showEmoji && (
                 <div ref={emojiPickerRef} className="absolute bottom-full left-0 z-50 flex flex-col gap-2 rounded-2xl bg-[#202c33] p-3 shadow-2xl w-[350px] mb-1 border border-white/10">
-                    {/* Tab Header */}
-                    <div className="flex bg-black/20 rounded-lg p-0.5 text-xs text-gray-300">
-                        {['emoji', 'gif', 'sticker'].map(tab => (
-                            <button
-                                key={tab}
-                                type="button"
-                                onClick={() => setPickerTab(tab)}
-                                className={`flex-1 py-1.5 rounded-md font-bold uppercase tracking-wider transition-all ${
-                                    pickerTab === tab 
-                                        ? 'bg-[#00a884] text-white shadow' 
-                                        : 'hover:text-white'
-                                }`}
-                            >
-                                {tab}
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Tab Content */}
                     <div className="h-[380px] overflow-hidden flex flex-col">
-                        {pickerTab === 'emoji' && (
-                            <EmojiPicker
-                                onEmojiClick={handleEmojiClick}
-                                theme="dark"
-                                height="100%"
-                                width="100%"
-                                searchDisabled={false}
-                                searchPlaceholder="Search emoji..."
-                                skinTonesDisabled
-                                previewConfig={{ showPreview: false }}
-                            />
-                        )}
-
-                        {pickerTab === 'gif' && (
                             <div className="flex flex-col h-full gap-2 font-sans text-xs overflow-hidden pt-1">
                                 <div className="flex px-1 gap-2">
                                     <input
@@ -738,28 +692,6 @@ const MessageInput = ({
                                     ))}
                                 </div>
                             </div>
-                        )}
-
-                        {pickerTab === 'sticker' && (
-                            <div className="flex flex-col h-full gap-2 font-sans text-xs overflow-y-auto pt-1">
-                                <p className="px-1 text-[11px] font-bold uppercase tracking-wider text-gray-400">Offline Stickers</p>
-                                <div className="grid grid-cols-4 gap-2 scrollbar-thin">
-                                    {STICKERS.map((sticker, i) => (
-                                        <button
-                                            key={i}
-                                            type="button"
-                                            onClick={() => {
-                                                onSend(sticker, 'sticker', disappearingTtl);
-                                                setShowEmoji(false);
-                                            }}
-                                            className="rounded-xl bg-white/5 p-2 hover:bg-white/10 transition-colors flex items-center justify-center"
-                                        >
-                                            <span role="img" aria-label={`sticker-${i + 1}`} className="text-4xl leading-none">{sticker}</span>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
                     </div>
                 </div>
             )}
@@ -1116,15 +1048,15 @@ const MessageInput = ({
                             >
                                 <GlobeIcon className="w-6 h-6" />
                             </button>
-                            {/* Emoji button — RIGHT INSIDE chatbox, vertically centered */}
+                            {/* GIF button — RIGHT INSIDE chatbox, vertically centered */}
                             <button
                                 id="emoji-btn"
                                 type="button"
                                 onClick={() => { setShowEmoji(v => !v); setShowAttachMenu(false); }}
                                 className={`absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full transition-all active:scale-90 ${showEmoji ? 'text-[#00a884]' : 'text-gray-400 hover:text-[#00a884]'}`}
-                                title="Emoji / GIF / Sticker"
+                                title="GIFs"
                             >
-                                <FaceSmileIcon className="w-6 h-6" />
+                                <span className="text-xs font-black tracking-wide">GIF</span>
                             </button>
                         </div>
                     )}

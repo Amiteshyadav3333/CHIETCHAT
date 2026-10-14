@@ -86,7 +86,6 @@ export const Home = () => {
     const [unlockError, setUnlockError] = useState('');
     const [blockedUsers, setBlockedUsers] = useState([]);
     const [sidebarSearchQuery, setSidebarSearchQuery] = useState('');
-    const [showSidebarEmoji, setShowSidebarEmoji] = useState(false);
     const [storyUserIds, setStoryUserIds] = useState([]);
     const [showFeatureTour, setShowFeatureTour] = useState(() => localStorage.getItem('cheetchat_tour_completed') !== '1');
 
@@ -192,7 +191,6 @@ export const Home = () => {
     const activeChatRef = useRef(activeChat);
     const chatsRef = useRef(chats);
     const messageRefsMap = useRef({});
-    const sidebarEmojiPickerRef = useRef(null);
     const businessAutomationRef = useRef(null);
 
     // Decryption helpers
@@ -292,20 +290,6 @@ export const Home = () => {
     const handleStatusGroupsChange = useCallback((statusGroups) => {
         setStoryUserIds(statusGroups.map(group => group.user?.id).filter(Boolean));
     }, []);
-
-    // Outside click for sidebar emoji picker
-    useEffect(() => {
-        const handleOutsideClick = (e) => {
-            if (showSidebarEmoji && sidebarEmojiPickerRef.current && !sidebarEmojiPickerRef.current.contains(e.target)) {
-                const emojiBtn = document.getElementById('sidebar-emoji-btn');
-                if (!emojiBtn || !emojiBtn.contains(e.target)) {
-                    setShowSidebarEmoji(false);
-                }
-            }
-        };
-        document.addEventListener('mousedown', handleOutsideClick);
-        return () => document.removeEventListener('mousedown', handleOutsideClick);
-    }, [showSidebarEmoji]);
 
     // Offline queue processing
     const processQueue = useCallback(async () => {
@@ -1647,9 +1631,6 @@ export const Home = () => {
                 handleDeleteAvatar={handleDeleteAvatar}
                 sidebarSearchQuery={sidebarSearchQuery}
                 setSidebarSearchQuery={setSidebarSearchQuery}
-                showSidebarEmoji={showSidebarEmoji}
-                setShowSidebarEmoji={setShowSidebarEmoji}
-                sidebarEmojiPickerRef={sidebarEmojiPickerRef}
                 handleStatusGroupsChange={handleStatusGroupsChange}
                 storyUserIds={storyUserIds}
                 isMobile={nav.isMobile}

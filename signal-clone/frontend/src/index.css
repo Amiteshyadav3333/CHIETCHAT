@@ -129,6 +129,26 @@ body {
   animation: chat-wallpaper-drift 18s ease-in-out infinite;
 }
 
+/* Social feed: a calmer community layout with Reddit-inspired warm accents. */
+.reddit-social { background: #0b141b !important; color: #d7dadc !important; }
+.reddit-social aside { border-color: #27333b !important; }
+.reddit-social main { background: #0b141b; }
+.reddit-social header { background: #111b23 !important; border-color: #27333b !important; }
+.reddit-social button { transition: background-color .16s ease, color .16s ease, border-color .16s ease; }
+.reddit-social [class~="text-[#1d9bf0]"] { color: #ff6a3d !important; }
+.reddit-social [class~="bg-[#1d9bf0]"] { background-color: #ff6a3d !important; }
+.reddit-social [class~="border-[#2f3336]"] { border-color: #27333b !important; }
+.reddit-social textarea:focus, .reddit-social input:focus { outline-color: #ff6a3d; }
+.reddit-social .reddit-feed-skeleton { padding: 12px 16px 28px; }
+.reddit-social .reddit-skeleton-card { padding: 18px; margin-bottom: 12px; border: 1px solid #27333b; border-radius: 14px; background: #111b23; }
+.reddit-skeleton-line { border-radius: 999px; background: linear-gradient(90deg, #18242d 25%, #22313b 45%, #18242d 65%); background-size: 220% 100%; animation: reddit-shimmer 1.35s ease-in-out infinite; }
+.reddit-skeleton-author { width: 34%; height: 12px; margin-bottom: 18px; }
+.reddit-skeleton-title { width: 72%; height: 18px; margin-bottom: 12px; }
+.reddit-skeleton-copy { width: 92%; height: 11px; margin-bottom: 8px; }
+.reddit-skeleton-copy.short { width: 58%; }
+@keyframes reddit-shimmer { to { background-position: -220% 0; } }
+@media (prefers-reduced-motion: reduce) { .reddit-skeleton-line { animation: none; } }
+
 @keyframes ludo-dice-natural-roll {
   0% { transform: translateY(0) rotateX(0) rotateY(0) rotateZ(0); }
   18% { transform: translateY(-18px) rotateX(110deg) rotateY(70deg) rotateZ(35deg); }

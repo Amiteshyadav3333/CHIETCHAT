@@ -22,7 +22,6 @@
         "chess.js": "^1.4.0",
         "clsx": "^2.0.0",
         "date-fns": "^2.30.0",
-        "emoji-picker-react": "^4.5.15",
         "framer-motion": "^10.16.4",
         "hls.js": "^1.7.0",
         "livekit-client": "^2.17.2",

@@ -2,8 +2,7 @@ import React from 'react';
 import AvatarZoom from '../../../components/AvatarZoom';
 import ContactList from '../../../components/ContactList';
 import StatusSection from '../../../components/StatusSection';
-import SidebarEmojiPicker from '../../../components/SidebarEmojiPicker';
-import { PlusIcon, FaceSmileIcon } from '@heroicons/react/24/outline';
+import { PlusIcon } from '@heroicons/react/24/outline';
 import { MobileBottomNavigation } from './HomeNavigationRail';
 
 export const ChatSidebar = ({
@@ -17,9 +16,6 @@ export const ChatSidebar = ({
     handleDeleteAvatar,
     sidebarSearchQuery,
     setSidebarSearchQuery,
-    showSidebarEmoji,
-    setShowSidebarEmoji,
-    sidebarEmojiPickerRef,
     handleStatusGroupsChange,
     storyUserIds,
     isMobile,
@@ -101,27 +97,7 @@ export const ChatSidebar = ({
                             </svg>
                         </button>
                     )}
-
-                    <button
-                        id="sidebar-emoji-btn"
-                        type="button"
-                        onClick={() => setShowSidebarEmoji(v => !v)}
-                        className={`absolute right-2.5 top-1/2 -translate-y-1/2 transition-all rounded-full p-0.5 ${showSidebarEmoji ? 'text-[#00a884]' : 'text-gray-400 hover:text-[#00a884]'}`}
-                        title="Emoji"
-                    >
-                        <FaceSmileIcon className="w-5 h-5" />
-                    </button>
                 </div>
-
-                {showSidebarEmoji && (
-                    <SidebarEmojiPicker
-                        pickerRef={sidebarEmojiPickerRef}
-                        onPick={(emoji) => {
-                            setSidebarSearchQuery(prev => prev + emoji);
-                            setShowSidebarEmoji(false);
-                        }}
-                    />
-                )}
             </div>
 
             {/* Stories stay above chats on desktop */}

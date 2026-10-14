@@ -34,14 +34,14 @@ const loadRazorpayCheckout = () => new Promise((resolve, reject) => {
     script.onload = resolve; script.onerror = () => reject(new Error('Premium checkout failed to load')); document.head.appendChild(script);
 });
 
-const VerifiedBadge = ({ premium }) => premium ? <span title="Premium verified" className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#1d9bf0] text-[10px] font-black text-white">✓</span> : null;
+const VerifiedBadge = ({ premium }) => premium ? <span title="Premium verified" className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#ff6a3d] text-[10px] font-black text-white">✓</span> : null;
 
 const CheetChatLogo = ({ className, style, hideTextOnMobile = true }) => (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, ...style }} className={className}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-8 h-8 text-[#1d9bf0] flex-shrink-0">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-8 h-8 text-[#ff6a3d] flex-shrink-0">
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 18.97a5.969 5.969 0 01-.774-2.814c0-.19.054-.379.161-.541A7.994 7.994 0 014.5 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
         </svg>
-        <span className={`${hideTextOnMobile ? 'hidden xl:inline' : 'inline'} font-black tracking-wider text-xl bg-gradient-to-r from-blue-400 to-[#1d9bf0] bg-clip-text text-transparent`} style={{ fontFamily: 'system-ui, sans-serif' }}>
+        <span className={`${hideTextOnMobile ? 'hidden xl:inline' : 'inline'} font-black tracking-wider text-xl bg-gradient-to-r from-blue-400 to-[#ff6a3d] bg-clip-text text-transparent`} style={{ fontFamily: 'system-ui, sans-serif' }}>
             CHEETCHAT
         </span>
     </div>
@@ -135,9 +135,13 @@ const TRENDING = [
 ];
 
 const CheetChatLoading = () => (
-    <div style={{ display: 'flex', justifyContent: 'center', padding: '64px 0' }}>
-        <div style={{ width: 32, height: 32, border: '4px solid rgba(255,255,255,0.1)', borderTopColor: '#1d9bf0', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    <div className="reddit-feed-skeleton" aria-label="Loading posts" role="status">
+        {[0, 1, 2].map(item => <div className="reddit-skeleton-card" key={item}>
+            <div className="reddit-skeleton-line reddit-skeleton-author" />
+            <div className="reddit-skeleton-line reddit-skeleton-title" />
+            <div className="reddit-skeleton-line reddit-skeleton-copy" />
+            <div className="reddit-skeleton-line reddit-skeleton-copy short" />
+        </div>)}
     </div>
 );
 
@@ -152,7 +156,7 @@ const CheetChatEmptyState = ({ text }) => (
 const TweetAction = ({ icon, count, onClick, active, activeColor, hoverColor, hoverBg }) => (
     <button onClick={e => { e.stopPropagation(); onClick && onClick(); }}
         style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderRadius: 9999, background: 'transparent', border: 'none', cursor: 'pointer', color: '#71767b', transition: 'all 0.15s' }}
-        onMouseEnter={e => { e.currentTarget.style.background = hoverBg || 'rgba(29,155,240,0.1)'; e.currentTarget.style.color = hoverColor || '#1d9bf0'; }}
+        onMouseEnter={e => { e.currentTarget.style.background = hoverBg || 'rgba(29,155,240,0.1)'; e.currentTarget.style.color = hoverColor || '#ff6a3d'; }}
         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = active && activeColor ? activeColor : '#71767b'; }}
     >
         <span style={active && activeColor ? { color: activeColor } : {}}>{icon}</span>
@@ -187,7 +191,7 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
                     style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', resize: 'none', fontSize: 20, color: '#e7e9ea', lineHeight: 1.6, fontFamily: 'inherit' }}
                 />
                 {preview.length > 0 && (
-                    <div className={`mt-3 grid gap-1 overflow-hidden rounded-2xl border border-[#2f3336] ${preview.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                    <div className={`mt-3 grid gap-1 overflow-hidden rounded-2xl border border-[#27333b] ${preview.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                         {preview.map((src, index) => <div key={src} className="relative min-h-32 bg-black">
                             {media[index]?.type.startsWith('video/') ? <video src={src} controls className="h-full max-h-72 w-full object-contain" /> : <img src={src} alt={`Selected ${index + 1}`} className="h-full max-h-72 w-full object-cover" />}
                             <button type="button" onClick={() => { setMedia(items => items.filter((_, itemIndex) => itemIndex !== index)); if (fileRef.current) fileRef.current.value = ''; }} className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/75 text-white"><XMarkIcon className="h-4 w-4" /></button>
@@ -195,7 +199,7 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
                         </div>)}
                     </div>
                 )}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, paddingTop: 12, borderTop: '1px solid #2f3336' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, paddingTop: 12, borderTop: '1px solid #27333b' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <input ref={fileRef} type="file" accept="image/*,video/*" multiple style={{ display: 'none' }} onChange={e => {
                             const selected = Array.from(e.target.files || []);
@@ -204,32 +208,32 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
                             setMedia(selected);
                         }} />
                         <button onClick={() => fileRef.current && fileRef.current.click()} title="Photo/Video"
-                            style={{ padding: 8, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', color: '#1d9bf0' }}
+                            style={{ padding: 8, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', color: '#ff6a3d' }}
                             onMouseEnter={e => e.currentTarget.style.background = 'rgba(29,155,240,0.1)'}
                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                             <PhotoIcon style={{ width: 20, height: 20 }} />
                         </button>
-                        <button type="button" onClick={() => setShowProCamera(true)} title="Pro Camera" className="rounded-full p-2 text-[#1d9bf0] hover:bg-blue-500/10">
+                        <button type="button" onClick={() => setShowProCamera(true)} title="Pro Camera" className="rounded-full p-2 text-[#ff6a3d] hover:bg-blue-500/10">
                             <CameraIcon className="h-5 w-5" />
                         </button>
-                        <button type="button" onClick={() => isPremium ? setArticleMode(v => !v) : alert('Articles are available with Premium')} className={`rounded-full px-3 py-2 text-xs font-bold ${articleMode ? 'bg-blue-500/20 text-blue-400' : 'text-[#1d9bf0]'}`}>Article</button>
-                        <button type="button" onClick={() => isPremium ? setMonetized(v => !v) : alert('Paid posts are available with Premium')} className={`rounded-full px-3 py-2 text-xs font-bold ${monetized ? 'bg-amber-500/20 text-amber-300' : 'text-[#1d9bf0]'}`}>₹ Earn</button>
+                        <button type="button" onClick={() => isPremium ? setArticleMode(v => !v) : alert('Articles are available with Premium')} className={`rounded-full px-3 py-2 text-xs font-bold ${articleMode ? 'bg-blue-500/20 text-blue-400' : 'text-[#ff6a3d]'}`}>Article</button>
+                        <button type="button" onClick={() => isPremium ? setMonetized(v => !v) : alert('Paid posts are available with Premium')} className={`rounded-full px-3 py-2 text-xs font-bold ${monetized ? 'bg-amber-500/20 text-amber-300' : 'text-[#ff6a3d]'}`}>₹ Earn</button>
                         {!isPremium && <button type="button" onClick={onUpgrade} className="rounded-full bg-violet-500/15 px-3 py-2 text-xs font-black text-violet-300">Premium</button>}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         {caption.length > 0 && (
                             <svg width="24" height="24" style={{ transform: 'rotate(-90deg)' }}>
-                                <circle cx="12" cy="12" r="9" fill="none" stroke="#2f3336" strokeWidth="2" />
+                                <circle cx="12" cy="12" r="9" fill="none" stroke="#27333b" strokeWidth="2" />
                                 <circle cx="12" cy="12" r="9" fill="none"
-                                    stroke={isOverLimit ? '#f4212e' : remaining < 20 ? '#ffd400' : '#1d9bf0'}
+                                    stroke={isOverLimit ? '#f4212e' : remaining < 20 ? '#ffd400' : '#ff6a3d'}
                                     strokeWidth="2" strokeDasharray={circumference} strokeDashoffset={dashOffset}
                                     strokeLinecap="round" style={{ transition: 'stroke-dashoffset 0.2s' }} />
                                 {remaining < 20 && <text x="12" y="16" textAnchor="middle" fontSize="8" fill={isOverLimit ? '#f4212e' : '#71767b'} style={{ transform: 'rotate(90deg)', transformOrigin: '12px 12px' }}>{remaining}</text>}
                             </svg>
                         )}
-                        <div style={{ width: 1, height: 24, background: '#2f3336' }} />
+                        <div style={{ width: 1, height: 24, background: '#27333b' }} />
                         <button onClick={() => onSubmit({ postKind: articleMode ? 'article' : 'standard', articleTitle, isMonetized: monetized })} disabled={posting || !canPost || (articleMode && !articleTitle.trim())}
-                            style={{ padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, border: 'none', cursor: canPost ? 'pointer' : 'not-allowed', background: canPost ? '#1d9bf0' : '#0f4f6e', color: canPost ? '#fff' : '#71767b', transition: 'background 0.15s' }}>
+                            style={{ padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, border: 'none', cursor: canPost ? 'pointer' : 'not-allowed', background: canPost ? '#ff6a3d' : '#0f4f6e', color: canPost ? '#fff' : '#71767b', transition: 'background 0.15s' }}>
                             {posting ? 'Posting…' : 'Post'}
                         </button>
                     </div>
@@ -244,16 +248,16 @@ const CommunityComposer = ({ avatar, caption, setCaption, pollOptions, setPollOp
     const [pollOpen, setPollOpen] = useState(false);
     const updateOption = (index, value) => setPollOptions(items => items.map((item, i) => i === index ? value : item));
     const validOptions = pollOptions.filter(item => item.trim()).length;
-    return <div className="border-b border-[#2f3336] bg-gradient-to-b from-[#0b1721] to-black px-4 py-4">
-        <div className="mb-3 flex items-center gap-2 text-sm font-bold text-[#1d9bf0]"><UsersIcon className="h-5 w-5" />Create a community post</div>
+    return <div className="border-b border-[#27333b] bg-gradient-to-b from-[#0b1721] to-black px-4 py-4">
+        <div className="mb-3 flex items-center gap-2 text-sm font-bold text-[#ff6a3d]"><UsersIcon className="h-5 w-5" />Create a community post</div>
         <div className="flex gap-3"><img src={avatar} alt="" className="h-10 w-10 rounded-full object-cover" /><div className="min-w-0 flex-1">
             <textarea value={caption} onChange={e => setCaption(e.target.value.slice(0, 1000))} rows={3} placeholder="Share an update with your community…" className="w-full resize-none bg-transparent text-lg text-white outline-none placeholder:text-[#71767b]" />
-            {pollOpen && <div className="mt-3 space-y-2 rounded-2xl border border-[#2f3336] bg-[#101820] p-3">
+            {pollOpen && <div className="mt-3 space-y-2 rounded-2xl border border-[#27333b] bg-[#101820] p-3">
                 <p className="text-xs font-bold uppercase tracking-wide text-[#71767b]">Poll options</p>
-                {pollOptions.map((option, index) => <div key={index} className="flex gap-2"><input value={option} onChange={e => updateOption(index, e.target.value.slice(0, 100))} placeholder={`Option ${index + 1}`} className="flex-1 rounded-xl border border-[#333639] bg-black px-3 py-2 text-sm text-white outline-none focus:border-[#1d9bf0]" />{index > 1 && <button onClick={() => setPollOptions(items => items.filter((_, i) => i !== index))} className="text-[#71767b] hover:text-red-400"><XMarkIcon className="h-5 w-5" /></button>}</div>)}
-                {pollOptions.length < 4 && <button onClick={() => setPollOptions(items => [...items, ''])} className="text-sm font-semibold text-[#1d9bf0]">+ Add option</button>}
+                {pollOptions.map((option, index) => <div key={index} className="flex gap-2"><input value={option} onChange={e => updateOption(index, e.target.value.slice(0, 100))} placeholder={`Option ${index + 1}`} className="flex-1 rounded-xl border border-[#333639] bg-black px-3 py-2 text-sm text-white outline-none focus:border-[#ff6a3d]" />{index > 1 && <button onClick={() => setPollOptions(items => items.filter((_, i) => i !== index))} className="text-[#71767b] hover:text-red-400"><XMarkIcon className="h-5 w-5" /></button>}</div>)}
+                {pollOptions.length < 4 && <button onClick={() => setPollOptions(items => [...items, ''])} className="text-sm font-semibold text-[#ff6a3d]">+ Add option</button>}
             </div>}
-            <div className="mt-3 flex items-center justify-between border-t border-[#2f3336] pt-3"><button onClick={() => { setPollOpen(v => !v); if (pollOpen) setPollOptions(['', '']); }} className={`flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold ${pollOpen ? 'bg-[#1d9bf0]/15 text-[#1d9bf0]' : 'text-[#71767b] hover:bg-white/5'}`}><ChartBarIcon className="h-5 w-5" />Poll</button><button onClick={onSubmit} disabled={posting || !caption.trim() || (pollOpen && validOptions < 2)} className="rounded-full bg-[#1d9bf0] px-5 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">{posting ? 'Publishing…' : 'Publish'}</button></div>
+            <div className="mt-3 flex items-center justify-between border-t border-[#27333b] pt-3"><button onClick={() => { setPollOpen(v => !v); if (pollOpen) setPollOptions(['', '']); }} className={`flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold ${pollOpen ? 'bg-[#ff6a3d]/15 text-[#ff6a3d]' : 'text-[#71767b] hover:bg-white/5'}`}><ChartBarIcon className="h-5 w-5" />Poll</button><button onClick={onSubmit} disabled={posting || !caption.trim() || (pollOpen && validOptions < 2)} className="rounded-full bg-[#ff6a3d] px-5 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">{posting ? 'Publishing…' : 'Publish'}</button></div>
         </div></div>
     </div>;
 };
@@ -334,7 +338,7 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
 
     return (
         <article
-            style={{ display: 'flex', gap: 12, padding: '12px 16px', borderBottom: '1px solid #2f3336', cursor: 'pointer', background: hovered ? 'rgba(255,255,255,0.03)' : 'transparent', transition: 'background 0.15s' }}
+            style={{ display: 'flex', gap: 12, padding: '12px 16px', borderBottom: '1px solid #27333b', cursor: 'pointer', background: hovered ? 'rgba(255,255,255,0.03)' : 'transparent', transition: 'background 0.15s' }}
             onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
         >
             <button onClick={() => onOpenProfile(authorId)} style={{ flexShrink: 0, marginTop: 2, border: 'none', background: 'transparent', cursor: 'pointer' }}>
@@ -359,12 +363,12 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
                     </div>
                     <div ref={menuRef} style={{ position: 'relative', flexShrink: 0 }}>
                         <button onClick={() => setShowMenu(s => !s)} style={{ padding: 6, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', color: '#71767b' }}
-                            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(29,155,240,0.1)'; e.currentTarget.style.color = '#1d9bf0'; }}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(29,155,240,0.1)'; e.currentTarget.style.color = '#ff6a3d'; }}
                             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#71767b'; }}>
                             <EllipsisHorizontalIcon style={{ width: 20, height: 20 }} />
                         </button>
                         {showMenu && (
-                            <div style={{ position: 'absolute', right: 0, top: 32, background: '#000', border: '1px solid #2f3336', borderRadius: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.8)', zIndex: 50, minWidth: 220, padding: '4px 0', overflow: 'hidden' }}>
+                            <div style={{ position: 'absolute', right: 0, top: 32, background: '#000', border: '1px solid #27333b', borderRadius: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.8)', zIndex: 50, minWidth: 220, padding: '4px 0', overflow: 'hidden' }}>
                                 {authorId !== (currentUser && currentUser.id) && (
                                     <button onClick={() => { onFollow(); setShowMenu(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#e7e9ea', fontSize: 14, fontWeight: 700, textAlign: 'left' }}
                                         onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
@@ -400,13 +404,13 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
                 {postCaption && <p data-user-content style={{ marginTop: 4, fontSize: 15, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#e7e9ea' }}><LinkifiedText>{postCaption}</LinkifiedText></p>}
                 {authorId === currentUser?.id && currentUser?.isPremium && <button onClick={async e => { e.stopPropagation(); try { const { data } = await axios.get(`/api/social/posts/${post.id}/analytics`, { headers: authHeaders(token) }); alert(`Views: ${data.views}\nEngagement: ${data.engagement}\nEarnings: ₹${(data.earningsPaise / 100).toFixed(2)}`); } catch (err) { alert(err.response?.data?.error || 'Analytics unavailable'); } }} className="mt-3 inline-flex items-center gap-1 rounded-full bg-white/5 px-3 py-1.5 text-xs font-bold text-blue-400"><ChartBarIcon className="h-4 w-4" />Advanced analytics</button>}
 
-                {displayPost.poll && <div className="mt-3 space-y-2 rounded-2xl border border-[#2f3336] bg-[#0b1117] p-3">
-                    {displayPost.poll.options.map((option, index) => { const count = displayPost.poll.counts[index] || 0; const pct = displayPost.poll.totalVotes ? Math.round(count * 100 / displayPost.poll.totalVotes) : 0; const selected = displayPost.poll.selectedOption === index; return <button key={index} onClick={() => onPollVote?.(index)} className={`relative w-full overflow-hidden rounded-xl border px-3 py-2.5 text-left text-sm font-semibold ${selected ? 'border-[#1d9bf0] text-white' : 'border-[#333639] text-[#e7e9ea]'}`}><span className="absolute inset-y-0 left-0 bg-[#1d9bf0]/20 transition-all" style={{ width: `${pct}%` }} /><span className="relative flex justify-between gap-3"><span>{option}</span><span className="text-[#8b98a5]">{pct}%</span></span></button>; })}
+                {displayPost.poll && <div className="mt-3 space-y-2 rounded-2xl border border-[#27333b] bg-[#0b1117] p-3">
+                    {displayPost.poll.options.map((option, index) => { const count = displayPost.poll.counts[index] || 0; const pct = displayPost.poll.totalVotes ? Math.round(count * 100 / displayPost.poll.totalVotes) : 0; const selected = displayPost.poll.selectedOption === index; return <button key={index} onClick={() => onPollVote?.(index)} className={`relative w-full overflow-hidden rounded-xl border px-3 py-2.5 text-left text-sm font-semibold ${selected ? 'border-[#ff6a3d] text-white' : 'border-[#333639] text-[#e7e9ea]'}`}><span className="absolute inset-y-0 left-0 bg-[#ff6a3d]/20 transition-all" style={{ width: `${pct}%` }} /><span className="relative flex justify-between gap-3"><span>{option}</span><span className="text-[#8b98a5]">{pct}%</span></span></button>; })}
                     <p className="px-1 text-xs text-[#71767b]">{displayPost.poll.totalVotes} vote{displayPost.poll.totalVotes === 1 ? '' : 's'} · vote can be changed</p>
                 </div>}
 
                 {postMediaItems.length > 0 && (
-                    <div className={`mt-3 grid max-h-[520px] gap-0.5 overflow-hidden rounded-2xl border border-[#2f3336] ${postMediaItems.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                    <div className={`mt-3 grid max-h-[520px] gap-0.5 overflow-hidden rounded-2xl border border-[#27333b] ${postMediaItems.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                         {postMediaItems.map((item, index) => item.type === 'video' ? (
                             <FeedVideo key={`${item.url}-${index}`} src={item.url} multi={postMediaItems.length > 1} muted={mutedVideos} autoplay={autoplayVideos} onOpen={() => setZoomedMedia({ src: item.url, type: 'video' })} />
                         ) : (
@@ -417,14 +421,14 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
 
                 {/* Action bar */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, marginLeft: -8 }}>
-                    <TweetAction icon={<ChatBubbleOvalLeftIcon style={{ width: 20, height: 20 }} />} count={comments.length || post.commentsCount} onClick={() => { setCommentsOpen(p => !p); if (!commentsOpen) fetchComments(); }} hoverColor="#1d9bf0" hoverBg="rgba(29,155,240,0.1)" />
+                    <TweetAction icon={<ChatBubbleOvalLeftIcon style={{ width: 20, height: 20 }} />} count={comments.length || post.commentsCount} onClick={() => { setCommentsOpen(p => !p); if (!commentsOpen) fetchComments(); }} hoverColor="#ff6a3d" hoverBg="rgba(29,155,240,0.1)" />
                     <div ref={rtMenuRef} style={{ position: 'relative' }}>
                         <TweetAction
                             icon={post.isRetweeted ? <RetweetSolidIcon style={{ width: 20, height: 20, color: '#00ba7c' }} /> : <ArrowPathRoundedSquareIcon style={{ width: 20, height: 20 }} />}
                             count={post.retweetCount} active={post.isRetweeted} activeColor="#00ba7c"
                             onClick={() => setShowRetweetMenu(s => !s)} hoverColor="#00ba7c" hoverBg="rgba(0,186,124,0.1)" />
                         {showRetweetMenu && (
-                            <div style={{ position: 'absolute', bottom: 40, left: 0, background: '#000', border: '1px solid #2f3336', borderRadius: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.8)', zIndex: 50, minWidth: 200, padding: '4px 0' }}>
+                            <div style={{ position: 'absolute', bottom: 40, left: 0, background: '#000', border: '1px solid #27333b', borderRadius: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.8)', zIndex: 50, minWidth: 200, padding: '4px 0' }}>
                                 <button onClick={() => { onRetweet(); setShowRetweetMenu(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#e7e9ea', fontSize: 14, fontWeight: 700, textAlign: 'left' }}
                                     onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
                                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
@@ -442,13 +446,13 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
                         icon={post.isLiked ? <HeartSolidIcon style={{ width: 20, height: 20, color: '#f91880' }} /> : <HeartIcon style={{ width: 20, height: 20 }} />}
                         count={post.likesCount} active={post.isLiked} activeColor="#f91880" onClick={onLike} hoverColor="#f91880" hoverBg="rgba(249,24,128,0.1)" />
                     <TweetAction
-                        icon={bookmarked ? <BookmarkSolidIcon style={{ width: 20, height: 20, color: '#1d9bf0' }} /> : <BookmarkIcon style={{ width: 20, height: 20 }} />}
-                        active={bookmarked} activeColor="#1d9bf0" onClick={() => setBookmarked(b => !b)} hoverColor="#1d9bf0" hoverBg="rgba(29,155,240,0.1)" />
-                    <TweetAction icon={<ShareIcon style={{ width: 20, height: 20 }} />} count={post.shareCount} onClick={() => setShowShare(true)} hoverColor="#1d9bf0" hoverBg="rgba(29,155,240,0.1)" />
+                        icon={bookmarked ? <BookmarkSolidIcon style={{ width: 20, height: 20, color: '#ff6a3d' }} /> : <BookmarkIcon style={{ width: 20, height: 20 }} />}
+                        active={bookmarked} activeColor="#ff6a3d" onClick={() => setBookmarked(b => !b)} hoverColor="#ff6a3d" hoverBg="rgba(29,155,240,0.1)" />
+                    <TweetAction icon={<ShareIcon style={{ width: 20, height: 20 }} />} count={post.shareCount} onClick={() => setShowShare(true)} hoverColor="#ff6a3d" hoverBg="rgba(29,155,240,0.1)" />
                 </div>
 
                 {commentsOpen && (
-                    <div style={{ marginTop: 12, borderTop: '1px solid #2f3336', paddingTop: 12 }}>
+                    <div style={{ marginTop: 12, borderTop: '1px solid #27333b', paddingTop: 12 }}>
                         {comments.length === 0 && <p style={{ fontSize: 14, textAlign: 'center', padding: '12px 0', color: '#71767b' }}>No replies yet.</p>}
                         {comments.map(item => (
                             <NestedComment key={item.id} comment={item} onReply={handleReplyToComment} onEdit={handleEditComment} onDelete={handleDeleteComment} currentUser={currentUser} onProfileClick={onOpenProfile} />
@@ -458,7 +462,7 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
                             <input value={comment} onChange={e => setComment(e.target.value)} placeholder="Post your reply"
                                 style={{ flex: 1, borderRadius: 9999, padding: '8px 16px', fontSize: 14, outline: 'none', background: '#202327', border: '1px solid #333639', color: '#e7e9ea' }} />
                             <button type="submit" disabled={submitting || !comment.trim()}
-                                style={{ padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, background: '#1d9bf0', color: '#fff', border: 'none', cursor: comment.trim() ? 'pointer' : 'not-allowed', opacity: comment.trim() ? 1 : 0.5 }}>
+                                style={{ padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, background: '#ff6a3d', color: '#fff', border: 'none', cursor: comment.trim() ? 'pointer' : 'not-allowed', opacity: comment.trim() ? 1 : 0.5 }}>
                                 Reply
                             </button>
                         </form>
@@ -491,7 +495,7 @@ const WhoToFollow = ({ token, onOpenProfile, onFollow }) => {
                 <span>🎓 Campus & Friends</span>
             </h2>
             <div style={{ maxHeight: 360, overflowY: 'auto', overscrollBehavior: 'contain' }}>{suggestions.map(u => (
-                <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderTop: '1px solid #2f3336' }}
+                <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderTop: '1px solid #27333b' }}
                     onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                     <button onClick={() => onOpenProfile(u.id)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', flexShrink: 0 }}>
@@ -544,22 +548,22 @@ const WhoToFollow = ({ token, onOpenProfile, onFollow }) => {
 
 const ChannelsList = ({ channels, loading, onOpen, onSubscribe, onCreateNew }) => (
     <div style={{ maxWidth: 600, margin: '0 auto', width: '100%' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #2f3336' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #27333b' }}>
             <h2 style={{ fontWeight: 800, fontSize: 20 }}>Spaces</h2>
             <button onClick={onCreateNew}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, background: '#1d9bf0', color: '#fff', border: 'none', cursor: 'pointer' }}
-                onMouseEnter={e => e.currentTarget.style.background = '#1a8cd8'}
-                onMouseLeave={e => e.currentTarget.style.background = '#1d9bf0'}>
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, background: '#ff6a3d', color: '#fff', border: 'none', cursor: 'pointer' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#ea5129'}
+                onMouseLeave={e => e.currentTarget.style.background = '#ff6a3d'}>
                 <PlusIcon style={{ width: 16, height: 16 }} />New Space
             </button>
         </div>
         {loading ? <CheetChatLoading /> : channels.length ? channels.map(ch => (
-            <div key={ch.id} style={{ borderBottom: '1px solid #2f3336' }}
+            <div key={ch.id} style={{ borderBottom: '1px solid #27333b' }}
                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                 <button onClick={() => onOpen(ch.id)} style={{ width: '100%', display: 'flex', gap: 16, padding: '16px', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
                     <div style={{ width: 56, height: 56, borderRadius: 16, overflow: 'hidden', flexShrink: 0, background: '#202327', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {ch.coverUrl ? <img src={ch.coverUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <SparklesIcon style={{ width: 28, height: 28, color: '#1d9bf0' }} />}
+                        {ch.coverUrl ? <img src={ch.coverUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <SparklesIcon style={{ width: 28, height: 28, color: '#ff6a3d' }} />}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ fontWeight: 700, color: '#e7e9ea', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ch.name}</p>
@@ -568,10 +572,10 @@ const ChannelsList = ({ channels, loading, onOpen, onSubscribe, onCreateNew }) =
                     </div>
                 </button>
                 <div style={{ padding: '0 16px 16px' }}>
-                    {ch.role === 'owner' ? <span style={{ fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 9999, background: '#1d9bf0', color: '#fff' }}>Owner</span>
+                    {ch.role === 'owner' ? <span style={{ fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 9999, background: '#ff6a3d', color: '#fff' }}>Owner</span>
                         : ch.role === 'approved' ? <span style={{ fontSize: 12, fontWeight: 700, color: '#00ba7c', display: 'flex', alignItems: 'center', gap: 4 }}><CheckIcon style={{ width: 14, height: 14 }} />Member</span>
                         : ch.role === 'pending' ? <span style={{ fontSize: 12, fontWeight: 700, color: '#ffd400' }}>Request pending…</span>
-                        : <button onClick={() => onSubscribe(ch.id)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, background: 'transparent', border: '1px solid #1d9bf0', color: '#1d9bf0', cursor: 'pointer' }}>
+                        : <button onClick={() => onSubscribe(ch.id)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, background: 'transparent', border: '1px solid #ff6a3d', color: '#ff6a3d', cursor: 'pointer' }}>
                             <UserPlusIcon style={{ width: 16, height: 16 }} />Join
                         </button>}
                 </div>
@@ -582,8 +586,8 @@ const ChannelsList = ({ channels, loading, onOpen, onSubscribe, onCreateNew }) =
 
 const ChannelView = ({ channel, posts, user, token, preview, media, caption, posting, fileRef, setCaption, setMedia, submitPost, likePost, retweetPost, sharePost, onShareToChat, deletePost, toggleFollow, requestSubscribe, reviewRequest, openProfile, currentUser, onUpgrade }) => (
     <div style={{ maxWidth: 600, margin: '0 auto', width: '100%' }}>
-        <div style={{ borderBottom: '1px solid #2f3336' }}>
-            <div style={{ height: 112, background: 'linear-gradient(135deg, #1d9bf0 0%, #764ba2 100%)', position: 'relative' }}>
+        <div style={{ borderBottom: '1px solid #27333b' }}>
+            <div style={{ height: 112, background: 'linear-gradient(135deg, #ff6a3d 0%, #764ba2 100%)', position: 'relative' }}>
                 {channel.coverUrl && <img src={channel.coverUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
             </div>
             <div style={{ padding: '16px' }}>
@@ -591,17 +595,17 @@ const ChannelView = ({ channel, posts, user, token, preview, media, caption, pos
                 <p style={{ fontSize: 14, color: '#71767b', marginTop: 4 }}>{channel.description}</p>
                 <p style={{ fontSize: 12, color: '#71767b', marginTop: 4 }}>
                     Created by{' '}
-                    <button onClick={() => openProfile(channel.owner.id)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#1d9bf0', fontSize: 12 }}>@{(channel.owner.username || '').toLowerCase()}</button>
+                    <button onClick={() => openProfile(channel.owner.id)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#ff6a3d', fontSize: 12 }}>@{(channel.owner.username || '').toLowerCase()}</button>
                     {' · '}{channel.subscriberCount} members
                 </p>
                 {(channel.role === 'none' || channel.role === 'rejected') && (
-                    <button onClick={requestSubscribe} style={{ marginTop: 12, padding: '8px 20px', borderRadius: 9999, fontWeight: 700, fontSize: 14, background: '#1d9bf0', color: '#fff', border: 'none', cursor: 'pointer' }}>Request to join</button>
+                    <button onClick={requestSubscribe} style={{ marginTop: 12, padding: '8px 20px', borderRadius: 9999, fontWeight: 700, fontSize: 14, background: '#ff6a3d', color: '#fff', border: 'none', cursor: 'pointer' }}>Request to join</button>
                 )}
                 {channel.role === 'pending' && <p style={{ marginTop: 12, color: '#ffd400', fontWeight: 700, fontSize: 14 }}>Request pending approval…</p>}
             </div>
         </div>
         {channel.role === 'owner' && channel.pendingRequests && channel.pendingRequests.length > 0 && (
-            <div style={{ padding: '16px', borderBottom: '1px solid #2f3336' }}>
+            <div style={{ padding: '16px', borderBottom: '1px solid #27333b' }}>
                 <h3 style={{ fontWeight: 700, marginBottom: 12 }}>Join Requests ({channel.pendingRequests.length})</h3>
                 {channel.pendingRequests.map(req => (
                     <div key={req.id} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
@@ -614,7 +618,7 @@ const ChannelView = ({ channel, posts, user, token, preview, media, caption, pos
             </div>
         )}
         {channel.canPost && (
-            <div style={{ padding: '12px 16px', borderBottom: '1px solid #2f3336' }}>
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid #27333b' }}>
                 <CheetChatComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} media={media} setMedia={setMedia} preview={preview} fileRef={fileRef} posting={posting} onSubmit={submitPost} isPremium={user?.isPremium} onUpgrade={onUpgrade} />
             </div>
         )}
@@ -726,7 +730,7 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
 
     return (
         <div className="h-[100dvh] w-full flex flex-col bg-black text-[#e7e9ea] font-sans overflow-hidden">
-            <header className="flex items-center gap-4 px-4 py-2 flex-shrink-0" style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)', borderBottom: '1px solid #2f3336' }}>
+            <header className="flex items-center gap-4 px-4 py-2 flex-shrink-0" style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)', borderBottom: '1px solid #27333b' }}>
                 <button onClick={onBack} className="p-2 rounded-full hover:bg-white/10 transition border-none bg-transparent cursor-pointer text-[#e7e9ea]">
                     <ArrowLeftIcon className="w-5 h-5" />
                 </button>
@@ -736,7 +740,7 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
                 </div>
             </header>
             <div className="flex-1 overflow-y-auto scrollbar-hide">
-                <div className="h-32 sm:h-44 relative flex-shrink-0 overflow-hidden" style={{ background: 'linear-gradient(135deg, #1d9bf0 0%, #0747a6 50%, #764ba2 100%)' }}>
+                <div className="h-32 sm:h-44 relative flex-shrink-0 overflow-hidden" style={{ background: 'linear-gradient(135deg, #ff6a3d 0%, #0747a6 50%, #764ba2 100%)' }}>
                     {u?.coverUrl && <img src={u.coverUrl} alt="Profile background" className="absolute inset-0 h-full w-full object-cover" />}
                     <div className="absolute inset-0 opacity-20" style={{ background: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.05) 10px, rgba(255,255,255,0.05) 20px)' }} />
                     {isOwnProfile && <><button onClick={() => coverInputRef.current?.click()} className="absolute bottom-3 right-3 rounded-full bg-black/65 px-3 py-2 text-xs font-bold text-white">{uploadingCover ? 'Uploading…' : 'Change background'}</button><input ref={coverInputRef} type="file" accept="image/*" hidden onChange={uploadCover} /></>}
@@ -761,7 +765,7 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
                         {isOwnProfile ? (
                             editMode ? (
                                 <div style={{ display: 'flex', gap: 8, marginTop: 56 }}>
-                                    <button onClick={() => setEditMode(false)} style={{ padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, border: '1px solid #2f3336', background: 'transparent', color: '#e7e9ea', cursor: 'pointer' }}>Cancel</button>
+                                    <button onClick={() => setEditMode(false)} style={{ padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, border: '1px solid #27333b', background: 'transparent', color: '#e7e9ea', cursor: 'pointer' }}>Cancel</button>
                                     <button onClick={saveProfile} disabled={saving} style={{ padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, background: '#e7e9ea', color: '#0f1419', border: 'none', cursor: 'pointer' }}>{saving ? 'Saving…' : 'Save'}</button>
                                 </div>
                             ) : (
@@ -793,7 +797,7 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
                             {u && u.bio && <p style={{ fontSize: 15, lineHeight: 1.6, marginBottom: 8 }}>{u.bio}</p>}
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', marginBottom: 12 }}>
                                 {safeProfileWebsite && (
-                                    <a href={safeProfileWebsite} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 14, color: '#1d9bf0', textDecoration: 'none' }}>
+                                    <a href={safeProfileWebsite} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 14, color: '#ff6a3d', textDecoration: 'none' }}>
                                         <LinkIcon style={{ width: 16, height: 16 }} />{u.websiteUrl.replace(/^https?:\/\//, '')}
                                     </a>
                                 )}
@@ -811,12 +815,12 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
                         <span style={{ fontSize: 14 }}><strong style={{ fontWeight: 700, color: '#e7e9ea' }}>{u && u.followersCount || 0}</strong> <span style={{ color: '#71767b' }}>Followers</span></span>
                     </div>
 
-                    <div style={{ display: 'flex', margin: '0 -16px', borderBottom: '1px solid #2f3336' }}>
+                    <div style={{ display: 'flex', margin: '0 -16px', borderBottom: '1px solid #27333b' }}>
                         {['posts', 'replies', 'media', 'likes'].map(tab => (
                             <button key={tab} onClick={() => setProfileTab(tab)}
                                 style={{ flex: 1, padding: '12px 0', fontSize: 14, fontWeight: 600, textTransform: 'capitalize', background: 'transparent', border: 'none', cursor: 'pointer', color: profileTab === tab ? '#e7e9ea' : '#71767b', position: 'relative' }}>
                                 {tab}
-                                {profileTab === tab && <div style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)', height: 4, width: 40, borderRadius: 9999, background: '#1d9bf0' }} />}
+                                {profileTab === tab && <div style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)', height: 4, width: 40, borderRadius: 9999, background: '#ff6a3d' }} />}
                             </button>
                         ))}
                     </div>
@@ -837,7 +841,8 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
 const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectMessage }) => {
     const { user, token, updateUser } = useContext(AuthContext);
     const [activeTab, setActiveTab] = useState(() => user?.uiPreferences?.socialDefaultFeed || localStorage.getItem('social_default_feed') || 'for-you');
-    const [posts, setPosts] = useState([]);
+    const feedCacheRef = useRef(new Map());
+    const [posts, setPosts] = useState(() => feedCacheRef.current.get(activeTab) || []);
     const [channels, setChannels] = useState([]);
     const [selectedChannel, setSelectedChannel] = useState(null);
     const [channelPosts, setChannelPosts] = useState([]);
@@ -865,13 +870,16 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
     const deepLinkHandled = useRef(false);
 
     const fetchPosts = useCallback(async (tab) => {
-        setLoading(true);
         const t = tab || activeTab;
+        const cached = feedCacheRef.current.get(t);
+        if (cached) setPosts(cached);
+        else setLoading(true);
         try {
             const feed = t === 'following' ? 'following' : t === 'community' ? 'community' : 'all';
             const res = await axios.get('/api/social/posts?feed=' + feed, { headers: authHeaders(token) });
+            feedCacheRef.current.set(t, res.data);
             setPosts(res.data);
-        } catch { } finally { setLoading(false); }
+        } catch { /* Keep the last successful feed visible during temporary network failures. */ } finally { setLoading(false); }
     }, [token, activeTab]);
 
     const fetchChannels = useCallback(async () => {
@@ -1033,9 +1041,9 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
     });
 
     return (
-        <div className="h-[100dvh] w-full flex flex-col bg-black text-[#e7e9ea] font-sans antialiased overflow-hidden select-none">
+        <div className="reddit-social h-[100dvh] w-full flex flex-col bg-[#0b141b] text-[#d7dadc] font-sans antialiased overflow-hidden select-none">
             {/* Mobile Header */}
-            <header className="flex md:hidden items-center justify-between px-4 py-3 border-b border-[#2f3336] flex-shrink-0 bg-black">
+            <header className="flex md:hidden items-center justify-between px-4 py-3 border-b border-[#27333b] flex-shrink-0 bg-black">
                 <button onClick={() => setProfileView({ userId: user.id })} className="border-none bg-transparent cursor-pointer flex-shrink-0">
                     <img src={user && user.avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
                 </button>
@@ -1047,7 +1055,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
 
             <div className="flex flex-1 overflow-hidden w-full max-w-[1250px] mx-auto">
                 {/* LEFT SIDEBAR */}
-                <aside className="hidden md:flex flex-col w-[72px] xl:w-[275px] flex-shrink-0 p-2 xl:p-4 border-r border-[#2f3336] h-full justify-between overflow-y-auto scrollbar-hide">
+                <aside className="hidden md:flex flex-col w-[72px] xl:w-[275px] flex-shrink-0 p-2 xl:p-4 border-r border-[#27333b] h-full justify-between overflow-y-auto scrollbar-hide">
                     <div className="flex flex-col items-center xl:items-start w-full">
                         <div className="px-3 mb-4 mt-2">
                             <CheetChatLogo hideTextOnMobile={true} />
@@ -1068,7 +1076,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                         ))}
                         <button
                             onClick={() => { setSelectedChannel(null); setActiveTab('for-you'); }}
-                            className="w-12 h-12 xl:w-full xl:h-auto xl:py-3.5 rounded-full font-bold text-base flex items-center justify-center bg-[#1d9bf0] text-white hover:bg-[#1a8cd8] transition-colors mt-4 border-none cursor-pointer shadow-lg"
+                            className="w-12 h-12 xl:w-full xl:h-auto xl:py-3.5 rounded-full font-bold text-base flex items-center justify-center bg-[#ff6a3d] text-white hover:bg-[#ea5129] transition-colors mt-4 border-none cursor-pointer shadow-lg"
                         >
                             <span className="hidden xl:inline">Post</span>
                             <span className="xl:hidden"><PlusIcon className="w-6 h-6" /></span>
@@ -1088,22 +1096,22 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                 </aside>
 
                 {/* MAIN COLUMN */}
-                <main className="flex-1 min-w-0 flex flex-col overflow-hidden border-r border-[#2f3336]">
+                <main className="flex-1 min-w-0 flex flex-col overflow-hidden border-r border-[#27333b]">
                     {/* Tab bar / header */}
                     <div className="flex-shrink-0">
                         {!selectedChannel ? (
-                            <div className="flex border-b border-[#2f3336] bg-black/80 backdrop-blur-md sticky top-0 z-10">
+                            <div className="flex border-b border-[#27333b] bg-black/80 backdrop-blur-md sticky top-0 z-10">
                                 {TABS.map(({ key, label }) => (
                                     <button key={key} onClick={() => setActiveTab(key)}
                                         className="flex-1 py-4 text-sm font-bold bg-transparent border-none cursor-pointer transition-colors relative"
                                         style={{ color: activeTab === key ? '#e7e9ea' : '#71767b' }}>
                                         {label}
-                                        {activeTab === key && <div className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[4px] w-14 rounded-full bg-[#1d9bf0]" />}
+                                        {activeTab === key && <div className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[4px] w-14 rounded-full bg-[#ff6a3d]" />}
                                     </button>
                                 ))}
                             </div>
                         ) : (
-                            <div className="flex items-center gap-3 px-4 py-3 border-b border-[#2f3336] bg-black/80 backdrop-blur-md sticky top-0 z-10">
+                            <div className="flex items-center gap-3 px-4 py-3 border-b border-[#27333b] bg-black/80 backdrop-blur-md sticky top-0 z-10">
                                 <button onClick={() => setSelectedChannel(null)} className="p-2 rounded-full bg-transparent border-none cursor-pointer text-[#e7e9ea] hover:bg-white/10 transition-colors">
                                     <ArrowLeftIcon className="w-5 h-5" />
                                 </button>
@@ -1125,11 +1133,11 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                             <ChannelsList channels={displayedChannels} loading={loading} onOpen={fetchChannel} onSubscribe={requestSubscribe} onCreateNew={() => setShowChannelForm(true)} />
                         ) : (
                             <div>
-                                {activeTab === 'community' ? <CommunityComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} pollOptions={pollOptions} setPollOptions={setPollOptions} posting={posting} onSubmit={() => submitPost(null, 'community')} /> : <div className="padding-4 px-4 py-3 border-b border-[#2f3336]">
+                                {activeTab === 'community' ? <CommunityComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} pollOptions={pollOptions} setPollOptions={setPollOptions} posting={posting} onSubmit={() => submitPost(null, 'community')} /> : <div className="padding-4 px-4 py-3 border-b border-[#27333b]">
                                     <CheetChatComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} media={media} setMedia={setMedia} preview={preview} fileRef={fileRef} posting={posting} isPremium={user?.isPremium} onUpgrade={showPremiumUpgrade} onSubmit={options => submitPost(null, options)} />
                                 </div>}
                                 {loading ? <CheetChatLoading /> : displayedPosts.length ? displayedPosts.map(post => (
-                                    <div key={post.id} ref={post.id === highlightedPostId ? highlightedRef : null} style={post.id === highlightedPostId ? { outline: '2px solid #1d9bf0' } : {}}>
+                                    <div key={post.id} ref={post.id === highlightedPostId ? highlightedRef : null} style={post.id === highlightedPostId ? { outline: '2px solid #ff6a3d' } : {}}>
                                         <TweetCard post={post} currentUser={user} token={token}
                                             onLike={() => likePost(post.id)} onRetweet={() => retweetPost(post.id)}
                                             onShare={count => sharePost(post.id, false, count)} onShareToChat={onShareToChat} onDelete={() => deletePost(post.id)}
@@ -1141,7 +1149,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                     </div>
 
                     {/* Mobile bottom nav */}
-                    <nav className="flex md:hidden items-center border-t border-[#2f3336] flex-shrink-0 bg-black py-1">
+                    <nav className="flex md:hidden items-center border-t border-[#27333b] flex-shrink-0 bg-black py-1">
                         {[
                             { icon: <HomeIcon className="w-6 h-6" />, action: () => { setSelectedChannel(null); setActiveTab('for-you'); } },
                             { icon: <ChartBarIcon className="w-6 h-6" />, action: () => { setSelectedChannel(null); setActiveTab('community'); } },
@@ -1156,17 +1164,17 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                 </main>
 
                 {/* RIGHT SIDEBAR */}
-                <aside className="hidden lg:flex flex-col w-[290px] xl:w-[350px] flex-shrink-0 p-4 h-full overflow-y-auto space-y-4 border-[#2f3336]">
+                <aside className="hidden lg:flex flex-col w-[290px] xl:w-[350px] flex-shrink-0 p-4 h-full overflow-y-auto space-y-4 border-[#27333b]">
                     <div className="flex items-center gap-3 px-4 py-2.5 rounded-full bg-[#202327]">
                         <MagnifyingGlassIcon className="w-5 h-5 text-[#71767b] flex-shrink-0" />
                         <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search"
                             className="bg-transparent border-none outline-none text-[15px] text-[#e7e9ea] flex-1" />
                     </div>
 
-                    <div className="rounded-2xl bg-[#16181c] overflow-hidden border border-[#2f3336]/40">
+                    <div className="rounded-2xl bg-[#16181c] overflow-hidden border border-[#27333b]/40">
                         <h2 className="px-4 py-3 font-extrabold text-lg text-[#e7e9ea]">Trends for you</h2>
                         <div className="max-h-[330px] overflow-y-auto overscroll-contain">{TRENDING.map((t, i) => (
-                            <button key={i} className="w-full px-4 py-3 bg-transparent border-none cursor-pointer text-left border-t border-[#2f3336] hover:bg-white/5 transition-colors"
+                            <button key={i} className="w-full px-4 py-3 bg-transparent border-none cursor-pointer text-left border-t border-[#27333b] hover:bg-white/5 transition-colors"
                                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
                                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                                 <p style={{ fontSize: 12, color: '#71767b' }}>{t.category} · Trending</p>
@@ -1182,7 +1190,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
 
             {/* Mobile FAB */}
             <button onClick={() => { setSelectedChannel(null); setActiveTab('for-you'); }}
-                className="md:hidden fixed bottom-16 right-4 w-14 h-14 rounded-full flex items-center justify-center shadow-2xl bg-[#1d9bf0] text-white hover:bg-[#1a8cd8] transition-colors border-none cursor-pointer z-40"
+                className="md:hidden fixed bottom-16 right-4 w-14 h-14 rounded-full flex items-center justify-center shadow-2xl bg-[#ff6a3d] text-white hover:bg-[#ea5129] transition-colors border-none cursor-pointer z-40"
             >
                 <PlusIcon className="w-6 h-6" />
             </button>
@@ -1204,7 +1212,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
 
             {showChannelForm && (
                 <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}>
-                    <form onSubmit={createChannel} style={{ width: '100%', maxWidth: 480, background: '#000', border: '1px solid #2f3336', borderRadius: 16, padding: 24, boxShadow: '0 16px 64px rgba(0,0,0,0.8)' }}>
+                    <form onSubmit={createChannel} style={{ width: '100%', maxWidth: 480, background: '#000', border: '1px solid #27333b', borderRadius: 16, padding: 24, boxShadow: '0 16px 64px rgba(0,0,0,0.8)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                             <h2 style={{ fontWeight: 800, fontSize: 20 }}>Create a Space</h2>
                             <button type="button" onClick={() => setShowChannelForm(false)} style={{ padding: 8, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', color: '#e7e9ea' }}><XMarkIcon style={{ width: 20, height: 20 }} /></button>
@@ -1215,12 +1223,12 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                             style={{ width: '100%', borderRadius: 8, padding: '12px 16px', fontSize: 14, outline: 'none', background: '#202327', border: '1px solid #333639', color: '#e7e9ea', resize: 'none', marginBottom: 12, boxSizing: 'border-box' }} />
                         <input ref={coverRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => setChannelForm(p => ({ ...p, cover: e.target.files && e.target.files[0] ? e.target.files[0] : null }))} />
                         <button type="button" onClick={() => coverRef.current && coverRef.current.click()}
-                            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 8, background: 'transparent', border: '1px solid #2f3336', cursor: 'pointer', color: '#e7e9ea', fontSize: 14, marginBottom: 12 }}>
+                            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 8, background: 'transparent', border: '1px solid #27333b', cursor: 'pointer', color: '#e7e9ea', fontSize: 14, marginBottom: 12 }}>
                             <PhotoIcon style={{ width: 20, height: 20 }} />{channelForm.cover ? channelForm.cover.name : 'Add cover photo'}
                         </button>
-                        <button style={{ width: '100%', padding: '12px', borderRadius: 9999, fontWeight: 700, fontSize: 16, background: '#1d9bf0', color: '#fff', border: 'none', cursor: 'pointer' }}
-                            onMouseEnter={e => e.currentTarget.style.background = '#1a8cd8'}
-                            onMouseLeave={e => e.currentTarget.style.background = '#1d9bf0'}>
+                        <button style={{ width: '100%', padding: '12px', borderRadius: 9999, fontWeight: 700, fontSize: 16, background: '#ff6a3d', color: '#fff', border: 'none', cursor: 'pointer' }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#ea5129'}
+                            onMouseLeave={e => e.currentTarget.style.background = '#ff6a3d'}>
                             Create Space
                         </button>
                     </form>

@@ -1137,6 +1137,17 @@ export const Home = () => {
         setOpenComposerRequest(value => value + 1);
     };
 
+    const openChats = () => {
+        setShowNotifications(false);
+        setShowSearchModal(false);
+        nav.setShowSettings(false);
+        nav.setShowSocial(false); nav.setShowReels(false); nav.setShowPodlive(false);
+        nav.setShowAiChat(false); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false);
+        nav.setMobileHomeTab('chats');
+        setActiveChat(null);
+        localStorage.removeItem('activeChatId');
+    };
+
     const handleLinkPhone = async (event) => {
         event.preventDefault();
         if (linkPhone.length !== 10) { setLinkPhoneError('Phone number must be exactly 10 digits'); return; }
@@ -1616,6 +1627,7 @@ export const Home = () => {
                 chats={chats}
                 onMenu={() => nav.isMobile ? nav.setNavPeekOpen(value => !value) : nav.setNavCollapsed(value => !value)}
                 onCreate={openContentPublisher}
+                onChats={openChats}
                 onNotifications={openNotifications}
                 onProfile={() => nav.setShowSettings(true)}
                 onSelectSearchResult={handleGlobalSearchResult}

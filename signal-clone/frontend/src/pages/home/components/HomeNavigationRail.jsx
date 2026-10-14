@@ -3,7 +3,7 @@ import AvatarZoom from '../../../components/AvatarZoom';
 import { ChatBubbleLeftRightIcon, ClockIcon, PhoneIcon, UserGroupIcon, Bars3Icon, PlusIcon, BellIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import { GlobalSearchBar } from './GlobalSearchBar';
 
-export const AppTopBar = ({ user, token, chats, onMenu, onCreate, onNotifications, onProfile, onSelectSearchResult, onMessageUser, unreadCount }) => (
+export const AppTopBar = ({ user, token, chats, onMenu, onCreate, onChats, onNotifications, onProfile, onSelectSearchResult, onMessageUser, unreadCount }) => (
     <header className="reddit-topbar relative z-[55] flex h-16 shrink-0 items-center gap-3 border-b px-3 sm:px-5">
         <button type="button" onClick={onMenu} className="reddit-topbar-icon rounded-full p-2.5" aria-label="Toggle navigation"><Bars3Icon className="h-5 w-5" /></button>
         <button type="button" onClick={onMenu} className="flex shrink-0 items-center gap-2" aria-label="Open navigation">
@@ -13,6 +13,7 @@ export const AppTopBar = ({ user, token, chats, onMenu, onCreate, onNotification
         <GlobalSearchBar token={token} chats={chats} onSelectResult={onSelectSearchResult} onMessageUser={onMessageUser} />
         <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
             <button type="button" onClick={onCreate} className="reddit-topbar-action flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold"><PlusIcon className="h-5 w-5" /><span className="hidden lg:inline">Publish</span></button>
+            <button type="button" onClick={onChats} className="reddit-topbar-icon flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold" aria-label="Open chats"><ChatBubbleLeftRightIcon className="h-5 w-5" /><span className="hidden lg:inline">Chat</span></button>
             <button type="button" onClick={onNotifications} className="reddit-topbar-icon relative rounded-full p-2.5" aria-label="Notifications"><BellIcon className="h-5 w-5" />{unreadCount > 0 && <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-[#ff6533] ring-2 ring-[#11171b]" />}</button>
             <button type="button" onClick={onProfile} className="hidden items-center gap-2 rounded-full p-1.5 sm:flex" aria-label={`Open settings for ${user?.username || 'user'}`}><AvatarZoom src={user?.avatar} name={user?.username} size="w-8 h-8" /><ChevronDownIcon className="h-4 w-4 text-gray-400" /></button>
         </div>

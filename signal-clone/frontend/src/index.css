@@ -159,6 +159,11 @@ body {
 .reddit-topbar-search { background: #1b2932; color: #93a1aa; border: 1px solid transparent; transition: border .15s ease, background .15s ease; }
 .reddit-topbar-search:hover { background: #202f38; border-color: #394852; color: #d7dadc; }
 .reddit-topbar-search kbd { color: #85939c; border-color: #394852; }
+.global-search-focused { border-color: #ff6533; box-shadow: 0 0 0 3px rgba(255,101,51,.12); }
+.global-search-results { color: #d7dadc; }
+.global-search-row { border-radius: 12px; transition: background .14s ease; }
+.global-search-row:hover { background: #1a2730; }
+.global-search input::-webkit-search-cancel-button { display: none; }
 .reddit-app-body { --app-nav-width: 220px; }
 .reddit-feature-overlay { left: 0; }
 .reddit-nav { border-radius: 0 !important; }

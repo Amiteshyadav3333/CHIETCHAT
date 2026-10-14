@@ -1,8 +1,9 @@
 from flask import Blueprint, jsonify, request
+from sqlalchemy import or_
 from werkzeug.utils import secure_filename
 import json
 import secrets
-from models import db, User, PendingRegistration, Block, Follow, ProfileAudienceAvatar, Notification, Chat, ChatParticipant, Message
+from models import db, User, PendingRegistration, Block, Follow, ProfileAudienceAvatar, Notification, Chat, ChatParticipant, Message, Reel, SocialPost, Channel
 from extensions import socketio
 from utils import (
     get_current_user_id, get_contact_user_ids, serialize_user, get_json_data,
@@ -13,6 +14,65 @@ from utils import (
 from content_moderation import ModerationUnavailable, reject_adult_content
 
 users_bp = Blueprint('users_bp', __name__)
+
+
+@users_bp.route('/api/search', methods=['GET'])
+def global_search():
+    """Search public app content without exposing phone numbers or private chats."""
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    query = str(request.args.get('q') or '').strip()[:80]
+    if len(query) < 2:
+        return jsonify({"users": [], "reels": [], "posts": [], "communities": []})
+
+    pattern = f"%{query}%"
+    users = User.query.filter(
+        User.id != user_id,
+        or_(User.username.ilike(pattern), User.platform_id.ilike(pattern))
+    ).order_by(User.username.asc()).limit(8).all()
+
+    reels = Reel.query.join(User, Reel.user_id == User.id).filter(
+        or_(Reel.caption.ilike(pattern), Reel.category.ilike(pattern), Reel.music_name.ilike(pattern), User.username.ilike(pattern), User.platform_id.ilike(pattern))
+    ).order_by(Reel.created_at.desc()).limit(8).all()
+
+    posts = SocialPost.query.filter(
+        SocialPost.channel_id.is_(None),
+        SocialPost.retweet_of_id.is_(None),
+        or_(SocialPost.caption.ilike(pattern), SocialPost.article_title.ilike(pattern))
+    ).order_by(SocialPost.created_at.desc()).limit(8).all()
+
+    public_groups = Chat.query.filter(
+        Chat.is_group.is_(True), Chat.is_public.is_(True),
+        or_(Chat.name.ilike(pattern), Chat.description.ilike(pattern), Chat.group_username.ilike(pattern))
+    ).order_by(Chat.name.asc()).limit(6).all()
+    channels = Channel.query.filter(
+        or_(Channel.name.ilike(pattern), Channel.description.ilike(pattern))
+    ).order_by(Channel.created_at.desc()).limit(6).all()
+
+    from routes.reels_bp import serialize_reel
+    from routes.social_bp import serialize_post
+
+    return jsonify({
+        "users": [{
+            "id": item.id,
+            "username": item.username,
+            "avatar": serialize_user(item, viewer_id=user_id).get('avatar'),
+            "platformId": item.platform_id,
+            "bio": item.bio or "",
+            "type": "user",
+        } for item in users],
+        "reels": [serialize_reel(item, user_id) for item in reels],
+        "posts": [serialize_post(item, user_id) for item in posts],
+        "communities": [
+            {"id": item.id, "name": item.name or "Community", "description": item.description or "", "avatar": item.avatar, "type": "group", "username": item.group_username}
+            for item in public_groups
+        ] + [
+            {"id": item.id, "name": item.name, "description": item.description or "", "avatar": item.cover_url, "type": "channel"}
+            for item in channels
+        ],
+    })
 
 ALLOWED_AVATAR_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
 

@@ -10,7 +10,7 @@ import { loadReelCache, saveReelCache } from '../utils/reelCache';
 import { REEL_CATEGORIES } from '../utils/reelCategories';
 import { useBackHandler } from '../utils/backNavigation';
 
-const Reels = ({ active, onBack, onShareToChat }) => {
+const Reels = ({ active, onBack, onShareToChat, initialReel = null, onInitialReelConsumed }) => {
     const { user, token } = useContext(AuthContext);
     const [reels, setReels] = useState(() => {
         return loadReelCache(user?.id);
@@ -42,6 +42,13 @@ const Reels = ({ active, onBack, onShareToChat }) => {
     useBackHandler(Boolean(reactingToReel), () => setReactingToReel(null), 'reels-reacting');
     useBackHandler(Boolean(selectedProfileReel), () => setSelectedProfileReel(null), 'reels-profile-reel');
     useBackHandler(Boolean(selectedProfileUserId), () => setSelectedProfileUserId(null), 'reels-profile-user');
+
+    useEffect(() => {
+        if (!initialReel?.id) return;
+        setSelectedProfileUserId(null);
+        setSelectedProfileReel(initialReel);
+        onInitialReelConsumed?.();
+    }, [initialReel, onInitialReelConsumed]);
 
     useEffect(() => {
         const updatePreferences = (event) => setPlaybackPrefs(current => ({

@@ -99,6 +99,7 @@ export const Home = () => {
     const [showSearchModal, setShowSearchModal] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [searchedUser, setSearchedUser] = useState(null);
+    const [globalSearchReel, setGlobalSearchReel] = useState(null);
     const [searchError, setSearchError] = useState('');
     const [showLinkPhoneModal, setShowLinkPhoneModal] = useState(false);
     const [linkPhone, setLinkPhone] = useState('');
@@ -1356,10 +1357,10 @@ export const Home = () => {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
-    const startChat = async () => {
-        if (!searchedUser || !user || !token) return;
+    const startChat = async (targetUser = searchedUser) => {
+        if (!targetUser || !user || !token) return;
         const existingChat = chats.find(chat =>
-            !chat.isGroup && chat.participants?.some(participant => participant.id === searchedUser.id)
+            !chat.isGroup && chat.participants?.some(participant => participant.id === targetUser.id)
         );
         if (existingChat) {
             setActiveChat(existingChat);
@@ -1369,7 +1370,7 @@ export const Home = () => {
             return;
         }
         try {
-            const res = await axios.post('/api/chats/create', { participants: [user.id, searchedUser.id], isGroup: false }, {
+            const res = await axios.post('/api/chats/create', { participants: [user.id, targetUser.id], isGroup: false }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             const updatedChats = await fetchChats();
@@ -1381,6 +1382,63 @@ export const Home = () => {
         } catch (err) {
             console.error(err);
             setSearchError(err.response?.data?.error || "Could not start chat");
+        }
+    };
+
+    const handleGlobalSearchResult = (type, item) => {
+        if (type === 'chat') {
+            nav.setShowSocial(false);
+            nav.setShowReels(false);
+            nav.setShowPodlive(false);
+            nav.setShowAiChat(false);
+            nav.setShowSmartSpace(false);
+            setActiveChat(item);
+            return;
+        }
+        if (type === 'profile') {
+            nav.setShowReels(false);
+            nav.setShowPodlive(false);
+            nav.setShowAiChat(false);
+            nav.setShowSmartSpace(false);
+            nav.setShowSaskatAI(false);
+            nav.setShowSocial(true);
+            nav.setSocialDeepLink({ type: 'profile', id: item.id });
+            return;
+        }
+        if (type === 'reel') {
+            setGlobalSearchReel(item);
+            nav.setShowSocial(false);
+            nav.setShowPodlive(false);
+            nav.setShowAiChat(false);
+            nav.setShowSmartSpace(false);
+            nav.setShowSaskatAI(false);
+            nav.setShowReels(true);
+            return;
+        }
+        if (type === 'post') {
+            nav.setShowReels(false);
+            nav.setShowPodlive(false);
+            nav.setShowAiChat(false);
+            nav.setShowSmartSpace(false);
+            nav.setShowSaskatAI(false);
+            nav.setShowSocial(true);
+            nav.setSocialDeepLink({ type: 'post', id: item.id });
+            return;
+        }
+        if (type === 'community' && item.type === 'channel') {
+            nav.setShowReels(false);
+            nav.setShowPodlive(false);
+            nav.setShowAiChat(false);
+            nav.setShowSmartSpace(false);
+            nav.setShowSaskatAI(false);
+            nav.setShowSocial(true);
+            nav.setSocialDeepLink({ type: 'channel', id: item.id });
+            return;
+        }
+        if (type === 'community') {
+            groups.setSearchModalTab('discover_groups');
+            groups.setGroupSearchQuery(item.name);
+            setShowSearchModal(true);
         }
     };
 
@@ -1543,11 +1601,14 @@ export const Home = () => {
             )}
             <AppTopBar
                 user={user}
+                token={token}
+                chats={chats}
                 onMenu={() => nav.isMobile ? nav.setNavPeekOpen(value => !value) : nav.setNavCollapsed(value => !value)}
-                onSearch={openNewChat}
                 onCreate={openNewChat}
                 onNotifications={openNotifications}
                 onProfile={() => nav.setShowSettings(true)}
+                onSelectSearchResult={handleGlobalSearchResult}
+                onMessageUser={startChat}
                 unreadCount={unreadCount}
             />
             <div className="reddit-app-body relative flex min-h-0 flex-1 overflow-hidden">
@@ -1846,6 +1907,8 @@ export const Home = () => {
                 receivePodliveInvite={nav.receivePodliveInvite}
                 updatePodliveLiveCount={nav.updatePodliveLiveCount}
                 navCollapsed={nav.navCollapsed}
+                initialReel={globalSearchReel}
+                onInitialReelConsumed={() => setGlobalSearchReel(null)}
             />
             </div>
 

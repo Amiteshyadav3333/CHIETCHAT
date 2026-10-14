@@ -67,6 +67,8 @@ export const FeatureOverlays = ({
     receivePodliveInvite,
     updatePodliveLiveCount,
     navCollapsed = false,
+    initialReel = null,
+    onInitialReelConsumed,
 }) => {
     const featurePosition = 'reddit-feature-overlay fixed inset-x-0 bottom-0 top-16 z-30 bg-[#0b141b]';
     const featureStyle = {
@@ -83,6 +85,8 @@ export const FeatureOverlays = ({
                             active={showReels && !incomingCall && !showCallModal}
                             onBack={() => setShowReels(false)} 
                             onShareToChat={shareReelToChat}
+                            initialReel={initialReel}
+                            onInitialReelConsumed={onInitialReelConsumed}
                         />
                     </React.Suspense>
                 </div>

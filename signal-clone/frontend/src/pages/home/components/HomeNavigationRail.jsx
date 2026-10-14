@@ -1,19 +1,16 @@
 import React from 'react';
 import AvatarZoom from '../../../components/AvatarZoom';
-import { ChatBubbleLeftRightIcon, ClockIcon, PhoneIcon, UserGroupIcon, Bars3Icon, MagnifyingGlassIcon, PlusIcon, BellIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { ChatBubbleLeftRightIcon, ClockIcon, PhoneIcon, UserGroupIcon, Bars3Icon, PlusIcon, BellIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { GlobalSearchBar } from './GlobalSearchBar';
 
-export const AppTopBar = ({ user, onMenu, onSearch, onCreate, onNotifications, onProfile, unreadCount }) => (
+export const AppTopBar = ({ user, token, chats, onMenu, onCreate, onNotifications, onProfile, onSelectSearchResult, onMessageUser, unreadCount }) => (
     <header className="reddit-topbar relative z-[55] flex h-16 shrink-0 items-center gap-3 border-b px-3 sm:px-5">
         <button type="button" onClick={onMenu} className="reddit-topbar-icon rounded-full p-2.5" aria-label="Toggle navigation"><Bars3Icon className="h-5 w-5" /></button>
         <button type="button" onClick={onMenu} className="flex shrink-0 items-center gap-2" aria-label="Open navigation">
             <img src="/cheetchat-logo.png" alt="" className="h-8 w-8 rounded-xl object-cover" />
             <span className="reddit-brand hidden text-lg font-black tracking-tight sm:inline">CHEETCHAT</span>
         </button>
-        <button type="button" onClick={onSearch} className="reddit-topbar-search mx-auto flex h-10 min-w-0 max-w-[560px] flex-1 items-center gap-3 rounded-full px-4 text-left">
-            <MagnifyingGlassIcon className="h-5 w-5 shrink-0" />
-            <span className="truncate text-sm">Search chats and people</span>
-            <kbd className="ml-auto hidden rounded-md border px-1.5 py-0.5 text-[10px] sm:inline">⌘ K</kbd>
-        </button>
+        <GlobalSearchBar token={token} chats={chats} onSelectResult={onSelectSearchResult} onMessageUser={onMessageUser} />
         <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
             <button type="button" onClick={onCreate} className="reddit-topbar-action flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold"><PlusIcon className="h-5 w-5" /><span className="hidden lg:inline">New chat</span></button>
             <button type="button" onClick={onNotifications} className="reddit-topbar-icon relative rounded-full p-2.5" aria-label="Notifications"><BellIcon className="h-5 w-5" />{unreadCount > 0 && <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-[#ff6533] ring-2 ring-[#11171b]" />}</button>

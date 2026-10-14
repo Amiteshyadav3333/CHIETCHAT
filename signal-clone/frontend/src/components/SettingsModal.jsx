@@ -72,9 +72,9 @@ const PremiumUpiCard = () => {
     return <div className="rounded-2xl border border-violet-400/25 bg-violet-500/10 p-4 text-center"><p className="font-black text-white">Secure Premium checkout</p><p className="mt-2 text-xs leading-5 text-violet-100">Purchase Premium from the Social section. The payment is verified by the backend and stays pending until an admin approves it.</p></div>;
 };
 
-const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wallpaper, onThemeChange, onWallpaperChange, onOpenSmartSpace, smartSpaceButtonEnabled, onSmartSpaceButtonChange }) => {
+const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wallpaper, onThemeChange, onWallpaperChange, onOpenSmartSpace, smartSpaceButtonEnabled, onSmartSpaceButtonChange, initialScreen = 'settings' }) => {
     const serverUi = user?.uiPreferences || {};
-    const [screen, setScreen] = useState('settings');
+    const [screen, setScreen] = useState(initialScreen);
     const [message, setMessage] = useState(null);
     const [busy, setBusy] = useState(false);
     const [businessTitle, setBusinessTitle] = useState('Business tools');

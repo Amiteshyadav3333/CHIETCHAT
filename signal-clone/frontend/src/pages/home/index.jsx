@@ -109,6 +109,7 @@ export const Home = () => {
     // Notifications
     const [notifications, setNotifications] = useState([]);
     const [showNotifications, setShowNotifications] = useState(false);
+    const [settingsInitialScreen, setSettingsInitialScreen] = useState('settings');
     const [unreadCount, setUnreadCount] = useState(0);
 
     // Messaging extras
@@ -1148,6 +1149,33 @@ export const Home = () => {
         localStorage.removeItem('activeChatId');
     };
 
+    const handleAccountMenuAction = (action, draftText = '') => {
+        setShowNotifications(false);
+        setShowSearchModal(false);
+        if (action === 'profile') {
+            nav.setShowSettings(false);
+            nav.setShowReels(false); nav.setShowPodlive(false); nav.setShowAiChat(false); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false);
+            nav.setSocialDeepLink({ type: 'profile', id: user?.id });
+            nav.setShowSocial(true);
+            return;
+        }
+        if (action === 'drafts' || action === 'earn') {
+            nav.setShowSettings(false);
+            nav.setShowReels(false); nav.setShowPodlive(false); nav.setShowAiChat(false); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false);
+            nav.setShowSocial(true);
+            setOpenComposerRequest(value => value + 1);
+            return;
+        }
+        if (action === 'draft') {
+            openContentPublisher();
+            window.setTimeout(() => window.dispatchEvent(new CustomEvent('ducor-open-social-draft', { detail: { text: draftText } })), 120);
+            return;
+        }
+        const targetScreen = action === 'avatar' ? 'profile' : action === 'premium' ? 'premium' : action === 'display' ? 'chats' : 'settings';
+        setSettingsInitialScreen(targetScreen);
+        nav.setShowSettings(true);
+    };
+
     const handleLinkPhone = async (event) => {
         event.preventDefault();
         if (linkPhone.length !== 10) { setLinkPhoneError('Phone number must be exactly 10 digits'); return; }
@@ -1612,7 +1640,8 @@ export const Home = () => {
                 onMenu={() => nav.isMobile ? nav.setNavPeekOpen(value => !value) : nav.setNavCollapsed(value => !value)}
                 onCreate={openContentPublisher}
                 onNotifications={openNotifications}
-                onProfile={() => nav.setShowSettings(true)}
+                onProfile={handleAccountMenuAction}
+                onChat={openChats}
                 onSelectSearchResult={handleGlobalSearchResult}
                 onMessageUser={startChat}
                 unreadCount={unreadCount}
@@ -1879,6 +1908,7 @@ export const Home = () => {
                 setShowSaskatAI={nav.setShowSaskatAI}
                 showSettings={nav.showSettings}
                 setShowSettings={nav.setShowSettings}
+                settingsInitialScreen={settingsInitialScreen}
                 user={user}
                 token={token}
                 logout={logout}

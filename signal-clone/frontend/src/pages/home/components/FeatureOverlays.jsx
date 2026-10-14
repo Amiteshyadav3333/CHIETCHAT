@@ -32,6 +32,7 @@ export const FeatureOverlays = ({
     setShowSaskatAI,
     showSettings,
     setShowSettings,
+    settingsInitialScreen = 'settings',
     user,
     token,
     logout,
@@ -147,6 +148,7 @@ export const FeatureOverlays = ({
                     <SettingsModal
                         user={user}
                         token={token}
+                        initialScreen={settingsInitialScreen}
                         onClose={() => setShowSettings(false)}
                         onLogout={logout}
                         onUserUpdate={updateUser}

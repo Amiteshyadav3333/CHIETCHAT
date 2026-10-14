@@ -923,6 +923,16 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
         window.setTimeout(() => document.querySelector('[data-ducor-composer] textarea')?.focus(), 120);
     }, [openComposerRequest]);
 
+    useEffect(() => {
+        const openDraft = event => {
+            setProfileView(null); setSelectedChannel(null); setActiveTab('for-you');
+            setCaption(event.detail?.text || '');
+            window.setTimeout(() => document.querySelector('[data-ducor-composer] textarea')?.focus(), 160);
+        };
+        window.addEventListener('ducor-open-social-draft', openDraft);
+        return () => window.removeEventListener('ducor-open-social-draft', openDraft);
+    }, []);
+
     const fetchChannels = useCallback(async () => {
         setLoading(true);
         try { const res = await axios.get('/api/social/channels', { headers: authHeaders(token) }); setChannels(res.data); } catch { } finally { setLoading(false); }

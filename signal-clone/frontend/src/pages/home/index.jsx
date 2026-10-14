@@ -1149,6 +1149,21 @@ export const Home = () => {
         localStorage.removeItem('activeChatId');
     };
 
+    const openTopBarFeature = (feature) => {
+        setShowNotifications(false);
+        setShowSearchModal(false);
+        nav.setShowSettings(false);
+        nav.hideAppNavForFeature();
+        nav.setShowReels(feature === 'reels');
+        nav.setShowPodlive(feature === 'podlive');
+        nav.setShowAiChat(feature === 'ai');
+        nav.setShowSocial(false);
+        nav.setShowSmartSpace(false);
+        nav.setShowSaskatAI(false);
+        setActiveChat(null);
+        localStorage.removeItem('activeChatId');
+    };
+
     const handleAccountMenuAction = (action, draftText = '') => {
         setShowNotifications(false);
         setShowSearchModal(false);
@@ -1642,6 +1657,9 @@ export const Home = () => {
                 onNotifications={openNotifications}
                 onProfile={handleAccountMenuAction}
                 onChat={openChats}
+                onReels={() => openTopBarFeature('reels')}
+                onPodlive={() => openTopBarFeature('podlive')}
+                onAI={() => openTopBarFeature('ai')}
                 onSelectSearchResult={handleGlobalSearchResult}
                 onMessageUser={startChat}
                 unreadCount={unreadCount}

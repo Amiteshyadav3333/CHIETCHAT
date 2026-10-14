@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { MagnifyingGlassIcon, PlayIcon, UserIcon, UsersIcon, ChatBubbleLeftRightIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
@@ -29,6 +29,7 @@ export const GlobalSearchBar = ({ token, chats = [], onSelectResult, onMessageUs
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [open, setOpen] = useState(false);
+    const inputRef = useRef(null);
     const normalizedQuery = query.trim();
     const resultCount = useMemo(() => Object.values(results).reduce((total, list) => total + list.length, 0), [results]);
 
@@ -78,16 +79,27 @@ export const GlobalSearchBar = ({ token, chats = [], onSelectResult, onMessageUs
         onSelectResult(type, item);
     };
 
+    const closeSearch = () => {
+        setOpen(false);
+        inputRef.current?.blur();
+    };
+
     return (
-        <div className="global-search relative mx-auto min-w-0 max-w-[620px] flex-1">
-            <form onSubmit={event => { event.preventDefault(); setOpen(true); }} className={`reddit-topbar-search flex h-10 items-center gap-3 rounded-full px-4 ${open ? 'global-search-focused' : ''}`}>
+        <div className={`global-search relative mx-auto min-w-0 max-w-[620px] flex-1 ${open ? 'global-search-expanded' : 'global-search-collapsed'}`}>
+            <form onClick={() => { if (!open) { setOpen(true); window.requestAnimationFrame(() => inputRef.current?.focus()); } }} onSubmit={event => { event.preventDefault(); setOpen(true); }} className={`reddit-topbar-search flex h-10 items-center gap-3 rounded-full px-4 ${open ? 'global-search-focused' : ''}`}>
                 <MagnifyingGlassIcon className="h-5 w-5 shrink-0" />
                 <input
+                    ref={inputRef}
                     type="search"
                     value={query}
                     onChange={event => { setQuery(event.target.value); setOpen(true); }}
                     onFocus={() => setOpen(true)}
-                    onKeyDown={event => { if (event.key === 'Escape') setOpen(false); }}
+                    onBlur={event => {
+                        if (window.matchMedia('(max-width: 767px)').matches && !event.currentTarget.closest('.global-search')?.contains(event.relatedTarget)) {
+                            window.setTimeout(() => setOpen(false), 80);
+                        }
+                    }}
+                    onKeyDown={event => { if (event.key === 'Escape') closeSearch(); }}
                     placeholder="Search people, videos, posts, communities"
                     aria-label="Search people, videos, posts and communities"
                     aria-expanded={open && normalizedQuery.length >= 2}
@@ -95,6 +107,7 @@ export const GlobalSearchBar = ({ token, chats = [], onSelectResult, onMessageUs
                     className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-gray-100 outline-none placeholder:text-gray-500 focus:ring-0"
                 />
                 {loading ? <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white/20 border-t-[#ff6533]" aria-label="Searching" /> : normalizedQuery && <button type="button" onClick={() => { setQuery(''); setOpen(false); }} className="rounded-full p-1 text-gray-400 hover:bg-white/10 hover:text-white" aria-label="Clear search"><XMarkIcon className="h-4 w-4" /></button>}
+                {open && <button type="button" onMouseDown={event => event.preventDefault()} onClick={closeSearch} className="global-search-close rounded-full p-1 text-gray-400 hover:bg-white/10 hover:text-white" aria-label="Close search"><XMarkIcon className="h-4 w-4" /></button>}
                 <kbd className="ml-auto hidden shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] sm:inline">⌘ K</kbd>
             </form>
             {open && normalizedQuery.length >= 2 && (

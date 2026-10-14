@@ -149,7 +149,7 @@ export default function MarketingLanding() {
 
     <section className="faq-section section-shell" id="faq"><div className="section-heading"><span>FAQ</span><h2>{t.faqTitle}</h2></div><div className="faq-list">{faqs.map(([q, a]) => <details key={q}><summary>{q}<span>+</span></summary><p>{a}</p></details>)}</div></section>
 
-    <section className="final-cta section-shell"><img src="/ducor-mark.svg" alt=""/><h2>{t.finalTitle}</h2><p>{t.finalBody}</p><a href="#auth-top">Create your Ducor account</a></section>
-    <footer className="marketing-footer"><div className="marketing-brand"><img src="/ducor-mark.svg" alt=""/><span>Ducor</span></div><p>Founded by Amitesh Kumar Yadav · Designed and developed in India 🇮🇳</p><div><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/about">About</a></div></footer>
+    <section className="final-cta section-shell"><img src="/lion-logo.png" alt=""/><h2>{t.finalTitle}</h2><p>{t.finalBody}</p><a href="#auth-top">Create your Ducor account</a></section>
+    <footer className="marketing-footer"><div className="marketing-brand"><img src="/lion-logo.png" alt=""/><span>Ducor</span></div><p>Founded by Amitesh Kumar Yadav · Designed and developed in India 🇮🇳</p><div><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/about">About</a></div></footer>
   </div>;
 }

@@ -8,7 +8,7 @@ const qualifications = [
 ];
 
 const projects = [
-  ['Ducor', 'An social platform for India connecting private chat, social, reels, calls, AI, communities and creator tools.', '/ducor-mark.svg', '/login'],
+  ['Ducor', 'An social platform for India connecting private chat, social, reels, calls, AI, communities and creator tools.', '/lion-logo.png', '/login'],
   ['IndiaSearch', 'A multilingual AI voice-search experience created for Indian users.', '/marketing/indiasearch.png', 'https://indiasearch.site/'],
   ['Anuvandini', 'A real-time language translation product designed to make communication more inclusive.', '/marketing/translator.png', 'https://downloader.indiasearch.site/'],
 ];
@@ -16,7 +16,7 @@ const projects = [
 export default function FounderPage() {
   useEffect(() => { const previous = document.title; document.title = 'Amitesh Kumar Yadav — Founder of Ducor'; return () => { document.title = previous; }; }, []);
   return <main className="founder-page">
-    <header className="founder-page-header"><a href="/login" className="founder-page-brand"><img src="/ducor-mark.svg" alt="Ducor"/><span>Ducor</span></a><nav><a href="/login#features">Product</a><a href="#qualifications">Qualifications</a><a href="#projects">Projects</a></nav><a href="/login" className="founder-back"><ArrowLeftIcon/> Back to Ducor</a></header>
+    <header className="founder-page-header"><a href="/login" className="founder-page-brand"><img src="/lion-logo.png" alt="Ducor"/><span>Ducor</span></a><nav><a href="/login#features">Product</a><a href="#qualifications">Qualifications</a><a href="#projects">Projects</a></nav><a href="/login" className="founder-back"><ArrowLeftIcon/> Back to Ducor</a></header>
 
     <section className="founder-hero"><div className="founder-hero-glow"/><div className="founder-portrait-wrap"><div className="founder-portrait-frame"><img src="/marketing/founder.jpg" alt="Amitesh Kumar Yadav, founder of Ducor"/></div><span className="founder-role">Founder of Ducor</span><div className="founder-floating-tag tag-products"><RocketLaunchIcon/> Social platform for India</div><div className="founder-floating-tag tag-certified"><CheckBadgeIcon/> Oracle certified</div></div><div className="founder-intro"><span className="founder-kicker">FOUNDER · PRODUCT CREATOR · INDIA</span><h1>Amitesh Kumar<br/><strong>Yadav</strong></h1><p className="founder-lead">The founder of Ducor, a social platform focused on news discovery, publishing and community conversations for people across India.</p><div className="founder-mission"><LightBulbIcon/><div><strong>The mission</strong><p>Build practical technology that helps Indian students communicate in their own language, learn, create communities, express ideas and grow digital businesses through a social platform built for people across India.</p></div></div><div className="founder-hero-actions"><a href="#qualifications">View qualifications</a><a href="#projects">Explore projects</a></div></div></section>
 
@@ -26,7 +26,7 @@ export default function FounderPage() {
 
     <section className="founder-projects" id="projects"><div className="founder-section-title"><span>PRODUCT ECOSYSTEM</span><h2>Projects created by Amitesh</h2></div><div className="founder-project-grid">{projects.map(([name, description, image, href]) => <a href={href} target={href.startsWith('http') ? '_blank' : undefined} rel={href.startsWith('http') ? 'noreferrer' : undefined} key={name}><img src={image} alt=""/><div><h3>{name}</h3><p>{description}</p><strong>Explore project <ArrowTopRightOnSquareIcon/></strong></div></a>)}</div></section>
 
-    <section className="founder-closing"><img src="/ducor-mark.svg" alt=""/><span>FOUNDER’S VISION</span><blockquote>“Technology becomes meaningful when it helps people speak in their own language, create with confidence and stay in control of their identity.”</blockquote><strong>— Amitesh Kumar Yadav</strong><a href="/login">Discover Ducor</a></section>
+    <section className="founder-closing"><img src="/lion-logo.png" alt=""/><span>FOUNDER’S VISION</span><blockquote>“Technology becomes meaningful when it helps people speak in their own language, create with confidence and stay in control of their identity.”</blockquote><strong>— Amitesh Kumar Yadav</strong><a href="/login">Discover Ducor</a></section>
     <footer className="founder-footer"><span>Ducor · Made in India 🇮🇳</span><span>Founder: Amitesh Kumar Yadav</span></footer>
   </main>;
 }

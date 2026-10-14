@@ -4,11 +4,11 @@ import { AuthContext } from '../context/AuthContext';
 import {
     XMarkIcon, TrashIcon,
     PaperAirplaneIcon, StopIcon, MicrophoneIcon,
-    FaceSmileIcon, PhoneIcon, SparklesIcon
+    PhoneIcon, SparklesIcon
 } from '@heroicons/react/24/solid';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import UserAvatar from './UserAvatar';
-import { EMOJIS, MessageBubble, TypingDots, WaveformVisualizer, renderMarkdown } from './AiChatPresentation';
+import { MessageBubble, TypingDots, WaveformVisualizer, renderMarkdown } from './AiChatPresentation';
 import AiVoiceWallpaper, { AI_WALLPAPER_THEMES } from './AiVoiceWallpaper';
 import HumanoidAiAvatar from './HumanoidAiAvatar';
 import { API_BASE_URL } from '../utils/apiBaseUrl';
@@ -35,7 +35,6 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     const [botInfo, setBotInfo] = useState(null);
     const [streamingText, setStreamingText] = useState('');
     const [isRecording, setIsRecording] = useState(false);
-    const [showEmoji, setShowEmoji] = useState(false);
     const [userGender, setUserGender] = useState('unknown');
     const [language, setLanguage] = useState(() => localStorage.getItem('ai_language') || 'en-IN');
     const [showSaskat, setShowSaskat] = useState(false);
@@ -744,7 +743,6 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
 
     const sendMessage = async (text) => {
         if (!text.trim() || loading) return;
-        setShowEmoji(false);
         const userMsg = {
             id: Date.now(), role: 'user',
             content: text, timestamp: new Date().toISOString()
@@ -957,7 +955,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     const botAvatar = (botInfo?.avatar && !botInfo.avatar.includes('dicebear')) ? botInfo.avatar : defaultRoyalAvatar;
 
     return (
-        <div className="ai-chat-root">
+        <div className="ai-chat-root reddit-ai-chat">
             <style>{`
                 .ai-chat-root {
                     display: flex;
@@ -1260,20 +1258,6 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                     border-color: ${isArjun ? 'rgba(96,165,250,0.35)' : 'rgba(192,132,252,0.35)'};
                     box-shadow: 0 0 0 2px ${isArjun ? 'rgba(96,165,250,0.08)' : 'rgba(192,132,252,0.08)'};
                 }
-                .ai-emoji-btn {
-                    background: none;
-                    border: none;
-                    color: #6b7280;
-                    cursor: pointer;
-                    padding: 4px;
-                    display: flex;
-                    align-items: center;
-                    transition: color 0.2s;
-                    flex-shrink: 0;
-                    align-self: flex-end;
-                    margin-bottom: 2px;
-                }
-                .ai-emoji-btn:hover { color: #d1d5db; }
                 .ai-textarea {
                     flex: 1;
                     background: none;
@@ -1322,37 +1306,6 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                     text-align: center;
                     margin-top: 6px;
                 }
-
-                /* ─── Emoji picker ─── */
-                .ai-emoji-picker {
-                    position: absolute;
-                    bottom: 100%;
-                    left: 12px;
-                    background: #1e2d36;
-                    border: 1px solid rgba(255,255,255,0.1);
-                    border-radius: 14px;
-                    padding: 10px;
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 4px;
-                    width: 220px;
-                    box-shadow: 0 -8px 24px rgba(0,0,0,0.4);
-                    animation: slideUp 0.2s ease;
-                    z-index: 100;
-                }
-                @keyframes slideUp {
-                    from { opacity:0; transform: translateY(8px); }
-                    to { opacity:1; transform: translateY(0); }
-                }
-                .ai-emoji-item {
-                    font-size: 20px;
-                    cursor: pointer;
-                    padding: 4px;
-                    border-radius: 6px;
-                    transition: background 0.15s;
-                    line-height: 1;
-                }
-                .ai-emoji-item:hover { background: rgba(255,255,255,0.08); }
 
                 /* ─── Date divider ─── */
                 .ai-date-divider {
@@ -1935,30 +1888,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
 
             {/* ─── Input bar ─── */}
             <div className="ai-input-bar">
-                {/* Emoji picker */}
-                {showEmoji && (
-                    <div className="ai-emoji-picker">
-                        {EMOJIS.map((e, i) => (
-                            <span
-                                key={i}
-                                className="ai-emoji-item"
-                                onClick={() => { setInput(prev => prev + e); setShowEmoji(false); inputRef.current?.focus(); }}
-                            >
-                                {e}
-                            </span>
-                        ))}
-                    </div>
-                )}
-
                 <div className="ai-input-row">
-                    <button
-                        className="ai-emoji-btn"
-                        onClick={() => setShowEmoji(v => !v)}
-                        title="Emoji"
-                    >
-                        <FaceSmileIcon style={{ width: 22, height: 22 }} />
-                    </button>
-
                     <textarea
                         ref={inputRef}
                         value={input}

@@ -33,7 +33,7 @@ export const ChatSidebar = ({
     startCallForChat,
 }) => {
     return (
-        <div className={`h-full min-h-0 w-full overflow-hidden md:w-[360px] lg:w-[390px] border-r border-gray-800 flex flex-col ${activeChat ? 'hidden md:flex' : 'flex'}`}>
+        <div className={`reddit-chat-sidebar h-full min-h-0 w-full overflow-hidden md:w-[360px] lg:w-[390px] border-r border-gray-800 flex flex-col ${activeChat ? 'hidden md:flex' : 'flex'}`}>
             {/* Header */}
             <div className="p-4 bg-signal-secondary flex justify-between items-center shadow-md z-10">
                 <div className="flex items-center gap-3">

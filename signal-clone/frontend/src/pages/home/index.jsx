@@ -1479,15 +1479,18 @@ export const Home = () => {
                 nav.setShowReels(false);
                 nav.setShowSocial(false);
                 nav.setShowPodlive(false);
+                nav.setShowAiChat(false);
+                nav.setShowSmartSpace(false);
+                nav.setShowSaskatAI(false);
                
                 setActiveChat(null);
                 localStorage.removeItem('activeChatId');
             }
         },
-        { label: 'Reels', icon: PlayIcon, active: nav.showReels, action: () => { nav.hideAppNavForFeature(); nav.setShowSocial(false); nav.setShowPodlive(false); nav.setShowReels(true); nav.setShowAiChat(false); } },
-        { label: 'Social', icon: PhotoIcon, active: nav.showSocial, action: () => { nav.hideAppNavForFeature(); nav.setShowReels(false); nav.setShowPodlive(false); nav.setShowSocial(true); nav.setShowAiChat(false); } },
-        { label: 'PodLive', icon: MicrophoneIcon, active: nav.showPodlive, action: () => { nav.hideAppNavForFeature(); nav.setShowReels(false); nav.setShowSocial(false); nav.setShowPodlive(true); nav.setShowAiChat(false); }, badge: nav.podliveLiveCount || 0 },
-        { label: 'AI', icon: SparklesIcon, active: nav.showAiChat, action: () => { nav.hideAppNavForFeature(); nav.setShowReels(false); nav.setShowSocial(false); nav.setShowPodlive(false); nav.setShowAiChat(true); nav.setShowSaskatAI(false); } },
+        { label: 'Reels', icon: PlayIcon, active: nav.showReels, action: () => { nav.hideAppNavForFeature(); nav.setShowSocial(false); nav.setShowPodlive(false); nav.setShowReels(true); nav.setShowAiChat(false); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false); } },
+        { label: 'Social', icon: PhotoIcon, active: nav.showSocial, action: () => { nav.hideAppNavForFeature(); nav.setShowReels(false); nav.setShowPodlive(false); nav.setShowSocial(true); nav.setShowAiChat(false); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false); } },
+        { label: 'PodLive', icon: MicrophoneIcon, active: nav.showPodlive, action: () => { nav.hideAppNavForFeature(); nav.setShowReels(false); nav.setShowSocial(false); nav.setShowPodlive(true); nav.setShowAiChat(false); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false); }, badge: nav.podliveLiveCount || 0 },
+        { label: 'AI', icon: SparklesIcon, active: nav.showAiChat, action: () => { nav.hideAppNavForFeature(); nav.setShowReels(false); nav.setShowSocial(false); nav.setShowPodlive(false); nav.setShowAiChat(true); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false); } },
         { label: 'Notify', icon: BellIcon, active: showNotifications, action: openNotifications, badge: unreadCount },
         { label: 'New', icon: PlusIcon, active: showSearchModal || showLinkPhoneModal, action: openNewChat },
         { label: 'Settings', icon: Cog6ToothIcon, active: nav.showSettings, action: () => { setShowNotifications(false); setShowSearchModal(false); nav.setShowSettings(true); } }
@@ -1526,7 +1529,7 @@ export const Home = () => {
     };
 
     return (
-        <div className="flex h-[100dvh] bg-signal-bg overflow-hidden text-gray-100 font-sans relative">
+        <div className="reddit-app-shell flex h-[100dvh] bg-signal-bg overflow-hidden text-gray-100 font-sans relative">
             {pendingCropImg && (
                 <ImageCropperModal
                     imageSrc={pendingCropImg.src}

@@ -209,7 +209,7 @@ const Reels = ({ active, onBack, onShareToChat }) => {
     }
 
     return (
-        <div className="h-full w-full bg-black relative overflow-hidden flex flex-col">
+        <div className="reddit-reels h-full w-full bg-[#0b141b] relative overflow-hidden flex flex-col">
             {/* Top Navigation */}
             <div className="absolute top-0 inset-x-0 z-30 flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent">
                 <button onClick={onBack} className="p-2 text-white hover:bg-white/10 rounded-full transition-colors">

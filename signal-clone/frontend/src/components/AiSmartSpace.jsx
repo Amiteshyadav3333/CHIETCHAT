@@ -65,7 +65,7 @@ const AiSmartSpace = ({ chats, token, onClose, onOpenChat }) => {
     };
 
     return (
-        <div className="flex h-full flex-col bg-[#07110f] text-white">
+        <div className="reddit-smart-space flex h-full flex-col bg-[#0b141b] text-white">
             <header className="flex items-center gap-3 border-b border-white/10 bg-[#10201c] px-5 py-4">
                 <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-cyan-500 shadow-lg"><SparklesIcon className="h-6 w-6" /></div>
                 <div className="min-w-0 flex-1"><h2 className="font-bold">AI Smart Space</h2><p className="text-xs text-emerald-200/60">Your daily communication assistant</p></div>

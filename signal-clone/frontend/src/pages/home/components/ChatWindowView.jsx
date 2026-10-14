@@ -108,7 +108,7 @@ export const ChatWindowView = ({
     }
 
     return (
-        <div className={`relative h-full min-h-0 flex-1 flex-col overflow-hidden bg-black/50 ${activeChat ? 'flex' : 'hidden md:flex'}`}>
+        <div className={`reddit-chat-window relative h-full min-h-0 flex-1 flex-col overflow-hidden bg-black/50 ${activeChat ? 'flex' : 'hidden md:flex'}`}>
             {showChatDraw && (
                 <DrawStudio
                     key={drawSource ? `${drawSource.type}-${drawSource.timestamp || drawSource.src}` : 'blank-draw'}

@@ -1,6 +1,7 @@
 import datetime
 import json
 import re
+import urllib.parse
 from collections import Counter
 from flask import Blueprint, current_app, jsonify, request
 from sqlalchemy import or_
@@ -75,6 +76,10 @@ def serialize_post(post, current_user_id):
             "mediaUrl": orig.media_url,
             "mediaType": orig.media_type,
             "mediaItems": post_media_items(orig),
+            "postKind": orig.post_kind or 'standard',
+            "title": orig.title or orig.article_title or "",
+            "linkUrl": orig.link_url or "",
+            "articleTitle": orig.article_title or "",
             "createdAt": iso_utc(orig.created_at),
             "user": orig_user,
             "likesCount": len(orig.likes),
@@ -115,6 +120,8 @@ def serialize_post(post, current_user_id):
         ,"postKind": post.post_kind or 'standard'
         ,"poll": {"options": poll_options, "counts": vote_counts, "totalVotes": sum(vote_counts), "selectedOption": selected_poll_option} if poll_options else None
         ,"articleTitle": post.article_title or ""
+        ,"title": post.title or post.article_title or ""
+        ,"linkUrl": post.link_url or ""
         ,"isMonetized": bool(post.is_monetized)
         ,"viewsCount": post.views_count or 0
         ,"earningsPaise": post.earnings_paise or 0 if post.user_id == current_user_id else None
@@ -187,7 +194,7 @@ def get_social_posts():
     feed = request.args.get('feed', 'all')
     query = SocialPost.query.filter_by(channel_id=None)
     if feed == 'news':
-        query = query.filter(SocialPost.post_kind == 'article')
+        query = query.filter(SocialPost.post_kind.in_(['news_post', 'article', 'link', 'poll']))
     elif feed == 'community':
         query = query.filter(SocialPost.post_kind == 'community')
     else:
@@ -217,7 +224,7 @@ def get_social_trends():
     recent_reels = Reel.query.filter(Reel.created_at >= cutoff).order_by(Reel.created_at.desc()).limit(1000).all()
     counts = Counter()
     for content in [*recent_posts, *recent_reels]:
-        text = ' '.join(filter(None, [getattr(content, 'caption', ''), getattr(content, 'article_title', '')]))
+        text = ' '.join(filter(None, [getattr(content, 'caption', ''), getattr(content, 'article_title', ''), getattr(content, 'title', '')]))
         tags = {tag.lower() for tag in re.findall(r'(?<!\w)#([\w]{2,40})', text, flags=re.UNICODE)}
         counts.update(tags)
     return jsonify([{"tag": f"#{tag}", "posts": count} for tag, count in counts.most_common(8)])
@@ -230,17 +237,35 @@ def create_social_post():
 
     caption = request.form.get('caption', '').strip()
     post_kind = request.form.get('postKind', 'standard').strip().lower()
-    if post_kind not in {'standard', 'community', 'article'}:
+    if post_kind not in {'standard', 'community', 'news_post', 'article', 'link', 'poll'}:
         return jsonify({"error": "Invalid post type"}), 400
     poll_options = []
     user = db.session.get(User, user_id)
     premium_active = bool(user.is_premium and (not user.premium_expires_at or user.premium_expires_at > utc_now()))
     is_monetized = request.form.get('isMonetized', 'false').lower() == 'true'
     article_title = request.form.get('articleTitle', '').strip()[:200]
+    post_title = request.form.get('postTitle', '').strip()[:200] or article_title
+    raw_link_url = request.form.get('linkUrl', '').strip()
+    link_url = ''
+    if raw_link_url:
+        if not re.match(r'^[a-z][a-z\d+.-]*:', raw_link_url, flags=re.IGNORECASE):
+            raw_link_url = 'https://' + raw_link_url
+        try:
+            parsed_link = urllib.parse.urlsplit(raw_link_url)
+            if len(raw_link_url) > 2048 or any(ord(char) <= 32 for char in raw_link_url) or parsed_link.scheme != 'https' or not parsed_link.hostname or parsed_link.username or parsed_link.password:
+                raise ValueError('Use a valid secure https link')
+            parsed_link.port
+            link_url = urllib.parse.urlunsplit(parsed_link)
+        except ValueError as error:
+            return jsonify({'error': str(error) or 'Use a valid public http or https link'}), 400
     if is_monetized and not premium_active:
         return jsonify({"error": "Premium membership is required for paid posts"}), 403
-    if post_kind == 'article' and not article_title:
+    if post_kind == 'article' and not post_title:
         return jsonify({"error": "Article title is required"}), 400
+    if post_kind == 'link' and (not post_title or not link_url):
+        return jsonify({"error": "A link post needs a title and a valid URL"}), 400
+    if post_kind == 'poll' and (not post_title):
+        return jsonify({"error": "A poll needs a question"}), 400
     raw_poll_options = request.form.get('pollOptions', '')
     if raw_poll_options:
         try:
@@ -249,6 +274,8 @@ def create_social_post():
             return jsonify({"error": "Invalid poll options"}), 400
         if len(poll_options) < 2 or len(poll_options) > 4:
             return jsonify({"error": "A poll needs 2 to 4 options"}), 400
+    if post_kind == 'poll' and not poll_options:
+        return jsonify({"error": "A poll needs at least two options"}), 400
     if post_kind != 'article' and len(caption) > MAX_POST_CAPTION_LENGTH:
         return jsonify({"error": f"Caption must be {MAX_POST_CAPTION_LENGTH} characters or less"}), 400
     channel_id = request.form.get('channelId')
@@ -323,7 +350,7 @@ def create_social_post():
         media_url = uploaded_items[0]['url']
         media_type = uploaded_items[0]['type']
 
-    if not caption and not media_url:
+    if not caption and not media_url and not post_title and not link_url:
         return jsonify({"error": "Write something or choose a photo/video"}), 400
 
     post = SocialPost(
@@ -336,6 +363,8 @@ def create_social_post():
         post_kind=post_kind,
         poll_options=json.dumps(poll_options) if poll_options else None,
         article_title=article_title or None,
+        title=post_title or None,
+        link_url=link_url or None,
         is_monetized=is_monetized,
     )
     db.session.add(post)

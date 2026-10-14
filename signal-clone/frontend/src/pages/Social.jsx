@@ -166,17 +166,23 @@ const TweetAction = ({ icon, count, onClick, active, activeColor, hoverColor, ho
 );
 
 const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, preview, fileRef, posting, onSubmit, isPremium, onUpgrade, defaultArticleMode = false }) => {
-    const [articleMode, setArticleMode] = useState(defaultArticleMode);
-    const [articleTitle, setArticleTitle] = useState('');
+    const [format, setFormat] = useState(defaultArticleMode ? 'article' : 'post');
+    const [title, setTitle] = useState('');
+    const [linkUrl, setLinkUrl] = useState('');
+    const [pollOptions, setPollOptions] = useState(['', '']);
     const [monetized, setMonetized] = useState(false);
     const [mediaDuration, setMediaDuration] = useState(0);
     const [showProCamera, setShowProCamera] = useState(false);
-    useEffect(() => { if (defaultArticleMode) setArticleMode(true); }, [defaultArticleMode]);
-    const maxChars = articleMode ? Number.POSITIVE_INFINITY : 280;
+    const articleMode = format === 'article';
+    useEffect(() => { setFormat(defaultArticleMode ? 'article' : 'post'); }, [defaultArticleMode]);
+    const maxChars = articleMode ? Number.POSITIVE_INFINITY : 1000;
     const remaining = maxChars - caption.length;
     const progress = Math.min((caption.length / maxChars) * 100, 100);
     const isOverLimit = remaining < 0;
-    const canPost = (caption.trim() || media.length > 0) && !isOverLimit;
+    const hasRequiredContent = format === 'link' ? Boolean(title.trim() && linkUrl.trim())
+        : format === 'poll' ? Boolean(title.trim() && pollOptions.filter(option => option.trim()).length >= 2)
+            : Boolean(caption.trim() || media.length > 0 || title.trim());
+    const canPost = hasRequiredContent && !isOverLimit;
     const circumference = 2 * Math.PI * 9;
     const dashOffset = circumference - (progress / 100) * circumference;
 
@@ -184,16 +190,21 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
         <div style={{ display: 'flex', gap: 12 }}>
             <img src={avatar} alt="" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, marginTop: 4 }} />
             <div style={{ flex: 1, minWidth: 0 }}>
-                {articleMode && <input value={articleTitle} onChange={e => setArticleTitle(e.target.value.slice(0, 200))} placeholder="Article title" className="mb-2 w-full border-0 border-b border-white/10 bg-transparent pb-2 text-xl font-black text-white outline-none" />}
+                <input value={title} onChange={e => setTitle(e.target.value.slice(0, 200))} placeholder={articleMode ? 'Article title' : format === 'link' ? 'Link title' : format === 'poll' ? 'Ask a question' : 'Post title (optional)'} className="mb-2 w-full border-0 border-b border-white/10 bg-transparent pb-2 text-xl font-black text-white outline-none" />
+                {format === 'link' && <input type="url" value={linkUrl} onChange={e => setLinkUrl(e.target.value)} placeholder="https://example.com/article" className="mb-2 w-full rounded-xl border border-[#27333b] bg-black/30 px-3 py-3 text-sm text-white outline-none focus:border-[#ff6a3d]" />}
                 <textarea
                     id="tweet-composer"
                     value={caption}
                     onChange={e => setCaption(e.target.value)}
-                    placeholder="What's happening?!"
-                    rows={caption ? Math.min(24, Math.max(3, Math.ceil(caption.length / 50))) : articleMode ? 8 : 2}
+                    placeholder={articleMode ? 'Write your story. Articles have no character limit.' : format === 'link' ? 'Add context to this link (optional)…' : format === 'poll' ? 'Add details for your poll (optional)…' : 'What would you like to share?'}
+                    rows={caption ? Math.min(24, Math.max(3, Math.ceil(caption.length / 50))) : articleMode ? 8 : 3}
                     style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', resize: 'vertical', minHeight: articleMode ? 220 : 64, maxHeight: 560, overflowY: 'auto', fontSize: articleMode ? 16 : 20, color: '#e7e9ea', lineHeight: 1.7, fontFamily: 'inherit' }}
                 />
-                {preview.length > 0 && (
+                {format === 'poll' && <div className="mt-3 space-y-2 rounded-2xl border border-[#27333b] bg-[#101820] p-3">
+                    {pollOptions.map((option, index) => <div key={index} className="flex gap-2"><input value={option} onChange={event => setPollOptions(items => items.map((item, itemIndex) => itemIndex === index ? event.target.value.slice(0, 100) : item))} placeholder={`Option ${index + 1}`} className="flex-1 rounded-xl border border-[#333639] bg-black px-3 py-2 text-sm text-white outline-none focus:border-[#ff6a3d]" />{index > 1 && <button type="button" onClick={() => setPollOptions(items => items.filter((_, itemIndex) => itemIndex !== index))} className="text-[#71767b] hover:text-red-400" aria-label={`Remove option ${index + 1}`}><XMarkIcon className="h-5 w-5" /></button>}</div>)}
+                    {pollOptions.length < 4 && <button type="button" onClick={() => setPollOptions(items => [...items, ''])} className="text-sm font-semibold text-[#ff6a3d]">+ Add option</button>}
+                </div>}
+                {preview.length > 0 && ['post', 'article'].includes(format) && (
                     <div className={`mt-3 grid gap-1 overflow-hidden rounded-2xl border border-[#27333b] ${preview.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                         {preview.map((src, index) => <div key={src} className="relative min-h-32 bg-black">
                             {media[index]?.type.startsWith('video/') ? <video src={src} controls className="h-full max-h-72 w-full object-contain" /> : <img src={src} alt={`Selected ${index + 1}`} className="h-full max-h-72 w-full object-cover" />}
@@ -203,7 +214,7 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
                     </div>
                 )}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, paddingTop: 12, borderTop: '1px solid #27333b' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                         <input ref={fileRef} type="file" accept="image/*,video/*" multiple style={{ display: 'none' }} onChange={async e => {
                             const selected = Array.from(e.target.files || []);
                             if (selected.length > 4) { alert('You can select up to four photos in one post.'); e.target.value = ''; return; }
@@ -214,16 +225,18 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
                             setMediaDuration(duration);
                             setMedia(selected);
                         }} />
-                        <button onClick={() => fileRef.current && fileRef.current.click()} title="Photo/Video"
+                        {['post', 'article'].includes(format) && <button onClick={() => fileRef.current && fileRef.current.click()} title="Add photos or video"
                             style={{ padding: 8, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', color: '#ff6a3d' }}
                             onMouseEnter={e => e.currentTarget.style.background = 'rgba(29,155,240,0.1)'}
                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                             <PhotoIcon style={{ width: 20, height: 20 }} />
-                        </button>
-                        <button type="button" onClick={() => setShowProCamera(true)} title="Pro Camera" className="rounded-full p-2 text-[#ff6a3d] hover:bg-blue-500/10">
+                        </button>}
+                        {['post', 'article'].includes(format) && <button type="button" onClick={() => setShowProCamera(true)} title="Pro Camera" className="rounded-full p-2 text-[#ff6a3d] hover:bg-blue-500/10">
                             <CameraIcon className="h-5 w-5" />
-                        </button>
-                        <button type="button" disabled={defaultArticleMode} onClick={() => setArticleMode(v => !v)} className={`rounded-full px-3 py-2 text-xs font-bold ${articleMode ? 'bg-blue-500/20 text-blue-400' : 'text-[#ff6a3d]'}`}>Article / News</button>
+                        </button>}
+                        <div className="flex flex-wrap gap-1 rounded-xl bg-black/30 p-1" role="group" aria-label="Post format">
+                            {['post', 'link', 'poll', 'article'].map(item => <button key={item} type="button" onClick={() => { setFormat(item); if (['link', 'poll'].includes(item)) { setMedia([]); setMediaDuration(0); if (fileRef.current) fileRef.current.value = ''; } }} className={`rounded-lg px-2 py-1.5 text-[11px] font-bold capitalize ${format === item ? 'bg-[#ff6a3d] text-white' : 'text-gray-400 hover:bg-white/10'}`}>{item === 'post' ? 'Post' : item === 'article' ? 'Article' : item}</button>)}
+                        </div>
                         <button type="button" onClick={() => isPremium ? setMonetized(v => !v) : onUpgrade('monetization')} className={`rounded-full px-3 py-2 text-xs font-bold ${monetized ? 'bg-amber-500/20 text-amber-300' : 'text-[#ff6a3d]'}`}>₹ Earn</button>
                         {!isPremium && <button type="button" onClick={onUpgrade} className="rounded-full bg-violet-500/15 px-3 py-2 text-xs font-black text-violet-300">Premium</button>}
                     </div>
@@ -239,7 +252,7 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
                             </svg>
                         )}
                         <div style={{ width: 1, height: 24, background: '#27333b' }} />
-                        <button onClick={() => onSubmit({ postKind: articleMode ? 'article' : 'standard', articleTitle, isMonetized: monetized, mediaDuration })} disabled={posting || !canPost || (articleMode && !articleTitle.trim())}
+                        <button onClick={async () => { const normalizedLink = linkUrl.trim() && !/^[a-z][a-z\d+.-]*:/i.test(linkUrl.trim()) ? `https://${linkUrl.trim()}` : linkUrl.trim(); const posted = await onSubmit({ postKind: articleMode ? 'article' : format === 'link' || format === 'poll' ? format : defaultArticleMode ? 'news_post' : 'standard', postTitle: title, articleTitle: articleMode ? title : '', linkUrl: normalizedLink, pollOptions: pollOptions.filter(option => option.trim()), isMonetized: monetized, mediaDuration }); if (posted) { setTitle(''); setLinkUrl(''); setPollOptions(['', '']); setMonetized(false); } }} disabled={posting || !canPost}
                             style={{ padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, border: 'none', cursor: canPost ? 'pointer' : 'not-allowed', background: canPost ? '#ff6a3d' : '#0f4f6e', color: canPost ? '#fff' : '#71767b', transition: 'background 0.15s' }}>
                             {posting ? 'Posting…' : 'Post'}
                         </button>
@@ -406,7 +419,8 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
                     </div>
                 </div>
 
-                {displayPost.articleTitle && <div className="mt-3 rounded-2xl border border-blue-500/20 bg-blue-500/10 p-4"><span className="text-[10px] font-black uppercase tracking-widest text-blue-400">News &amp; Article</span><h2 className="mt-1 text-xl font-black text-white">{displayPost.articleTitle}</h2></div>}
+                {(displayPost.title || displayPost.articleTitle) && <div className="mt-3 rounded-2xl border border-blue-500/20 bg-blue-500/10 p-4"><span className="text-[10px] font-black uppercase tracking-widest text-blue-400">{displayPost.postKind === 'link' ? 'Link' : displayPost.postKind === 'poll' ? 'Poll' : displayPost.postKind === 'article' ? 'News & Article' : 'Post'}</span><h2 className="mt-1 text-xl font-black text-white">{displayPost.title || displayPost.articleTitle}</h2></div>}
+                {displayPost.linkUrl && getSafeWebsiteUrl(displayPost.linkUrl) && <a href={getSafeWebsiteUrl(displayPost.linkUrl)} target="_blank" rel="noopener noreferrer" className="mt-3 block rounded-2xl border border-[#27333b] bg-[#101820] p-4 transition hover:border-[#ff6a3d]/60"><span className="text-xs font-semibold text-[#8b98a5]">{new URL(getSafeWebsiteUrl(displayPost.linkUrl)).hostname}</span><p className="mt-1 break-all text-sm font-semibold text-[#ff9875]">{displayPost.linkUrl}</p></a>}
                 {displayPost.isMonetized && <span className="mt-2 inline-flex rounded-full bg-amber-400/15 px-2 py-1 text-[10px] font-bold text-amber-300">Creator earnings enabled</span>}
                 {postCaption && <p data-user-content style={{ marginTop: 4, fontSize: 15, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#e7e9ea' }}><LinkifiedText>{postCaption}</LinkifiedText></p>}
                 {authorId === currentUser?.id && currentUser?.isPremium && <button onClick={async e => { e.stopPropagation(); try { const { data } = await axios.get(`/api/social/posts/${post.id}/analytics`, { headers: authHeaders(token) }); alert(`Views: ${data.views}\nEngagement: ${data.engagement}\nEarnings: ₹${(data.earningsPaise / 100).toFixed(2)}`); } catch (err) { alert(err.response?.data?.error || 'Analytics unavailable'); } }} className="mt-3 inline-flex items-center gap-1 rounded-full bg-white/5 px-3 py-1.5 text-xs font-bold text-blue-400"><ChartBarIcon className="h-4 w-4" />Advanced analytics</button>}
@@ -944,12 +958,15 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
 
     const submitPost = async (channelId, postKind = 'standard', premiumOptions = {}) => {
         if (typeof postKind === 'object') { premiumOptions = postKind; postKind = premiumOptions.postKind || 'standard'; }
-        if (!caption.trim() && media.length === 0) return;
+        if (!caption.trim() && media.length === 0 && !premiumOptions.postTitle && !premiumOptions.articleTitle) return false;
         setPosting(true);
         const fd = new FormData();
         fd.append('caption', caption);
         fd.append('postKind', postKind);
+        if (premiumOptions.postTitle) fd.append('postTitle', premiumOptions.postTitle);
+        if (premiumOptions.linkUrl) fd.append('linkUrl', premiumOptions.linkUrl);
         if (premiumOptions.articleTitle) fd.append('articleTitle', premiumOptions.articleTitle);
+        if (Array.isArray(premiumOptions.pollOptions) && premiumOptions.pollOptions.length >= 2) fd.append('pollOptions', JSON.stringify(premiumOptions.pollOptions));
         if (premiumOptions.isMonetized) fd.append('isMonetized', 'true');
         if (Number.isFinite(premiumOptions.mediaDuration)) fd.append('mediaDuration', String(premiumOptions.mediaDuration));
         if (postKind === 'community' && pollOptions.filter(item => item.trim()).length >= 2) fd.append('pollOptions', JSON.stringify(pollOptions.filter(item => item.trim())));
@@ -957,9 +974,10 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
         media.forEach(file => fd.append('media', file));
         try {
             const res = await axios.post('/api/social/posts', fd, { headers: { ...authHeaders(token), 'Content-Type': 'multipart/form-data' } });
-            channelId ? setChannelPosts(p => [res.data, ...p]) : setPosts(p => [res.data, ...p]);
+            channelId ? setChannelPosts(p => [res.data, ...p]) : setPosts(p => { const next = [res.data, ...p]; feedCacheRef.current.set(activeTab, next); return next; });
             axios.get('/api/social/trends', { headers: authHeaders(token) }).then(({ data }) => setTrends(Array.isArray(data) ? data : data.trends || [])).catch(() => {});
             setCaption(''); setMedia([]); setPollOptions(['', '']); if (fileRef.current) fileRef.current.value = '';
+            return true;
         } catch (err) {
             if (err.response?.data?.code === 'DAILY_POST_LIMIT_REACHED') {
                 axios.get('/api/payments/config', { headers: authHeaders(token) }).then(({ data }) => setPremiumPrice(data.premiumPrice || 199)).catch(() => {});
@@ -968,6 +986,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
             } else if (err.response?.data?.code === 'PREMIUM_VIDEO_LENGTH_REQUIRED') {
                 showPremiumUpgrade('video');
             } else alert(err.response?.data?.error || 'Could not post');
+            return false;
         } finally { setPosting(false); }
     };
 
@@ -1063,8 +1082,10 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
         if (!searchQuery) return true;
         const q = searchQuery.toLowerCase();
         const captionMatch = post.caption?.toLowerCase().includes(q);
+        const titleMatch = post.title?.toLowerCase().includes(q) || post.articleTitle?.toLowerCase().includes(q);
+        const linkMatch = post.linkUrl?.toLowerCase().includes(q);
         const nameMatch = post.user?.username?.toLowerCase().includes(q);
-        return captionMatch || nameMatch;
+        return captionMatch || titleMatch || linkMatch || nameMatch;
     });
 
     const displayedChannels = channels.filter(ch => {
@@ -1074,7 +1095,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
     });
 
     return (
-        <div className="reddit-social h-[100dvh] w-full flex flex-col bg-[#0b141b] text-[#d7dadc] font-sans antialiased overflow-hidden select-none">
+        <div className="reddit-social h-[100dvh] w-full flex flex-col bg-[#0b141b] text-[#d7dadc] font-sans antialiased overflow-hidden">
             {/* Mobile Header */}
             <header className="flex md:hidden items-center justify-between px-4 py-3 border-b border-[#27333b] flex-shrink-0 bg-black">
                 <button onClick={() => setProfileView({ userId: user.id })} className="border-none bg-transparent cursor-pointer flex-shrink-0">
@@ -1137,7 +1158,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                             <div className="flex border-b border-[#27333b] bg-black/80 backdrop-blur-md sticky top-0 z-10">
                                 {TABS.map(({ key, label }) => (
                                     <button key={key} onClick={() => setActiveTab(key)}
-                                        className="flex-1 py-4 text-sm font-bold bg-transparent border-none cursor-pointer transition-colors relative"
+                                        className="min-w-0 flex-1 whitespace-nowrap py-4 text-xs font-bold bg-transparent border-none cursor-pointer transition-colors relative sm:text-sm"
                                         style={{ color: activeTab === key ? '#e7e9ea' : '#71767b' }}>
                                         {label}
                                         {activeTab === key && <div className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[4px] w-14 rounded-full bg-[#ff6a3d]" />}

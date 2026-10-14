@@ -290,7 +290,7 @@ def add_missing_columns(inspector, table_name, columns):
 # Bump this marker whenever models gain columns or tables. Production runs
 # ensure_database_schema() in the pre-deploy step and skips versions it has
 # already applied.
-SCHEMA_VERSION = '20261014_28_ducor_articles'
+SCHEMA_VERSION = '20261015_29_social_post_formats'
 
 def ensure_runtime_compat_schema():
     """Repair columns required by the currently deployed models.
@@ -358,7 +358,8 @@ def ensure_runtime_compat_schema():
     inspector = inspect(db.engine)
     add_missing_columns(inspector, 'social_post', {
         'post_kind': db.String(20), 'poll_options': db.Text(),
-        'article_title': db.String(200), 'is_monetized': db.Boolean(),
+        'article_title': db.String(200), 'title': db.String(200),
+        'link_url': db.String(2048), 'is_monetized': db.Boolean(),
         'views_count': db.Integer(), 'earnings_paise': db.Integer(), 'media_items': db.Text(),
     })
     inspector = inspect(db.engine)
@@ -676,6 +677,8 @@ def ensure_database_schema(force=False):
             'share_count': db.Integer(),
             'post_kind': db.String(20),
             'poll_options': db.Text(),
+            'title': db.String(200),
+            'link_url': db.String(2048),
             'media_items': db.Text(),
         })
         add_missing_columns(inspector, 'social_post_comment', {

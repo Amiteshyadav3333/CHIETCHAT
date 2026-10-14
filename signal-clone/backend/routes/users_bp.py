@@ -40,7 +40,7 @@ def global_search():
     posts = SocialPost.query.filter(
         SocialPost.channel_id.is_(None),
         SocialPost.retweet_of_id.is_(None),
-        or_(SocialPost.caption.ilike(pattern), SocialPost.article_title.ilike(pattern))
+        or_(SocialPost.caption.ilike(pattern), SocialPost.article_title.ilike(pattern), SocialPost.title.ilike(pattern), SocialPost.link_url.ilike(pattern))
     ).order_by(SocialPost.created_at.desc()).limit(8).all()
 
     public_groups = Chat.query.filter(

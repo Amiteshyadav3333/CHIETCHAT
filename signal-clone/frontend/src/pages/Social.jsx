@@ -1096,17 +1096,6 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
 
     return (
         <div className="reddit-social h-[100dvh] w-full flex flex-col bg-[#0b141b] text-[#d7dadc] font-sans antialiased overflow-hidden">
-            {/* Mobile Header */}
-            <header className="flex md:hidden items-center justify-between px-4 py-3 border-b border-[#27333b] flex-shrink-0 bg-black">
-                <button onClick={() => setProfileView({ userId: user.id })} className="border-none bg-transparent cursor-pointer flex-shrink-0">
-                    <img src={user && user.avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
-                </button>
-                <CheetChatLogo hideTextOnMobile={false} />
-                <button onClick={onBack} className="p-2 rounded-full hover:bg-white/10 transition border-none bg-transparent cursor-pointer text-[#e7e9ea]">
-                    <ArrowLeftIcon className="w-5 h-5" />
-                </button>
-            </header>
-
             <div className="flex flex-1 overflow-hidden w-full max-w-[1250px] mx-auto">
                 {/* LEFT SIDEBAR */}
                 <aside className="hidden md:flex flex-col w-[72px] xl:w-[275px] flex-shrink-0 p-2 xl:p-4 border-r border-[#27333b] h-full justify-between overflow-y-auto scrollbar-hide">

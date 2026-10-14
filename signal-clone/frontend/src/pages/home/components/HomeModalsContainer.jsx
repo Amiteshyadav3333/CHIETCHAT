@@ -4,7 +4,7 @@ import { AppLockOverlay, EditMessageModal, ForwardMessageModal, OfflineBanner } 
 import DeleteChatModal from '../../../components/DeleteChatModal';
 import EncryptionInfoModal from '../../../components/EncryptionInfoModal';
 import { formatFileSize } from '../../../utils/mediaCompressor';
-import { InformationCircleIcon, XMarkIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
+import { InformationCircleIcon, XMarkIcon, Bars3Icon } from '@heroicons/react/24/outline';
 
 export const HomeModalsContainer = ({
     snapNotice,
@@ -311,10 +311,11 @@ export const HomeModalsContainer = ({
             {(appNavHidden || isMobile) && !navPeekOpen && (
                 <button
                     onClick={() => setNavPeekOpen(true)}
-                    className="fixed left-0 top-1/2 z-[70] -translate-y-1/2 rounded-r-2xl border border-l-0 border-gray-700 bg-[#111b21]/95 px-1.5 py-6 text-gray-300 shadow-2xl hover:text-white active:scale-95"
-                    title="Show menu"
+                    className="fixed left-0 top-1/2 z-[70] -translate-y-1/2 rounded-r-xl border border-l-0 border-[#3b4650] bg-[#17232c]/95 px-2 py-4 text-gray-200 shadow-xl transition hover:border-[#ff6533] hover:text-white active:scale-95"
+                    title="Open app navigation"
+                    aria-label="Open app navigation"
                 >
-                    <EllipsisVerticalIcon className="w-5 h-5" />
+                    <Bars3Icon className="h-5 w-5" />
                 </button>
             )}
 

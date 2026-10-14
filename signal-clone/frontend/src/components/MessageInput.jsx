@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import axios from 'axios';
 import { 
-    PaperAirplaneIcon, PaperClipIcon, MicrophoneIcon,
+    PaperAirplaneIcon, FaceSmileIcon, PaperClipIcon, MicrophoneIcon,
     StopIcon, XMarkIcon, ChartBarIcon, MapPinIcon, DocumentIcon,
     MusicalNoteIcon, PhotoIcon, CameraIcon, VideoCameraIcon, UserCircleIcon
 } from '@heroicons/react/24/solid';
@@ -59,6 +59,13 @@ const GlobeIcon = ({ className }) => (
     </svg>
 );
 
+const EMOJI_GROUPS = [
+    { label: 'Smileys', items: ['😀','😃','😄','😁','😆','😅','😂','🤣','😊','🙂','🙃','😉','😍','🥰','😘','😎','🤔','🤗','🥳','😭','😴','😮','😡','🤯'] },
+    { label: 'Reactions', items: ['👍','👎','👏','🙌','🙏','💪','🤝','👀','❤️','🧡','💛','💚','💙','💜','💯','🔥','✨','🎉','🚀','💐','🌟','🫶','✅','❌'] },
+    { label: 'People', items: ['👋','🤚','✋','🖐️','👌','🤌','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','👇','☝️','✍️','💅','🧑‍💻','🧑‍🎨','🧑‍🚀','🧑‍🍳','🧑‍🏫','🧑‍🔬'] },
+];
+const STICKERS = ['😀','😂','🥰','😍','😎','🥳','🤩','🤗','🤔','😴','😭','😡','🤯','😇','👍','👏','🙏','💪','❤️','💯','🔥','🎉','🎂','🎁','✨','🌟','🫶','🚀'];
+
 const apiUrl = API_BASE_URL;
 const cleanBaseUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
 
@@ -77,6 +84,7 @@ const MessageInput = ({
 }) => {
     const [text, setText] = useState('');
     const [showEmoji, setShowEmoji] = useState(false);
+    const [pickerTab, setPickerTab] = useState('emoji');
     const [gifSearch, setGifSearch] = useState('');
     const [gifs, setGifs] = useState([]);
     const [loadingGifs, setLoadingGifs] = useState(false);
@@ -245,14 +253,14 @@ const MessageInput = ({
     }, [drawSource]);
 
     React.useEffect(() => {
-        if (showEmoji && gifs.length === 0) {
+        if (showEmoji && pickerTab === 'gif' && gifs.length === 0) {
             setLoadingGifs(true);
             fetch(`${cleanBaseUrl}/api/gifs?q=trending`)
                 .then(res => res.json())
                 .then(data => { setGifs(data.gifs || []); setLoadingGifs(false); })
                 .catch(() => { setGifs([]); setLoadingGifs(false); });
         }
-    }, [showEmoji, gifs.length]);
+    }, [showEmoji, pickerTab, gifs.length]);
 
     React.useEffect(() => {
         const handleClickOutside = (e) => {
@@ -388,6 +396,11 @@ const MessageInput = ({
             e.preventDefault();
             handleSubmit(e);
         }
+    };
+
+    const insertEmoji = (emoji) => {
+        setText(value => value + emoji);
+        inputRef.current?.focus();
     };
 
     const handleFileChange = (e) => {
@@ -637,12 +650,28 @@ const MessageInput = ({
                 </div>
             )}
 
-            {/* GIF picker */}
+            {/* Emoji, sticker and GIF picker */}
             {showEmoji && (
-                <div ref={emojiPickerRef} className="absolute bottom-full left-0 z-50 flex flex-col gap-2 rounded-2xl bg-[#202c33] p-3 shadow-2xl w-[350px] mb-1 border border-white/10">
-                    <div className="h-[380px] overflow-hidden flex flex-col">
-                            <div className="flex flex-col h-full gap-2 font-sans text-xs overflow-hidden pt-1">
-                                <div className="flex px-1 gap-2">
+                <div ref={emojiPickerRef} className="absolute bottom-full left-0 z-50 mb-2 flex w-[min(360px,calc(100vw-24px))] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#17232c] p-2 shadow-2xl">
+                    <div className="grid grid-cols-3 gap-1 rounded-xl bg-black/20 p-1 text-xs font-bold">
+                        {[['emoji', 'Emoji'], ['sticker', 'Stickers'], ['gif', 'GIFs']].map(([tab, label]) => (
+                            <button key={tab} type="button" onClick={() => setPickerTab(tab)} className={`rounded-lg px-2 py-2 transition-colors ${pickerTab === tab ? 'bg-[#ff4500] text-white' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}>{label}</button>
+                        ))}
+                    </div>
+                    <div className="mt-2 max-h-[min(360px,55dvh)] min-h-[220px] overflow-y-auto">
+                        {pickerTab === 'emoji' && <div className="space-y-3 p-2">
+                            {EMOJI_GROUPS.map(group => <section key={group.label}>
+                                <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-gray-500">{group.label}</p>
+                                <div className="grid grid-cols-8 gap-1">
+                                    {group.items.map((emoji, index) => <button key={`${emoji}-${index}`} type="button" onClick={() => insertEmoji(emoji)} aria-label={`Insert ${emoji}`} className="grid aspect-square place-items-center rounded-lg text-xl hover:bg-white/10 active:scale-90">{emoji}</button>)}
+                                </div>
+                            </section>)}
+                        </div>}
+                        {pickerTab === 'sticker' && <div className="grid grid-cols-4 gap-2 p-3">
+                            {STICKERS.map((sticker, index) => <button key={`${sticker}-${index}`} type="button" onClick={() => { onSend(sticker, 'sticker', disappearingTtl); setShowEmoji(false); }} aria-label={`Send sticker ${index + 1}`} className="grid aspect-square place-items-center rounded-xl border border-white/5 bg-white/5 text-4xl transition hover:border-[#ff6533]/50 hover:bg-white/10 active:scale-95">{sticker}</button>)}
+                        </div>}
+                        {pickerTab === 'gif' && <div className="flex min-h-[260px] flex-col gap-2 p-2 font-sans text-xs">
+                            <div className="flex gap-2">
                                     <input
                                         type="text"
                                         placeholder="Search GIFs..."
@@ -658,7 +687,7 @@ const MessageInput = ({
                                                     .catch(() => { setGifs([]); setLoadingGifs(false); });
                                             }
                                         }}
-                                        className="w-full bg-[#111b21] border border-white/10 rounded-md px-2 py-1 text-white outline-none focus:border-[#00a884]"
+                                        className="w-full rounded-lg border border-white/10 bg-[#111b21] px-3 py-2 text-white outline-none focus:border-[#ff6533]"
                                     />
                                     <button
                                         type="button"
@@ -669,12 +698,12 @@ const MessageInput = ({
                                                 .then(data => { setGifs(data.gifs || []); setLoadingGifs(false); })
                                                 .catch(() => { setGifs([]); setLoadingGifs(false); });
                                         }}
-                                        className="bg-[#00a884] text-white px-3 py-1 rounded-md font-bold hover:bg-[#008f72]"
+                                        className="rounded-lg bg-[#ff4500] px-3 py-2 font-bold text-white hover:bg-[#e33e00]"
                                     >
                                         Search
                                     </button>
-                                </div>
-                                <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-1 scrollbar-thin px-1 pb-1">
+                            </div>
+                            <div className="grid grid-cols-2 gap-1 overflow-y-auto px-1 pb-1">
                                     {loadingGifs ? (
                                         <div className="col-span-2 text-center py-4 text-gray-400">Loading GIFs...</div>
                                     ) : gifs.map((url, i) => (
@@ -690,8 +719,8 @@ const MessageInput = ({
                                             <img src={url} alt={`gif-${i}`} className="w-full h-full object-cover" loading="lazy" />
                                         </button>
                                     ))}
-                                </div>
                             </div>
+                        </div>}
                     </div>
                 </div>
             )}
@@ -1054,9 +1083,9 @@ const MessageInput = ({
                                 type="button"
                                 onClick={() => { setShowEmoji(v => !v); setShowAttachMenu(false); }}
                                 className={`absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full transition-all active:scale-90 ${showEmoji ? 'text-[#00a884]' : 'text-gray-400 hover:text-[#00a884]'}`}
-                                title="GIFs"
+                                title="Emoji, stickers and GIFs"
                             >
-                                <span className="text-xs font-black tracking-wide">GIF</span>
+                                <FaceSmileIcon className="h-6 w-6" />
                             </button>
                         </div>
                     )}

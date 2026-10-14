@@ -3,12 +3,12 @@ import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import {
     XMarkIcon, TrashIcon,
-    PaperAirplaneIcon, StopIcon, MicrophoneIcon,
+    PaperAirplaneIcon, StopIcon, MicrophoneIcon, FaceSmileIcon,
     PhoneIcon, SparklesIcon
 } from '@heroicons/react/24/solid';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import UserAvatar from './UserAvatar';
-import { MessageBubble, TypingDots, WaveformVisualizer, renderMarkdown } from './AiChatPresentation';
+import { EMOJIS, MessageBubble, TypingDots, WaveformVisualizer, renderMarkdown } from './AiChatPresentation';
 import AiVoiceWallpaper, { AI_WALLPAPER_THEMES } from './AiVoiceWallpaper';
 import HumanoidAiAvatar from './HumanoidAiAvatar';
 import { API_BASE_URL } from '../utils/apiBaseUrl';
@@ -31,6 +31,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     const { token, user } = useContext(AuthContext);
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
+    const [showEmoji, setShowEmoji] = useState(false);
     const [loading, setLoading] = useState(false);
     const [botInfo, setBotInfo] = useState(null);
     const [streamingText, setStreamingText] = useState('');
@@ -743,6 +744,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
 
     const sendMessage = async (text) => {
         if (!text.trim() || loading) return;
+        setShowEmoji(false);
         const userMsg = {
             id: Date.now(), role: 'user',
             content: text, timestamp: new Date().toISOString()
@@ -1889,6 +1891,9 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
             {/* ─── Input bar ─── */}
             <div className="ai-input-bar">
                 <div className="ai-input-row">
+                    <button type="button" className="ai-emoji-btn" onClick={() => setShowEmoji(value => !value)} title="Insert emoji" aria-label="Insert emoji">
+                        <FaceSmileIcon style={{ width: 22, height: 22 }} />
+                    </button>
                     <textarea
                         ref={inputRef}
                         value={input}
@@ -1936,6 +1941,11 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                         </button>
                     )}
                 </div>
+                {showEmoji && <div className="ai-emoji-picker" role="group" aria-label="Choose an emoji">
+                    {EMOJIS.slice(0, 72).map((emoji, index) => <button key={`${emoji}-${index}`} type="button" className="ai-emoji-item" aria-label={`Insert ${emoji}`} onClick={() => { setInput(value => value + emoji); inputRef.current?.focus(); }}>
+                        {emoji}
+                    </button>)}
+                </div>}
 
                 <p className="ai-footer-note">
                     ✨ {botInfo?.name || 'AI'} — Tera apna personal AI companion

@@ -29,7 +29,7 @@ import { useChatPreferences } from './hooks/useChatPreferences';
 import { useCallManager } from './hooks/useCallManager';
 import { useGroupDetails } from './hooks/useGroupDetails';
 
-import { HomeNavigationRail } from './components/HomeNavigationRail';
+import { AppTopBar, HomeNavigationRail } from './components/HomeNavigationRail';
 import { ChatSidebar } from './components/ChatSidebar';
 import { ChatWindowView } from './components/ChatWindowView';
 import { ChatInfoDrawer } from './components/ChatInfoDrawer';
@@ -1518,6 +1518,10 @@ export const Home = () => {
         if (!appNavHidden) nav.setNavPeekOpen(false);
     }, [appNavHidden]);
 
+    useEffect(() => {
+        localStorage.setItem('app_nav_collapsed', nav.navCollapsed ? '1' : '0');
+    }, [nav.navCollapsed]);
+
     const unlockApp = async (event) => {
         event.preventDefault();
         const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(unlockPin)))).map(byte => byte.toString(16).padStart(2, '0')).join('');
@@ -1529,7 +1533,7 @@ export const Home = () => {
     };
 
     return (
-        <div className="reddit-app-shell flex h-[100dvh] bg-signal-bg overflow-hidden text-gray-100 font-sans relative">
+        <div className="reddit-app-shell flex h-[100dvh] flex-col bg-signal-bg overflow-hidden text-gray-100 font-sans relative">
             {pendingCropImg && (
                 <ImageCropperModal
                     imageSrc={pendingCropImg.src}
@@ -1537,6 +1541,16 @@ export const Home = () => {
                     onCancel={() => setPendingCropImg(null)}
                 />
             )}
+            <AppTopBar
+                user={user}
+                onMenu={() => nav.isMobile ? nav.setNavPeekOpen(value => !value) : nav.setNavCollapsed(value => !value)}
+                onSearch={openNewChat}
+                onCreate={openNewChat}
+                onNotifications={openNotifications}
+                onProfile={() => nav.setShowSettings(true)}
+                unreadCount={unreadCount}
+            />
+            <div className="reddit-app-body relative flex min-h-0 flex-1 overflow-hidden">
             <HomeModalsContainer
                 snapNotice={snapNotice}
                 setSnapNotice={setSnapNotice}
@@ -1613,13 +1627,9 @@ export const Home = () => {
             <HomeNavigationRail
                 navPeekOpen={nav.navPeekOpen}
                 setNavPeekOpen={nav.setNavPeekOpen}
-                appNavHidden={appNavHidden}
                 navItems={navItems}
                 user={user}
-                mobileHomeTab={nav.mobileHomeTab}
-                setMobileHomeTab={nav.setMobileHomeTab}
-                totalUnreadMessages={totalUnreadMessages}
-                setShowArchive={prefs.setShowArchive}
+                navCollapsed={nav.navCollapsed}
             />
 
             {/* Sidebar with Contacts and Status */}
@@ -1835,7 +1845,9 @@ export const Home = () => {
                 setPodliveInvite={nav.setPodliveInvite}
                 receivePodliveInvite={nav.receivePodliveInvite}
                 updatePodliveLiveCount={nav.updatePodliveLiveCount}
+                navCollapsed={nav.navCollapsed}
             />
+            </div>
 
             <AppFeatureTour
                 isOpen={showFeatureTour}

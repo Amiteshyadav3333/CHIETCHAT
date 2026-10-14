@@ -66,12 +66,18 @@ export const FeatureOverlays = ({
     setPodliveInvite,
     receivePodliveInvite,
     updatePodliveLiveCount,
+    navCollapsed = false,
 }) => {
+    const featurePosition = 'reddit-feature-overlay fixed inset-x-0 bottom-0 top-16 z-30 bg-[#0b141b]';
+    const featureStyle = {
+        '--app-nav-width': navCollapsed ? '76px' : '220px',
+        '--app-nav-width-xl': navCollapsed ? '76px' : '250px',
+    };
     return (
         <>
             {/* Reels Overlay */}
             {showReels && (
-                <div className="fixed inset-0 z-30 bg-[#0b141b] md:left-[220px] xl:left-[250px]">
+                <div className={featurePosition} style={featureStyle}>
                     <React.Suspense fallback={<FeatureLoader />}>
                         <Reels
                             active={showReels && !incomingCall && !showCallModal}
@@ -84,7 +90,7 @@ export const FeatureOverlays = ({
 
             {/* Social Overlay */}
             {showSocial && (
-                <div className="fixed inset-0 z-30 bg-[#0b141b] md:left-[220px] xl:left-[250px]">
+                <div className={featurePosition} style={featureStyle}>
                     <React.Suspense fallback={<FeatureLoader />}>
                         <Social
                             active={showSocial && !incomingCall && !showCallModal}
@@ -100,7 +106,7 @@ export const FeatureOverlays = ({
 
             {/* Saskat AI Overlay */}
             {showSaskatAI && (
-                <div className="fixed inset-0 z-30 bg-[#0b141b] md:left-[220px] xl:left-[250px]">
+                <div className={featurePosition} style={featureStyle}>
                     <React.Suspense fallback={<FeatureLoader />}>
                         <SaskatAI onClose={() => setShowSaskatAI(false)} />
                     </React.Suspense>
@@ -116,7 +122,7 @@ export const FeatureOverlays = ({
 
             {/* PodLive Overlay */}
             {showPodlive && (
-                <div className="fixed inset-0 z-30 bg-[#0b141b] md:left-[220px] xl:left-[250px]">
+                <div className={featurePosition} style={featureStyle}>
                     <React.Suspense fallback={<FeatureLoader />}>
                         <PodLiveView
                             active={showPodlive && !incomingCall && !showCallModal}
@@ -153,7 +159,7 @@ export const FeatureOverlays = ({
             )}
 
             {/* AI Chat Overlay */}
-            <div className={`fixed inset-0 z-30 bg-[#0b141b] md:left-[220px] xl:left-[250px] transition-opacity duration-200 ${showAiChat ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+            <div className={`${featurePosition} transition-opacity duration-200 ${showAiChat ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} style={featureStyle}>
                 {showAiChat && (
                     <React.Suspense fallback={<FeatureLoader />}>
                         <AiChat
@@ -213,7 +219,7 @@ export const FeatureOverlays = ({
             </div>
 
             {/* AI Smart Space Overlay */}
-            <div className={`fixed inset-0 z-30 bg-[#0b141b] md:left-[220px] xl:left-[250px] transition-opacity duration-200 ${showSmartSpace ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+            <div className={`${featurePosition} transition-opacity duration-200 ${showSmartSpace ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} style={featureStyle}>
                 {showSmartSpace && (
                     <React.Suspense fallback={<FeatureLoader />}>
                         <AiSmartSpace

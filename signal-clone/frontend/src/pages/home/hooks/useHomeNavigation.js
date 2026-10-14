@@ -13,6 +13,7 @@ export const useHomeNavigation = () => {
     const [socialDeepLink, setSocialDeepLink] = useState(null); // { type: 'post'|'profile', id }
     const [showSettings, setShowSettings] = useState(false);
     const [navPeekOpen, setNavPeekOpen] = useState(false);
+    const [navCollapsed, setNavCollapsed] = useState(() => localStorage.getItem('app_nav_collapsed') === '1');
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
     const [mobileHomeTab, setMobileHomeTab] = useState('chats');
 
@@ -79,6 +80,7 @@ export const useHomeNavigation = () => {
         socialDeepLink, setSocialDeepLink,
         showSettings, setShowSettings,
         navPeekOpen, setNavPeekOpen,
+        navCollapsed, setNavCollapsed,
         isMobile, setIsMobile,
         mobileHomeTab, setMobileHomeTab,
         hideAppNavForFeature,

@@ -1,35 +1,51 @@
 import React from 'react';
 import AvatarZoom from '../../../components/AvatarZoom';
-import { ChatBubbleLeftRightIcon, ClockIcon, PhoneIcon, UserGroupIcon } from '@heroicons/react/24/outline';
+import { ChatBubbleLeftRightIcon, ClockIcon, PhoneIcon, UserGroupIcon, Bars3Icon, MagnifyingGlassIcon, PlusIcon, BellIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+
+export const AppTopBar = ({ user, onMenu, onSearch, onCreate, onNotifications, onProfile, unreadCount }) => (
+    <header className="reddit-topbar relative z-[55] flex h-16 shrink-0 items-center gap-3 border-b px-3 sm:px-5">
+        <button type="button" onClick={onMenu} className="reddit-topbar-icon rounded-full p-2.5" aria-label="Toggle navigation"><Bars3Icon className="h-5 w-5" /></button>
+        <button type="button" onClick={onMenu} className="flex shrink-0 items-center gap-2" aria-label="Open navigation">
+            <img src="/cheetchat-logo.png" alt="" className="h-8 w-8 rounded-xl object-cover" />
+            <span className="reddit-brand hidden text-lg font-black tracking-tight sm:inline">CHEETCHAT</span>
+        </button>
+        <button type="button" onClick={onSearch} className="reddit-topbar-search mx-auto flex h-10 min-w-0 max-w-[560px] flex-1 items-center gap-3 rounded-full px-4 text-left">
+            <MagnifyingGlassIcon className="h-5 w-5 shrink-0" />
+            <span className="truncate text-sm">Search chats and people</span>
+            <kbd className="ml-auto hidden rounded-md border px-1.5 py-0.5 text-[10px] sm:inline">⌘ K</kbd>
+        </button>
+        <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
+            <button type="button" onClick={onCreate} className="reddit-topbar-action flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold"><PlusIcon className="h-5 w-5" /><span className="hidden lg:inline">New chat</span></button>
+            <button type="button" onClick={onNotifications} className="reddit-topbar-icon relative rounded-full p-2.5" aria-label="Notifications"><BellIcon className="h-5 w-5" />{unreadCount > 0 && <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-[#ff6533] ring-2 ring-[#11171b]" />}</button>
+            <button type="button" onClick={onProfile} className="hidden items-center gap-2 rounded-full p-1.5 sm:flex" aria-label={`Open settings for ${user?.username || 'user'}`}><AvatarZoom src={user?.avatar} name={user?.username} size="w-8 h-8" /><ChevronDownIcon className="h-4 w-4 text-gray-400" /></button>
+        </div>
+    </header>
+);
 
 export const HomeNavigationRail = ({
     navPeekOpen,
     setNavPeekOpen,
-    appNavHidden,
     navItems,
     user,
-    mobileHomeTab,
-    setMobileHomeTab,
-    totalUnreadMessages,
-    setShowArchive,
+    navCollapsed = false,
 }) => {
     return (
         <>
             {navPeekOpen && (
                 <div
                     onClick={() => setNavPeekOpen(false)}
-                    className="fixed inset-0 z-[60] bg-black/40"
+                    className="fixed inset-x-0 bottom-0 top-16 z-[60] bg-black/55 backdrop-blur-[2px]"
                 />
             )}
 
             {/* WhatsApp-style side navigation rail */}
             <aside className={navPeekOpen
-                ? "reddit-nav fixed inset-y-0 left-0 z-[80] flex w-[min(290px,86vw)] flex-col border-r border-gray-800 px-3 py-4 shadow-2xl md:w-[220px] md:py-5 xl:w-[250px]"
-                : `reddit-nav relative z-[40] hidden ${appNavHidden ? 'md:hidden' : 'md:flex'} md:w-[220px] md:flex-col md:border-r md:px-3 md:py-5 xl:w-[250px]`
+                ? "reddit-nav fixed inset-y-16 left-0 z-[80] flex w-[min(290px,86vw)] flex-col border-r border-gray-800 px-3 py-4 shadow-2xl"
+                : `reddit-nav relative z-[40] hidden md:flex ${navCollapsed ? 'w-[76px]' : 'w-[220px] xl:w-[250px]'} shrink-0 flex-col border-r px-2 py-4 transition-[width] duration-200`
             }>
-                <div className="h-12 px-2 flex items-center">
+                <div className={`h-10 px-2 flex items-center ${navCollapsed && !navPeekOpen ? 'justify-center' : ''}`}>
                     <img src="/cheetchat-logo.png" alt="CHEETCHAT" className="h-9 w-9 rounded-xl object-cover" />
-                    <span className={`reddit-brand ml-2 text-xl font-black tracking-tight ${navPeekOpen ? 'inline' : 'hidden md:inline'}`}>CHEETCHAT</span>
+                    <span className={`reddit-brand ml-2 text-xl font-black tracking-tight ${navCollapsed && !navPeekOpen ? 'hidden' : 'inline'}`}>CHEETCHAT</span>
                 </div>
                 <nav className="reddit-nav-items mt-5 flex flex-col gap-1 overflow-y-auto">
                     {navItems.map((item, index) => {
@@ -41,14 +57,14 @@ export const HomeNavigationRail = ({
                             item.label.toLowerCase()
                         );
                         return <React.Fragment key={item.label}>
-                            {(index === 1 || index === 5) && <div className="reddit-nav-heading px-3 pb-1 pt-5">{index === 1 ? 'EXPLORE' : 'YOUR ACCOUNT'}</div>}
+                            {(index === 1 || index === 5) && <div className={`reddit-nav-heading px-3 pb-1 pt-5 ${navCollapsed && !navPeekOpen ? 'hidden' : ''}`}>{index === 1 ? 'DISCOVER' : 'YOUR ACCOUNT'}</div>}
                             <button
                                 data-tour={tourKey}
                                 onClick={() => {
                                     item.action();
                                     setNavPeekOpen(false);
                                 }}
-                                className={`reddit-nav-link relative flex items-center gap-4 rounded-full px-3 py-3 text-left transition-colors ${item.active ? 'reddit-nav-link-active' : ''}`}
+                                className={`reddit-nav-link relative flex items-center gap-4 rounded-xl px-3 py-3 text-left transition-colors ${navCollapsed && !navPeekOpen ? 'justify-center px-2' : ''} ${item.active ? 'reddit-nav-link-active' : ''}`}
                                 title={item.label}
                             >
                                 <span className="relative">
@@ -64,14 +80,14 @@ export const HomeNavigationRail = ({
                                         </span>
                                     )}
                                 </span>
-                                <span className="text-sm font-semibold">{item.label}</span>
+                                <span className={`${navCollapsed && !navPeekOpen ? 'hidden' : ''} text-sm font-semibold`}>{item.label}</span>
                             </button>
                         </React.Fragment>;
                     })}
                 </nav>
-                <div className="reddit-nav-profile mt-auto flex items-center gap-3 rounded-2xl px-2 py-3">
+                <div className={`reddit-nav-profile mt-auto flex items-center gap-3 rounded-2xl px-2 py-3 ${navCollapsed && !navPeekOpen ? 'justify-center' : ''}`}>
                     <AvatarZoom src={user?.avatar} name={user?.username} size="w-10 h-10" />
-                    <div className="min-w-0">
+                    <div className={`${navCollapsed && !navPeekOpen ? 'hidden' : ''} min-w-0`}>
                         <p className="text-sm font-bold truncate">{user?.username}</p>
                         <p className="text-xs text-green-500">Online</p>
                     </div>

@@ -1550,29 +1550,13 @@ export const Home = () => {
 
     // Navigation items
     const navItems = [
-        {
-            label: 'Chats',
-            icon: ChatBubbleLeftRightIcon,
-            active: !nav.showSocial && !nav.showReels && !nav.showPodlive,
-            action: () => {
-                nav.hideAppNavForFeature();
-                nav.setShowReels(false);
-                nav.setShowSocial(false);
-                nav.setShowPodlive(false);
-                nav.setShowAiChat(false);
-                nav.setShowSmartSpace(false);
-                nav.setShowSaskatAI(false);
-               
-                setActiveChat(null);
-                localStorage.removeItem('activeChatId');
-            }
-        },
         { label: 'Reels', icon: PlayIcon, active: nav.showReels, action: () => { nav.hideAppNavForFeature(); nav.setShowSocial(false); nav.setShowPodlive(false); nav.setShowReels(true); nav.setShowAiChat(false); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false); } },
         { label: 'Social', icon: PhotoIcon, active: nav.showSocial, action: () => { nav.hideAppNavForFeature(); nav.setShowReels(false); nav.setShowPodlive(false); nav.setShowSocial(true); nav.setShowAiChat(false); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false); } },
         { label: 'PodLive', icon: MicrophoneIcon, active: nav.showPodlive, action: () => { nav.hideAppNavForFeature(); nav.setShowReels(false); nav.setShowSocial(false); nav.setShowPodlive(true); nav.setShowAiChat(false); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false); }, badge: nav.podliveLiveCount || 0 },
         { label: 'AI', icon: SparklesIcon, active: nav.showAiChat, action: () => { nav.hideAppNavForFeature(); nav.setShowReels(false); nav.setShowSocial(false); nav.setShowPodlive(false); nav.setShowAiChat(true); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false); } },
         { label: 'Notify', icon: BellIcon, active: showNotifications, action: openNotifications, badge: unreadCount },
         { label: 'Publish', icon: PlusIcon, active: nav.showSocial, action: openContentPublisher },
+        { label: 'Chats', icon: ChatBubbleLeftRightIcon, active: !nav.showSocial && !nav.showReels && !nav.showPodlive && !nav.showAiChat && !nav.showSmartSpace && !nav.showSaskatAI, action: openChats },
         { label: 'Settings', icon: Cog6ToothIcon, active: nav.showSettings, action: () => { setShowNotifications(false); setShowSearchModal(false); nav.setShowSettings(true); } }
     ];
 
@@ -1627,7 +1611,6 @@ export const Home = () => {
                 chats={chats}
                 onMenu={() => nav.isMobile ? nav.setNavPeekOpen(value => !value) : nav.setNavCollapsed(value => !value)}
                 onCreate={openContentPublisher}
-                onChats={openChats}
                 onNotifications={openNotifications}
                 onProfile={() => nav.setShowSettings(true)}
                 onSelectSearchResult={handleGlobalSearchResult}

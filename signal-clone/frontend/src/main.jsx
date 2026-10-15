@@ -12,7 +12,6 @@ const ProfileSetup = React.lazy(() => import('./pages/ProfileSetup'));
 const PublicReel = React.lazy(() => import('./pages/PublicReel'));
 const RecoveryCode = React.lazy(() => import('./pages/RecoveryCode'));
 const FounderPage = React.lazy(() => import('./pages/FounderPage'));
-const SaskatAI = React.lazy(() => import('./pages/SaskatAI/SaskatAI'));
 const AdminLogin = React.lazy(() => import('./pages/AdminLogin'));
 const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard'));
 import './index.css';
@@ -126,9 +125,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                             <Route path="/recovery-code" element={
                                 <ProtectedRoute><RecoveryCode /></ProtectedRoute>
                             } />
-                            <Route path="/saskat-ai" element={
-                                <ProtectedRoute><SaskatAI onClose={() => window.history.back()} /></ProtectedRoute>
-                            } />
+                            <Route path="/saskat-ai" element={<Navigate to="/" replace />} />
                             <Route path="/admin/login" element={<AdminLogin />} />
                             <Route path="/admin/dashboard" element={<AdminDashboard />} />
                             <Route path="/" element={

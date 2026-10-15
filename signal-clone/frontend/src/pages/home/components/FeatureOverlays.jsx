@@ -156,7 +156,6 @@ export const FeatureOverlays = ({
                         wallpaper={wallpaper}
                         onThemeChange={setTheme}
                         onWallpaperChange={setWallpaper}
-                        onOpenSmartSpace={() => { setShowSettings(false); setShowSmartSpace(true); }}
                         smartSpaceButtonEnabled={smartSpaceButtonEnabled}
                         onSmartSpaceButtonChange={(enabled) => {
                             setSmartSpaceButtonEnabled(enabled);

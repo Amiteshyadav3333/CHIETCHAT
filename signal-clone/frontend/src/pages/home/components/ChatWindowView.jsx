@@ -37,6 +37,7 @@ export const ChatWindowView = ({
     formatLastSeen,
     smartSpaceButtonEnabled,
     setShowSmartSpace,
+    setShowAiChat,
     showMessageSearch,
     setShowMessageSearch,
     messageSearchQuery,
@@ -208,6 +209,9 @@ export const ChatWindowView = ({
                             <SparklesIcon className="w-5 h-5" />
                         </button>
                     )}
+                    <button onClick={() => { setShowTopDropdown(false); setShowAiChat(true); }} title="Open AI companion" aria-label="Open AI companion" className="rounded-full bg-violet-400/10 p-1.5 text-violet-300 hover:bg-violet-400/20">
+                        <SparklesIcon className="w-5 h-5" />
+                    </button>
                     <button onClick={() => setShowMessageSearch(v => !v)} title="Search messages"><MagnifyingGlassIcon className="w-6 h-6" /></button>
                     <button onClick={() => startCall('voice')} title="Voice Call"><PhoneIcon className="w-6 h-6" /></button>
                     <button onClick={() => startCall('video')} title="Video Call"><VideoCameraIcon className="w-6 h-6" /></button>

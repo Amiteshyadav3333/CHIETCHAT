@@ -1156,7 +1156,7 @@ export const Home = () => {
         nav.hideAppNavForFeature();
         nav.setShowReels(feature === 'reels');
         nav.setShowPodlive(feature === 'podlive');
-        nav.setShowAiChat(feature === 'ai');
+        nav.setShowAiChat(false);
         nav.setShowSocial(false);
         nav.setShowSmartSpace(false);
         nav.setShowSaskatAI(false);
@@ -1596,7 +1596,6 @@ export const Home = () => {
         { label: 'Reels', icon: PlayIcon, active: nav.showReels, action: () => { nav.hideAppNavForFeature(); nav.setShowSocial(false); nav.setShowPodlive(false); nav.setShowReels(true); nav.setShowAiChat(false); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false); } },
         { label: 'Social', icon: PhotoIcon, active: nav.showSocial, action: () => { nav.hideAppNavForFeature(); nav.setShowReels(false); nav.setShowPodlive(false); nav.setShowSocial(true); nav.setShowAiChat(false); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false); } },
         { label: 'PodLive', icon: MicrophoneIcon, active: nav.showPodlive, action: () => { nav.hideAppNavForFeature(); nav.setShowReels(false); nav.setShowSocial(false); nav.setShowPodlive(true); nav.setShowAiChat(false); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false); }, badge: nav.podliveLiveCount || 0 },
-        { label: 'AI', icon: SparklesIcon, active: nav.showAiChat, action: () => { nav.hideAppNavForFeature(); nav.setShowReels(false); nav.setShowSocial(false); nav.setShowPodlive(false); nav.setShowAiChat(true); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false); } },
         { label: 'Notify', icon: BellIcon, active: showNotifications, action: openNotifications, badge: unreadCount },
         { label: 'Publish', icon: PlusIcon, active: nav.showSocial, action: openContentPublisher },
         { label: 'Chats', icon: ChatBubbleLeftRightIcon, active: !nav.showSocial && !nav.showReels && !nav.showPodlive && !nav.showAiChat && !nav.showSmartSpace && !nav.showSaskatAI, action: openChats },
@@ -1659,7 +1658,6 @@ export const Home = () => {
                 onChat={openChats}
                 onReels={() => openTopBarFeature('reels')}
                 onPodlive={() => openTopBarFeature('podlive')}
-                onAI={() => openTopBarFeature('ai')}
                 onSelectSearchResult={handleGlobalSearchResult}
                 onMessageUser={startChat}
                 unreadCount={unreadCount}
@@ -1773,6 +1771,11 @@ export const Home = () => {
                 pinnedChats={prefs.pinnedChats}
                 totalUnreadMessages={totalUnreadMessages}
                 startCallForChat={calls.startCallForChat}
+                onOpenAiChat={() => {
+                    nav.setShowSocial(false); nav.setShowReels(false); nav.setShowPodlive(false);
+                    nav.setShowSmartSpace(false); nav.setShowSaskatAI(false); nav.setShowAiChat(true);
+                    nav.setMobileHomeTab('chats');
+                }}
             />
 
             {/* Main Chat View */}
@@ -1802,6 +1805,7 @@ export const Home = () => {
                 formatLastSeen={formatLastSeen}
                 smartSpaceButtonEnabled={nav.smartSpaceButtonEnabled}
                 setShowSmartSpace={nav.setShowSmartSpace}
+                setShowAiChat={nav.setShowAiChat}
                 showMessageSearch={showMessageSearch}
                 setShowMessageSearch={setShowMessageSearch}
                 messageSearchQuery={messageSearchQuery}

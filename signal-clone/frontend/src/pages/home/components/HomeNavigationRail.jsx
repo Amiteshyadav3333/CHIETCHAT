@@ -10,7 +10,7 @@ const accountActions = [
     ['settings', 'App settings', Cog6ToothIcon],
 ];
 
-export const AppTopBar = ({ user, token, chats, onMenu, onCreate, onNotifications, onProfile, onChat, onReels, onPodlive, onAI, onSelectSearchResult, onMessageUser, unreadCount }) => {
+export const AppTopBar = ({ user, token, chats, onMenu, onCreate, onNotifications, onProfile, onChat, onReels, onPodlive, onSelectSearchResult, onMessageUser, unreadCount }) => {
     const [accountMenuOpen, setAccountMenuOpen] = React.useState(false);
     const [draftsOpen, setDraftsOpen] = React.useState(false);
     const [draftText, setDraftText] = React.useState('');
@@ -29,7 +29,6 @@ export const AppTopBar = ({ user, token, chats, onMenu, onCreate, onNotification
             <button type="button" onClick={onChat} className="reddit-topbar-icon flex items-center gap-2 rounded-full px-2.5 py-2 text-sm font-semibold" aria-label="Open chats" title="Open chats"><ChatBubbleLeftRightIcon className="h-5 w-5" /><span className="hidden 2xl:inline">Chat</span></button>
             <button type="button" onClick={onReels} className="reddit-topbar-icon reddit-topbar-secondary flex items-center gap-2 rounded-full px-2.5 py-2 text-sm font-semibold" aria-label="Open Reels" title="Reels"><PlayIcon className="h-5 w-5" /><span className="hidden 2xl:inline">Reels</span></button>
             <button type="button" onClick={onPodlive} className="reddit-topbar-icon reddit-topbar-secondary flex items-center gap-2 rounded-full px-2.5 py-2 text-sm font-semibold" aria-label="Open PodLive" title="PodLive"><MicrophoneIcon className="h-5 w-5" /><span className="hidden 2xl:inline">PodLive</span></button>
-            <button type="button" onClick={onAI} className="reddit-topbar-icon reddit-topbar-secondary flex items-center gap-2 rounded-full px-2.5 py-2 text-sm font-semibold" aria-label="Open AI" title="AI"><SparklesIcon className="h-5 w-5" /><span className="hidden 2xl:inline">AI</span></button>
             <button type="button" onClick={onNotifications} className="reddit-topbar-icon relative rounded-full p-2.5" aria-label="Notifications"><BellIcon className="h-5 w-5" />{unreadCount > 0 && <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-[#ff6533] ring-2 ring-[#11171b]" />}</button>
             <div className="relative">
                 <button type="button" onClick={() => setAccountMenuOpen(value => !value)} className="flex items-center gap-2 rounded-full p-1.5 hover:bg-white/10" aria-label={`Open user menu for ${user?.username || 'user'}`} aria-expanded={accountMenuOpen}>
@@ -94,7 +93,6 @@ export const HomeNavigationRail = ({
                         const tourKey = item.tourId || (
                             item.label === 'New' ? 'new-chat' :
                             item.label === 'Notify' ? 'notify' :
-                            item.label === 'AI' ? 'ai' :
                             item.label.toLowerCase()
                         );
                         return <React.Fragment key={item.label}>

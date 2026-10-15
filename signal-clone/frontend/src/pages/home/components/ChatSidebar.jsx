@@ -2,7 +2,7 @@ import React from 'react';
 import AvatarZoom from '../../../components/AvatarZoom';
 import ContactList from '../../../components/ContactList';
 import StatusSection from '../../../components/StatusSection';
-import { PlusIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, SparklesIcon } from '@heroicons/react/24/outline';
 import { MobileBottomNavigation } from './HomeNavigationRail';
 
 export const ChatSidebar = ({
@@ -31,6 +31,7 @@ export const ChatSidebar = ({
     pinnedChats,
     totalUnreadMessages,
     startCallForChat,
+    onOpenAiChat,
 }) => {
     return (
         <div className={`reddit-chat-sidebar h-full min-h-0 w-full overflow-hidden md:w-[360px] lg:w-[390px] border-r border-gray-800 flex flex-col ${activeChat ? 'hidden md:flex' : 'flex'}`}>
@@ -59,6 +60,15 @@ export const ChatSidebar = ({
                     </div>
                 </div>
                 <div className="flex gap-2">
+                    <button
+                        type="button"
+                        onClick={onOpenAiChat}
+                        className="p-2 hover:bg-violet-500/15 rounded-full text-violet-300 transition-colors"
+                        title="Open AI companion"
+                        aria-label="Open AI companion"
+                    >
+                        <SparklesIcon className="w-6 h-6" />
+                    </button>
                     <button 
                         onClick={openNewChat}
                         className="p-2 hover:bg-gray-700/55 rounded-full text-signal-accent transition-colors" 

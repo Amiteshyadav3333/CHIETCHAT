@@ -1,17 +1,29 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, usePathname } from '../../../utils/clientRouter';
+
+const pathToView = {
+    '/': 'social', '/chats': 'chats', '/social': 'social', '/reels': 'reels',
+    '/podlive': 'podlive', '/smart-space': 'smart-space', '/settings': 'settings',
+    '/ai-chat': 'ai-chat', '/saskat-ai': 'saskat-ai',
+};
+const viewToPath = Object.fromEntries(Object.entries(pathToView).map(([path, view]) => [view, path]));
 
 export const useHomeNavigation = () => {
-    const [showReels, setShowReels] = useState(false);
-    const [showSocial, setShowSocial] = useState(true);
-    const [showAiChat, setShowAiChat] = useState(false);
-    const [showSmartSpace, setShowSmartSpace] = useState(false);
+    const pathname = usePathname();
+    const navigate = useNavigate();
+    const currentView = pathToView[pathname] || 'social';
+    const routeSyncPending = useRef(false);
+    const [showReels, setShowReels] = useState(() => currentView === 'reels');
+    const [showSocial, setShowSocial] = useState(() => currentView === 'social');
+    const [showAiChat, setShowAiChat] = useState(() => currentView === 'ai-chat');
+    const [showSmartSpace, setShowSmartSpace] = useState(() => currentView === 'smart-space');
     const [smartSpaceButtonEnabled, setSmartSpaceButtonEnabled] = useState(() => localStorage.getItem('smart_space_button_enabled') === '1');
-    const [showPodlive, setShowPodlive] = useState(false);
+    const [showPodlive, setShowPodlive] = useState(() => currentView === 'podlive');
     const [podliveInvite, setPodliveInvite] = useState(null);
     const [podliveLiveCount, setPodliveLiveCount] = useState(0);
-    const [showSaskatAI, setShowSaskatAI] = useState(false);
+    const [showSaskatAI, setShowSaskatAI] = useState(() => currentView === 'saskat-ai');
     const [socialDeepLink, setSocialDeepLink] = useState(null); // { type: 'post'|'profile', id }
-    const [showSettings, setShowSettings] = useState(false);
+    const [showSettings, setShowSettings] = useState(() => currentView === 'settings');
     const [navPeekOpen, setNavPeekOpen] = useState(false);
     const [navCollapsed, setNavCollapsed] = useState(() => localStorage.getItem('app_nav_collapsed') === '1');
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -23,16 +35,33 @@ export const useHomeNavigation = () => {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    useEffect(() => {
-        localStorage.removeItem('activeChatId');
-        localStorage.setItem('activeView', 'social');
+    const setCurrentView = useCallback((view) => {
+        setShowReels(view === 'reels');
+        setShowSocial(view === 'social');
+        setShowPodlive(view === 'podlive');
+        setShowSmartSpace(view === 'smart-space');
+        setShowSettings(view === 'settings');
+        setShowAiChat(view === 'ai-chat');
+        setShowSaskatAI(view === 'saskat-ai');
     }, []);
 
-    // Persist active view for refresh survival
+    // A direct URL or browser back/forward restores the matching app section.
     useEffect(() => {
-        const view = showReels ? 'reels' : showSocial ? 'social' : showPodlive ? 'podlive' : showSmartSpace ? 'smart-space' : showSettings ? 'settings' : 'chats';
+        routeSyncPending.current = true;
+        setCurrentView(pathToView[pathname] || 'social');
+    }, [pathname, setCurrentView]);
+
+    // Keep section changes in browser history so the back button works naturally.
+    useEffect(() => {
+        if (routeSyncPending.current) {
+            routeSyncPending.current = false;
+            return;
+        }
+        const view = showReels ? 'reels' : showSocial ? 'social' : showPodlive ? 'podlive' : showSmartSpace ? 'smart-space' : showSettings ? 'settings' : showAiChat ? 'ai-chat' : showSaskatAI ? 'saskat-ai' : 'chats';
+        const target = viewToPath[view];
+        if (target && target !== pathname) navigate(target);
         localStorage.setItem('activeView', view);
-    }, [showReels, showSocial, showPodlive, showSmartSpace, showSettings]);
+    }, [showReels, showSocial, showPodlive, showSmartSpace, showSettings, showAiChat, showSaskatAI, pathname, navigate]);
 
     const hideAppNavForFeature = useCallback(() => {
         setNavPeekOpen(false);

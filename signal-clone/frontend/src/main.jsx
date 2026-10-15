@@ -117,6 +117,14 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                             <Route path="/about" element={<About />} />
                             <Route path="/founder" element={<FounderPage />} />
                             <Route path="/reels/:reelId" element={<PublicReel />} />
+                            <Route path="/chats" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+                            <Route path="/social" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+                            <Route path="/reels" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+                            <Route path="/podlive" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+                            <Route path="/smart-space" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+                            <Route path="/settings" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+                            <Route path="/ai-chat" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+                            <Route path="/saskat-ai" element={<ProtectedRoute><Home /></ProtectedRoute>} />
                             <Route path="/setup-profile" element={
                                 <ProtectedRoute>
                                     <ProfileSetup />
@@ -125,7 +133,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                             <Route path="/recovery-code" element={
                                 <ProtectedRoute><RecoveryCode /></ProtectedRoute>
                             } />
-                            <Route path="/saskat-ai" element={<Navigate to="/" replace />} />
                             <Route path="/admin/login" element={<AdminLogin />} />
                             <Route path="/admin/dashboard" element={<AdminDashboard />} />
                             <Route path="/" element={

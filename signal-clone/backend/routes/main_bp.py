@@ -164,13 +164,24 @@ def translate_text():
         return jsonify({"error": "Translation is temporarily unavailable"}), 502
 
 @main_bp.route('/', defaults={'path': ''})
-
 @main_bp.route('/<path:path>')
 def serve(path):
     static_folder = current_app.static_folder
-    if path != "" and os.path.exists(os.path.join(static_folder, path)):
+    if path and os.path.isfile(os.path.join(static_folder, path)):
         return send_from_directory(static_folder, path)
-    elif os.path.exists(os.path.join(static_folder, 'index.html')):
+
+    # Only application routes should receive the SPA shell. Unknown API URLs
+    # must remain 404s instead of returning HTML with a successful status.
+    app_routes = {
+        '', 'login', 'signup', 'reset-password', 'terms', 'privacy', 'about',
+        'founder', 'setup-profile', 'recovery-code', 'admin/login',
+        'admin/dashboard', 'chats', 'social', 'reels', 'podlive',
+        'smart-space', 'settings', 'ai-chat', 'saskat-ai',
+    }
+    is_public_reel = bool(re.fullmatch(r'reels/[^/]+', path or ''))
+    if (path in app_routes or is_public_reel) and os.path.isfile(os.path.join(static_folder, 'index.html')):
         return send_from_directory(static_folder, 'index.html')
-    else:
-        return "Cheat Chat Backend Running.", 200
+
+    if path.startswith('api/'):
+        return jsonify({'error': 'Not found'}), 404
+    return 'Not found', 404

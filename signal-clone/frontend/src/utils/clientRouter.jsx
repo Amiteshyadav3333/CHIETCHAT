@@ -63,6 +63,7 @@ export const Navigate = ({ to, replace = false }) => {
 };
 
 export const useNavigate = () => React.useContext(RouterContext).navigate;
+export const usePathname = () => React.useContext(RouterContext).path;
 export const useParams = () => React.useContext(RouterContext).params;
 
 export const Link = ({ to, onClick, children, ...props }) => {

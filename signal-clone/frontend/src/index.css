@@ -169,7 +169,8 @@ body {
   .global-search.global-search-collapsed { flex: 0 0 40px; width: 40px; max-width: none; margin-left: 0; margin-right: 0; }
   .global-search-collapsed .reddit-topbar-search { width: 40px; justify-content: center; padding-left: 0; padding-right: 0; }
   .global-search-collapsed .reddit-topbar-search input,
-  .global-search-collapsed .reddit-topbar-search kbd { display: none; }
+  .global-search-collapsed .reddit-topbar-search kbd,
+  .global-search-collapsed .global-search-agent { display: none; }
   .global-search.global-search-expanded { position: fixed; z-index: 80; top: 8px; right: 8px; left: 8px; width: auto; max-width: none; margin: 0; }
   .global-search-expanded .reddit-topbar-search { width: 100%; padding-left: 12px; padding-right: 12px; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
   .global-search-expanded .global-search-close { display: flex; }

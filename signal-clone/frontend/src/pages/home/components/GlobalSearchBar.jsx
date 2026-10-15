@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
-import { MagnifyingGlassIcon, PlayIcon, UserIcon, UsersIcon, ChatBubbleLeftRightIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { MagnifyingGlassIcon, PlayIcon, UserIcon, UsersIcon, ChatBubbleLeftRightIcon, XMarkIcon, MicrophoneIcon } from '@heroicons/react/24/outline';
 
 const categories = [
     ['chats', 'Your chats', ChatBubbleLeftRightIcon],
@@ -23,7 +23,7 @@ const SearchRow = ({ icon: Icon, image, title, subtitle, onClick, action, action
     </div>
 );
 
-export const GlobalSearchBar = ({ token, chats = [], onSelectResult, onMessageUser }) => {
+export const GlobalSearchBar = ({ token, chats = [], onSelectResult, onMessageUser, onOpenAgent }) => {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState({ users: [], reels: [], posts: [], communities: [] });
     const [loading, setLoading] = useState(false);
@@ -106,6 +106,9 @@ export const GlobalSearchBar = ({ token, chats = [], onSelectResult, onMessageUs
                     autoComplete="off"
                     className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-gray-100 outline-none placeholder:text-gray-500 focus:ring-0"
                 />
+                <button type="button" onMouseDown={event => event.preventDefault()} onClick={event => { event.stopPropagation(); onOpenAgent?.(); }} className="global-search-agent shrink-0 rounded-full p-1.5 text-emerald-300 transition hover:bg-emerald-300/10 hover:text-emerald-200" aria-label="Open Saskat voice agent" title="Saskat voice agent">
+                    <MicrophoneIcon className="h-5 w-5" />
+                </button>
                 {loading ? <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white/20 border-t-[#ff6533]" aria-label="Searching" /> : normalizedQuery && <button type="button" onClick={() => { setQuery(''); setOpen(false); }} className="rounded-full p-1 text-gray-400 hover:bg-white/10 hover:text-white" aria-label="Clear search"><XMarkIcon className="h-4 w-4" /></button>}
                 {open && <button type="button" onMouseDown={event => event.preventDefault()} onClick={closeSearch} className="global-search-close rounded-full p-1 text-gray-400 hover:bg-white/10 hover:text-white" aria-label="Close search"><XMarkIcon className="h-4 w-4" /></button>}
                 <kbd className="ml-auto hidden shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] sm:inline">⌘ K</kbd>

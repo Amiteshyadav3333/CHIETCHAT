@@ -42,7 +42,7 @@ import AppFeatureTour from '../../components/AppFeatureTour';
 
 import {
     ChatBubbleLeftRightIcon, PlayIcon, PhotoIcon,
-    MicrophoneIcon, SparklesIcon, BellIcon, PlusIcon,
+    MicrophoneIcon, BellIcon, PlusIcon,
     Cog6ToothIcon
 } from '@heroicons/react/24/outline';
 
@@ -1876,11 +1876,6 @@ export const Home = () => {
                 pinnedChats={prefs.pinnedChats}
                 totalUnreadMessages={totalUnreadMessages}
                 startCallForChat={calls.startCallForChat}
-                onOpenAiChat={() => {
-                    nav.setShowSocial(false); nav.setShowReels(false); nav.setShowPodlive(false);
-                    nav.setShowSmartSpace(false); nav.setShowSaskatAI(false); nav.setShowAiChat(true);
-                    nav.setMobileHomeTab('chats');
-                }}
             />
 
             {/* Main Chat View */}

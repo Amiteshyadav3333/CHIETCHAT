@@ -6,7 +6,7 @@ import AvatarZoom from '../../../components/AvatarZoom';
 import {
     ArrowLeftIcon, PhoneIcon, VideoCameraIcon, EllipsisVerticalIcon,
     XMarkIcon, MapPinIcon, InformationCircleIcon, ClipboardDocumentIcon,
-    ForwardIcon, PencilSquareIcon, SparklesIcon, MagnifyingGlassIcon,
+    ForwardIcon, PencilSquareIcon, MagnifyingGlassIcon,
     LockClosedIcon, ClipboardDocumentCheckIcon
 } from '@heroicons/react/24/outline';
 import GroupCollaborationHub from '../../../components/collaboration/GroupCollaborationHub';
@@ -204,14 +204,6 @@ export const ChatWindowView = ({
                             <ClipboardDocumentCheckIcon className="w-5 h-5" />
                         </button>
                     )}
-                    {smartSpaceButtonEnabled && (
-                        <button onClick={() => { setShowTopDropdown(false); setShowSmartSpace(true); }} title="Open AI Smart Space" className="rounded-full bg-emerald-400/10 p-1.5 text-emerald-400 hover:bg-emerald-400/20">
-                            <SparklesIcon className="w-5 h-5" />
-                        </button>
-                    )}
-                    <button onClick={() => { setShowTopDropdown(false); setShowAiChat(true); }} title="Open AI companion" aria-label="Open AI companion" className="rounded-full bg-violet-400/10 p-1.5 text-violet-300 hover:bg-violet-400/20">
-                        <SparklesIcon className="w-5 h-5" />
-                    </button>
                     <button onClick={() => setShowMessageSearch(v => !v)} title="Search messages"><MagnifyingGlassIcon className="w-6 h-6" /></button>
                     <button onClick={() => startCall('voice')} title="Voice Call"><PhoneIcon className="w-6 h-6" /></button>
                     <button onClick={() => startCall('video')} title="Video Call"><VideoCameraIcon className="w-6 h-6" /></button>
@@ -244,7 +236,7 @@ export const ChatWindowView = ({
                                         className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-gray-200 hover:bg-white/10"
                                     >
                                         <span>🧠</span>
-                                        <span>{smartSpaceButtonEnabled ? 'Hide AI Smart Space button' : 'Enable AI Smart Space button'}</span>
+                                        <span>{smartSpaceButtonEnabled ? 'Hide AI Smart Space in composer menu' : 'Show AI Smart Space in composer menu'}</span>
                                     </button>
                                     <button 
                                         onClick={() => {
@@ -552,6 +544,9 @@ export const ChatWindowView = ({
                 placeholderOverride={visibleActiveChat.isChatDisabled && visibleActiveChat.groupAdminId !== user?.id ? "Only admins can send messages in this group" : ""}
                 lastMessageText={messages.length > 0 && messages[messages.length - 1].senderId !== user?.id && (!messages[messages.length - 1].type || messages[messages.length - 1].type === 'text') ? messages[messages.length - 1].content : ''}
                 showAiFeature={aiEnabled}
+                onOpenAiChat={() => { setShowTopDropdown(false); setShowAiChat(true); }}
+                showSmartSpaceShortcut={smartSpaceButtonEnabled}
+                onOpenSmartSpace={() => { setShowTopDropdown(false); setShowSmartSpace(true); }}
                 showSmartReplies={smartRepliesEnabled}
                 currentUserId={user?.id}
                 gamePlayers={visibleActiveChat.participants}

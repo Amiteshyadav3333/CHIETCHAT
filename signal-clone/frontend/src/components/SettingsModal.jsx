@@ -923,7 +923,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                         <>
                             <SectionLabel>AI communication assistant</SectionLabel>
                             <SettingsGroup>
-                                <SettingsToggle icon={<SparklesIcon />} title="Show Smart Space in chat header" subtitle="Adds an optional shortcut beside call and search buttons" value={smartSpaceButtonEnabled} onClick={() => onSmartSpaceButtonChange?.(!smartSpaceButtonEnabled)} />
+                                <SettingsToggle icon={<SparklesIcon />} title="Show Smart Space in composer menu" subtitle="Adds a shortcut to the chat attachment menu" value={smartSpaceButtonEnabled} onClick={() => onSmartSpaceButtonChange?.(!smartSpaceButtonEnabled)} />
                             </SettingsGroup>
                             <SectionLabel>Display</SectionLabel>
                             <SettingsGroup>

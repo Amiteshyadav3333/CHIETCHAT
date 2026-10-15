@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import axios from 'axios';
 import { 
     PaperAirplaneIcon, FaceSmileIcon, PaperClipIcon, MicrophoneIcon,
-    StopIcon, XMarkIcon, ChartBarIcon, MapPinIcon, DocumentIcon,
+    StopIcon, XMarkIcon, ChartBarIcon, MapPinIcon, DocumentIcon, SparklesIcon,
     MusicalNoteIcon, PhotoIcon, CameraIcon, VideoCameraIcon, UserCircleIcon
 } from '@heroicons/react/24/solid';
 import { ArrowUturnLeftIcon, GiftIcon, ShoppingBagIcon } from '@heroicons/react/24/outline';
@@ -79,7 +79,8 @@ const MessageInput = ({
     showAiFeature = false,
     showSmartReplies = false,
     currentUserId, gamePlayers = [], payeeId, payeeName,
-    onSchedule, token, drawSource = null, onDrawSourceConsumed, onOpenDraw,
+    onSchedule, token, drawSource = null, onDrawSourceConsumed, onOpenDraw, onOpenAiChat,
+    showSmartSpaceShortcut = false, onOpenSmartSpace,
     cameraOpenRequest = 0, photoReactionSource = null, onPhotoReactionComplete
 }) => {
     const [text, setText] = useState('');
@@ -731,6 +732,14 @@ const MessageInput = ({
             {showAttachMenu && (
                 <div ref={attachMenuRef} className="absolute bottom-full left-2 sm:left-10 mb-3 z-50 w-[calc(100vw-1rem)] max-w-sm rounded-3xl bg-[#233138] p-3 shadow-2xl border border-white/10 animate-slide-up">
                     <div className="grid grid-cols-4 gap-2">
+                        {showSmartSpaceShortcut && (
+                            <AttachOption
+                                label="AI Smart Space"
+                                color="bg-emerald-600"
+                                icon={<SparklesIcon className="h-6 w-6 text-white" />}
+                                onClick={() => { setShowAttachMenu(false); onOpenSmartSpace?.(); }}
+                            />
+                        )}
                         <AttachOption
                             label="Draw on chat"
                             color="bg-emerald-500"
@@ -1014,6 +1023,16 @@ const MessageInput = ({
                             title="Attachments"
                         >
                             <PaperClipIcon className="w-6 h-6" />
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => { setShowAttachMenu(false); setShowEmoji(false); onOpenAiChat?.(); }}
+                            className="flex h-10 w-10 items-center justify-center rounded-full text-violet-300 transition-all hover:bg-violet-400/10 hover:text-violet-200 active:scale-90"
+                            title="Open AI companion"
+                            aria-label="Open AI companion"
+                        >
+                            <SparklesIcon className="h-5 w-5" />
                         </button>
 
                         {/* AI Grammar Fix */}

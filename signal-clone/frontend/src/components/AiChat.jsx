@@ -46,7 +46,6 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
 
     // ─── Calling States ───
     const [isCallActive, setIsCallActive] = useState(false);
-    const [isCallVideo, setIsCallVideo] = useState(false);
     const [callState, setCallState] = useState('ringing'); // ringing, connected, disconnected
     const [callDuration, setCallDuration] = useState(0);
     const [isCallMuted, setIsCallMuted] = useState(false);
@@ -69,12 +68,11 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     const ringtoneOscRef = useRef(null);
     const timerIntervalRef = useRef(null);
 
-    // AI Voice & Video refs
+    // Voice call refs
     const shouldListenRef = useRef(false);
     const recognitionLangRef = useRef(localStorage.getItem('ai_language') || 'en-IN');
     const ttsAudioRef = useRef(null);
-    const videoStreamRef = useRef(null);
-    const videoRef = useRef(null);
+    const callAudioStreamRef = useRef(null);
     const callSpeechSilenceTimerRef = useRef(null);
     const callTranscriptAccumulatorRef = useRef('');
 
@@ -182,7 +180,6 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
             alert('Voice calls require microphone speech recognition in Chrome or Edge. Text chat is still available.');
             return;
         }
-        setIsCallVideo(false);
         setIsCallActive(true);
         setCallState('ringing');
         setCallDuration(0);
@@ -195,7 +192,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         if (navigator.mediaDevices?.getUserMedia) {
             navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
                 if (isCallActiveRef.current) {
-                    videoStreamRef.current = stream;
+                    callAudioStreamRef.current = stream;
                 } else {
                     stream.getTracks().forEach(t => t.stop());
                 }
@@ -223,57 +220,6 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
             speakAiResponse(greeting);
         }, 2500);
     };
-
-    // Start Video Call Flow
-    const startVideoCall = async () => {
-        if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) {
-            alert('AI video conversations require speech recognition in Chrome or Edge.');
-            return;
-        }
-        setIsCallVideo(true);
-        setIsCallActive(true);
-        setCallState('ringing');
-        setCallDuration(0);
-        setIsCallMuted(false);
-        setAiSpeaking(false);
-        setUserSpeaking(false);
-        pendingActionCallRef.current = null;
-
-        startRingtone();
-
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            videoStreamRef.current = stream;
-        } catch (e) {
-            console.error("Camera access error:", e);
-        }
-
-        // Simulate pickup after 2.5 seconds
-        setTimeout(() => {
-            if (!isCallActiveRef.current) return;
-            
-            if (ringtoneOscRef.current) {
-                ringtoneOscRef.current.stop();
-                ringtoneOscRef.current = null;
-            }
-
-            setCallState('connected');
-
-            // Play AI greeting
-            const uname = user?.username || '';
-            const vgreeting = botInfo?.name === 'Arjun'
-                ? (uname ? `ha ${uname}, video pe aa gaya, bol` : `ha bol, video pe hoon`)
-                : (uname ? `heyy ${uname}, chalo start karte hain ❤️` : `heyy, chalo start karte hain ❤️`);
-            speakAiResponse(vgreeting);
-        }, 2500);
-    };
-
-    // Effect to bind video feed
-    useEffect(() => {
-        if (isCallActive && isCallVideo && videoStreamRef.current && videoRef.current) {
-            videoRef.current.srcObject = videoStreamRef.current;
-        }
-    }, [isCallActive, isCallVideo, videoStreamRef.current]);
 
     // Speech Recognition
     const initSpeechRecognition = () => {
@@ -386,36 +332,12 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         setUserSpeaking(false);
     };
 
-    // Frame capture helper
-    const captureFrame = () => {
-        const video = videoRef.current;
-        if (!video || video.paused || video.ended) return null;
-        try {
-            const canvas = document.createElement('canvas');
-            if (!video.videoWidth || !video.videoHeight) return null;
-            const scale = Math.min(1, 960 / video.videoWidth);
-            canvas.width = Math.round(video.videoWidth * scale);
-            canvas.height = Math.round(video.videoHeight * scale);
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            return canvas.toDataURL('image/jpeg', 0.86);
-        } catch (e) {
-            console.error("Frame capture error:", e);
-            return null;
-        }
-    };
-
     const handleCallUserSpeech = async (speechText) => {
         if (callSpeechSilenceTimerRef.current) {
             clearTimeout(callSpeechSilenceTimerRef.current);
         }
         stopListening();
         setLiveSpokenText(`You: "${speechText}"`);
-
-        let frameData = null;
-        if (isCallVideo) {
-            frameData = captureFrame();
-        }
 
         const userMsg = {
             id: Date.now(),
@@ -428,12 +350,9 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
 
         try {
             const res = await axios.post('/api/ai/chat', {
-                message: frameData
-                    ? `${speechText}\n[Live camera frame attached. Inspect it carefully before answering.]`
-                    : speechText,
+                message: speechText,
                 user_gender: userGender,
-                image: frameData,
-                call_mode: isCallVideo ? 'video' : 'voice',
+                call_mode: 'voice',
                 language,
                 // Fast conversational reply for live call
                 max_tokens: 65,
@@ -650,16 +569,15 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     const endCall = () => {
         setIsCallActive(false);
         setCallState('disconnected');
-        setIsCallVideo(false);
 
         if (ringtoneOscRef.current) {
             ringtoneOscRef.current.stop();
             ringtoneOscRef.current = null;
         }
 
-        if (videoStreamRef.current) {
-            videoStreamRef.current.getTracks().forEach(t => t.stop());
-            videoStreamRef.current = null;
+        if (callAudioStreamRef.current) {
+            callAudioStreamRef.current.getTracks().forEach(t => t.stop());
+            callAudioStreamRef.current = null;
         }
 
         if (ttsAudioRef.current) {
@@ -690,6 +608,17 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         const g = storedUser?.gender || 'unknown';
         setUserGender(g);
     }, [user]);
+
+    useEffect(() => {
+        const profileGender = String(userGender && userGender !== 'unknown'
+            ? userGender
+            : user?.gender || localStorage.getItem('user_gender') || 'unknown').toLowerCase();
+        if (profileGender !== 'male' && profileGender !== 'female') return;
+        const persona = profileGender === 'female'
+            ? { name: 'Arjun', avatar: '/ai/arjun-royal.jpg', bio: 'Tera dost Arjun — hamesha yahan hoon tere liye 💙' }
+            : { name: 'Aria', avatar: '/ai/aria-royal.jpg', bio: 'Main Aria hoon — teri apni AI companion ✨' };
+        setBotInfo(current => ({ ...(current || {}), ...persona }));
+    }, [userGender, user?.gender]);
 
     // Load bot info + message history
     useEffect(() => {
@@ -946,9 +875,11 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         "interview ki taiyari kara do"
     ];
 
-    const storedGender = (userGender || user?.gender || localStorage.getItem('user_gender') || '').toLowerCase();
+    const storedGender = String(userGender && userGender !== 'unknown'
+        ? userGender
+        : user?.gender || localStorage.getItem('user_gender') || '').toLowerCase();
     const isFemaleUser = storedGender === 'female';
-    const isArjun = botInfo?.name ? botInfo.name === 'Arjun' : isFemaleUser;
+    const isArjun = isFemaleUser;
     const defaultRoyalAvatar = isArjun ? '/ai/arjun-royal.jpg' : '/ai/aria-royal.jpg';
     const botAvatar = (botInfo?.avatar && !botInfo.avatar.includes('dicebear')) ? botInfo.avatar : defaultRoyalAvatar;
 
@@ -1056,6 +987,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                     color: #d1d5db; font-size: 12px; font-weight: 700; cursor: pointer;
                 }
                 .ai-mode-btn--active { background: ${isArjun ? '#2563eb' : '#7c3aed'}; border-color: transparent; color: white; }
+                .ai-mode-status { cursor: default; user-select: none; }
                 .ai-language-select {
                     margin-left: auto; min-width: 112px; border: 1px solid rgba(255,255,255,.12); border-radius: 999px;
                     padding: 8px 12px; background: #202c33; color: white; font-size: 12px; font-weight: 700; outline: none;
@@ -1323,59 +1255,6 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                 }
                 .ai-date-divider::before { left: 0; }
                 .ai-date-divider::after { right: 0; }
-
-                /* ─── Video Call Vision Container ─── */
-                .ai-call-video-container {
-                    position: absolute;
-                    top: 80px;
-                    right: 20px;
-                    width: 130px;
-                    height: 180px;
-                    border-radius: 16px;
-                    overflow: hidden;
-                    border: 2px solid rgba(255,255,255,0.15);
-                    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
-                    z-index: 100;
-                    background: #000;
-                    backdrop-filter: blur(12px);
-                    -webkit-backdrop-filter: blur(12px);
-                    display: flex;
-                    flex-direction: column;
-                }
-                .ai-call-video-feed {
-                    width: 100%;
-                    height: 100%;
-                    object-fit: cover;
-                    transform: scaleX(-1);
-                }
-                .ai-call-video-badge {
-                    position: absolute;
-                    top: 8px;
-                    left: 8px;
-                    display: flex;
-                    align-items: center;
-                    gap: 6px;
-                    background: rgba(0,0,0,0.6);
-                    padding: 4px 8px;
-                    border-radius: 8px;
-                    font-size: 10px;
-                    color: #fff;
-                    font-weight: 600;
-                    z-index: 101;
-                    backdrop-filter: blur(4px);
-                    border: 1px solid rgba(255,255,255,0.08);
-                }
-                .ai-call-video-pulse {
-                    width: 6px;
-                    height: 6px;
-                    background: #ef4444;
-                    border-radius: 50%;
-                    animation: video-pulse-red 1s infinite alternate;
-                }
-                @keyframes video-pulse-red {
-                    0% { transform: scale(0.8); opacity: 0.5; }
-                    100% { transform: scale(1.2); opacity: 1; box-shadow: 0 0 8px #ef4444; }
-                }
 
                 /* ─── Call Overlay styles ─── */
                 .ai-call-overlay {
@@ -1749,11 +1628,6 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                 </div>
 
                 <div className="ai-header-actions">
-                    <button onClick={startVideoCall} className="ai-icon-btn" title="Video Call AI companion" style={{ color: isArjun ? '#60a5fa' : '#c084fc', marginRight: 4 }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: 18, height: 18 }}>
-                            <path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3V7.5a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.94-.94 2.56-.27 2.56 1.06v11.38c0 1.33-1.62 2-2.56 1.06z" />
-                        </svg>
-                    </button>
                     <button onClick={startCall} className="ai-icon-btn" title="Call AI companion" style={{ color: isArjun ? '#60a5fa' : '#c084fc' }}>
                         <PhoneIcon style={{ width: 18, height: 18 }} />
                     </button>
@@ -1771,61 +1645,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
             <div className="ai-mode-bar" aria-label="AI conversation mode">
                 <button className="ai-mode-btn ai-mode-btn--active" onClick={() => inputRef.current?.focus()}>💬 Chat</button>
                 <button className="ai-mode-btn" onClick={startCall}><PhoneIcon style={{ width: 15, height: 15 }} /> Voice call</button>
-                <button className="ai-mode-btn" onClick={startVideoCall}>📹 Video call</button>
-
-                {/* Switch between Aria & Arjun */}
-                <div style={{ display: 'inline-flex', alignItems: 'center', background: 'rgba(255,255,255,0.08)', borderRadius: 20, padding: '2px 4px', gap: 2 }}>
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setBotInfo(prev => ({
-                                ...(prev || {}),
-                                name: 'Aria',
-                                avatar: '/ai/aria-royal.jpg',
-                                bio: 'Main Aria hoon — teri apni AI companion ✨'
-                            }));
-                            setUserGender('male');
-                        }}
-                        style={{
-                            border: 'none',
-                            background: !isArjun ? '#c084fc' : 'transparent',
-                            color: !isArjun ? '#000' : '#d1d5db',
-                            fontWeight: 700,
-                            fontSize: 11,
-                            padding: '3px 8px',
-                            borderRadius: 14,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s'
-                        }}
-                    >
-                        ✨ Aria
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setBotInfo(prev => ({
-                                ...(prev || {}),
-                                name: 'Arjun',
-                                avatar: '/ai/arjun-royal.jpg',
-                                bio: 'Tera dost Arjun — hamesha yahan hoon tere liye 💙'
-                            }));
-                            setUserGender('female');
-                        }}
-                        style={{
-                            border: 'none',
-                            background: isArjun ? '#60a5fa' : 'transparent',
-                            color: isArjun ? '#000' : '#d1d5db',
-                            fontWeight: 700,
-                            fontSize: 11,
-                            padding: '3px 8px',
-                            borderRadius: 14,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s'
-                        }}
-                    >
-                        💙 Arjun
-                    </button>
-                </div>
+                <span className="ai-mode-btn ai-mode-btn--active ai-mode-status" aria-live="polite">{isArjun ? '💙 Arjun' : '✨ Aria'} · auto</span>
 
                 <select className="ai-language-select" value={language} onChange={event => setLanguage(event.target.value)} aria-label="AI response language">
                     {AI_LANGUAGES.map(item => <option key={item.code} value={item.code}>{item.label}</option>)}
@@ -1970,18 +1790,8 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                                 userSpeaking={userSpeaking}
                                 loading={loading}
                                 callState={callState}
-                                stream={videoStreamRef.current}
+                                stream={callAudioStreamRef.current}
                             />
-                        </div>
-                    )}
-
-                    {isCallVideo && (
-                        <div className="ai-call-video-container">
-                            <div className="ai-call-video-badge">
-                                <span className="ai-call-video-pulse" />
-                                AI Vision Active
-                            </div>
-                            <video ref={videoRef} autoPlay playsInline muted className="ai-call-video-feed" />
                         </div>
                     )}
 

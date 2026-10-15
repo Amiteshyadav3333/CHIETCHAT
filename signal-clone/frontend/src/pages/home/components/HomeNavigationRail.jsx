@@ -28,13 +28,12 @@ export const AppTopBar = ({ user, token, chats, onMenu, onCreate, onNotification
         <button type="button" onClick={onMenu} className="reddit-topbar-icon rounded-xl p-1.5" aria-label="Open app functions" title="Open app functions">
             <img src="/lion-logo.png" alt="Ducor app functions" className="h-9 w-9 rounded-xl object-cover" />
         </button>
-        <GlobalSearchBar token={token} chats={chats} onSelectResult={onSelectSearchResult} onMessageUser={onMessageUser} />
+        <GlobalSearchBar token={token} chats={chats} onSelectResult={onSelectSearchResult} onMessageUser={onMessageUser} onOpenAgent={onAgent} />
         <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
             <button type="button" onClick={onCreate} className="reddit-topbar-action flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold"><PlusIcon className="h-5 w-5" /><span className="hidden lg:inline">Publish</span></button>
             <button type="button" onClick={onChat} className="reddit-topbar-icon flex items-center gap-2 rounded-full px-2.5 py-2 text-sm font-semibold" aria-label="Open chats" title="Open chats"><ChatBubbleLeftRightIcon className="h-5 w-5" /><span className="hidden 2xl:inline">Chat</span></button>
             <button type="button" onClick={onReels} className="reddit-topbar-icon reddit-topbar-secondary flex items-center gap-2 rounded-full px-2.5 py-2 text-sm font-semibold" aria-label="Open Reels" title="Reels"><PlayIcon className="h-5 w-5" /><span className="hidden 2xl:inline">Reels</span></button>
             <button type="button" onClick={onPodlive} className="reddit-topbar-icon reddit-topbar-secondary flex items-center gap-2 rounded-full px-2.5 py-2 text-sm font-semibold" aria-label="Open PodLive" title="PodLive"><MicrophoneIcon className="h-5 w-5" /><span className="hidden 2xl:inline">PodLive</span></button>
-            <button type="button" onClick={onAgent} className="reddit-topbar-icon reddit-topbar-secondary flex items-center gap-2 rounded-full px-2.5 py-2 text-sm font-semibold text-emerald-300" aria-label="Open Saskat voice agent" title="Saskat voice agent"><MicrophoneIcon className="h-5 w-5" /><span className="hidden xl:inline">Saskat</span></button>
             <button type="button" onClick={onNotifications} className="reddit-topbar-icon relative rounded-full p-2.5" aria-label="Notifications"><BellIcon className="h-5 w-5" />{unreadCount > 0 && <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-[#ff6533] ring-2 ring-[#11171b]" />}</button>
             <div className="relative">
                 <button type="button" onClick={() => setAccountMenuOpen(value => !value)} className="flex items-center gap-2 rounded-full p-1.5 hover:bg-white/10" aria-label={`Open user menu for ${user?.username || 'user'}`} aria-expanded={accountMenuOpen}>

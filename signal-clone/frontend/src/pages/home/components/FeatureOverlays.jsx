@@ -67,6 +67,7 @@ export const FeatureOverlays = ({
     setPodliveInvite,
     receivePodliveInvite,
     updatePodliveLiveCount,
+    onAgentCommand,
     navCollapsed = false,
     initialReel = null,
     onInitialReelConsumed,
@@ -113,11 +114,9 @@ export const FeatureOverlays = ({
 
             {/* Saskat AI Overlay */}
             {showSaskatAI && (
-                <div className={featurePosition} style={featureStyle}>
-                    <React.Suspense fallback={<FeatureLoader />}>
-                        <SaskatAI onClose={() => setShowSaskatAI(false)} />
-                    </React.Suspense>
-                </div>
+                <React.Suspense fallback={<FeatureLoader />}>
+                    <SaskatAI onClose={() => setShowSaskatAI(false)} onCommand={onAgentCommand} />
+                </React.Suspense>
             )}
 
             {/* PodLive Invite Bridge */}

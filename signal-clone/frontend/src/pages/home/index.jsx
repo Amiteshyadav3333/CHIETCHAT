@@ -1191,6 +1191,110 @@ export const Home = () => {
         nav.setShowSettings(true);
     };
 
+    const handleSaskatAgentCommand = async (spokenCommand) => {
+        const command = String(spokenCommand || '').toLowerCase().replace(/[.,!?]/g, ' ').replace(/\s+/g, ' ').trim();
+        const keepAgentOpen = () => nav.setShowSaskatAI(true);
+        const clearCurrentView = () => {
+            setShowNotifications(false);
+            setShowSearchModal(false);
+            nav.setShowSettings(false);
+            nav.setShowReels(false);
+            nav.setShowPodlive(false);
+            nav.setShowSocial(false);
+            nav.setShowAiChat(false);
+            nav.setShowSmartSpace(false);
+            nav.setShowSaskatAI(true);
+            setActiveChat(null);
+            localStorage.removeItem('activeChatId');
+        };
+
+        if (/^(close|close agent|stop|band karo|agent band karo|saskat band karo)$/.test(command)) {
+            nav.setShowSaskatAI(false);
+            return 'Saskat band ho raha hai.';
+        }
+        if (/\b(reels?|short videos?)\b/.test(command) || command.includes('रील')) {
+            clearCurrentView(); nav.setShowReels(true); nav.setMobileHomeTab('chats');
+            return 'Reels khol diye.';
+        }
+        if (/\b(pod ?live|live audio|podcast)\b/.test(command) || command.includes('पॉडलाइव')) {
+            clearCurrentView(); nav.setShowPodlive(true);
+            return 'PodLive khol diya.';
+        }
+        const chatWithMatch = command.match(/^(?:open|start|kholo|khol) chat with (.+)$/);
+        if (chatWithMatch) {
+            try {
+                const response = await axios.post('/api/user/search', { query: chatWithMatch[1].trim() }, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                const targetUser = response.data?.user || response.data;
+                if (!targetUser?.id) return response.data?.error || 'Us naam se user nahi mila.';
+                await startChat(targetUser);
+                keepAgentOpen();
+                return `${targetUser.username || chatWithMatch[1]} ke saath chat khol di.`;
+            } catch (error) {
+                return error.response?.data?.error || 'User search nahi ho saki.';
+            }
+        }
+        if (/\b(new chat|start chat|find a person|naya chat)\b/.test(command) || command.includes('नया चैट')) {
+            keepAgentOpen(); openNewChat();
+            return 'New chat search khol diya.';
+        }
+        if (/\b(chats?|messages?|inbox)\b/.test(command) || command.includes('चैट')) {
+            clearCurrentView(); nav.setMobileHomeTab('chats');
+            return 'Chats khol diye.';
+        }
+        if (/\b(social|feed|home|posts?)\b/.test(command) || command.includes('पोस्ट') || command.includes('सोशल')) {
+            clearCurrentView(); nav.setShowSocial(true);
+            return 'Social feed khol diya.';
+        }
+        if (/\b(publish|create post|write a post|new post|post likho)\b/.test(command)) {
+            clearCurrentView(); nav.setShowSocial(true); setOpenComposerRequest(value => value + 1);
+            return 'Publish composer khol diya. Post publish karne se pehle aap review karke khud confirm karein.';
+        }
+        if (/\b(notification|notifications|notis|सूचना)\b/.test(command)) {
+            clearCurrentView(); setShowNotifications(true);
+            return 'Notifications khol diye.';
+        }
+        if (/\b(search|find|khojo|dhundo)\b/.test(command) || command.includes('ढूंढ')) {
+            const query = command.replace(/^(search|find|khojo|dhundo|ढूंढ)( karo)?\s*/, '').trim();
+            setSearchQuery(query);
+            setShowSearchModal(true);
+            keepAgentOpen();
+            return query ? `${query} ke liye search khol diya.` : 'Search khol diya. Ab app mein search kar sakte hain.';
+        }
+        if (/\b(edit avatar|change avatar|profile photo|avatar badlo)\b/.test(command)) {
+            setSettingsInitialScreen('profile'); nav.setShowSettings(true); keepAgentOpen();
+            return 'Profile settings khol diye. Avatar controls wahan milenge.';
+        }
+        if (/\b(profile|my profile|view profile|meri profile)\b/.test(command) || command.includes('प्रोफाइल')) {
+            clearCurrentView(); nav.setSocialDeepLink({ type: 'profile', id: user?.id }); nav.setShowSocial(true);
+            return 'Aapki profile khol di.';
+        }
+        if (/\b(drafts?|draft dikhao)\b/.test(command)) {
+            window.dispatchEvent(new CustomEvent('ducor-open-drafts'));
+            keepAgentOpen();
+            return 'Aapke saved drafts khol diye.';
+        }
+        if (/\b(earn|earnings|earning|kamai)\b/.test(command)) {
+            handleAccountMenuAction('earn'); keepAgentOpen();
+            return 'Creator earning options khol diye.';
+        }
+        if (/\b(premium|upgrade)\b/.test(command)) {
+            setSettingsInitialScreen('premium'); nav.setShowSettings(true); keepAgentOpen();
+            return 'Premium settings khol diye.';
+        }
+        if (/\b(display mode|theme|dark mode|light mode|display)\b/.test(command)) {
+            setSettingsInitialScreen('chats'); nav.setShowSettings(true); keepAgentOpen();
+            return 'Display settings khol diye.';
+        }
+        if (/\b(settings|app settings|setting)\b/.test(command) || command.includes('सेटिंग')) {
+            setSettingsInitialScreen('settings'); nav.setShowSettings(true); keepAgentOpen();
+            return 'App settings khol di.';
+        }
+
+        return 'Ye voice command abhi supported nahi hai. Aap Chats, Social, Reels, PodLive, Publish, Search, Profile, Notifications ya Settings bol sakte hain.';
+    };
+
     const handleLinkPhone = async (event) => {
         event.preventDefault();
         if (linkPhone.length !== 10) { setLinkPhoneError('Phone number must be exactly 10 digits'); return; }
@@ -1602,7 +1706,7 @@ export const Home = () => {
         { label: 'Settings', icon: Cog6ToothIcon, active: nav.showSettings, action: () => { setShowNotifications(false); setShowSearchModal(false); nav.setShowSettings(true); } }
     ];
 
-    const featureOverlayOpen = showSearchModal || showLinkPhoneModal || showNotifications || nav.showSettings || calls.showCallModal || calls.incomingCall;
+    const featureOverlayOpen = showSearchModal || showLinkPhoneModal || showNotifications || nav.showSettings || nav.showSaskatAI || calls.showCallModal || calls.incomingCall;
     const appNavHidden = featureOverlayOpen || Boolean(activeChat);
     const customWallpaper = localStorage.getItem('custom_chat_wallpaper');
     const hasCustomWallpaper = prefs.wallpaper === 'custom' && Boolean(customWallpaper);
@@ -1658,6 +1762,7 @@ export const Home = () => {
                 onChat={openChats}
                 onReels={() => openTopBarFeature('reels')}
                 onPodlive={() => openTopBarFeature('podlive')}
+                onAgent={() => nav.setShowSaskatAI(true)}
                 onSelectSearchResult={handleGlobalSearchResult}
                 onMessageUser={startChat}
                 unreadCount={unreadCount}
@@ -1965,6 +2070,7 @@ export const Home = () => {
                 setPodliveInvite={nav.setPodliveInvite}
                 receivePodliveInvite={nav.receivePodliveInvite}
                 updatePodliveLiveCount={nav.updatePodliveLiveCount}
+                onAgentCommand={handleSaskatAgentCommand}
                 navCollapsed={nav.navCollapsed}
                 initialReel={globalSearchReel}
                 onInitialReelConsumed={() => setGlobalSearchReel(null)}

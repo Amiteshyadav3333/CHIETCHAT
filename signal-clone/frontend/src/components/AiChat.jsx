@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef, useContext, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import {
     XMarkIcon, TrashIcon,
     PaperAirplaneIcon, StopIcon, MicrophoneIcon, FaceSmileIcon,
-    PhoneIcon, SparklesIcon
+    PhoneIcon
 } from '@heroicons/react/24/solid';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import UserAvatar from './UserAvatar';
@@ -13,8 +13,6 @@ import AiVoiceWallpaper, { AI_WALLPAPER_THEMES } from './AiVoiceWallpaper';
 import HumanoidAiAvatar from './HumanoidAiAvatar';
 import { API_BASE_URL } from '../utils/apiBaseUrl';
 import { useBackHandler } from '../utils/backNavigation';
-
-const SaskatAI = lazy(() => import('../pages/SaskatAI/SaskatAI'));
 
 const AI_LANGUAGES = [
     { code: 'hi-IN', label: 'हिंदी' }, { code: 'en-IN', label: 'English' },
@@ -38,7 +36,6 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
     const [isRecording, setIsRecording] = useState(false);
     const [userGender, setUserGender] = useState('unknown');
     const [language, setLanguage] = useState(() => localStorage.getItem('ai_language') || 'en-IN');
-    const [showSaskat, setShowSaskat] = useState(false);
 
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
@@ -677,7 +674,6 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         stopListening();
     };
 
-    useBackHandler(Boolean(showSaskat), () => setShowSaskat(false), 'aichat-saskat');
     useBackHandler(Boolean(isCallActive), () => endCall(), 'aichat-call');
 
     useEffect(() => {
@@ -1753,9 +1749,6 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                 </div>
 
                 <div className="ai-header-actions">
-                    <button onClick={() => setShowSaskat(true)} className="ai-icon-btn" title="Saskat AI" style={{ color: '#f59e0b' }}>
-                        <SparklesIcon style={{ width: 18, height: 18 }} />
-                    </button>
                     <button onClick={startVideoCall} className="ai-icon-btn" title="Video Call AI companion" style={{ color: isArjun ? '#60a5fa' : '#c084fc', marginRight: 4 }}>
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: 18, height: 18 }}>
                             <path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3V7.5a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.94-.94 2.56-.27 2.56 1.06v11.38c0 1.33-1.62 2-2.56 1.06z" />
@@ -1951,15 +1944,6 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
                     ✨ {botInfo?.name || 'AI'} — Tera apna personal AI companion
                 </p>
             </div>
-
-            {/* ─── Saskat AI Overlay ─── */}
-            {showSaskat && (
-                <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: '#0a0e27' }}>
-                    <Suspense fallback={<div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>Loading…</div>}>
-                        <SaskatAI onClose={() => setShowSaskat(false)} />
-                    </Suspense>
-                </div>
-            )}
 
             {/* ─── Call Overlay Modal ─── */}
             {/* ─── Call Overlay Modal (Full-Screen Immersive Humanoid Call) ─── */}

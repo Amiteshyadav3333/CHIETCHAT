@@ -10,13 +10,18 @@ const accountActions = [
     ['settings', 'App settings', Cog6ToothIcon],
 ];
 
-export const AppTopBar = ({ user, token, chats, onMenu, onCreate, onNotifications, onProfile, onChat, onReels, onPodlive, onSelectSearchResult, onMessageUser, unreadCount }) => {
+export const AppTopBar = ({ user, token, chats, onMenu, onCreate, onNotifications, onProfile, onChat, onReels, onPodlive, onAgent, onSelectSearchResult, onMessageUser, unreadCount }) => {
     const [accountMenuOpen, setAccountMenuOpen] = React.useState(false);
     const [draftsOpen, setDraftsOpen] = React.useState(false);
     const [draftText, setDraftText] = React.useState('');
     const [drafts, setDrafts] = React.useState(() => {
         try { return JSON.parse(localStorage.getItem('ducor_social_drafts') || '[]'); } catch { return []; }
     });
+    React.useEffect(() => {
+        const openDrafts = () => setDraftsOpen(true);
+        window.addEventListener('ducor-open-drafts', openDrafts);
+        return () => window.removeEventListener('ducor-open-drafts', openDrafts);
+    }, []);
     const saveDrafts = next => { setDrafts(next); localStorage.setItem('ducor_social_drafts', JSON.stringify(next)); };
     return (
     <header className="reddit-topbar relative z-[55] flex h-16 shrink-0 items-center gap-3 border-b px-3 sm:px-5">
@@ -29,6 +34,7 @@ export const AppTopBar = ({ user, token, chats, onMenu, onCreate, onNotification
             <button type="button" onClick={onChat} className="reddit-topbar-icon flex items-center gap-2 rounded-full px-2.5 py-2 text-sm font-semibold" aria-label="Open chats" title="Open chats"><ChatBubbleLeftRightIcon className="h-5 w-5" /><span className="hidden 2xl:inline">Chat</span></button>
             <button type="button" onClick={onReels} className="reddit-topbar-icon reddit-topbar-secondary flex items-center gap-2 rounded-full px-2.5 py-2 text-sm font-semibold" aria-label="Open Reels" title="Reels"><PlayIcon className="h-5 w-5" /><span className="hidden 2xl:inline">Reels</span></button>
             <button type="button" onClick={onPodlive} className="reddit-topbar-icon reddit-topbar-secondary flex items-center gap-2 rounded-full px-2.5 py-2 text-sm font-semibold" aria-label="Open PodLive" title="PodLive"><MicrophoneIcon className="h-5 w-5" /><span className="hidden 2xl:inline">PodLive</span></button>
+            <button type="button" onClick={onAgent} className="reddit-topbar-icon reddit-topbar-secondary flex items-center gap-2 rounded-full px-2.5 py-2 text-sm font-semibold text-emerald-300" aria-label="Open Saskat voice agent" title="Saskat voice agent"><MicrophoneIcon className="h-5 w-5" /><span className="hidden xl:inline">Saskat</span></button>
             <button type="button" onClick={onNotifications} className="reddit-topbar-icon relative rounded-full p-2.5" aria-label="Notifications"><BellIcon className="h-5 w-5" />{unreadCount > 0 && <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-[#ff6533] ring-2 ring-[#11171b]" />}</button>
             <div className="relative">
                 <button type="button" onClick={() => setAccountMenuOpen(value => !value)} className="flex items-center gap-2 rounded-full p-1.5 hover:bg-white/10" aria-label={`Open user menu for ${user?.username || 'user'}`} aria-expanded={accountMenuOpen}>

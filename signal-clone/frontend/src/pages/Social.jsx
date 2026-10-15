@@ -21,8 +21,10 @@ import { getSafeWebsiteUrl } from '../utils/safeUrl';
 import SocialShareSheet from '../components/SocialShareSheet';
 import ProCameraStudio from '../components/ProCameraStudio';
 import { useBackHandler } from '../utils/backNavigation';
+import { isSocialFeedCacheFresh, loadSocialFeedCache, saveSocialFeedCache } from '../utils/socialFeedCache';
 
 const authHeaders = (token) => ({ Authorization: `Bearer ${token}` });
+const feedCacheKey = (userId, feed) => `${userId || 'guest'}:${feed}`;
 
 const readVideoDuration = file => new Promise(resolve => {
     const video = document.createElement('video');
@@ -863,7 +865,12 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
     const { user, token, updateUser } = useContext(AuthContext);
     const [activeTab, setActiveTab] = useState(() => user?.uiPreferences?.socialDefaultFeed || localStorage.getItem('social_default_feed') || 'for-you');
     const feedCacheRef = useRef(new Map());
-    const [posts, setPosts] = useState(() => feedCacheRef.current.get(activeTab) || []);
+    const feedRequestsRef = useRef(new Map());
+    const activeTabRef = useRef(activeTab);
+    const activeUserRef = useRef(user?.id);
+    activeTabRef.current = activeTab;
+    activeUserRef.current = user?.id;
+    const [posts, setPosts] = useState(() => feedCacheRef.current.get(feedCacheKey(user?.id, activeTab))?.posts || []);
     const [channels, setChannels] = useState([]);
     const [selectedChannel, setSelectedChannel] = useState(null);
     const [channelPosts, setChannelPosts] = useState([]);
@@ -893,18 +900,59 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
     const highlightedRef = useRef(null);
     const deepLinkHandled = useRef(false);
 
-    const fetchPosts = useCallback(async (tab) => {
+    const fetchPosts = useCallback(async (tab, { force = false } = {}) => {
         const t = tab || activeTab;
-        const cached = feedCacheRef.current.get(t);
-        if (cached) setPosts(cached);
-        else setLoading(true);
-        try {
-            const feed = t === 'following' ? 'following' : t === 'community' ? 'community' : t === 'news' ? 'news' : 'all';
-            const res = await axios.get('/api/social/posts?feed=' + feed, { headers: authHeaders(token) });
-            feedCacheRef.current.set(t, res.data);
-            setPosts(res.data);
-        } catch { /* Keep the last successful feed visible during temporary network failures. */ } finally { setLoading(false); }
-    }, [token, activeTab]);
+        const key = feedCacheKey(user?.id, t);
+        const pending = feedRequestsRef.current.get(key);
+        if (pending && !force) return pending;
+        const task = (async () => {
+            let cached = feedCacheRef.current.get(key);
+            if (!cached && user?.id) {
+                const stored = await loadSocialFeedCache(user.id, t);
+                if (stored) {
+                    cached = stored;
+                    feedCacheRef.current.set(key, stored);
+                }
+            }
+            if (activeTabRef.current === t && activeUserRef.current === user?.id) {
+                if (cached?.posts) setPosts(cached.posts);
+                else setPosts([]);
+                setLoading(!cached?.posts?.length);
+            }
+            if (!force && cached?.posts && isSocialFeedCacheFresh(cached.updatedAt)) {
+                if (activeTabRef.current === t && activeUserRef.current === user?.id) setLoading(false);
+                return cached.posts;
+            }
+
+            try {
+                const feed = t === 'following' ? 'following' : t === 'community' ? 'community' : t === 'news' ? 'news' : 'all';
+                const res = await axios.get('/api/social/posts?feed=' + feed, { headers: authHeaders(token) });
+                const nextPosts = Array.isArray(res.data) ? res.data : [];
+                const nextCache = { posts: nextPosts, updatedAt: Date.now() };
+                feedCacheRef.current.set(key, nextCache);
+                saveSocialFeedCache(user?.id, t, nextPosts);
+                if (activeTabRef.current === t && activeUserRef.current === user?.id) setPosts(nextPosts);
+                return nextPosts;
+            } catch {
+                return cached?.posts || [];
+            } finally {
+                if (activeTabRef.current === t && activeUserRef.current === user?.id) setLoading(false);
+            }
+        })();
+        feedRequestsRef.current.set(key, task);
+        try { return await task; }
+        finally { if (feedRequestsRef.current.get(key) === task) feedRequestsRef.current.delete(key); }
+    }, [token, activeTab, user?.id]);
+
+    const updateCachedFeed = (feed, update) => {
+        setPosts(current => {
+            const next = update(current);
+            const entry = { posts: next, updatedAt: Date.now() };
+            feedCacheRef.current.set(feedCacheKey(user?.id, feed), entry);
+            saveSocialFeedCache(user?.id, feed, next);
+            return next;
+        });
+    };
 
     useEffect(() => {
         if (!token) return;
@@ -946,7 +994,20 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
     useEffect(() => {
         if (!token) return;
         if (activeTab === 'channels') fetchChannels(); else fetchPosts(activeTab);
-    }, [activeTab, token]);
+    }, [activeTab, token, fetchChannels, fetchPosts]);
+
+    useEffect(() => {
+        if (!token) return;
+        const refreshOnReturn = () => {
+            if (!document.hidden && activeTabRef.current !== 'channels') fetchPosts(activeTabRef.current);
+        };
+        document.addEventListener('visibilitychange', refreshOnReturn);
+        window.addEventListener('online', refreshOnReturn);
+        return () => {
+            document.removeEventListener('visibilitychange', refreshOnReturn);
+            window.removeEventListener('online', refreshOnReturn);
+        };
+    }, [token, fetchPosts]);
 
     useEffect(() => {
         if (!deepLink || deepLinkHandled.current) return;
@@ -954,8 +1015,15 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
         if (deepLink.type === 'profile') { setProfileView({ userId: deepLink.id }); onDeepLinkConsumed && onDeepLinkConsumed(); }
         else if (deepLink.type === 'channel') { setActiveTab('channels'); fetchChannel(deepLink.id); onDeepLinkConsumed && onDeepLinkConsumed(); }
         else if (deepLink.type === 'post') {
+            activeTabRef.current = 'for-you';
             setActiveTab('for-you'); setSelectedChannel(null);
-            fetchPosts('for-you').then(() => { setHighlightedPostId(deepLink.id); onDeepLinkConsumed && onDeepLinkConsumed(); setTimeout(() => setHighlightedPostId(null), 4000); });
+            fetchPosts('for-you').then(async loadedPosts => {
+                const targetExists = loadedPosts.some(post => String(post.id) === String(deepLink.id));
+                if (!targetExists) await fetchPosts('for-you', { force: true });
+                setHighlightedPostId(deepLink.id);
+                onDeepLinkConsumed && onDeepLinkConsumed();
+                setTimeout(() => setHighlightedPostId(null), 4000);
+            });
         }
     }, [deepLink]);
 
@@ -984,7 +1052,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
         media.forEach(file => fd.append('media', file));
         try {
             const res = await axios.post('/api/social/posts', fd, { headers: { ...authHeaders(token), 'Content-Type': 'multipart/form-data' } });
-            channelId ? setChannelPosts(p => [res.data, ...p]) : setPosts(p => { const next = [res.data, ...p]; feedCacheRef.current.set(activeTab, next); return next; });
+            channelId ? setChannelPosts(p => [res.data, ...p]) : updateCachedFeed(activeTab, p => [res.data, ...p]);
             axios.get('/api/social/trends', { headers: authHeaders(token) }).then(({ data }) => setTrends(Array.isArray(data) ? data : data.trends || [])).catch(() => {});
             setCaption(''); setMedia([]); setPollOptions(['', '']); if (fileRef.current) fileRef.current.value = '';
             return true;
@@ -1047,7 +1115,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
         try {
             const res = await axios.post('/api/users/' + targetUserId + '/follow', {}, { headers: authHeaders(token) });
             const patch = p => p.user.id === targetUserId ? { ...p, user: { ...p.user, isFollowing: res.data.isFollowing } } : p;
-            setPosts(p => p.map(patch)); setChannelPosts(p => p.map(patch));
+            updateCachedFeed(activeTab, p => p.map(patch)); setChannelPosts(p => p.map(patch));
             return res.data;
         } catch { return null; }
     };
@@ -1058,25 +1126,25 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
         try { const res = await axios.post('/api/social/channels/' + selectedChannel.id + '/members/' + membershipId, { action }, { headers: authHeaders(token) }); setSelectedChannel(res.data); setChannels(p => p.map(ch => ch.id === res.data.id ? res.data : ch)); } catch { }
     };
     const likePost = async (postId, isChannelPost) => {
-        try { const res = await axios.post('/api/social/posts/' + postId + '/like', {}, { headers: authHeaders(token) }); const patch = p => p.id === postId ? { ...p, isLiked: res.data.isLiked, likesCount: res.data.likesCount } : p; isChannelPost ? setChannelPosts(p => p.map(patch)) : setPosts(p => p.map(patch)); } catch { }
+        try { const res = await axios.post('/api/social/posts/' + postId + '/like', {}, { headers: authHeaders(token) }); const patch = p => p.id === postId ? { ...p, isLiked: res.data.isLiked, likesCount: res.data.likesCount } : p; isChannelPost ? setChannelPosts(p => p.map(patch)) : updateCachedFeed(activeTab, p => p.map(patch)); } catch { }
     };
     const retweetPost = async (postId, isChannelPost) => {
-        try { const res = await axios.post('/api/social/posts/' + postId + '/retweet', {}, { headers: authHeaders(token) }); const patch = p => p.id === postId ? { ...p, isRetweeted: res.data.isRetweeted, retweetCount: res.data.retweetCount } : p; isChannelPost ? setChannelPosts(p => p.map(patch)) : setPosts(p => p.map(patch)); if (!isChannelPost) fetchPosts(activeTab); } catch { }
+        try { const res = await axios.post('/api/social/posts/' + postId + '/retweet', {}, { headers: authHeaders(token) }); const patch = p => p.id === postId ? { ...p, isRetweeted: res.data.isRetweeted, retweetCount: res.data.retweetCount } : p; isChannelPost ? setChannelPosts(p => p.map(patch)) : updateCachedFeed(activeTab, p => p.map(patch)); if (!isChannelPost) fetchPosts(activeTab, { force: true }); } catch { }
     };
     const sharePost = (postId, isChannelPost, shareCount) => {
         const patch = p => p.id === postId ? { ...p, shareCount } : p;
-        isChannelPost ? setChannelPosts(p => p.map(patch)) : setPosts(p => p.map(patch));
+        isChannelPost ? setChannelPosts(p => p.map(patch)) : updateCachedFeed(activeTab, p => p.map(patch));
     };
     const votePoll = async (postId, optionIndex, isChannelPost = false) => {
         try {
             const { data } = await axios.post(`/api/social/posts/${postId}/poll-vote`, { optionIndex }, { headers: authHeaders(token) });
             const patch = post => post.id === postId ? { ...post, poll: data } : post;
-            isChannelPost ? setChannelPosts(items => items.map(patch)) : setPosts(items => items.map(patch));
+            isChannelPost ? setChannelPosts(items => items.map(patch)) : updateCachedFeed(activeTab, items => items.map(patch));
         } catch (error) { alert(error.response?.data?.error || 'Could not record vote'); }
     };
     const deletePost = async (postId, isChannelPost) => {
         if (!window.confirm('Delete this post?')) return;
-        try { await axios.delete('/api/social/posts/' + postId, { headers: authHeaders(token) }); isChannelPost ? setChannelPosts(p => p.filter(x => x.id !== postId)) : setPosts(p => p.filter(x => x.id !== postId)); } catch { alert('Delete failed'); }
+        try { await axios.delete('/api/social/posts/' + postId, { headers: authHeaders(token) }); isChannelPost ? setChannelPosts(p => p.filter(x => x.id !== postId)) : updateCachedFeed(activeTab, p => p.filter(x => x.id !== postId)); } catch { alert('Delete failed'); }
     };
 
     const openProfile = (userId) => setProfileView({ userId });

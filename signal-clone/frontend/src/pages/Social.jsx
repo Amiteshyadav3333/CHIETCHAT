@@ -25,6 +25,7 @@ import { isSocialFeedCacheFresh, loadSocialFeedCache, saveSocialFeedCache } from
 
 const authHeaders = (token) => ({ Authorization: `Bearer ${token}` });
 const feedCacheKey = (userId, feed) => `${userId || 'guest'}:${feed}`;
+const countThreadComments = comments => comments.reduce((count, item) => count + 1 + countThreadComments(item.replies || []), 0);
 
 const readVideoDuration = file => new Promise(resolve => {
     const video = document.createElement('video');
@@ -289,6 +290,8 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
     const mutedVideos = currentUser?.uiPreferences?.socialMutedVideos ?? localStorage.getItem('social_muted_videos') !== '0';
     const [commentsOpen, setCommentsOpen] = useState(false);
     const [comments, setComments] = useState([]);
+    const [commentsLoading, setCommentsLoading] = useState(false);
+    const [commentSort, setCommentSort] = useState('best');
     const [comment, setComment] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [showRetweetMenu, setShowRetweetMenu] = useState(false);
@@ -311,7 +314,9 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
     };
 
     const fetchComments = async () => {
-        try { const res = await axios.get('/api/social/posts/' + post.id + '/comments'); setComments(res.data); } catch { }
+        setCommentsLoading(true);
+        try { const res = await axios.get('/api/social/posts/' + post.id + '/comments'); setComments(Array.isArray(res.data) ? res.data : []); } catch { }
+        finally { setCommentsLoading(false); }
     };
     const submitComment = async (e) => {
         e.preventDefault();
@@ -323,7 +328,16 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
         } catch { } finally { setSubmitting(false); }
     };
     const handleReplyToComment = async (commentId, content) => {
-        try { await axios.post('/api/social/comments/' + commentId + '/replies', { content }, { headers: authHeaders(token) }); fetchComments(); } catch { }
+        await axios.post('/api/social/comments/' + commentId + '/replies', { content }, { headers: authHeaders(token) });
+        await fetchComments();
+    };
+    const handleCommentVote = async (commentId, vote) => {
+        const { data } = await axios.post(`/api/social/comments/${commentId}/vote`, { vote }, { headers: authHeaders(token) });
+        const updateVotes = items => items.map(item => item.id === commentId
+            ? { ...item, ...data }
+            : { ...item, replies: updateVotes(item.replies || []) });
+        setComments(current => updateVotes(current));
+        return data;
     };
     const handleDeleteComment = async (commentId) => {
         if (!window.confirm('Delete this comment?')) return;
@@ -357,6 +371,10 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
     const postMediaType = displayPost.mediaType || post.mediaType;
     const postMediaItems = displayPost.mediaItems?.length ? displayPost.mediaItems : (postMedia ? [{ url: postMedia, type: postMediaType }] : []);
     const postDate = displayPost.createdAt || post.createdAt;
+    const visibleCommentCount = commentsOpen ? countThreadComments(comments) : (post.commentsCount || 0);
+    const sortedComments = [...comments].sort((first, second) => commentSort === 'best'
+        ? (second.score || 0) - (first.score || 0) || new Date(second.createdAt) - new Date(first.createdAt)
+        : new Date(second.createdAt) - new Date(first.createdAt));
 
     return (
         <article
@@ -444,7 +462,7 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
 
                 {/* Action bar */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, marginLeft: -8 }}>
-                    <TweetAction icon={<ChatBubbleOvalLeftIcon style={{ width: 20, height: 20 }} />} count={comments.length || post.commentsCount} onClick={() => { setCommentsOpen(p => !p); if (!commentsOpen) fetchComments(); }} hoverColor="#ff6a3d" hoverBg="rgba(29,155,240,0.1)" />
+                    <TweetAction icon={<ChatBubbleOvalLeftIcon style={{ width: 20, height: 20 }} />} count={visibleCommentCount} onClick={() => { setCommentsOpen(p => !p); if (!commentsOpen) fetchComments(); }} hoverColor="#ff6a3d" hoverBg="rgba(29,155,240,0.1)" />
                     <div ref={rtMenuRef} style={{ position: 'relative' }}>
                         <TweetAction
                             icon={post.isRetweeted ? <RetweetSolidIcon style={{ width: 20, height: 20, color: '#00ba7c' }} /> : <ArrowPathRoundedSquareIcon style={{ width: 20, height: 20 }} />}
@@ -475,21 +493,39 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
                 </div>
 
                 {commentsOpen && (
-                    <div style={{ marginTop: 12, borderTop: '1px solid #27333b', paddingTop: 12 }}>
-                        {comments.length === 0 && <p style={{ fontSize: 14, textAlign: 'center', padding: '12px 0', color: '#71767b' }}>No replies yet.</p>}
-                        {comments.map(item => (
-                            <NestedComment key={item.id} comment={item} onReply={handleReplyToComment} onEdit={handleEditComment} onDelete={handleDeleteComment} currentUser={currentUser} onProfileClick={onOpenProfile} />
-                        ))}
-                        <form onSubmit={submitComment} style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
-                            <img src={currentUser && currentUser.avatar} alt="" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                            <input value={comment} onChange={e => setComment(e.target.value)} placeholder="Post your reply"
-                                style={{ flex: 1, borderRadius: 9999, padding: '8px 16px', fontSize: 14, outline: 'none', background: '#202327', border: '1px solid #333639', color: '#e7e9ea' }} />
-                            <button type="submit" disabled={submitting || !comment.trim()}
-                                style={{ padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, background: '#ff6a3d', color: '#fff', border: 'none', cursor: comment.trim() ? 'pointer' : 'not-allowed', opacity: comment.trim() ? 1 : 0.5 }}>
-                                Reply
+                    <section className="mt-4 overflow-hidden rounded-2xl border border-[#27333b] bg-[#0c1014]">
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#27333b] px-4 py-3">
+                            <div>
+                                <h3 className="text-sm font-extrabold text-[#e7e9ea]">Discussion</h3>
+                                <p className="mt-0.5 text-[11px] text-[#71767b]">{visibleCommentCount} comments · Join the conversation</p>
+                            </div>
+                            <div className="flex items-center rounded-full border border-white/[0.07] bg-black/30 p-1" aria-label="Sort comments">
+                                {[['best', 'Top'], ['new', 'New']].map(([value, label]) => (
+                                    <button key={value} type="button" onClick={() => setCommentSort(value)} className={`rounded-full px-3 py-1.5 text-[11px] font-bold transition ${commentSort === value ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}>
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <form onSubmit={submitComment} className="flex items-center gap-2.5 border-b border-[#27333b] px-3 py-3 sm:px-4">
+                            <img src={currentUser?.avatar || '/default-avatar.png'} alt="" className="h-9 w-9 shrink-0 rounded-full border border-white/10 object-cover" />
+                            <input value={comment} onChange={event => setComment(event.target.value)} maxLength={1000} placeholder="Add a thoughtful comment…"
+                                className="min-w-0 flex-1 rounded-xl border border-white/[0.07] bg-[#151a20] px-3.5 py-2.5 text-sm text-white outline-none placeholder:text-gray-600 focus:border-orange-400/50" />
+                            <button type="submit" disabled={submitting || !comment.trim()} className="shrink-0 rounded-xl bg-orange-500 px-3.5 py-2.5 text-xs font-extrabold text-white transition hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-40">
+                                {submitting ? 'Posting…' : 'Comment'}
                             </button>
                         </form>
-                    </div>
+
+                        <div className="space-y-4 px-3 py-4 sm:px-4">
+                            {commentsLoading && !comments.length && <div className="space-y-3" aria-label="Loading comments"><div className="h-16 animate-pulse rounded-2xl bg-white/[0.04]" /><div className="h-16 animate-pulse rounded-2xl bg-white/[0.04]" /></div>}
+                            {!commentsLoading && !comments.length && <div className="py-5 text-center"><p className="text-sm font-semibold text-gray-300">Start the discussion</p><p className="mt-1 text-xs text-gray-500">Be the first to share a helpful thought.</p></div>}
+                            {sortedComments.map(item => (
+                                <NestedComment key={item.id} comment={item} onReply={handleReplyToComment} onEdit={handleEditComment}
+                                    onDelete={handleDeleteComment} onVote={handleCommentVote} currentUser={currentUser} onProfileClick={onOpenProfile} />
+                            ))}
+                        </div>
+                    </section>
                 )}
             </div>
             {zoomedMedia && <FullscreenMediaModal src={zoomedMedia.src} type={zoomedMedia.type} onClose={() => setZoomedMedia(null)} />}

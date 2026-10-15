@@ -16,7 +16,7 @@ from models import (
     db, User, PendingRegistration, Chat, ChatParticipant, GroupJoinRequest,
     Contact, Message, Status, StatusView, StatusReaction, Block, Reel,
     ReelLike, ReelComment, Follow, Notification, SocialPost, SocialPostLike,
-    SocialPostComment, CommentReply, Channel, ChannelMembership, ActiveSession,
+    SocialPostComment, SocialPostCommentVote, CommentReply, Channel, ChannelMembership, ActiveSession,
     UserReport, StarredMessage, PollVote, ProfileAudienceAvatar, BusinessProfile,
     CatalogProduct, BusinessAutomation, BusinessProfileView, BusinessAutoReplyLog,
     PaymentOrder, PushSubscription, UploadAsset, ScheduledMessage, CallRecord,
@@ -895,7 +895,9 @@ def delete_user_account_data(user):
 
     own_comment_ids = [row.id for row in SocialPostComment.query.filter_by(user_id=user_id).all()]
     if own_comment_ids:
+        SocialPostCommentVote.query.filter(SocialPostCommentVote.comment_id.in_(own_comment_ids)).delete(synchronize_session=False)
         CommentReply.query.filter(CommentReply.comment_id.in_(own_comment_ids)).delete(synchronize_session=False)
+    SocialPostCommentVote.query.filter_by(user_id=user_id).delete(synchronize_session=False)
     CommentReply.query.filter_by(user_id=user_id).delete(synchronize_session=False)
     SocialPostComment.query.filter_by(user_id=user_id).delete(synchronize_session=False)
 

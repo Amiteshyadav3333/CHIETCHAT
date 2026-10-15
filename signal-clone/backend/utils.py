@@ -290,7 +290,7 @@ def add_missing_columns(inspector, table_name, columns):
 # Bump this marker whenever models gain columns or tables. Production runs
 # ensure_database_schema() in the pre-deploy step and skips versions it has
 # already applied.
-SCHEMA_VERSION = '20261015_29_social_post_formats'
+SCHEMA_VERSION = '20261015_30_social_comment_votes'
 
 def ensure_runtime_compat_schema():
     """Repair columns required by the currently deployed models.
@@ -326,6 +326,27 @@ def ensure_runtime_compat_schema():
             'FOREIGN KEY(post_id) REFERENCES social_post(id), '
             'FOREIGN KEY(user_id) REFERENCES user(id))'
         ))
+    if {'social_post_comment', 'user'}.issubset(set(inspector.get_table_names())):
+        if db.engine.dialect.name == 'postgresql':
+            db.session.execute(text(
+                'CREATE TABLE IF NOT EXISTS social_post_comment_vote ('
+                'id SERIAL PRIMARY KEY, '
+                'comment_id INTEGER NOT NULL REFERENCES social_post_comment(id) ON DELETE CASCADE, '
+                'user_id INTEGER NOT NULL REFERENCES "user"(id) ON DELETE CASCADE, '
+                'value SMALLINT NOT NULL CHECK (value IN (-1, 1)), '
+                'created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, '
+                'CONSTRAINT uq_social_comment_user_vote UNIQUE (comment_id, user_id))'
+            ))
+        else:
+            db.session.execute(text(
+                'CREATE TABLE IF NOT EXISTS social_post_comment_vote ('
+                'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+                'comment_id INTEGER NOT NULL REFERENCES social_post_comment(id) ON DELETE CASCADE, '
+                'user_id INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE, '
+                'value INTEGER NOT NULL CHECK (value IN (-1, 1)), '
+                'created_at DATETIME DEFAULT CURRENT_TIMESTAMP, '
+                'CONSTRAINT uq_social_comment_user_vote UNIQUE (comment_id, user_id))'
+            ))
     db.session.commit()
     add_missing_columns(inspector, 'user', {
         'phone_number_privacy': db.String(20),

@@ -4,11 +4,11 @@ import re
 import urllib.parse
 from collections import Counter
 from flask import Blueprint, current_app, jsonify, request
-from sqlalchemy import or_
+from sqlalchemy import case, func, or_
 from werkzeug.utils import secure_filename
 
 from models import (
-    db, User, Follow, Reel, SocialPost, SocialPostLike, SocialPostShare, SocialPostComment, SocialPollVote,
+    db, User, Follow, Reel, SocialPost, SocialPostLike, SocialPostShare, SocialPostComment, SocialPostCommentVote, SocialPollVote,
     Channel, ChannelMembership, CommentReply, Status, UserReport
 )
 from utils import (
@@ -27,6 +27,7 @@ COMMENT_DEFAULT_LIMIT = 50
 COMMENT_MAX_LIMIT = 100
 MAX_POST_CAPTION_LENGTH = 1000
 MAX_COMMENT_LENGTH = 1000
+MAX_COMMENT_DEPTH = 8
 MAX_CHANNEL_QUERY_LENGTH = 100
 FREE_DAILY_POST_LIMIT = 3
 MAX_POST_IMAGES = 4
@@ -127,18 +128,66 @@ def serialize_post(post, current_user_id):
         ,"earningsPaise": post.earnings_paise or 0 if post.user_id == current_user_id else None
     }
 
-def serialize_comment(comment, current_user_id):
+def serialize_comment(comment, current_user_id, vote_stats=None):
+    vote_stats = vote_stats or {}
+    comment_vote = vote_stats.get(comment.id, {'upvotes': 0, 'downvotes': 0, 'userVote': 0, 'score': 0})
     replies = comment.replies
-    sorted_replies = sorted(replies, key=lambda r: (not bool(r.user.is_premium), r.created_at))
+    sorted_replies = sorted(
+        replies,
+        key=lambda reply: (
+            vote_stats.get(reply.id, {}).get('score', 0),
+            bool(reply.user.is_premium),
+            reply.created_at,
+        ),
+        reverse=True,
+    )
     return {
         "id": comment.id,
         "content": comment.content,
         "createdAt": iso_utc(comment.created_at),
         "user": serialize_user(comment.user, viewer_id=current_user_id),
         "parentId": comment.parent_id,
-        "replies": [serialize_comment(r, current_user_id) for r in sorted_replies]
-        ,"isBoosted": bool(comment.user.is_premium)
+        "replies": [serialize_comment(reply, current_user_id, vote_stats) for reply in sorted_replies],
+        "isBoosted": bool(comment.user.is_premium),
+        **comment_vote,
     }
+
+
+def comment_depth(comment):
+    depth = 0
+    while comment.parent_id is not None:
+        depth += 1
+        comment = comment.parent
+    return depth
+
+
+def comment_vote_stats(comments, current_user_id):
+    comment_ids = []
+    pending = list(comments)
+    while pending:
+        comment = pending.pop()
+        comment_ids.append(comment.id)
+        pending.extend(comment.replies)
+    if not comment_ids:
+        return {}
+    rows = db.session.query(
+        SocialPostCommentVote.comment_id.label('comment_id'),
+        func.sum(case((SocialPostCommentVote.value == 1, 1), else_=0)).label('upvotes'),
+        func.sum(case((SocialPostCommentVote.value == -1, 1), else_=0)).label('downvotes'),
+        func.max(case((SocialPostCommentVote.user_id == current_user_id, SocialPostCommentVote.value), else_=None)).label('user_vote'),
+    ).filter(SocialPostCommentVote.comment_id.in_(comment_ids)).group_by(SocialPostCommentVote.comment_id).all()
+    result = {
+        comment_id: {
+            'upvotes': int(upvotes or 0),
+            'downvotes': int(downvotes or 0),
+            'userVote': int(user_vote or 0),
+            'score': int(upvotes or 0) - int(downvotes or 0),
+        }
+        for comment_id, upvotes, downvotes, user_vote in rows
+    }
+    for comment_id in comment_ids:
+        result.setdefault(comment_id, {'upvotes': 0, 'downvotes': 0, 'userVote': 0, 'score': 0})
+    return result
 
 
 def serialize_reply(reply, current_user_id=None):
@@ -509,9 +558,11 @@ def get_social_post_comments(post_id):
         return jsonify({"error": "Unauthorized"}), 401
     db.get_or_404(SocialPost, post_id)
     comments = SocialPostComment.query.filter_by(post_id=post_id, parent_id=None).order_by(
-        SocialPostComment.created_at.asc()
+        SocialPostComment.created_at.desc()
     ).limit(bounded_limit(COMMENT_DEFAULT_LIMIT, COMMENT_MAX_LIMIT)).all()
-    return jsonify([serialize_comment(c, user_id) for c in comments])
+    votes = comment_vote_stats(comments, user_id)
+    comments.sort(key=lambda item: (votes[item.id]['score'], item.created_at), reverse=True)
+    return jsonify([serialize_comment(item, user_id, votes) for item in comments])
 
 @social_bp.route('/api/social/posts/<int:post_id>/comments', methods=['POST'])
 def create_social_post_comment(post_id):
@@ -530,14 +581,16 @@ def create_social_post_comment(post_id):
         return jsonify({"error": f"Comment must be {MAX_COMMENT_LENGTH} characters or less"}), 400
     parent_id = data.get('parentId')
     if parent_id is not None:
-        parent = SocialPostComment.query.filter_by(id=parent_id, post_id=post_id, parent_id=None).first()
+        parent = SocialPostComment.query.filter_by(id=parent_id, post_id=post_id).first()
         if not parent:
             return jsonify({"error": "Invalid parent comment"}), 400
+        if comment_depth(parent) >= MAX_COMMENT_DEPTH:
+            return jsonify({"error": f"Replies can be nested up to {MAX_COMMENT_DEPTH} levels"}), 400
     comment = SocialPostComment(post_id=post_id, user_id=user_id, content=content, parent_id=parent_id)
     db.session.add(comment)
     db.session.commit()
     create_notification(post.user_id, user_id, 'comment', f"commented: {content[:50]}", post_id)
-    return jsonify(serialize_comment(comment, user_id)), 201
+    return jsonify(serialize_comment(comment, user_id, comment_vote_stats([comment], user_id))), 201
 
 # ─── COMMENT REPLIES ──────────────────────────────────────────────────────────
 
@@ -555,8 +608,8 @@ def reply_to_comment(comment_id):
         return jsonify({"error": "Reply cannot be empty"}), 400
     if len(content) > MAX_COMMENT_LENGTH:
         return jsonify({"error": f"Reply must be {MAX_COMMENT_LENGTH} characters or less"}), 400
-    if comment.parent_id is not None:
-        return jsonify({"error": "Replies can only be added to top-level comments"}), 400
+    if comment_depth(comment) >= MAX_COMMENT_DEPTH:
+        return jsonify({"error": f"Replies can be nested up to {MAX_COMMENT_DEPTH} levels"}), 400
     reply = SocialPostComment(
         post_id=comment.post_id,
         user_id=user_id,
@@ -566,7 +619,29 @@ def reply_to_comment(comment_id):
     db.session.add(reply)
     db.session.commit()
     create_notification(comment.user_id, user_id, 'comment_reply', f"replied: {content[:50]}", comment.post_id)
-    return jsonify(serialize_comment(reply, user_id)), 201
+    return jsonify(serialize_comment(reply, user_id, comment_vote_stats([reply], user_id))), 201
+
+
+@social_bp.route('/api/social/comments/<int:comment_id>/vote', methods=['POST'])
+def vote_social_comment(comment_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    comment = SocialPostComment.query.filter_by(id=comment_id).with_for_update().first_or_404()
+    requested_vote = get_json_data().get('vote')
+    if type(requested_vote) is not int or requested_vote not in (-1, 0, 1):
+        return jsonify({"error": "Vote must be -1, 0, or 1"}), 400
+
+    existing_vote = SocialPostCommentVote.query.filter_by(comment_id=comment_id, user_id=user_id).first()
+    if requested_vote == 0 or (existing_vote and existing_vote.value == requested_vote):
+        if existing_vote:
+            db.session.delete(existing_vote)
+    elif existing_vote:
+        existing_vote.value = requested_vote
+    else:
+        db.session.add(SocialPostCommentVote(comment_id=comment_id, user_id=user_id, value=requested_vote))
+    db.session.commit()
+    return jsonify(comment_vote_stats([comment], user_id)[comment_id])
 
 @social_bp.route('/api/social/comments/<int:comment_id>', methods=['DELETE'])
 def delete_social_comment(comment_id):
@@ -599,7 +674,7 @@ def edit_social_comment(comment_id):
         return jsonify({"error": f"Comment must be {MAX_COMMENT_LENGTH} characters or less"}), 400
     comment.content = content
     db.session.commit()
-    return jsonify(serialize_comment(comment, user_id))
+    return jsonify(serialize_comment(comment, user_id, comment_vote_stats([comment], user_id)))
 
 
 

@@ -522,7 +522,19 @@ class SocialPostComment(db.Model):
     created_at = db.Column(db.DateTime, default=utc_now)
     user = db.relationship('User')
     replies = db.relationship('SocialPostComment', backref=db.backref('parent', remote_side=[id]), lazy=True, cascade='all, delete-orphan')
+    votes = db.relationship('SocialPostCommentVote', backref='comment', lazy=True, cascade='all, delete-orphan')
     legacy_replies = db.relationship('CommentReply', backref='comment', lazy=True, cascade='all, delete-orphan')
+
+class SocialPostCommentVote(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    comment_id = db.Column(db.Integer, db.ForeignKey('social_post_comment.id', ondelete='CASCADE'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False)
+    value = db.Column(db.SmallInteger, nullable=False)  # -1 | 1
+    created_at = db.Column(db.DateTime, default=utc_now)
+    __table_args__ = (
+        db.UniqueConstraint('comment_id', 'user_id', name='uq_social_comment_user_vote'),
+        db.CheckConstraint('value IN (-1, 1)', name='ck_social_comment_vote_value'),
+    )
 
 class CommentReply(db.Model):
     id = db.Column(db.Integer, primary_key=True)

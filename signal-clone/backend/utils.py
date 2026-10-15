@@ -349,6 +349,7 @@ def ensure_runtime_compat_schema():
             ))
     db.session.commit()
     add_missing_columns(inspector, 'user', {
+        'is_profile_private': db.Boolean(),
         'phone_number_privacy': db.String(20),
         'profile_photo_exceptions': db.Text(),
         'story_privacy': db.String(20),
@@ -363,6 +364,29 @@ def ensure_runtime_compat_schema():
         'college': db.String(150),
         'location': db.String(150),
     })
+    inspector = inspect(db.engine)
+    if 'user' in inspector.get_table_names():
+        if db.engine.dialect.name == 'postgresql':
+            db.session.execute(text(
+                'CREATE TABLE IF NOT EXISTS profile_follow_request ('
+                'id SERIAL PRIMARY KEY, '
+                'requester_id INTEGER NOT NULL REFERENCES "user"(id) ON DELETE CASCADE, '
+                'profile_owner_id INTEGER NOT NULL REFERENCES "user"(id) ON DELETE CASCADE, '
+                'created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, '
+                'CONSTRAINT uq_profile_follow_request UNIQUE (requester_id, profile_owner_id))'
+            ))
+        else:
+            db.session.execute(text(
+                'CREATE TABLE IF NOT EXISTS profile_follow_request ('
+                'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+                'requester_id INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE, '
+                'profile_owner_id INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE, '
+                'created_at DATETIME DEFAULT CURRENT_TIMESTAMP, '
+                'CONSTRAINT uq_profile_follow_request UNIQUE (requester_id, profile_owner_id))'
+            ))
+        db.session.execute(text('CREATE INDEX IF NOT EXISTS ix_profile_follow_request_requester_id ON profile_follow_request (requester_id)'))
+        db.session.execute(text('CREATE INDEX IF NOT EXISTS ix_profile_follow_request_profile_owner_id ON profile_follow_request (profile_owner_id)'))
+        db.session.commit()
     inspector = inspect(db.engine)
     add_missing_columns(inspector, 'pending_registration', {
         'referral_code': db.String(16),

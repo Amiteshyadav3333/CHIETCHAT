@@ -201,7 +201,7 @@ const AdminDashboard = () => {
             <header className="admin-header">
                 <div className="admin-header-left">
                     <h1>⚙️ Admin Panel</h1>
-                    <p>Saskat AI - Advertisement Management</p>
+                    <p>Ducor AI - Advertisement Management</p>
                 </div>
                 <div className="admin-header-right">
                     <span className="admin-user">👤 {adminUser.name || adminUser.email}</span>

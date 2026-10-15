@@ -1191,9 +1191,8 @@ export const Home = () => {
         nav.setShowSettings(true);
     };
 
-    const handleSaskatAgentCommand = async (spokenCommand) => {
+    const handleDucorAgentCommand = async (spokenCommand) => {
         const command = String(spokenCommand || '').toLowerCase().replace(/[.,!?]/g, ' ').replace(/\s+/g, ' ').trim();
-        const keepAgentOpen = () => nav.setShowSaskatAI(true);
         const clearCurrentView = () => {
             setShowNotifications(false);
             setShowSearchModal(false);
@@ -1203,14 +1202,13 @@ export const Home = () => {
             nav.setShowSocial(false);
             nav.setShowAiChat(false);
             nav.setShowSmartSpace(false);
-            nav.setShowSaskatAI(true);
             setActiveChat(null);
             localStorage.removeItem('activeChatId');
         };
 
-        if (/^(close|close agent|stop|band karo|agent band karo|saskat band karo)$/.test(command)) {
+        if (/^(close|close agent|stop|band karo|agent band karo|ducor band karo|saskat band karo)$/.test(command)) {
             nav.setShowSaskatAI(false);
-            return 'Saskat band ho raha hai.';
+            return 'Ducor band ho raha hai.';
         }
         if (/\b(reels?|short videos?)\b/.test(command) || command.includes('रील')) {
             clearCurrentView(); nav.setShowReels(true); nav.setMobileHomeTab('chats');
@@ -1229,14 +1227,13 @@ export const Home = () => {
                 const targetUser = response.data?.user || response.data;
                 if (!targetUser?.id) return response.data?.error || 'Us naam se user nahi mila.';
                 await startChat(targetUser);
-                keepAgentOpen();
                 return `${targetUser.username || chatWithMatch[1]} ke saath chat khol di.`;
             } catch (error) {
                 return error.response?.data?.error || 'User search nahi ho saki.';
             }
         }
         if (/\b(new chat|start chat|find a person|naya chat)\b/.test(command) || command.includes('नया चैट')) {
-            keepAgentOpen(); openNewChat();
+            openNewChat();
             return 'New chat search khol diya.';
         }
         if (/\b(chats?|messages?|inbox)\b/.test(command) || command.includes('चैट')) {
@@ -1259,11 +1256,10 @@ export const Home = () => {
             const query = command.replace(/^(search|find|khojo|dhundo|ढूंढ)( karo)?\s*/, '').trim();
             setSearchQuery(query);
             setShowSearchModal(true);
-            keepAgentOpen();
             return query ? `${query} ke liye search khol diya.` : 'Search khol diya. Ab app mein search kar sakte hain.';
         }
         if (/\b(edit avatar|change avatar|profile photo|avatar badlo)\b/.test(command)) {
-            setSettingsInitialScreen('profile'); nav.setShowSettings(true); keepAgentOpen();
+            setSettingsInitialScreen('profile'); nav.setShowSettings(true);
             return 'Profile settings khol diye. Avatar controls wahan milenge.';
         }
         if (/\b(profile|my profile|view profile|meri profile)\b/.test(command) || command.includes('प्रोफाइल')) {
@@ -1272,23 +1268,22 @@ export const Home = () => {
         }
         if (/\b(drafts?|draft dikhao)\b/.test(command)) {
             window.dispatchEvent(new CustomEvent('ducor-open-drafts'));
-            keepAgentOpen();
             return 'Aapke saved drafts khol diye.';
         }
         if (/\b(earn|earnings|earning|kamai)\b/.test(command)) {
-            handleAccountMenuAction('earn'); keepAgentOpen();
+            handleAccountMenuAction('earn');
             return 'Creator earning options khol diye.';
         }
         if (/\b(premium|upgrade)\b/.test(command)) {
-            setSettingsInitialScreen('premium'); nav.setShowSettings(true); keepAgentOpen();
+            setSettingsInitialScreen('premium'); nav.setShowSettings(true);
             return 'Premium settings khol diye.';
         }
         if (/\b(display mode|theme|dark mode|light mode|display)\b/.test(command)) {
-            setSettingsInitialScreen('chats'); nav.setShowSettings(true); keepAgentOpen();
+            setSettingsInitialScreen('chats'); nav.setShowSettings(true);
             return 'Display settings khol diye.';
         }
         if (/\b(settings|app settings|setting)\b/.test(command) || command.includes('सेटिंग')) {
-            setSettingsInitialScreen('settings'); nav.setShowSettings(true); keepAgentOpen();
+            setSettingsInitialScreen('settings'); nav.setShowSettings(true);
             return 'App settings khol di.';
         }
 
@@ -1762,7 +1757,7 @@ export const Home = () => {
                 onChat={openChats}
                 onReels={() => openTopBarFeature('reels')}
                 onPodlive={() => openTopBarFeature('podlive')}
-                onAgent={() => nav.setShowSaskatAI(true)}
+                onAgentCommand={handleDucorAgentCommand}
                 onSelectSearchResult={handleGlobalSearchResult}
                 onMessageUser={startChat}
                 unreadCount={unreadCount}
@@ -2065,7 +2060,7 @@ export const Home = () => {
                 setPodliveInvite={nav.setPodliveInvite}
                 receivePodliveInvite={nav.receivePodliveInvite}
                 updatePodliveLiveCount={nav.updatePodliveLiveCount}
-                onAgentCommand={handleSaskatAgentCommand}
+                onAgentCommand={handleDucorAgentCommand}
                 navCollapsed={nav.navCollapsed}
                 initialReel={globalSearchReel}
                 onInitialReelConsumed={() => setGlobalSearchReel(null)}

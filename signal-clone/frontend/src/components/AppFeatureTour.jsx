@@ -84,7 +84,7 @@ export const TOUR_STEPS = [
     },
     {
         id: 'ai',
-        title: '5. Saskat AI Copilot',
+        title: '5. Ducor AI Copilot',
         subtitle: 'Your 24/7 intelligent study tutor, coding mentor & creator',
         badge: 'INTELLIGENCE SUITE',
         icon: SparklesIcon,
@@ -95,7 +95,7 @@ export const TOUR_STEPS = [
             '💻 Code Mentor: Debug scripts, learn algorithms, and prep for technical placement interviews.',
             '🎨 AI Wallpapers & Art: Generate customized imagery and personalized chat backgrounds.'
         ],
-        proTip: 'Type "@saskat summarize" inside group chats to get instant lecture note summaries.',
+        proTip: 'Type "@ducor summarize" inside group chats to get instant lecture note summaries.',
         buttonText: 'Got it! Next →'
     },
     {

@@ -1314,7 +1314,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
 
                                     <div className="rounded-2xl border border-white/5 bg-[#182229] p-4">
                                         <h5 className="text-sm font-bold text-white flex items-center gap-2">
-                                            <span>✨ 5. Saskat AI Copilot</span>
+                                            <span>✨ 5. Ducor AI Copilot</span>
                                         </h5>
                                         <p className="mt-1.5 text-xs text-gray-300 leading-relaxed">
                                             <strong>Capabilities:</strong> 24/7 intelligent study tutor, coding mentor, and creative AI generator for essays, notes, and wallpapers.

@@ -10,7 +10,7 @@ const accountActions = [
     ['settings', 'App settings', Cog6ToothIcon],
 ];
 
-export const AppTopBar = ({ user, token, chats, onMenu, onCreate, onNotifications, onProfile, onChat, onReels, onPodlive, onAgent, onSelectSearchResult, onMessageUser, unreadCount }) => {
+export const AppTopBar = ({ user, token, chats, onMenu, onCreate, onNotifications, onProfile, onChat, onReels, onPodlive, onAgentCommand, onSelectSearchResult, onMessageUser, unreadCount }) => {
     const [accountMenuOpen, setAccountMenuOpen] = React.useState(false);
     const [draftsOpen, setDraftsOpen] = React.useState(false);
     const [draftText, setDraftText] = React.useState('');
@@ -28,7 +28,7 @@ export const AppTopBar = ({ user, token, chats, onMenu, onCreate, onNotification
         <button type="button" onClick={onMenu} className="reddit-topbar-icon rounded-xl p-1.5" aria-label="Open app functions" title="Open app functions">
             <img src="/lion-logo.png" alt="Ducor app functions" className="h-9 w-9 rounded-xl object-cover" />
         </button>
-        <GlobalSearchBar token={token} chats={chats} onSelectResult={onSelectSearchResult} onMessageUser={onMessageUser} onOpenAgent={onAgent} />
+        <GlobalSearchBar token={token} chats={chats} onSelectResult={onSelectSearchResult} onMessageUser={onMessageUser} onAgentCommand={onAgentCommand} />
         <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
             <button type="button" onClick={onCreate} className="reddit-topbar-action flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold"><PlusIcon className="h-5 w-5" /><span className="hidden lg:inline">Publish</span></button>
             <button type="button" onClick={onChat} className="reddit-topbar-icon flex items-center gap-2 rounded-full px-2.5 py-2 text-sm font-semibold" aria-label="Open chats" title="Open chats"><ChatBubbleLeftRightIcon className="h-5 w-5" /><span className="hidden 2xl:inline">Chat</span></button>

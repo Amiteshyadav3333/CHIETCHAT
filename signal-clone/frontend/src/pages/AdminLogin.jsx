@@ -45,7 +45,7 @@ const AdminLogin = () => {
                 <div className="admin-login-header">
                     <div className="admin-logo">⚙️</div>
                     <h1>Admin Panel</h1>
-                    <p>Saskat AI - Advertisement Management</p>
+                    <p>Ducor AI - Advertisement Management</p>
                 </div>
 
                 {error && (

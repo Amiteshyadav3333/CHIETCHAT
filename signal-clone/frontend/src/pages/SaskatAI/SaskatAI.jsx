@@ -6,7 +6,7 @@ const SaskatAI = ({ onClose, onCommand }) => {
     const [working, setWorking] = useState(false);
     const [supported, setSupported] = useState(true);
     const [transcript, setTranscript] = useState('');
-    const [reply, setReply] = useState('Main Saskat hoon. App ko voice se control karne ke liye mic dabayein.');
+    const [reply, setReply] = useState('Main Ducor hoon. App ko voice se control karne ke liye mic dabayein.');
     const recognitionRef = useRef(null);
     const requestRef = useRef(0);
 
@@ -100,7 +100,7 @@ const SaskatAI = ({ onClose, onCommand }) => {
                 <header className="flex items-center justify-between border-b border-white/10 px-5 py-4 sm:px-7">
                     <div className="flex items-center gap-3">
                         <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-emerald-300/25 to-cyan-400/10 text-emerald-200"><MicrophoneIcon className="h-6 w-6" /></div>
-                        <div><h1 id="saskat-agent-title" className="font-bold">Saskat App Agent</h1><p className="text-xs text-emerald-200/70">Voice control · signed in as you</p></div>
+                        <div><h1 id="saskat-agent-title" className="font-bold">Ducor App Agent</h1><p className="text-xs text-emerald-200/70">Voice control · signed in as you</p></div>
                     </div>
                     <button type="button" onClick={onClose} className="rounded-full p-2 text-gray-300 hover:bg-white/10" aria-label="Close agent"><XMarkIcon className="h-5 w-5" /></button>
                 </header>
@@ -117,7 +117,7 @@ const SaskatAI = ({ onClose, onCommand }) => {
                         <p className="mt-1 text-sm text-gray-200">{transcript || 'Abhi koi command nahi'}</p>
                     </div>
                     <div className="mt-3 min-h-16 w-full rounded-2xl border border-emerald-300/10 bg-emerald-300/[.04] p-4 text-left">
-                        <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-emerald-200/60"><SpeakerWaveIcon className="h-3.5 w-3.5" /> Saskat</p>
+                        <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-emerald-200/60"><SpeakerWaveIcon className="h-3.5 w-3.5" /> Ducor</p>
                         <p className="mt-1 text-sm text-gray-200">{reply}</p>
                     </div>
                     {!supported && <p className="mt-3 text-xs text-amber-200">Chrome ya Edge mein voice commands chalayen.</p>}

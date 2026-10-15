@@ -5,7 +5,7 @@ const SaskatAINav = () => {
     return (
         <Link to="/saskat-ai" className="nav-item saskat-ai-nav">
             <span className="nav-icon">🤖</span>
-            <span className="nav-label">Saskat AI</span>
+            <span className="nav-label">Ducor AI</span>
         </Link>
     );
 };

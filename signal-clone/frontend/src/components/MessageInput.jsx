@@ -1029,8 +1029,8 @@ const MessageInput = ({
                             type="button"
                             onClick={() => { setShowAttachMenu(false); setShowEmoji(false); onOpenAiChat?.(); }}
                             className="flex h-10 w-10 items-center justify-center rounded-full text-violet-300 transition-all hover:bg-violet-400/10 hover:text-violet-200 active:scale-90"
-                            title="Open AI companion"
-                            aria-label="Open AI companion"
+                            title="Open Aria AI"
+                            aria-label="Open Aria AI chat"
                         >
                             <SparklesIcon className="h-5 w-5" />
                         </button>

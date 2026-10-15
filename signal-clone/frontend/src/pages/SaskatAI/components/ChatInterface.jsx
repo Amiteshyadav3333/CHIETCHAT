@@ -23,7 +23,7 @@ const ChatInterface = ({ messages, onSendMessage, isLoading, userPhoto }) => {
                 {messages.length === 0 ? (
                     <div className="empty-state">
                         <div className="empty-icon">🤖</div>
-                        <h2>Welcome to Saskat AI</h2>
+                        <h2>Welcome to Ducor AI</h2>
                         <p>Ask me anything - I can help with questions, generate images, fill forms, and more!</p>
                         <div className="quick-prompts">
                             <button onClick={() => onSendMessage('What is AI?')}>What is AI?</button>
@@ -81,7 +81,7 @@ const ChatInterface = ({ messages, onSendMessage, isLoading, userPhoto }) => {
                         type="text"
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
-                        placeholder="Ask Saskat AI anything..."
+                        placeholder="Ask Ducor AI anything..."
                         disabled={isLoading}
                         className="chat-input"
                     />

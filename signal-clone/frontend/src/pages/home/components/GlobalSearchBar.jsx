@@ -23,13 +23,16 @@ const SearchRow = ({ icon: Icon, image, title, subtitle, onClick, action, action
     </div>
 );
 
-export const GlobalSearchBar = ({ token, chats = [], onSelectResult, onMessageUser, onOpenAgent }) => {
+export const GlobalSearchBar = ({ token, chats = [], onSelectResult, onMessageUser, onAgentCommand }) => {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState({ users: [], reels: [], posts: [], communities: [] });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [open, setOpen] = useState(false);
+    const [voiceBusy, setVoiceBusy] = useState(false);
+    const [voiceStatus, setVoiceStatus] = useState('');
     const inputRef = useRef(null);
+    const recognitionRef = useRef(null);
     const normalizedQuery = query.trim();
     const resultCount = useMemo(() => Object.values(results).reduce((total, list) => total + list.length, 0), [results]);
 
@@ -84,6 +87,68 @@ export const GlobalSearchBar = ({ token, chats = [], onSelectResult, onMessageUs
         inputRef.current?.blur();
     };
 
+    useEffect(() => () => recognitionRef.current?.abort(), []);
+
+    const startVoiceCommand = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (voiceBusy) {
+            recognitionRef.current?.stop();
+            return;
+        }
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            setOpen(true);
+            setVoiceStatus('Voice commands ke liye Chrome ya Edge use karein.');
+            return;
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'hi-IN';
+        recognition.continuous = false;
+        recognition.interimResults = true;
+        recognitionRef.current = recognition;
+        setOpen(true);
+        setVoiceBusy(true);
+        setVoiceStatus('Ducor sun raha hai…');
+        recognition.onresult = (resultEvent) => {
+            let finalText = '';
+            let interimText = '';
+            for (let index = resultEvent.resultIndex; index < resultEvent.results.length; index += 1) {
+                const segment = resultEvent.results[index][0]?.transcript || '';
+                if (resultEvent.results[index].isFinal) finalText += segment;
+                else interimText += segment;
+            }
+            if (interimText) setVoiceStatus(`Sun raha hai: ${interimText}`);
+            if (finalText.trim()) {
+                const command = finalText.trim();
+                setVoiceBusy(false);
+                setVoiceStatus(`Command: ${command} · kaam kar raha hai…`);
+                Promise.resolve(onAgentCommand?.(command))
+                    .then(reply => setVoiceStatus(typeof reply === 'string' ? reply : 'Command chala di.'))
+                    .catch(error => setVoiceStatus(error?.message || 'Command poori nahi ho saki.'));
+            }
+        };
+        recognition.onerror = (recognitionEvent) => {
+            setVoiceBusy(false);
+            if (recognitionEvent.error !== 'no-speech' && recognitionEvent.error !== 'aborted') {
+                setVoiceStatus('Mic permission allow karke phir try karein.');
+            } else if (recognitionEvent.error === 'no-speech') {
+                setVoiceStatus('Awaaz nahi mili. Mic dabakar phir boliye.');
+            }
+        };
+        recognition.onend = () => {
+            setVoiceBusy(false);
+            recognitionRef.current = null;
+        };
+        try { recognition.start(); }
+        catch {
+            setVoiceBusy(false);
+            recognitionRef.current = null;
+            setVoiceStatus('Mic start nahi ho saka. Dobara try karein.');
+        }
+    };
+
     return (
         <div className={`global-search relative mx-auto min-w-0 max-w-[620px] flex-1 ${open ? 'global-search-expanded' : 'global-search-collapsed'}`}>
             <form onClick={() => { if (!open) { setOpen(true); window.requestAnimationFrame(() => inputRef.current?.focus()); } }} onSubmit={event => { event.preventDefault(); setOpen(true); }} className={`reddit-topbar-search flex h-10 items-center gap-3 rounded-full px-4 ${open ? 'global-search-focused' : ''}`}>
@@ -106,13 +171,14 @@ export const GlobalSearchBar = ({ token, chats = [], onSelectResult, onMessageUs
                     autoComplete="off"
                     className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-gray-100 outline-none placeholder:text-gray-500 focus:ring-0"
                 />
-                <button type="button" onMouseDown={event => event.preventDefault()} onClick={event => { event.stopPropagation(); onOpenAgent?.(); }} className="global-search-agent shrink-0 rounded-full p-1.5 text-emerald-300 transition hover:bg-emerald-300/10 hover:text-emerald-200" aria-label="Open Saskat voice agent" title="Saskat voice agent">
+                <button type="button" onMouseDown={event => event.preventDefault()} onClick={startVoiceCommand} className={`global-search-agent shrink-0 rounded-full p-1.5 transition ${voiceBusy ? 'bg-rose-400/15 text-rose-300' : 'text-emerald-300 hover:bg-emerald-300/10 hover:text-emerald-200'}`} aria-label={voiceBusy ? 'Stop Ducor voice command' : 'Speak a Ducor voice command'} title={voiceBusy ? 'Stop listening' : 'Ducor voice command'}>
                     <MicrophoneIcon className="h-5 w-5" />
                 </button>
                 {loading ? <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white/20 border-t-[#ff6533]" aria-label="Searching" /> : normalizedQuery && <button type="button" onClick={() => { setQuery(''); setOpen(false); }} className="rounded-full p-1 text-gray-400 hover:bg-white/10 hover:text-white" aria-label="Clear search"><XMarkIcon className="h-4 w-4" /></button>}
                 {open && <button type="button" onMouseDown={event => event.preventDefault()} onClick={closeSearch} className="global-search-close rounded-full p-1 text-gray-400 hover:bg-white/10 hover:text-white" aria-label="Close search"><XMarkIcon className="h-4 w-4" /></button>}
                 <kbd className="ml-auto hidden shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] sm:inline">⌘ K</kbd>
             </form>
+            {open && voiceStatus && <div role="status" className="absolute left-0 right-0 top-[calc(100%+8px)] z-[60] rounded-xl border border-emerald-300/15 bg-[#111b23] px-4 py-3 text-xs text-emerald-100 shadow-xl">{voiceStatus}</div>}
             {open && normalizedQuery.length >= 2 && (
                 <>
                     <button type="button" aria-label="Close search results" className="fixed inset-0 z-40 cursor-default bg-black/15" onClick={() => setOpen(false)} />
@@ -123,7 +189,7 @@ export const GlobalSearchBar = ({ token, chats = [], onSelectResult, onMessageUs
                         </div>
                         {error ? <p className="px-3 py-5 text-center text-sm text-rose-300">{error}</p> : loading && resultCount === 0 ? <p className="px-3 py-5 text-center text-sm text-gray-400">Searching across Ducor…</p> : null}
                         {!loading && !error && resultCount === 0 && <p className="px-3 py-6 text-center text-sm text-gray-400">No matches yet. Try a different name or keyword.</p>}
-                        {categories.map(([key, label, Icon]) => results[key]?.length > 0 && (
+                        {categories.map(([key, label]) => results[key]?.length > 0 && (
                             <section key={key} className="pb-1">
                                 <h3 className="px-3 pb-1 pt-2 text-[10px] font-black uppercase tracking-[.15em] text-gray-500">{label}</h3>
                                 {results[key].map(item => {

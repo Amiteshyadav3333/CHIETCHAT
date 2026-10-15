@@ -43,9 +43,11 @@ const ReelUploader = ({ onClose, onSuccess }) => {
 
     const fileInputRef = useRef(null);
     const mediaRecorderRef = useRef(null);
+    const mediaStreamRef = useRef(null);
     const videoPreviewRef = useRef(null);
     const chunksRef = useRef([]);
     const timerRef = useRef(null);
+    const recordingRef = useRef(false);
 
     const filters = [
         { name: 'None', class: 'none', filter: '' },
@@ -62,12 +64,14 @@ const ReelUploader = ({ onClose, onSuccess }) => {
         { name: 'Night', class: 'night', filter: 'brightness(50%) hue-rotate(200deg)' }
     ];
 
-    useEffect(() => {
-        return () => {
-            stopStream();
-            stopSongPreview();
-            if (timerRef.current) clearInterval(timerRef.current);
-        };
+    useEffect(() => () => {
+        if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview);
+    }, [preview]);
+
+    useEffect(() => () => {
+        stopStream();
+        stopSongPreview();
+        if (timerRef.current) clearInterval(timerRef.current);
     }, []);
 
     useEffect(() => {
@@ -84,8 +88,10 @@ const ReelUploader = ({ onClose, onSuccess }) => {
     }, [facingMode]);
 
     const stopStream = () => {
-        if (mediaStream) {
-            mediaStream.getTracks().forEach(track => track.stop());
+        if (mediaRecorderRef.current?.state === 'recording') stopRecording();
+        if (mediaStreamRef.current) {
+            mediaStreamRef.current.getTracks().forEach(track => track.stop());
+            mediaStreamRef.current = null;
             setMediaStream(null);
         }
     };
@@ -101,6 +107,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                 },
                 audio: true
             });
+            mediaStreamRef.current = stream;
             setMediaStream(stream);
         } catch (err) {
             alert('Could not access camera: ' + err.message);
@@ -110,7 +117,9 @@ const ReelUploader = ({ onClose, onSuccess }) => {
     const startRecording = () => {
         if (!mediaStream) return;
         chunksRef.current = [];
-        const recorder = new MediaRecorder(mediaStream);
+        const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
+            .find(type => MediaRecorder.isTypeSupported(type));
+        const recorder = new MediaRecorder(mediaStream, mimeType ? { mimeType } : undefined);
         mediaRecorderRef.current = recorder;
         
         recorder.ondataavailable = (e) => {
@@ -118,7 +127,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
         };
 
         recorder.onstop = () => {
-            const blob = new Blob(chunksRef.current, { type: 'video/mp4' });
+            const blob = new Blob(chunksRef.current, { type: recorder.mimeType || mimeType || 'video/webm' });
             const url = URL.createObjectURL(blob);
             setFile(blob);
             setPreview(url);
@@ -126,6 +135,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
         };
 
         recorder.start();
+        recordingRef.current = true;
         setRecording(true);
         setRecordTime(0);
 
@@ -137,9 +147,9 @@ const ReelUploader = ({ onClose, onSuccess }) => {
 
         timerRef.current = setInterval(() => {
             setRecordTime(prev => {
-                if (prev >= MAX_DURATION) {
+                if (prev + 1 >= MAX_DURATION) {
                     stopRecording();
-                    return prev;
+                    return MAX_DURATION;
                 }
                 return prev + 1;
             });
@@ -147,7 +157,8 @@ const ReelUploader = ({ onClose, onSuccess }) => {
     };
 
     const stopRecording = () => {
-        if (mediaRecorderRef.current && recording) {
+        if (mediaRecorderRef.current?.state === 'recording' && recordingRef.current) {
+            recordingRef.current = false;
             mediaRecorderRef.current.stop();
             setRecording(false);
             if (timerRef.current) clearInterval(timerRef.current);
@@ -161,16 +172,19 @@ const ReelUploader = ({ onClose, onSuccess }) => {
         const selected = e.target.files[0];
         if (selected) {
             const video = document.createElement('video');
-            video.src = URL.createObjectURL(selected);
+            const objectUrl = URL.createObjectURL(selected);
+            video.src = objectUrl;
             video.onloadedmetadata = () => {
                 if (video.duration > MAX_DURATION + 1) {
+                    URL.revokeObjectURL(objectUrl);
                     alert(`Video too long! Max ${MAX_DURATION} seconds allowed.`);
                     return;
                 }
                 setMediaDuration(Math.min(MAX_DURATION, Math.ceil(video.duration)));
                 setFile(selected);
-                setPreview(video.src);
+                setPreview(objectUrl);
             };
+            video.onerror = () => URL.revokeObjectURL(objectUrl);
         }
     };
 
@@ -287,9 +301,10 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                 </button>
             </div>
 
-            <div className="flex-1 p-4 flex flex-col gap-4 overflow-y-auto pb-20">
+            <div className="flex-1 p-4 md:p-6 flex flex-col lg:flex-row lg:items-start lg:justify-center gap-6 overflow-y-auto pb-20">
                 {/* Preview/Recording Area */}
-                <div className="relative aspect-[9/16] w-full max-w-[320px] mx-auto rounded-2xl overflow-hidden border border-white/10 bg-gray-900">
+                <div className="w-full lg:w-auto lg:sticky lg:top-4 shrink-0">
+                <div className="relative aspect-[9/16] w-full max-w-[360px] sm:max-w-[400px] lg:w-[min(38vw,420px)] lg:max-w-none mx-auto rounded-3xl overflow-hidden border border-white/10 bg-gray-900 shadow-2xl shadow-black/40">
                     {preview ? (
                         <>
                             <video 
@@ -302,7 +317,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                                 style={{ filter: filters.find(f => f.class === selectedFilter)?.filter }}
                             />
                             <button 
-                                onClick={() => { setFile(null); setPreview(null); }}
+                                onClick={() => { if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview); setFile(null); setPreview(null); setMediaDuration(0); }}
                                 className="absolute top-4 right-4 bg-black/60 p-2 rounded-full text-white"
                             >
                                 <XMarkIcon className="w-5 h-5" />
@@ -391,8 +406,10 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                         ))}
                     </div>
                 )}
+                </div>
 
                 <input ref={fileInputRef} type="file" accept="video/*" onChange={handleFileChange} className="hidden" />
+                <div className="w-full max-w-xl mx-auto lg:mx-0 lg:max-w-[520px] space-y-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 md:p-5">
                 <button type="button" onClick={() => { setShowMemeLibrary(true); if (!memeResults.length) searchMemes(null, 'Indian memes'); }} className="flex w-full items-center justify-center gap-3 rounded-2xl border border-pink-400/25 bg-gradient-to-r from-pink-500/15 to-violet-500/15 px-4 py-3 text-sm font-black text-white hover:border-pink-400/50"><span className="text-xl">😂</span> Create Reel from Meme Library</button>
                 {showProCamera && <ProCameraStudio
                     initialMode="video"
@@ -475,6 +492,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
                         </div>
                     )}
                     {selectedSong && <label className="block rounded-xl bg-white/5 p-3 text-xs text-gray-300"><span className="mb-2 flex justify-between"><span>Music volume</span><strong>{Math.round(musicVolume * 100)}%</strong></span><input type="range" min="0" max="1" step="0.05" value={musicVolume} onChange={event => setMusicVolume(Number(event.target.value))} className="w-full accent-purple-500" /></label>}
+                </div>
                 </div>
             </div>
 

@@ -43,6 +43,8 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
     const streamRef = useRef(null);
     const mediaRecorderRef = useRef(null);
     const audioContextRef = useRef(null);
+    const sourceAudioNodeRef = useRef(null);
+    const sourceGainRef = useRef(null);
     const chunksRef = useRef([]);
     const frameRef = useRef(null);
     const timerRef = useRef(null);
@@ -139,6 +141,7 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
     const stopEverything = () => {
         cancelAnimationFrame(frameRef.current);
         clearInterval(timerRef.current);
+        if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
         stopSongPreview();
         if (streamRef.current) {
             streamRef.current.getTracks().forEach(track => track.stop());
@@ -260,12 +263,21 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
         setEditTime(0);
 
         try {
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const audioCtx = audioContextRef.current || new (window.AudioContext || window.webkitAudioContext)();
             if (audioCtx.state === 'suspended') await audioCtx.resume();
             audioContextRef.current = audioCtx;
             const destination = audioCtx.createMediaStreamDestination();
 
-            connectElementAudio(audioCtx, destination, originalVideoRef.current, sourceAudioOn ? sourceVolume : 0);
+            if (!sourceAudioNodeRef.current && originalVideoRef.current) {
+                sourceAudioNodeRef.current = audioCtx.createMediaElementSource(originalVideoRef.current);
+                sourceGainRef.current = audioCtx.createGain();
+                sourceAudioNodeRef.current.connect(sourceGainRef.current);
+            }
+            if (sourceGainRef.current) {
+                sourceGainRef.current.disconnect();
+                sourceGainRef.current.gain.value = sourceAudioOn ? sourceVolume : 0;
+                sourceGainRef.current.connect(destination);
+            }
 
             if (selectedSong?.previewUrl) {
                 const music = new Audio(selectedSong.previewUrl);
@@ -313,10 +325,15 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
                 const url = URL.createObjectURL(blob);
                 setRecordedBlob(blob);
                 setRecordedUrl(url);
+                stream.getTracks().forEach(track => track.stop());
+                if (originalVideoRef.current) originalVideoRef.current.muted = true;
+                setSourcePaused(true);
             };
 
             originalVideoRef.current.currentTime = sourceTime || 0;
-            if (!sourcePaused) originalVideoRef.current.play().catch(() => {});
+            originalVideoRef.current.muted = false;
+            originalVideoRef.current.play().catch(() => {});
+            setSourcePaused(false);
 
             drawReactionFrame();
             recorder.start(1000);
@@ -325,7 +342,7 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
             timerRef.current = setInterval(() => {
                 setRecordTime(prev => {
                     if (prev + 1 >= MAX_SECONDS) {
-                        stopRecording();
+                        if (mediaRecorderRef.current?.state === 'recording') stopRecording();
                         return MAX_SECONDS;
                     }
                     return prev + 1;
@@ -340,9 +357,10 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
     };
 
     const stopRecording = () => {
-        if (!recording || !mediaRecorderRef.current) return;
+        if (mediaRecorderRef.current?.state !== 'recording') return;
+        clearInterval(timerRef.current);
         mediaRecorderRef.current.stop();
-        originalVideoRef.current.pause();
+        originalVideoRef.current?.pause();
         setRecording(false);
     };
 
@@ -408,21 +426,19 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
     };
 
     const uploadReaction = async () => {
-        if (!recordedBlob) return;
+        if (!recordedBlob || uploading) return;
         setUploading(true);
-
-        const finalBlob = memeClips.length ? await renderMemeClips(recordedBlob, memeClips) : recordedBlob;
-        const formData = new FormData();
-        formData.append('video', finalBlob, 'reaction.webm');
-        formData.append('caption', `Reacting to @${originalReel.user.username}`);
-        formData.append('parentReelId', originalReel.id);
-        if (selectedSong?.previewUrl) {
-            formData.append('musicUrl', selectedSong.previewUrl);
-            formData.append('musicName', `${selectedSong.title} - ${selectedSong.artist}`);
-            formData.append('musicVolume', musicVolume);
-        }
-
         try {
+            const finalBlob = memeClips.length ? await renderMemeClips(recordedBlob, memeClips) : recordedBlob;
+            const formData = new FormData();
+            formData.append('video', finalBlob, 'reaction.webm');
+            formData.append('caption', `Reacting to @${originalReel.user.username}`);
+            formData.append('parentReelId', originalReel.id);
+            if (selectedSong?.previewUrl) {
+                formData.append('musicUrl', selectedSong.previewUrl);
+                formData.append('musicName', `${selectedSong.title} - ${selectedSong.artist}`);
+                formData.append('musicVolume', musicVolume);
+            }
             await axios.post('/api/reels', formData, {
                 headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` }
             });
@@ -717,7 +733,6 @@ const ReelReactor = ({ originalReel, onClose, onSuccess }) => {
                                     ref={originalVideoRef}
                                     src={originalReel.videoUrl}
                                     className="h-full w-full object-cover"
-                                    muted
                                     crossOrigin="anonymous"
                                     playsInline
                                     loop

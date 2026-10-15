@@ -9,7 +9,7 @@ from werkzeug.utils import secure_filename
 
 from models import (
     db, User, Follow, Reel, SocialPost, SocialPostLike, SocialPostShare, SocialPostComment, SocialPostCommentVote, SocialPollVote,
-    Channel, ChannelMembership, CommentReply, Status, UserReport
+    Channel, ChannelMembership, CommentReply, Status, UserReport, ProfileFollowRequest
 )
 from utils import (
     get_current_user_id, get_json_data, iso_utc, serialize_user,
@@ -241,7 +241,11 @@ def get_social_posts():
         return jsonify({"error": "Unauthorized"}), 401
 
     feed = request.args.get('feed', 'all')
-    query = SocialPost.query.filter_by(channel_id=None)
+    followed_ids = [f.followed_id for f in Follow.query.filter_by(follower_id=user_id).all()]
+    query = SocialPost.query.join(User, SocialPost.user_id == User.id).filter(
+        SocialPost.channel_id.is_(None),
+        or_(User.is_profile_private.is_(False), User.id == user_id, User.id.in_(followed_ids) if followed_ids else User.id == user_id),
+    )
     if feed == 'news':
         query = query.filter(SocialPost.post_kind.in_(['news_post', 'article', 'link', 'poll']))
     elif feed == 'community':
@@ -249,7 +253,6 @@ def get_social_posts():
     else:
         query = query.filter(or_(SocialPost.post_kind == 'standard', SocialPost.post_kind.is_(None)))
     if feed == 'following':
-        followed_ids = [f.followed_id for f in Follow.query.filter_by(follower_id=user_id).all()]
         if not followed_ids:
             return jsonify([])
         query = query.filter(SocialPost.user_id.in_(followed_ids))
@@ -709,21 +712,46 @@ def get_user_profile(profile_user_id):
     following_count = Follow.query.filter_by(follower_id=profile_user_id).count()
     posts_count = SocialPost.query.filter_by(user_id=profile_user_id, channel_id=None, retweet_of_id=None).count()
     is_following = Follow.query.filter_by(follower_id=current_user_id, followed_id=profile_user_id).first() is not None
+    follow_request = ProfileFollowRequest.query.filter_by(requester_id=current_user_id, profile_owner_id=profile_user_id).first()
+    can_view_private_profile = current_user_id == profile_user_id or not profile_user.is_profile_private or is_following
 
     user_data = serialize_user(profile_user, viewer_id=current_user_id)
     user_data["followersCount"] = followers_count
     user_data["followingCount"] = following_count
     user_data["postsCount"] = posts_count
     user_data["isFollowing"] = is_following
+    user_data["followRequested"] = bool(follow_request)
     user_data["bio"] = profile_user.bio or ""
     user_data["websiteUrl"] = profile_user.website_url or ""
     user_data["joinedAt"] = iso_utc(profile_user.created_at)
 
-    posts = SocialPost.query.filter_by(user_id=profile_user_id, channel_id=None).order_by(SocialPost.created_at.desc()).limit(30).all()
+    posts = SocialPost.query.filter_by(user_id=profile_user_id, channel_id=None).order_by(SocialPost.created_at.desc()).limit(30).all() if can_view_private_profile else []
     return jsonify({
         "user": user_data,
-        "posts": [serialize_post(p, current_user_id) for p in posts]
+        "posts": [serialize_post(p, current_user_id) for p in posts],
+        "privateProfileLocked": not can_view_private_profile,
     })
+
+
+@social_bp.route('/api/social/users/<int:profile_user_id>/<string:relationship>', methods=['GET'])
+def get_profile_relationships(profile_user_id, relationship):
+    current_user_id = get_current_user_id()
+    if not current_user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    profile_user = db.session.get(User, profile_user_id)
+    if not profile_user:
+        return jsonify({"error": "User not found"}), 404
+    if relationship not in {'followers', 'following'}:
+        return jsonify({"error": "Invalid relationship"}), 400
+    is_following = Follow.query.filter_by(follower_id=current_user_id, followed_id=profile_user_id).first() is not None
+    if profile_user.is_profile_private and current_user_id != profile_user_id and not is_following:
+        return jsonify({"error": "Follow this private account to view its connections", "privateProfile": True}), 403
+    query = Follow.query.filter_by(followed_id=profile_user_id) if relationship == 'followers' else Follow.query.filter_by(follower_id=profile_user_id)
+    rows = query.order_by(Follow.created_at.desc()).limit(200).all()
+    account_ids = [row.follower_id if relationship == 'followers' else row.followed_id for row in rows]
+    accounts = User.query.filter(User.id.in_(account_ids)).all() if account_ids else []
+    by_id = {account.id: account for account in accounts}
+    return jsonify([serialize_user(by_id[item_id], viewer_id=current_user_id) for item_id in account_ids if item_id in by_id])
 
 @social_bp.route('/api/social/posts/<int:post_id>/report', methods=['POST'])
 def report_social_post(post_id):

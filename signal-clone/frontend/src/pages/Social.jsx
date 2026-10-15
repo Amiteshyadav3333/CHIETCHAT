@@ -90,8 +90,6 @@ const FeedVideo = ({ src, multi, muted, autoplay, onOpen }) => {
     const [visible, setVisible] = useState(false);
     const [failed, setFailed] = useState(false);
 
-    if (failed) return <div className="flex min-h-36 items-center justify-center bg-[#16181c] px-4 text-center text-xs text-[#71767b]">This media is no longer available.</div>;
-
     useEffect(() => {
         const preloadObserver = new IntersectionObserver(([entry]) => {
             if (entry.isIntersecting) setNearViewport(true);
@@ -115,6 +113,8 @@ const FeedVideo = ({ src, multi, muted, autoplay, onOpen }) => {
         if (autoplay && visible) video.play().catch(() => {});
         else video.pause();
     }, [autoplay, visible, nearViewport]);
+
+    if (failed) return <div className="flex min-h-36 items-center justify-center bg-[#16181c] px-4 text-center text-xs text-[#71767b]">This media is no longer available.</div>;
 
     return (
         <div ref={containerRef} style={{ position: 'relative', cursor: 'pointer' }} onClick={onOpen}>
@@ -700,6 +700,10 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
     const [uploadingCover, setUploadingCover] = useState(false);
     const [zoomedAvatar, setZoomedAvatar] = useState(false);
     const [profileTab, setProfileTab] = useState('posts');
+    const [relationshipList, setRelationshipList] = useState(null);
+    const [relationshipLoading, setRelationshipLoading] = useState(false);
+    const [followRequests, setFollowRequests] = useState([]);
+    const [privacySaving, setPrivacySaving] = useState(false);
     const [avatarHover, setAvatarHover] = useState(false);
     const avatarInputRef = useRef(null);
     const coverInputRef = useRef(null);
@@ -716,6 +720,13 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
     }, [userId, token]);
 
     useEffect(() => { fetchProfile(); }, [fetchProfile]);
+
+    useEffect(() => {
+        if (!isOwnProfile) return;
+        axios.get('/api/user/follow-requests', { headers: authHeaders(token) })
+            .then(res => setFollowRequests(Array.isArray(res.data) ? res.data : []))
+            .catch(() => setFollowRequests([]));
+    }, [isOwnProfile, token]);
 
     const saveProfile = async () => {
         setSaving(true);
@@ -754,8 +765,38 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
         if (!profileData) return;
         try {
             const res = await axios.post('/api/users/' + userId + '/follow', {}, { headers: authHeaders(token) });
-            setProfileData(prev => ({ ...prev, user: { ...prev.user, isFollowing: res.data.isFollowing, followersCount: prev.user.followersCount + (res.data.isFollowing ? 1 : -1) } }));
+            setProfileData(prev => ({ ...prev, user: { ...prev.user, isFollowing: res.data.isFollowing, followRequested: !!res.data.followRequested, followersCount: Math.max(0, prev.user.followersCount + (res.data.isFollowing ? 1 : prev.user.isFollowing ? -1 : 0)) } }));
         } catch { }
+    };
+
+    const toggleProfilePrivacy = async () => {
+        if (!u || privacySaving) return;
+        setPrivacySaving(true);
+        try {
+            const { data } = await axios.put('/api/user/privacy', { isProfilePrivate: !u.isProfilePrivate }, { headers: authHeaders(token) });
+            setProfileData(prev => ({ ...prev, user: { ...prev.user, isProfilePrivate: data.isProfilePrivate } }));
+            updateUser?.(data);
+        } catch (error) { alert(error.response?.data?.error || 'Could not update account privacy'); }
+        finally { setPrivacySaving(false); }
+    };
+
+    const openRelationships = async kind => {
+        setRelationshipList({ kind, users: [] });
+        setRelationshipLoading(true);
+        try {
+            const { data } = await axios.get(`/api/social/users/${userId}/${kind}`, { headers: authHeaders(token) });
+            setRelationshipList({ kind, users: data });
+        } catch (error) {
+            setRelationshipList({ kind, users: [], error: error.response?.data?.error || 'Could not load accounts' });
+        } finally { setRelationshipLoading(false); }
+    };
+
+    const reviewFollowRequest = async (requestId, action) => {
+        try {
+            await axios.post(`/api/user/follow-requests/${requestId}`, { action }, { headers: authHeaders(token) });
+            setFollowRequests(prev => prev.filter(item => item.id !== requestId));
+            if (action === 'approve') setProfileData(prev => ({ ...prev, user: { ...prev.user, followersCount: prev.user.followersCount + 1 } }));
+        } catch (error) { alert(error.response?.data?.error || 'Could not update follow request'); }
     };
 
     const handleLike = async (postId) => {
@@ -828,11 +869,11 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
                                     <button onClick={saveProfile} disabled={saving} style={{ padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, background: '#e7e9ea', color: '#0f1419', border: 'none', cursor: 'pointer' }}>{saving ? 'Saving…' : 'Save'}</button>
                                 </div>
                             ) : (
-                                <button onClick={() => setEditMode(true)} style={{ marginTop: 56, padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, border: '1px solid #536471', background: 'transparent', color: '#e7e9ea', cursor: 'pointer' }}>Edit profile</button>
+                                <div className="mt-14 flex flex-wrap justify-end gap-2"><button disabled={privacySaving} onClick={toggleProfilePrivacy} style={{ padding: '6px 12px', borderRadius: 9999, fontWeight: 700, fontSize: 12, border: '1px solid #536471', background: 'transparent', color: '#e7e9ea', cursor: 'pointer' }}>{privacySaving ? 'Saving…' : u?.isProfilePrivate ? '🔒 Private' : '🌐 Public'}</button><button onClick={() => setEditMode(true)} style={{ padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, border: '1px solid #536471', background: 'transparent', color: '#e7e9ea', cursor: 'pointer' }}>Edit profile</button></div>
                             )
                         ) : (
-                            <div style={{ marginTop: 56, display: 'flex', gap: 8 }}><button onClick={() => onDirectMessage?.(u)} className="rounded-full border border-[#536471] px-4 py-1.5 text-sm font-bold text-white">Message</button><button onClick={handleFollowToggle} style={{ padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, background: u && u.isFollowing ? 'transparent' : '#e7e9ea', color: u && u.isFollowing ? '#e7e9ea' : '#0f1419', border: u && u.isFollowing ? '1px solid #536471' : 'none', cursor: 'pointer' }}>
-                                {u && u.isFollowing ? 'Following' : 'Follow'}
+                            <div style={{ marginTop: 56, display: 'flex', gap: 8 }}><button onClick={() => onDirectMessage?.(u)} className="rounded-full border border-[#536471] px-4 py-1.5 text-sm font-bold text-white">Message</button><button onClick={handleFollowToggle} style={{ padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, background: u && (u.isFollowing || u.followRequested) ? 'transparent' : '#e7e9ea', color: u && (u.isFollowing || u.followRequested) ? '#e7e9ea' : '#0f1419', border: u && (u.isFollowing || u.followRequested) ? '1px solid #536471' : 'none', cursor: 'pointer' }}>
+                                {u && u.isFollowing ? 'Following' : u?.followRequested ? 'Requested' : u?.isProfilePrivate ? 'Request to follow' : 'Follow'}
                             </button></div>
                         )}
                     </div>
@@ -869,10 +910,20 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
                         </>
                     )}
 
-                    <div style={{ display: 'flex', gap: 20, marginBottom: 16 }}>
-                        <span style={{ fontSize: 14 }}><strong style={{ fontWeight: 700, color: '#e7e9ea' }}>{u && u.followingCount || 0}</strong> <span style={{ color: '#71767b' }}>Following</span></span>
-                        <span style={{ fontSize: 14 }}><strong style={{ fontWeight: 700, color: '#e7e9ea' }}>{u && u.followersCount || 0}</strong> <span style={{ color: '#71767b' }}>Followers</span></span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 16, marginBottom: 16 }}>
+                        <button onClick={() => openRelationships('following')} style={{ fontSize: 14, border: 0, padding: 0, background: 'transparent', color: '#71767b', cursor: 'pointer' }}><strong style={{ fontWeight: 700, color: '#e7e9ea' }}>{u && u.followingCount || 0}</strong> Following</button>
+                        <button onClick={() => openRelationships('followers')} style={{ fontSize: 14, border: 0, padding: 0, background: 'transparent', color: '#71767b', cursor: 'pointer' }}><strong style={{ fontWeight: 700, color: '#e7e9ea' }}>{u && u.followersCount || 0}</strong> Followers</button>
                     </div>
+
+                    {isOwnProfile && followRequests.length > 0 && <section className="mb-4 rounded-2xl border border-[#27333b] bg-[#101318] p-4">
+                        <h3 className="mb-3 text-sm font-bold text-white">Follow requests <span className="text-[#ff6a3d]">{followRequests.length}</span></h3>
+                        {followRequests.map(item => <div key={item.id} className="flex items-center gap-3 py-2">
+                            <img src={item.user.avatar} alt="" className="h-9 w-9 rounded-full object-cover" />
+                            <span className="min-w-0 flex-1 truncate text-sm font-semibold">{item.user.username}</span>
+                            <button onClick={() => reviewFollowRequest(item.id, 'approve')} className="rounded-full bg-[#ff6a3d] px-3 py-1.5 text-xs font-bold text-white">Accept</button>
+                            <button onClick={() => reviewFollowRequest(item.id, 'reject')} className="rounded-full border border-[#536471] px-3 py-1.5 text-xs font-bold text-white">Decline</button>
+                        </div>)}
+                    </section>}
 
                     <div style={{ display: 'flex', margin: '0 -16px', borderBottom: '1px solid #27333b' }}>
                         {['posts', 'replies', 'media', 'likes'].map(tab => (
@@ -885,13 +936,14 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
                     </div>
                 </div>
 
-                {filteredProfilePosts.length ? filteredProfilePosts.map(post => (
+                {profileData?.privateProfileLocked ? <div className="flex flex-col items-center gap-2 px-6 py-16 text-center"><span className="text-3xl">🔒</span><strong className="text-lg">This account is private</strong><p className="text-sm text-[#71767b]">Request to follow to see their posts and connections.</p></div> : filteredProfilePosts.length ? filteredProfilePosts.map(post => (
                     <TweetCard key={post.id} post={post} currentUser={currentUser} token={token}
                         onLike={() => handleLike(post.id)} onRetweet={() => handleRetweet(post.id)}
                         onShare={count => handleShare(post.id, count)} onShareToChat={onShareToChat} onDelete={() => handleDelete(post.id)}
                         onFollow={() => {}} onOpenProfile={onOpenProfile} />
                 )) : <CheetChatEmptyState text={isOwnProfile ? "You haven't posted yet." : "No posts yet."} />}
             </div>
+            {relationshipList && <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4" onClick={() => setRelationshipList(null)}><section className="flex max-h-[78dvh] w-full max-w-md flex-col rounded-t-3xl border border-[#27333b] bg-[#101318] p-4 sm:rounded-3xl" onClick={event => event.stopPropagation()}><header className="mb-3 flex items-center justify-between"><h3 className="text-lg font-bold text-white">{relationshipList.kind === 'followers' ? 'Followers' : 'Following'}</h3><button onClick={() => setRelationshipList(null)} className="rounded-full px-3 py-1 text-sm text-white hover:bg-white/10">Close</button></header><div className="overflow-y-auto">{relationshipLoading ? <p className="py-8 text-center text-sm text-gray-400">Loading…</p> : relationshipList.error ? <p className="py-8 text-center text-sm text-gray-400">{relationshipList.error}</p> : relationshipList.users.length ? relationshipList.users.map(account => <button key={account.id} onClick={() => { setRelationshipList(null); onOpenProfile?.(account.id); }} className="flex w-full items-center gap-3 rounded-xl px-2 py-3 text-left hover:bg-white/5"><img src={account.avatar} alt="" className="h-11 w-11 rounded-full object-cover"/><span className="font-semibold text-white">{account.username}</span></button>) : <p className="py-8 text-center text-sm text-gray-400">No accounts to show yet.</p>}</div></section></div>}
             {zoomedAvatar && <FullscreenMediaModal src={u?.avatar} type="image" onClose={() => setZoomedAvatar(false)} />}
         </div>
     );
@@ -1117,7 +1169,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                 key: checkout.keyId, amount: Math.round(payment.amount * 100), currency: payment.currency,
                 name: 'Ducor Premium', description: 'Creator tools', order_id: payment.providerOrderId,
                 handler: async result => {
-                    const verified = await axios.post(`/api/payments/orders/${payment.id}/verify`, result, { headers });
+                    await axios.post(`/api/payments/orders/${payment.id}/verify`, result, { headers });
                     setPremiumPrompt(false);
                     alert('Payment verified. Your Premium request is waiting for admin approval. Premium will activate once approved.');
                 },

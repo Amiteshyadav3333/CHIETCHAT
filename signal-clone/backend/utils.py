@@ -290,7 +290,7 @@ def add_missing_columns(inspector, table_name, columns):
 # Bump this marker whenever models gain columns or tables. Production runs
 # ensure_database_schema() in the pre-deploy step and skips versions it has
 # already applied.
-SCHEMA_VERSION = '20261015_30_social_comment_votes'
+SCHEMA_VERSION = '20261015_31_profile_privacy_follow_requests'
 
 def ensure_runtime_compat_schema():
     """Repair columns required by the currently deployed models.
@@ -537,6 +537,7 @@ def ensure_database_schema(force=False):
             'hide_online_status': db.Boolean(),
             'read_receipts': db.Boolean(),
             'profile_photo_privacy': db.String(20),
+            'is_profile_private': db.Boolean(),
             'profile_photo_exceptions': db.Text(),
             'story_privacy': db.String(20),
             'story_privacy_exceptions': db.Text(),
@@ -583,6 +584,8 @@ def ensure_database_schema(force=False):
                 updates.append('read_receipts = COALESCE(read_receipts, TRUE)')
             if 'profile_photo_privacy' in user_columns:
                 updates.append("profile_photo_privacy = COALESCE(profile_photo_privacy, 'everyone')")
+            if 'is_profile_private' in user_columns:
+                updates.append('is_profile_private = COALESCE(is_profile_private, FALSE)')
             if 'story_privacy' in user_columns:
                 updates.append("story_privacy = COALESCE(story_privacy, 'contacts')")
             if 'phone_number_privacy' in user_columns:
@@ -981,6 +984,7 @@ def serialize_user(user, viewer_id=None):
         "premiumReferralCount": User.query.filter_by(referred_by_id=user.id, email_verified=True).count() if viewer_id == user.id else 0,
         "premiumReferralGoal": 7 if viewer_id == user.id else 0,
         "profilePhotoPrivacy": profile_mode,
+        "isProfilePrivate": bool(getattr(user, 'is_profile_private', False)),
         "profilePhotoExceptions": user.profile_photo_exceptions or "" if viewer_id == user.id else "",
         "storyPrivacy": (user.story_privacy or 'contacts') if viewer_id == user.id else None,
         "storyPrivacyExceptions": (user.story_privacy_exceptions or "") if viewer_id == user.id else "",

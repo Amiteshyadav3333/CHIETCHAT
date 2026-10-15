@@ -34,6 +34,7 @@ class User(db.Model):
     hide_online_status = db.Column(db.Boolean, default=False)
     read_receipts = db.Column(db.Boolean, default=True)
     profile_photo_privacy = db.Column(db.String(20), default='everyone')
+    is_profile_private = db.Column(db.Boolean, nullable=False, default=False)
     profile_photo_exceptions = db.Column(db.Text, nullable=True)
     story_privacy = db.Column(db.String(20), nullable=False, default='contacts')
     story_privacy_exceptions = db.Column(db.Text, nullable=True)
@@ -448,6 +449,14 @@ class Follow(db.Model):
     followed_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now)
     __table_args__ = (db.UniqueConstraint('follower_id', 'followed_id', name='uq_follow_follower_followed'),)
+
+class ProfileFollowRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    requester_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    profile_owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=utc_now)
+    requester = db.relationship('User', foreign_keys=[requester_id])
+    __table_args__ = (db.UniqueConstraint('requester_id', 'profile_owner_id', name='uq_profile_follow_request'),)
 
 class Notification(db.Model):
     id = db.Column(db.Integer, primary_key=True)

@@ -3,7 +3,7 @@ from sqlalchemy import or_
 from werkzeug.utils import secure_filename
 import json
 import secrets
-from models import db, User, PendingRegistration, Block, Follow, ProfileAudienceAvatar, Notification, Chat, ChatParticipant, Message, Reel, SocialPost, Channel
+from models import db, User, PendingRegistration, Block, Follow, ProfileFollowRequest, ProfileAudienceAvatar, Notification, Chat, ChatParticipant, Message, Reel, SocialPost, Channel
 from extensions import socketio
 from utils import (
     get_current_user_id, get_contact_user_ids, serialize_user, get_json_data,
@@ -798,11 +798,26 @@ def toggle_follow(followed_id):
     if user_id == followed_id:
         return jsonify({"error": "Cannot follow yourself"}), 400
     
+    target = db.session.get(User, followed_id)
+    if not target:
+        return jsonify({"error": "User not found"}), 404
     existing = Follow.query.filter_by(follower_id=user_id, followed_id=followed_id).first()
     if existing:
         db.session.delete(existing)
         db.session.commit()
         return jsonify({"isFollowing": False})
+
+    pending = ProfileFollowRequest.query.filter_by(requester_id=user_id, profile_owner_id=followed_id).first()
+    if pending:
+        db.session.delete(pending)
+        db.session.commit()
+        return jsonify({"isFollowing": False, "followRequested": False})
+
+    if target.is_profile_private:
+        db.session.add(ProfileFollowRequest(requester_id=user_id, profile_owner_id=followed_id))
+        db.session.commit()
+        create_notification(recipient_id=followed_id, sender_id=user_id, n_type='follow_request', content="requested to follow you", target_id=user_id)
+        return jsonify({"isFollowing": False, "followRequested": True})
     
     db.session.add(Follow(follower_id=user_id, followed_id=followed_id))
     db.session.commit()
@@ -816,6 +831,37 @@ def toggle_follow(followed_id):
     )
     
     return jsonify({"isFollowing": True})
+
+
+@users_bp.route('/api/user/follow-requests', methods=['GET'])
+def get_profile_follow_requests():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    requests = ProfileFollowRequest.query.filter_by(profile_owner_id=user_id).order_by(ProfileFollowRequest.created_at.desc()).limit(100).all()
+    return jsonify([{
+        "id": item.id,
+        "createdAt": item.created_at.isoformat() if item.created_at else None,
+        "user": serialize_user(item.requester, viewer_id=user_id),
+    } for item in requests])
+
+
+@users_bp.route('/api/user/follow-requests/<int:request_id>', methods=['POST'])
+def review_profile_follow_request(request_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    follow_request = db.session.get(ProfileFollowRequest, request_id)
+    if not follow_request or follow_request.profile_owner_id != user_id:
+        return jsonify({"error": "Request not found"}), 404
+    action = str((request.get_json(silent=True) or {}).get('action') or '').lower()
+    if action not in {'approve', 'reject'}:
+        return jsonify({"error": "Choose approve or reject"}), 400
+    if action == 'approve' and not Follow.query.filter_by(follower_id=follow_request.requester_id, followed_id=user_id).first():
+        db.session.add(Follow(follower_id=follow_request.requester_id, followed_id=user_id))
+    db.session.delete(follow_request)
+    db.session.commit()
+    return jsonify({"status": action})
 
 
 @users_bp.route('/api/users/suggestions', methods=['GET'])
@@ -1003,6 +1049,8 @@ def update_privacy_settings():
         val = data.get('phoneNumberPrivacy')
         if val in ['everyone', 'contacts', 'nobody']:
             user.phone_number_privacy = val
+    if 'isProfilePrivate' in data:
+        user.is_profile_private = bool(data.get('isProfilePrivate'))
 
     db.session.commit()
     

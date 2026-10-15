@@ -17,6 +17,7 @@ const ACTIVITY_META = {
     comment_reply:   { icon: ChatBubbleLeftIcon,              color: 'text-cyan-400',    bg: 'bg-cyan-500/15',    label: 'replied to your comment' },
     retweet:         { icon: ArrowPathRoundedSquareIcon,      color: 'text-green-400',   bg: 'bg-green-500/15',   label: 'retweeted your post' },
     follow:          { icon: UserPlusIcon,                    color: 'text-purple-400',  bg: 'bg-purple-500/15',  label: 'started following you' },
+    follow_request:  { icon: UserPlusIcon,                    color: 'text-amber-400',   bg: 'bg-amber-500/15',   label: 'requested to follow your private account' },
     channel_request: { icon: UsersIcon,                      color: 'text-yellow-400',  bg: 'bg-yellow-500/15',  label: 'channel activity' },
     mention:         { icon: StarIcon,                        color: 'text-orange-400',  bg: 'bg-orange-500/15',  label: 'mentioned you' },
     share:           { icon: ArrowUpTrayIcon,                 color: 'text-teal-400',    bg: 'bg-teal-500/15',    label: 'shared your post' },

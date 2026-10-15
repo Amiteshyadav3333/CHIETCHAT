@@ -185,6 +185,17 @@ body {
 @media (min-width: 1280px) {
   .reddit-feature-overlay { left: var(--app-nav-width-xl, 250px); }
 }
+@media (min-width: 768px) and (max-width: 1023px) {
+  .reddit-nav { width: 76px !important; }
+  .reddit-nav .reddit-brand,
+  .reddit-nav-profile > div,
+  .reddit-nav-link > span:last-child,
+  .reddit-nav-heading { display: none !important; }
+  .reddit-nav-link { justify-content: center !important; padding-inline: 8px !important; }
+  .reddit-nav-profile { justify-content: center !important; }
+  .reddit-feature-overlay { left: 76px !important; }
+  .reddit-chat-sidebar { width: min(34vw, 300px) !important; flex: 0 0 min(34vw, 300px) !important; }
+}
 .reddit-nav { background: #10181f !important; border-color: var(--reddit-border) !important; color: #d7dadc; }
 .reddit-brand { color: #f2f4f5; letter-spacing: -.04em; }
 .reddit-nav-items { gap: 4px !important; }
@@ -252,6 +263,15 @@ body {
 .reddit-smart-space input:focus { --tw-ring-color: #ff6533 !important; }
 
 @media (max-width: 767px) {
+  .reddit-topbar { gap: 6px !important; padding-inline: 8px !important; }
+  .reddit-topbar-action,
+  .reddit-topbar-icon { flex-shrink: 0; }
+  .reddit-topbar-action { padding-inline: 10px !important; }
+  .reddit-topbar-icon { padding-inline: 8px !important; }
+  .reddit-social .social-feed-tabs { max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .reddit-social .social-feed-tabs::-webkit-scrollbar { display: none; }
+  .reddit-social .social-feed-tabs > button { flex: 0 0 auto; min-width: 74px; padding-inline: 12px; }
+  .reddit-chat-sidebar { border-right: 0 !important; }
   .reddit-nav { width: min(290px, 86vw) !important; }
   .reddit-nav-link { justify-content: flex-start !important; padding-inline: 14px !important; }
   .reddit-nav-link-active::before { left: -13px; }
@@ -268,6 +288,9 @@ body {
   .reddit-ai-chat .ai-input-bar { padding: 10px !important; }
   .reddit-ai-chat .ai-emoji-picker { left: 8px !important; max-width: calc(100vw - 32px); }
   .reddit-smart-space > div:last-child { grid-template-columns: minmax(0, 1fr) !important; }
+}
+@media (max-width: 639px) {
+  .reddit-topbar-secondary { display: none !important; }
 }
 
 @keyframes ludo-dice-natural-roll {

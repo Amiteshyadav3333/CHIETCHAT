@@ -1154,7 +1154,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                     {/* Tab bar / header */}
                     <div className="flex-shrink-0">
                         {!selectedChannel ? (
-                            <div className="flex border-b border-[#27333b] bg-black/80 backdrop-blur-md sticky top-0 z-10">
+                            <div className="social-feed-tabs flex border-b border-[#27333b] bg-black/80 backdrop-blur-md sticky top-0 z-10">
                                 {TABS.map(({ key, label }) => (
                                     <button key={key} onClick={() => setActiveTab(key)}
                                         className="min-w-0 flex-1 whitespace-nowrap py-4 text-xs font-bold bg-transparent border-none cursor-pointer transition-colors relative sm:text-sm"

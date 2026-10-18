@@ -26,7 +26,7 @@ export const AppTopBar = ({ user, token, chats, onMenu, onCreate, onNotification
     return (
     <header className="reddit-topbar relative z-[55] flex h-16 shrink-0 items-center gap-3 border-b px-3 sm:px-5">
         <button type="button" onClick={onMenu} className="reddit-topbar-icon rounded-xl p-1.5" aria-label="Open app functions" title="Open app functions">
-            <img src="/lion-logo.png" alt="Ducor app functions" className="h-9 w-9 rounded-xl object-cover" />
+            <img src="/ducor-lion-mark.svg" alt="Ducor app functions" className="h-9 w-9 rounded-xl object-cover" />
         </button>
         <GlobalSearchBar token={token} chats={chats} onSelectResult={onSelectSearchResult} onMessageUser={onMessageUser} onAgentCommand={onAgentCommand} />
         <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
@@ -89,7 +89,7 @@ export const HomeNavigationRail = ({
                 : `reddit-nav relative z-[40] hidden md:flex ${navCollapsed ? 'w-[76px]' : 'w-[220px] xl:w-[250px]'} shrink-0 flex-col border-r px-2 py-4 transition-[width] duration-200`
             }>
                 <div className={`h-10 px-2 flex items-center ${navCollapsed && !navPeekOpen ? 'justify-center' : ''}`}>
-                    <img src="/lion-logo.png" alt="Ducor" className="h-9 w-9 rounded-xl object-cover" />
+                    <img src="/ducor-lion-mark.svg" alt="Ducor" className="h-9 w-9 rounded-xl object-cover" />
                     <span className={`reddit-brand ml-2 text-xl font-black tracking-tight ${navCollapsed && !navPeekOpen ? 'hidden' : 'inline'}`}>Ducor</span>
                 </div>
                 <nav className="reddit-nav-items mt-5 flex flex-col gap-1 overflow-y-auto">

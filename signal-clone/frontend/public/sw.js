@@ -1,4 +1,4 @@
-const SHELL_CACHE = 'cheetchat-shell-v6';
+const SHELL_CACHE = 'cheetchat-shell-v7';
 
 self.addEventListener('install', (event) => {
     event.waitUntil(

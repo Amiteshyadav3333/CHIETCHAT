@@ -22,6 +22,7 @@ import SocialShareSheet from '../components/SocialShareSheet';
 import ProCameraStudio from '../components/ProCameraStudio';
 import { useBackHandler } from '../utils/backNavigation';
 import { isSocialFeedCacheFresh, loadSocialFeedCache, saveSocialFeedCache } from '../utils/socialFeedCache';
+import { useNavigate, usePathname } from '../utils/clientRouter';
 
 const authHeaders = (token) => ({ Authorization: `Bearer ${token}` });
 const feedCacheKey = (userId, feed) => `${userId || 'guest'}:${feed}`;
@@ -429,7 +430,7 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
                                         <span aria-hidden="true">⚑</span> Report photo/video
                                     </button>
                                 )}
-                                <button onClick={() => { navigator.clipboard && navigator.clipboard.writeText(window.location.origin + '/?post=' + post.id); setShowMenu(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#e7e9ea', fontSize: 14, textAlign: 'left' }}
+                                <button onClick={() => { navigator.clipboard && navigator.clipboard.writeText(`${window.location.origin}/posts/${encodeURIComponent(post.id)}`); setShowMenu(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#e7e9ea', fontSize: 14, textAlign: 'left' }}
                                     onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
                                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                                     <LinkIcon style={{ width: 20, height: 20 }} />Copy link
@@ -950,6 +951,8 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
 };
 
 const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectMessage, openComposerRequest = 0 }) => {
+    const navigate = useNavigate();
+    const pathname = usePathname();
     const { user, token, updateUser } = useContext(AuthContext);
     const [activeTab, setActiveTab] = useState(() => user?.uiPreferences?.socialDefaultFeed || localStorage.getItem('social_default_feed') || 'for-you');
     const feedCacheRef = useRef(new Map());
@@ -982,11 +985,14 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
 
     useBackHandler(Boolean(showChannelForm), () => setShowChannelForm(false), 'social-channel-form');
     useBackHandler(Boolean(selectedChannel), () => setSelectedChannel(null), 'social-channel');
-    useBackHandler(Boolean(profileView), () => setProfileView(null), 'social-profile');
+    useBackHandler(Boolean(profileView), () => { setProfileView(null); navigate('/social', { replace: true }); }, 'social-profile');
+    useEffect(() => {
+        if (!pathname.startsWith('/profile/')) setProfileView(null);
+    }, [pathname]);
     const fileRef = useRef(null);
     const coverRef = useRef(null);
     const highlightedRef = useRef(null);
-    const deepLinkHandled = useRef(false);
+    const deepLinkHandled = useRef('');
 
     const fetchPosts = useCallback(async (tab, { force = false } = {}) => {
         const t = tab || activeTab;
@@ -1098,8 +1104,11 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
     }, [token, fetchPosts]);
 
     useEffect(() => {
-        if (!deepLink || deepLinkHandled.current) return;
-        deepLinkHandled.current = true;
+        if (!deepLink) { deepLinkHandled.current = ''; return; }
+        const deepLinkKey = `${deepLink.type}:${deepLink.id}`;
+        if (deepLinkHandled.current === deepLinkKey) return;
+        deepLinkHandled.current = deepLinkKey;
+        if (deepLink.type !== 'profile') setProfileView(null);
         if (deepLink.type === 'profile') { setProfileView({ userId: deepLink.id }); onDeepLinkConsumed && onDeepLinkConsumed(); }
         else if (deepLink.type === 'channel') { setActiveTab('channels'); fetchChannel(deepLink.id); onDeepLinkConsumed && onDeepLinkConsumed(); }
         else if (deepLink.type === 'post') {
@@ -1235,11 +1244,11 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
         try { await axios.delete('/api/social/posts/' + postId, { headers: authHeaders(token) }); isChannelPost ? setChannelPosts(p => p.filter(x => x.id !== postId)) : updateCachedFeed(activeTab, p => p.filter(x => x.id !== postId)); } catch { alert('Delete failed'); }
     };
 
-    const openProfile = (userId) => setProfileView({ userId });
+    const openProfile = (userId) => { setProfileView({ userId }); navigate(`/profile/${encodeURIComponent(userId)}`); };
 
     if (profileView) return (
         <UserProfileView userId={profileView.userId} currentUser={user} token={token} updateUser={updateUser}
-            onBack={() => setProfileView(null)} onOpenProfile={openProfile} onShareToChat={onShareToChat} onDirectMessage={onDirectMessage} />
+            onBack={() => { setProfileView(null); navigate('/social', { replace: true }); }} onOpenProfile={openProfile} onShareToChat={onShareToChat} onDirectMessage={onDirectMessage} />
     );
     const currentPosts = selectedChannel ? channelPosts : posts;
     const TABS = [{ key: 'for-you', label: 'For You' }, { key: 'news', label: 'News' }, { key: 'community', label: 'Community' }, { key: 'following', label: 'Following' }, { key: 'channels', label: 'Spaces' }];
@@ -1274,7 +1283,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                             { icon: <NewspaperIcon className="w-7 h-7" />, label: 'News', action: () => { setSelectedChannel(null); setActiveTab('news'); } },
                             { icon: <ChartBarIcon className="w-7 h-7" />, label: 'Community', action: () => { setSelectedChannel(null); setActiveTab('community'); } },
                             { icon: <UsersIcon className="w-7 h-7" />, label: 'Spaces', action: () => { setSelectedChannel(null); setActiveTab('channels'); } },
-                            { icon: <UserCircleIcon className="w-7 h-7" />, label: 'Profile', action: () => setProfileView({ userId: user.id }) },
+                            { icon: <UserCircleIcon className="w-7 h-7" />, label: 'Profile', action: () => openProfile(user.id) },
                             { icon: <ArrowLeftIcon className="w-7 h-7" />, label: 'Back', action: onBack },
                         ].map(({ icon, label, action }) => (
                             <button key={label} onClick={action}
@@ -1293,7 +1302,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                         </button>
                     </div>
 
-                    <button onClick={() => setProfileView({ userId: user.id })}
+                    <button onClick={() => openProfile(user.id)}
                         className="flex items-center justify-center xl:justify-start gap-3 p-2 rounded-full bg-transparent border-none cursor-pointer w-full hover:bg-white/10 transition-colors"
                     >
                         <img src={user && user.avatar} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
@@ -1365,7 +1374,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                             { icon: <NewspaperIcon className="w-6 h-6" />, action: () => { setSelectedChannel(null); setActiveTab('news'); } },
                             { icon: <ChartBarIcon className="w-6 h-6" />, action: () => { setSelectedChannel(null); setActiveTab('community'); } },
                             { icon: <UsersIcon className="w-6 h-6" />, action: () => { setSelectedChannel(null); setActiveTab('channels'); } },
-                            { icon: user && user.avatar ? <img src={user.avatar} alt="" className="w-6 h-6 rounded-full object-cover" /> : <UserCircleIcon className="w-6 h-6" />, action: () => setProfileView({ userId: user.id }) },
+                            { icon: user && user.avatar ? <img src={user.avatar} alt="" className="w-6 h-6 rounded-full object-cover" /> : <UserCircleIcon className="w-6 h-6" />, action: () => openProfile(user.id) },
                         ].map((btn, i) => (
                             <button key={i} onClick={btn.action} className="flex-1 flex justify-center py-2.5 bg-transparent border-none cursor-pointer text-[#e7e9ea] hover:opacity-85">
                                 {btn.icon}

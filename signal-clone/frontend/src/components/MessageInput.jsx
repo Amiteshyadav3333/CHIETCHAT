@@ -498,7 +498,6 @@ const MessageInput = ({
             const mediaRecorder = new MediaRecorder(stream, preferredType ? { mimeType: preferredType } : undefined);
             mediaRecorderRef.current = mediaRecorder;
             audioChunksRef.current = [];
-
             mediaRecorder.ondataavailable = (e) => {
                 if (e.data.size > 0) audioChunksRef.current.push(e.data);
             };
@@ -1011,7 +1010,7 @@ const MessageInput = ({
             {/* ─── WhatsApp-style Input Row ─── */}
             <div className="flex items-end gap-2 px-2 py-2">
 
-                {/* Left icons: Attach + Translate + AI (emoji moved inside chatbox) */}
+                {/* Left icons: Attach + AI + Translate (emoji moved inside chatbox) */}
                 {!isRecording && !disabled && (
                     <div className="flex items-center gap-0.5 flex-shrink-0 pb-1">
                         {/* Attach */}
@@ -1025,15 +1024,17 @@ const MessageInput = ({
                             <PaperClipIcon className="w-6 h-6" />
                         </button>
 
-                        <button
-                            type="button"
-                            onClick={() => { setShowAttachMenu(false); setShowEmoji(false); onOpenAiChat?.(); }}
-                            className="flex h-10 w-10 items-center justify-center rounded-full text-violet-300 transition-all hover:bg-violet-400/10 hover:text-violet-200 active:scale-90"
-                            title="Open Aria AI"
-                            aria-label="Open Aria AI chat"
-                        >
-                            <SparklesIcon className="h-5 w-5" />
-                        </button>
+                        {onOpenAiChat && (
+                            <button
+                                type="button"
+                                onClick={() => { setShowAttachMenu(false); setShowEmoji(false); onOpenAiChat(); }}
+                                className="flex h-10 w-10 items-center justify-center rounded-full text-violet-300 transition-all hover:bg-violet-400/10 hover:text-violet-200 active:scale-90"
+                                title="Talk to Aria AI"
+                                aria-label="Talk to Aria AI"
+                            >
+                                <SparklesIcon className="h-5 w-5" />
+                            </button>
+                        )}
 
                         {/* AI Grammar Fix */}
                         {showAiFeature && (

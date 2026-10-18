@@ -325,7 +325,7 @@ const Login = () => {
     return (
         <div className="h-[100dvh] overflow-y-auto overscroll-contain bg-[#08090b] text-signal-text scroll-smooth">
             <header className="auth-header">
-                <a href="#auth-top" className="auth-header-brand"><img src="/lion-logo.png" alt="Ducor logo"/><span>Ducor</span></a>
+                <a href="#auth-top" className="auth-header-brand"><img src="/ducor-lion-mark.svg" alt="Ducor logo"/><span>Ducor</span></a>
                 <nav className="auth-header-nav"><a href="#features">Features</a><a href="#security">Security</a><a href="/founder">Founder</a><a href="#projects">Projects</a><a href="#pricing">Pricing</a><a href="#legal">Legal</a></nav>
                 <div className="auth-header-actions">
                     <div className="auth-language" aria-label="Website language"><button type="button" className={siteLanguage === 'en' ? 'active' : ''} onClick={() => changeSiteLanguage('en')}>EN</button><button type="button" className={siteLanguage === 'hi' ? 'active' : ''} onClick={() => changeSiteLanguage('hi')}>हिं</button></div>
@@ -354,7 +354,7 @@ const Login = () => {
                 <div className="auth-google-center">
                     <div className="auth-preview-stack" aria-hidden="true"><div className="auth-preview-phone preview-back"><img src="/marketing/social.jpg" alt=""/></div><div className="auth-preview-phone preview-front"><img src="/marketing/chat.jpg" alt=""/></div><div className="auth-preview-glow"/></div>
                     <div className="auth-google-card">
-                        <div className="auth-google-logo"><img src="/lion-logo.png" alt="Ducor"/></div>
+                        <div className="auth-google-logo"><img src="/ducor-lion-mark.svg" alt="Ducor"/></div>
                         <span>Fast, secure account access</span>
                         <h2>Enter Ducor</h2>
                         <p>Join conversations, discover useful resources and publish stories with your communities.</p>
@@ -372,7 +372,7 @@ const Login = () => {
                 <div className="hidden min-h-[640px] border-r border-white/10 bg-[#0d1117] p-8 md:flex md:flex-col md:justify-between">
                     <div>
                         <div className="mb-10 flex items-center gap-3">
-                            <img src="/lion-logo.png" alt="Ducor logo" className="h-11 w-11 rounded-lg object-cover" />
+                            <img src="/ducor-lion-mark.svg" alt="Ducor logo" className="h-11 w-11 rounded-lg object-cover" />
                             <div>
                                 <h1 className="text-2xl font-bold tracking-normal">Ducor</h1>
                                 <p className="text-sm text-gray-400">A Social Platform for India</p>
@@ -399,7 +399,7 @@ const Login = () => {
 
                 <div className="p-6 sm:p-8">
                     <div className="mb-7 md:hidden">
-                        <img src="/lion-logo.png" alt="Ducor logo" className="mb-3 h-11 w-11 rounded-lg object-cover" />
+                        <img src="/ducor-lion-mark.svg" alt="Ducor logo" className="mb-3 h-11 w-11 rounded-lg object-cover" />
                         <h1 className="text-3xl font-bold tracking-normal">Ducor</h1>
                         <p className="text-sm text-gray-400">Social platform · Made in India</p>
                     </div>

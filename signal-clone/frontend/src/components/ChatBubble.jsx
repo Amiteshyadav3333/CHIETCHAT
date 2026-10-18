@@ -690,6 +690,12 @@ const ChatBubble = ({
     const [videoNoteExpanded, setVideoNoteExpanded] = useState(false);
 
     const [translatedText, setTranslatedText] = useState('');
+    const [audioTranscript, setAudioTranscript] = useState('');
+    const [audioTranscriptLanguage, setAudioTranscriptLanguage] = useState('');
+    const [translatedAudioTranscript, setTranslatedAudioTranscript] = useState('');
+    const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
+    const [isTranslatingAudioTranscript, setIsTranslatingAudioTranscript] = useState(false);
+    const [audioTranscriptError, setAudioTranscriptError] = useState('');
 
     const currentUserStr = localStorage.getItem('user');
     const currentUser = currentUserStr ? JSON.parse(currentUserStr) : null;
@@ -837,6 +843,43 @@ const ChatBubble = ({
         }
     };
 
+    const handleTranscribeAudioMessage = async () => {
+        if (!content || isTranscribingAudio) return;
+        setIsTranscribingAudio(true);
+        setAudioTranscriptError('');
+        try {
+            const audioResponse = await fetch(content);
+            if (!audioResponse.ok) throw new Error('Could not read this audio message.');
+            const audioBlob = await audioResponse.blob();
+            const extension = audioBlob.type.includes('mp4') ? 'm4a' : audioBlob.type.includes('ogg') ? 'ogg' : audioBlob.type.includes('mpeg') ? 'mp3' : 'webm';
+            const formData = new FormData();
+            formData.append('file', new File([audioBlob], `voice-message.${extension}`, { type: audioBlob.type || 'audio/webm' }));
+            const headers = token && token !== 'cookie-session' ? { Authorization: `Bearer ${token}` } : {};
+            const response = await axios.post('/api/ai/transcribe-audio', formData, { headers, timeout: 120000 });
+            setAudioTranscript(response.data.text || '');
+            setAudioTranscriptLanguage(response.data.language || '');
+            setTranslatedAudioTranscript('');
+        } catch (error) {
+            setAudioTranscriptError(error.response?.data?.error || error.message || 'Could not transcribe this audio.');
+        } finally {
+            setIsTranscribingAudio(false);
+        }
+    };
+
+    const handleTranslateAudioTranscript = async () => {
+        if (!audioTranscript || !onTranslate || isTranslatingAudioTranscript) return;
+        setIsTranslatingAudioTranscript(true);
+        try {
+            const translated = await onTranslate(audioTranscript, targetLang, 'auto');
+            setTranslatedAudioTranscript(translated || '');
+            if (translated) localStorage.setItem('preferred_translation_language', targetLang);
+        } catch (error) {
+            setAudioTranscriptError(error.response?.data?.error || 'Translation failed. Please try again.');
+        } finally {
+            setIsTranslatingAudioTranscript(false);
+        }
+    };
+
     const renderContent = (cnt, type) => {
 
         if (type === 'drawing') return <DrawingMessage content={cnt} />;
@@ -944,11 +987,31 @@ const ChatBubble = ({
         // ── AUDIO ──
         if (type === 'audio' || cnt.match(/\.(mp3|wav|m4a|aac|oga|webm)$/i)) {
             return (
-                <InlineAudioPlayer
-                    src={cnt}
-                    isOwn={isOwn}
-                    onOpen={() => setZoomedMedia({ src: cnt, type: 'audio' })}
-                />
+                <div className="space-y-2">
+                    <InlineAudioPlayer
+                        src={cnt}
+                        isOwn={isOwn}
+                        onOpen={() => setZoomedMedia({ src: cnt, type: 'audio' })}
+                    />
+                    {!protectedSnapMode && <button type="button" onClick={handleTranscribeAudioMessage} disabled={isTranscribingAudio} className="rounded-lg bg-black/15 px-2.5 py-1.5 text-xs font-semibold text-white/85 transition hover:bg-black/25 disabled:opacity-60">{isTranscribingAudio ? 'Listening and writing…' : audioTranscript ? 'Convert audio to text again' : 'Convert audio to text'}</button>}
+                    {!protectedSnapMode && !audioTranscript && <p className="text-[10px] text-white/55">Audio is sent for transcription only when you tap.</p>}
+                    {(audioTranscriptError || audioTranscript) && (
+                        <div className="max-w-[300px] rounded-xl border border-white/10 bg-black/15 p-3 text-left" onClick={event => event.stopPropagation()}>
+                            {audioTranscriptError && <p role="status" className="mb-2 text-xs text-rose-200">{audioTranscriptError}</p>}
+                            {audioTranscript && <>
+                                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-white/55">Transcript{audioTranscriptLanguage ? ` · ${audioTranscriptLanguage}` : ''}</p>
+                                <p className="whitespace-pre-wrap break-words text-sm text-white">{audioTranscript}</p>
+                                <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-white/10 pt-2">
+                                    <select value={targetLang} onChange={event => setLocalTargetLang(event.target.value)} aria-label="Translate transcript to" className="min-w-0 flex-1 rounded-md border border-white/10 bg-[#111b21] px-2 py-1 text-xs text-white">
+                                        {LANGUAGES.map(language => <option key={language.code} value={language.code}>{language.name}</option>)}
+                                    </select>
+                                    <button type="button" onClick={handleTranslateAudioTranscript} disabled={isTranslatingAudioTranscript} className="rounded-md bg-violet-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-violet-500 disabled:opacity-60">{isTranslatingAudioTranscript ? 'Translating…' : 'Translate'}</button>
+                                </div>
+                                {translatedAudioTranscript && <div className="mt-2 border-t border-white/10 pt-2"><p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-200">Translation ({LANGUAGES.find(language => language.code === targetLang)?.name || targetLang})</p><p className="whitespace-pre-wrap break-words text-sm text-emerald-100">{translatedAudioTranscript}</p></div>}
+                            </>}
+                        </div>
+                    )}
+                </div>
             );
         }
         // ── VIDEO ──

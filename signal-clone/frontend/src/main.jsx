@@ -69,7 +69,7 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
 
 const WhiteCheetChatMark = () => (
     <div className="flex flex-col items-center" aria-label="Ducor">
-        <img src="/lion-logo.png" alt="" className="h-24 w-24 rounded-[1.75rem] object-cover shadow-[0_0_48px_rgba(255,101,51,0.2)]" />
+        <img src="/ducor-lion-mark.svg" alt="" className="h-24 w-24 rounded-[1.75rem] object-cover shadow-[0_0_48px_rgba(255,101,51,0.2)]" />
         <span className="mt-4 bg-gradient-to-r from-sky-400 via-violet-400 to-orange-400 bg-clip-text text-xl font-black tracking-[0.24em] text-transparent">Ducor</span>
     </div>
 );
@@ -117,6 +117,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                             <Route path="/about" element={<About />} />
                             <Route path="/founder" element={<FounderPage />} />
                             <Route path="/reels/:reelId" element={<PublicReel />} />
+                            <Route path="/posts/:postId" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+                            <Route path="/profile/:profileId" element={<ProtectedRoute><Home /></ProtectedRoute>} />
                             <Route path="/chats" element={<ProtectedRoute><Home /></ProtectedRoute>} />
                             <Route path="/social" element={<ProtectedRoute><Home /></ProtectedRoute>} />
                             <Route path="/reels" element={<ProtectedRoute><Home /></ProtectedRoute>} />

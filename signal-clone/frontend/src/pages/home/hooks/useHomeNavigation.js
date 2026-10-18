@@ -7,6 +7,16 @@ const pathToView = {
     '/ai-chat': 'ai-chat', '/saskat-ai': 'saskat-ai',
 };
 const viewToPath = Object.fromEntries(Object.entries(pathToView).map(([path, view]) => [view, path]));
+const readSocialDeepLink = pathname => {
+    const match = pathname.match(/^\/(posts|profile)\/([^/]+)\/?$/);
+    if (match) return { type: match[1] === 'posts' ? 'post' : 'profile', id: decodeURIComponent(match[2]) };
+    if (pathname === '/') {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('post')) return { type: 'post', id: params.get('post') };
+        if (params.get('profile')) return { type: 'profile', id: params.get('profile') };
+    }
+    return null;
+};
 
 export const useHomeNavigation = () => {
     const pathname = usePathname();
@@ -22,7 +32,7 @@ export const useHomeNavigation = () => {
     const [podliveInvite, setPodliveInvite] = useState(null);
     const [podliveLiveCount, setPodliveLiveCount] = useState(0);
     const [showSaskatAI, setShowSaskatAI] = useState(() => currentView === 'saskat-ai');
-    const [socialDeepLink, setSocialDeepLink] = useState(null); // { type: 'post'|'profile', id }
+    const [socialDeepLink, setSocialDeepLink] = useState(() => readSocialDeepLink(pathname));
     const [showSettings, setShowSettings] = useState(() => currentView === 'settings');
     const [navPeekOpen, setNavPeekOpen] = useState(false);
     const [navCollapsed, setNavCollapsed] = useState(() => localStorage.getItem('app_nav_collapsed') === '1');
@@ -48,6 +58,9 @@ export const useHomeNavigation = () => {
     // A direct URL or browser back/forward restores the matching app section.
     useEffect(() => {
         routeSyncPending.current = true;
+        const deepLink = readSocialDeepLink(pathname);
+        if (deepLink) setSocialDeepLink(deepLink);
+        else setSocialDeepLink(null);
         setCurrentView(pathToView[pathname] || 'social');
     }, [pathname, setCurrentView]);
 

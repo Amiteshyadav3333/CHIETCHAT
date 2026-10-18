@@ -1,6 +1,6 @@
 export const getSocialShareData = (post, origin = window.location.origin) => {
     const displayPost = post.isRetweet && post.originalPost ? post.originalPost : post;
-    const url = `${origin}/?post=${post.id}`;
+    const url = `${origin}/posts/${encodeURIComponent(post.id)}`;
     const text = displayPost.caption?.trim() || `See @${displayPost.user?.username || 'Ducor'}'s post`;
     return { title: 'Ducor Post', text, url, message: `${text}\n${url}` };
 };

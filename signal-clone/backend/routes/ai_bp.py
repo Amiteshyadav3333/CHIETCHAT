@@ -5,12 +5,60 @@ import urllib.parse
 import urllib.error
 import re
 import datetime
+import requests
 from flask import Blueprint, request, jsonify, Response, stream_with_context, current_app
 from models import db, AiConversation, User
 from utils import get_current_user_id, utc_now
 from observability import report_safe_exception
 
 ai_bp = Blueprint('ai_bp', __name__)
+
+
+@ai_bp.route('/api/ai/transcribe-audio', methods=['POST'])
+def transcribe_audio():
+    if not get_current_user_id():
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    audio = request.files.get('file')
+    if not audio or not audio.filename:
+        return jsonify({'error': 'Choose an audio message to transcribe'}), 400
+    audio_bytes = audio.read(25 * 1024 * 1024 + 1)
+    if not audio_bytes:
+        return jsonify({'error': 'Audio file is empty'}), 400
+    if len(audio_bytes) > 25 * 1024 * 1024:
+        return jsonify({'error': 'Audio must be 25 MB or smaller'}), 413
+    if not OPENAI_API_KEY and not GROQ_API_KEY:
+        return jsonify({'error': 'Audio transcription is not configured on this server'}), 503
+
+    providers = []
+    if OPENAI_API_KEY:
+        providers.append(('https://api.openai.com/v1/audio/transcriptions', OPENAI_API_KEY, 'whisper-1'))
+    if GROQ_API_KEY:
+        providers.append(('https://api.groq.com/openai/v1/audio/transcriptions', GROQ_API_KEY, 'whisper-large-v3-turbo'))
+
+    filename = audio.filename.rsplit('/', 1)[-1].rsplit('\\', 1)[-1][:120]
+    mime_type = audio.mimetype or 'application/octet-stream'
+    for endpoint, api_key, model in providers:
+        try:
+            response = requests.post(
+                endpoint,
+                headers={'Authorization': f'Bearer {api_key}'},
+                files={'file': (filename, audio_bytes, mime_type)},
+                data={'model': model, 'response_format': 'verbose_json'},
+                timeout=90,
+            )
+            if not response.ok:
+                response.raise_for_status()
+            result = response.json()
+            transcript = result.get('text', '').strip()
+            if transcript:
+                return jsonify({'text': transcript, 'language': result.get('language', '')})
+        except requests.RequestException as error:
+            current_app.logger.warning('Audio transcription provider failed: %s', error)
+        except (ValueError, AttributeError) as error:
+            current_app.logger.warning('Audio transcription response was invalid: %s', error)
+
+    return jsonify({'error': 'Could not transcribe this audio. Please try again.'}), 502
 
 # ── Provider config ──────────────────────────────────────────────
 GROK_API_KEY    = os.environ.get('GROK_API_KEY', '')

@@ -1441,7 +1441,7 @@ export const Home = () => {
 
     const shareSocialPostToChat = (post) => {
         const displayPost = post.isRetweet && post.originalPost ? post.originalPost : post;
-        const postUrl = `${window.location.origin}/?post=${post.id}`;
+        const postUrl = `${window.location.origin}/posts/${encodeURIComponent(post.id)}`;
         const caption = String(displayPost.caption || '').trim();
         nav.setShowSocial(false);
         setForwardMessage({

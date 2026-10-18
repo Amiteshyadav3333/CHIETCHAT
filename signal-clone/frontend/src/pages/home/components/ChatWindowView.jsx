@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import ChatBubble, { ChatDrawingOverlay, DateSeparator, isChatOverlayDrawing } from '../../../components/ChatBubble';
 import MessageInput from '../../../components/MessageInput';
 import DrawStudio from '../../../components/DrawStudio';
@@ -97,6 +97,17 @@ export const ChatWindowView = ({
     disappearingTtl,
     scheduleMessage,
 }) => {
+    const topDropdownRef = useRef(null);
+
+    useEffect(() => {
+        if (!showTopDropdown) return;
+        const handleOutsideClick = (event) => {
+            if (!topDropdownRef.current?.contains(event.target)) setShowTopDropdown(false);
+        };
+        document.addEventListener('mousedown', handleOutsideClick);
+        return () => document.removeEventListener('mousedown', handleOutsideClick);
+    }, [showTopDropdown, setShowTopDropdown]);
+
     const [showCollaborationHub, setShowCollaborationHub] = React.useState(false);
 
     if (!visibleActiveChat) {
@@ -207,7 +218,7 @@ export const ChatWindowView = ({
                     <button onClick={() => setShowMessageSearch(v => !v)} title="Search messages"><MagnifyingGlassIcon className="w-6 h-6" /></button>
                     <button onClick={() => startCall('voice')} title="Voice Call"><PhoneIcon className="w-6 h-6" /></button>
                     <button onClick={() => startCall('video')} title="Video Call"><VideoCameraIcon className="w-6 h-6" /></button>
-                    <div className="relative">
+                    <div className="relative" ref={topDropdownRef}>
                         <button onClick={() => { setShowTopDropdown(v => !v); setShowTopReactions(false); }} className="text-gray-400 hover:text-white">
                             <EllipsisVerticalIcon className="w-6 h-6" />
                         </button>

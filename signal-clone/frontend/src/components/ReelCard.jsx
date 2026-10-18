@@ -451,7 +451,7 @@ const ReelCard = ({ reel, currentUser, onShare, onProfileClick, onReact, onDelet
                         className="flex items-center gap-3 cursor-pointer group"
                         onClick={(e) => { e.stopPropagation(); if (ownerId) onProfileClick(ownerId); }}
                     >
-                        <img src={reelOwner.avatar || '/icons/icon-192.png'} className="w-10 h-10 rounded-full border-2 border-white shadow-lg group-hover:scale-110 transition-transform object-cover" alt="" />
+                        <img src={reelOwner.avatar || '/ducor-lion-mark.svg'} className="w-10 h-10 rounded-full border-2 border-white shadow-lg group-hover:scale-110 transition-transform object-cover" alt="" />
                         <span className="text-white font-bold text-sm drop-shadow-md group-hover:underline">@{reelOwner.username || 'unknown'}</span>
                         {reelOwner.isVerified && <span title="Premium verified" className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 text-[10px] font-black text-white">✓</span>}
                     </div>

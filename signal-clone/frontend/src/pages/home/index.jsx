@@ -66,6 +66,9 @@ export const Home = () => {
 
     const [chats, setChats] = useState(() => loadChatMetadata(user?.id));
     const [activeChat, setActiveChat] = useState(null);
+    const [chatWallpaperPrefs, setChatWallpaperPrefs] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('chat_wallpaper_preferences') || '{}'); } catch { return {}; }
+    });
     const [isOnline, setIsOnline] = useState(navigator.onLine);
     const [messages, setMessages] = useState(() => {
         purgeLegacyMessageCaches();
@@ -76,6 +79,21 @@ export const Home = () => {
     // Custom Hooks
     const nav = useHomeNavigation();
     const prefs = useChatPreferences(user);
+
+    const saveChatWallpaperPref = useCallback((chatId, preference) => {
+        setChatWallpaperPrefs(current => {
+            const next = { ...current };
+            if (preference) next[String(chatId)] = preference;
+            else delete next[String(chatId)];
+            try {
+                localStorage.setItem('chat_wallpaper_preferences', JSON.stringify(next));
+            } catch {
+                window.alert('This device is out of space for more custom wallpapers. Remove a saved wallpaper and try again.');
+                return current;
+            }
+            return next;
+        });
+    }, []);
 
     // Chat room specific states
     const [replyTo, setReplyTo] = useState(null);
@@ -1703,20 +1721,24 @@ export const Home = () => {
 
     const featureOverlayOpen = showSearchModal || showLinkPhoneModal || showNotifications || nav.showSettings || nav.showSaskatAI || calls.showCallModal || calls.incomingCall;
     const appNavHidden = featureOverlayOpen || Boolean(activeChat);
-    const customWallpaper = localStorage.getItem('custom_chat_wallpaper');
-    const hasCustomWallpaper = prefs.wallpaper === 'custom' && Boolean(customWallpaper);
-    const chatBackground = prefs.wallpaper === 'dots'
+    const activeChatWallpaperPref = visibleActiveChat ? chatWallpaperPrefs[String(visibleActiveChat.id)] : null;
+    const activeChatWallpaper = activeChatWallpaperPref?.type === 'preset' ? activeChatWallpaperPref.value : prefs.wallpaper;
+    const customWallpaper = activeChatWallpaperPref?.type === 'image'
+        ? activeChatWallpaperPref.value
+        : activeChatWallpaper === 'custom' ? localStorage.getItem('custom_chat_wallpaper') : null;
+    const hasCustomWallpaper = Boolean(customWallpaper);
+    const chatBackground = activeChatWallpaper === 'dots'
         ? 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.12) 1px, transparent 0), #0b141a'
-        : prefs.wallpaper === 'emerald'
+        : activeChatWallpaper === 'emerald'
             ? 'linear-gradient(135deg, #06251f, #111b21 55%, #17212b)'
-            : prefs.wallpaper === 'white'
+            : activeChatWallpaper === 'white'
                 ? '#ffffff'
-                : prefs.wallpaper === 'sunset' ? 'linear-gradient(145deg, #431407, #9a3412 48%, #701a75)'
-                : prefs.wallpaper === 'ocean' ? 'linear-gradient(145deg, #082f49, #0e7490 48%, #164e63)'
-                : prefs.wallpaper === 'lavender' ? 'linear-gradient(145deg, #312e81, #6d28d9 52%, #4c1d95)'
-                : prefs.wallpaper === 'rose' ? 'linear-gradient(145deg, #4c0519, #9f1239 52%, #831843)'
-                : prefs.wallpaper === 'sand' ? 'linear-gradient(145deg, #78350f, #a16207 52%, #713f12)'
-                : prefs.wallpaper === 'aurora' ? 'linear-gradient(135deg, #042f2e, #065f46 34%, #312e81 68%, #4c1d95)'
+                : activeChatWallpaper === 'sunset' ? 'linear-gradient(145deg, #431407, #9a3412 48%, #701a75)'
+                : activeChatWallpaper === 'ocean' ? 'linear-gradient(145deg, #082f49, #0e7490 48%, #164e63)'
+                : activeChatWallpaper === 'lavender' ? 'linear-gradient(145deg, #312e81, #6d28d9 52%, #4c1d95)'
+                : activeChatWallpaper === 'rose' ? 'linear-gradient(145deg, #4c0519, #9f1239 52%, #831843)'
+                : activeChatWallpaper === 'sand' ? 'linear-gradient(145deg, #78350f, #a16207 52%, #713f12)'
+                : activeChatWallpaper === 'aurora' ? 'linear-gradient(135deg, #042f2e, #065f46 34%, #312e81 68%, #4c1d95)'
                 : 'linear-gradient(to bottom, #0b141a, #0d1b22)';
 
     useEffect(() => {
@@ -1936,7 +1958,7 @@ export const Home = () => {
                 customWallpaper={customWallpaper}
                 hasCustomWallpaper={hasCustomWallpaper}
                 chatBackground={chatBackground}
-                wallpaper={prefs.wallpaper}
+                wallpaper={activeChatWallpaper}
                 showBioBanner={showBioBanner}
                 setShowBioBanner={setShowBioBanner}
                 snapMode={snapMode}
@@ -1975,8 +1997,12 @@ export const Home = () => {
                 handleDeleteChat={handleDeleteChat}
                 setChats={setChats}
                 setActiveChat={setActiveChat}
-                wallpaper={prefs.wallpaper}
-                setWallpaper={prefs.setWallpaper}
+                wallpaper={activeChatWallpaper}
+                setWallpaper={value => saveChatWallpaperPref(visibleActiveChat?.id, { type: 'preset', value })}
+                customWallpaper={customWallpaper}
+                onCustomWallpaperChange={value => saveChatWallpaperPref(visibleActiveChat?.id, { type: 'image', value })}
+                onResetWallpaper={() => saveChatWallpaperPref(visibleActiveChat?.id, null)}
+                onUserUpdated={updateUser}
                 disappearingTtl={disappearingTtl}
                 updateDisappearingTtl={updateDisappearingTtl}
                 setShowChatDraw={setShowChatDraw}

@@ -19,6 +19,10 @@ export const ChatInfoDrawer = ({
     setActiveChat,
     wallpaper,
     setWallpaper,
+    customWallpaper,
+    onCustomWallpaperChange,
+    onResetWallpaper,
+    onUserUpdated,
     disappearingTtl,
     updateDisappearingTtl,
     setShowChatDraw,
@@ -141,12 +145,18 @@ export const ChatInfoDrawer = ({
                         <ChatPreferences
                             wallpaper={wallpaper}
                             onWallpaperChange={setWallpaper}
+                            customWallpaper={customWallpaper}
+                            onCustomWallpaperChange={onCustomWallpaperChange}
+                            onResetWallpaper={onResetWallpaper}
                             disappearingTtl={disappearingTtl}
                             onDisappearingChange={updateDisappearingTtl}
                             chatId={visibleActiveChat.id}
                             onOpenDraw={() => { setShowInfoPanel(false); setShowChatDraw(true); }}
                             snapMode={snapMode}
                             onSnapModeChange={updateSnapMode}
+                            user={user}
+                            token={token}
+                            onUserUpdated={onUserUpdated}
                         />
                         {other && (
                             <button

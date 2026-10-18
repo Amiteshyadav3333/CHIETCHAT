@@ -1,4 +1,5 @@
 import React from 'react';
+import axios from 'axios';
 import ChatSoundPreferences from './ChatSoundPreferences';
 
 const WALLPAPERS = [
@@ -14,7 +15,7 @@ const WALLPAPERS = [
     ['aurora', 'Aurora', 'bg-gradient-to-br from-emerald-900 via-indigo-800 to-violet-700'],
 ];
 
-const ChatPreferences = ({ wallpaper, onWallpaperChange, disappearingTtl, onDisappearingChange, chatId, onOpenDraw, snapMode = false, onSnapModeChange }) => {
+const ChatPreferences = ({ wallpaper, onWallpaperChange, customWallpaper, onCustomWallpaperChange, onResetWallpaper, disappearingTtl, onDisappearingChange, chatId, onOpenDraw, snapMode = false, onSnapModeChange, user, token, onUserUpdated }) => {
     const [expandedSection, setExpandedSection] = React.useState(null);
     const toggleSection = section => setExpandedSection(current => current === section ? null : section);
     const colorKey = `chat_bubble_color_${chatId || 'default'}`;
@@ -28,7 +29,65 @@ const ChatPreferences = ({ wallpaper, onWallpaperChange, disappearingTtl, onDisa
     const [storyVisible, setStoryVisible] = React.useState(() => localStorage.getItem(storyKey) !== '0');
     const [photoVisible, setPhotoVisible] = React.useState(() => localStorage.getItem(photoKey) !== '0');
     const [showSnapConfirm, setShowSnapConfirm] = React.useState(false);
+    const [selectedFont, setSelectedFont] = React.useState('');
+    const [fontSize, setFontSize] = React.useState('');
+    const [universalMessage, setUniversalMessage] = React.useState(user?.bio || '');
+    const [savingUniversalMessage, setSavingUniversalMessage] = React.useState(false);
+    const [universalMessageFeedback, setUniversalMessageFeedback] = React.useState('');
+    const wallpaperInputRef = React.useRef(null);
     const unitSeconds = { seconds: 1, minutes: 60, hours: 3600, days: 86400, years: 31536000 };
+
+    React.useEffect(() => {
+        setSelectedFont(localStorage.getItem(`chat_custom_font_${chatId}`) || '');
+        setFontSize(localStorage.getItem(`chat_font_size_${chatId}`) || '');
+        setUniversalMessage(user?.bio || '');
+        setContactColor(localStorage.getItem(colorKey) || localStorage.getItem('chat_bubble_color') || '#00a884');
+        setReceivedColor(localStorage.getItem(receivedColorKey) || '#202c33');
+        setStoryVisible(localStorage.getItem(storyKey) !== '0');
+        setPhotoVisible(localStorage.getItem(photoKey) !== '0');
+    }, [chatId, user?.id, colorKey, receivedColorKey, storyKey, photoKey]);
+
+    const saveUniversalMessage = async () => {
+        setSavingUniversalMessage(true);
+        setUniversalMessageFeedback('');
+        try {
+            const headers = token && token !== 'cookie-session' ? { Authorization: `Bearer ${token}` } : {};
+            const response = await axios.post('/api/users/profile', { bio: universalMessage.trim() }, { headers });
+            onUserUpdated?.(response.data);
+            setUniversalMessageFeedback(universalMessage.trim() ? 'Your message is now visible across your profile and chats for 24 hours.' : 'Universal message cleared.');
+        } catch (error) {
+            setUniversalMessageFeedback(error.response?.data?.error || 'Could not save your universal message.');
+        } finally {
+            setSavingUniversalMessage(false);
+        }
+    };
+
+    const handleWallpaperFile = async event => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        if (!file.type.startsWith('image/')) return alert('Choose an image from your gallery.');
+        if (file.size > 20 * 1024 * 1024) return alert('Choose an image smaller than 20 MB.');
+        try {
+            const source = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(new Error('Could not read this image.'));
+                reader.readAsDataURL(file);
+            });
+            const image = new Image();
+            image.src = source;
+            await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; });
+            const scale = Math.min(1, 1200 / Math.max(image.naturalWidth, image.naturalHeight));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+            canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+            canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+            onCustomWallpaperChange?.(canvas.toDataURL('image/jpeg', 0.78));
+        } catch {
+            alert('Could not use this image as a wallpaper. Try another picture.');
+        }
+    };
     return (
     <div className="border-b border-gray-800 bg-[#111b21] px-4 py-4">
         <PreferenceSection title="Chat settings" open={expandedSection === 'settings'} onClick={() => toggleSection('settings')}>
@@ -65,7 +124,20 @@ const ChatPreferences = ({ wallpaper, onWallpaperChange, disappearingTtl, onDisa
                     </button>
                 ))}
             </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+                <input ref={wallpaperInputRef} type="file" accept="image/*" className="hidden" onChange={handleWallpaperFile} />
+                <button type="button" onClick={() => wallpaperInputRef.current?.click()} className="rounded-lg border border-[#00a884]/50 bg-[#00a884]/10 px-3 py-2 text-xs font-semibold text-[#7ee6ce] hover:bg-[#00a884]/20">Choose from gallery</button>
+                {customWallpaper && <button type="button" onClick={onResetWallpaper} className="rounded-lg border border-gray-700 px-3 py-2 text-xs font-semibold text-gray-300 hover:bg-white/5">Use default wallpaper</button>}
+            </div>
+            <p className="mt-2 text-[11px] text-gray-500">Wallpaper changes apply only to this conversation and are saved on this device.</p>
         </PreferenceSection>
+        {chatId && <PreferenceSection title="Chat font" open={expandedSection === 'font'} onClick={() => toggleSection('font')}>
+            <div className="grid grid-cols-2 gap-3">
+                <label className="block text-xs text-gray-400">Font style<select value={selectedFont} onChange={event => { const value = event.target.value; setSelectedFont(value); if (value) localStorage.setItem(`chat_custom_font_${chatId}`, value); else localStorage.removeItem(`chat_custom_font_${chatId}`); window.dispatchEvent(new Event('cheetchat-colour-updated')); }} className="mt-1 w-full rounded-lg border border-gray-700 bg-[#202c33] px-3 py-2 text-sm text-white"><option value="">Default</option><option value="sans">Sans</option><option value="serif">Serif</option><option value="rounded">Rounded</option><option value="mono">Monospace</option></select></label>
+                <label className="block text-xs text-gray-400">Text size<select value={fontSize} onChange={event => { const value = event.target.value; setFontSize(value); if (value) localStorage.setItem(`chat_font_size_${chatId}`, value); else localStorage.removeItem(`chat_font_size_${chatId}`); window.dispatchEvent(new Event('cheetchat-colour-updated')); }} className="mt-1 w-full rounded-lg border border-gray-700 bg-[#202c33] px-3 py-2 text-sm text-white"><option value="">Default</option><option value="small">Small</option><option value="normal">Medium</option><option value="large">Large</option></select></label>
+            </div>
+            <p className="mt-2 text-[11px] text-gray-500">Font style and size are saved separately for this conversation.</p>
+        </PreferenceSection>}
         <PreferenceSection title="Bubble colours for this conversation" open={expandedSection === 'colors'} onClick={() => toggleSection('colors')}>
             <div className="grid grid-cols-2 gap-3"><label className="rounded-xl bg-white/5 p-3"><span className="mb-2 block text-xs text-gray-400">My messages</span><input type="color" value={contactColor} onChange={event => { setContactColor(event.target.value); localStorage.setItem(colorKey, event.target.value); window.dispatchEvent(new Event('cheetchat-colour-updated')); }} className="h-10 w-full rounded border-0 bg-transparent" /></label><label className="rounded-xl bg-white/5 p-3"><span className="mb-2 block text-xs text-gray-400">Their messages</span><input type="color" value={receivedColor} onChange={event => { setReceivedColor(event.target.value); localStorage.setItem(receivedColorKey, event.target.value); window.dispatchEvent(new Event('cheetchat-colour-updated')); }} className="h-10 w-full rounded border-0 bg-transparent" /></label></div>
             <span className="mt-2 block text-[11px] text-gray-500">These colours are stored only on your device.</span>
@@ -75,6 +147,12 @@ const ChatPreferences = ({ wallpaper, onWallpaperChange, disappearingTtl, onDisa
         {showSnapConfirm && <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={() => setShowSnapConfirm(false)}><div className="w-full max-w-sm rounded-3xl border border-yellow-400/25 bg-[#111b21] p-6 shadow-2xl" onClick={event => event.stopPropagation()}><div className="mb-4 text-5xl">👻</div><h3 className="text-xl font-bold text-white">{snapMode ? 'End Snap Chat?' : 'Start Snap Mode?'}</h3><p className="mt-2 text-sm leading-6 text-gray-300">{snapMode ? 'Messages, photos, audio and video from this session will disappear from every participant’s chat ten minutes after Snap Chat ends.' : 'Messages and media remain visible while Snap Chat is active, then disappear for every participant ten minutes after it ends. Downloads, forwarding and common screen-capture shortcuts are restricted.'}</p><div className="mt-4 rounded-xl bg-yellow-400/10 p-3 text-xs leading-5 text-yellow-200">An encrypted server copy is retained for security for up to seven days. The database record and managed media are then permanently deleted.</div><div className="mt-5 flex gap-2"><button type="button" onClick={() => setShowSnapConfirm(false)} className="flex-1 rounded-xl border border-gray-700 py-3 text-sm font-semibold text-gray-300">Cancel</button><button type="button" onClick={() => { onSnapModeChange(!snapMode); setShowSnapConfirm(false); }} className="flex-1 rounded-xl bg-yellow-400 py-3 text-sm font-black text-black">{snapMode ? 'End Snap Chat' : 'Start Snap Mode'}</button></div></div></div>}
         {chatId && <PreferenceSection title="Custom Tone & Ringtones" open={expandedSection === 'sounds'} onClick={() => toggleSection('sounds')}><ChatSoundPreferences chatId={chatId} /></PreferenceSection>}
         {chatId && <PreferenceSection title="Story and profile privacy" open={expandedSection === 'privacy'} onClick={() => toggleSection('privacy')}><PrivacyToggle label="Show my profile photo" value={photoVisible} onChange={value => { setPhotoVisible(value); localStorage.setItem(photoKey, value ? '1' : '0'); }} /><PrivacyToggle label="Show my story" value={storyVisible} onChange={value => { setStoryVisible(value); localStorage.setItem(storyKey, value ? '1' : '0'); }} /><p className="mt-2 text-[11px] leading-4 text-gray-500">Choose visibility separately for this contact.</p></PreferenceSection>}
+        {chatId && <PreferenceSection title="Universal message" open={expandedSection === 'universal-message'} onClick={() => toggleSection('universal-message')}>
+            <p className="mb-2 text-[11px] leading-4 text-gray-400">Set one message for your profile and all conversations. It stays visible for 24 hours.</p>
+            <textarea value={universalMessage} onChange={event => setUniversalMessage(event.target.value.slice(0, 160))} rows={3} maxLength={160} placeholder="Write a message for everyone…" className="w-full resize-none rounded-lg border border-gray-700 bg-[#202c33] px-3 py-2 text-sm text-white outline-none placeholder:text-gray-500 focus:border-[#00a884]" />
+            <div className="mt-2 flex items-center justify-between gap-3"><span className="text-[11px] text-gray-500">{universalMessage.length}/160</span><button type="button" disabled={savingUniversalMessage} onClick={saveUniversalMessage} className="rounded-lg bg-[#00a884] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{savingUniversalMessage ? 'Saving…' : 'Save message'}</button></div>
+            {universalMessageFeedback && <p role="status" className="mt-2 text-[11px] text-gray-300">{universalMessageFeedback}</p>}
+        </PreferenceSection>}
     </div>
     );
 };

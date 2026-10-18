@@ -23,21 +23,58 @@ export const useHomeNavigation = () => {
     const navigate = useNavigate();
     const currentView = pathToView[pathname] || 'social';
     const routeSyncPending = useRef(false);
-    const [showReels, setShowReels] = useState(() => currentView === 'reels');
-    const [showSocial, setShowSocial] = useState(() => currentView === 'social');
-    const [showAiChat, setShowAiChat] = useState(() => currentView === 'ai-chat');
-    const [showSmartSpace, setShowSmartSpace] = useState(() => currentView === 'smart-space');
+    const [showReels, setShowReelsState] = useState(() => currentView === 'reels');
+    const [showSocial, setShowSocialState] = useState(() => currentView === 'social');
+    const [showAiChat, setShowAiChatState] = useState(() => currentView === 'ai-chat');
+    const [showSmartSpace, setShowSmartSpaceState] = useState(() => currentView === 'smart-space');
     const [smartSpaceButtonEnabled, setSmartSpaceButtonEnabled] = useState(() => localStorage.getItem('smart_space_button_enabled') === '1');
-    const [showPodlive, setShowPodlive] = useState(() => currentView === 'podlive');
+    const [showPodlive, setShowPodliveState] = useState(() => currentView === 'podlive');
     const [podliveInvite, setPodliveInvite] = useState(null);
     const [podliveLiveCount, setPodliveLiveCount] = useState(0);
-    const [showSaskatAI, setShowSaskatAI] = useState(() => currentView === 'saskat-ai');
+    const [showSaskatAI, setShowSaskatAIState] = useState(() => currentView === 'saskat-ai');
     const [socialDeepLink, setSocialDeepLink] = useState(() => readSocialDeepLink(pathname));
-    const [showSettings, setShowSettings] = useState(() => currentView === 'settings');
+    const [showSettings, setShowSettingsState] = useState(() => currentView === 'settings');
     const [navPeekOpen, setNavPeekOpen] = useState(false);
     const [navCollapsed, setNavCollapsed] = useState(() => localStorage.getItem('app_nav_collapsed') === '1');
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
     const [mobileHomeTab, setMobileHomeTab] = useState('chats');
+
+    // Selecting a main section updates its shareable URL immediately. Keeping
+    // this in the same handler as the view change avoids stale URLs when
+    // several sections are hidden and shown in one click handler.
+    const activateView = useCallback((view, syncUrl = true) => {
+        setShowReelsState(view === 'reels');
+        setShowSocialState(view === 'social');
+        setShowPodliveState(view === 'podlive');
+        setShowSmartSpaceState(view === 'smart-space');
+        setShowSettingsState(view === 'settings');
+        setShowAiChatState(view === 'ai-chat');
+        setShowSaskatAIState(view === 'saskat-ai');
+        const target = viewToPath[view];
+        if (syncUrl && target && target !== pathname) navigate(target);
+    }, [navigate, pathname]);
+
+    const setShowReels = useCallback(value => {
+        if (value) activateView('reels'); else setShowReelsState(false);
+    }, [activateView]);
+    const setShowSocial = useCallback(value => {
+        if (value) activateView('social'); else setShowSocialState(false);
+    }, [activateView]);
+    const setShowPodlive = useCallback(value => {
+        if (value) activateView('podlive'); else setShowPodliveState(false);
+    }, [activateView]);
+    const setShowSmartSpace = useCallback(value => {
+        if (value) activateView('smart-space'); else setShowSmartSpaceState(false);
+    }, [activateView]);
+    const setShowSettings = useCallback(value => {
+        if (value) activateView('settings'); else setShowSettingsState(false);
+    }, [activateView]);
+    const setShowAiChat = useCallback(value => {
+        if (value) activateView('ai-chat'); else setShowAiChatState(false);
+    }, [activateView]);
+    const setShowSaskatAI = useCallback(value => {
+        if (value) activateView('saskat-ai'); else setShowSaskatAIState(false);
+    }, [activateView]);
 
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -46,14 +83,8 @@ export const useHomeNavigation = () => {
     }, []);
 
     const setCurrentView = useCallback((view) => {
-        setShowReels(view === 'reels');
-        setShowSocial(view === 'social');
-        setShowPodlive(view === 'podlive');
-        setShowSmartSpace(view === 'smart-space');
-        setShowSettings(view === 'settings');
-        setShowAiChat(view === 'ai-chat');
-        setShowSaskatAI(view === 'saskat-ai');
-    }, []);
+        activateView(view, false);
+    }, [activateView]);
 
     // A direct URL or browser back/forward restores the matching app section.
     useEffect(() => {

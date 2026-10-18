@@ -2,7 +2,7 @@ import React from 'react';
 import AvatarZoom from '../../../components/AvatarZoom';
 import ContactList from '../../../components/ContactList';
 import StatusSection from '../../../components/StatusSection';
-import { PlusIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, SparklesIcon } from '@heroicons/react/24/outline';
 import { MobileBottomNavigation } from './HomeNavigationRail';
 
 export const ChatSidebar = ({
@@ -11,6 +11,7 @@ export const ChatSidebar = ({
     user,
     token,
     openNewChat,
+    onOpenAiChat,
     avatarInputRef,
     handleAvatarChange,
     handleDeleteAvatar,
@@ -59,6 +60,15 @@ export const ChatSidebar = ({
                     </div>
                 </div>
                 <div className="flex gap-2">
+                    <button
+                        type="button"
+                        onClick={onOpenAiChat}
+                        className="rounded-full p-2 text-violet-300 transition-colors hover:bg-violet-500/10 hover:text-violet-200"
+                        title="Talk to AI"
+                        aria-label="Talk to AI"
+                    >
+                        <SparklesIcon className="h-6 w-6" />
+                    </button>
                     <button 
                         onClick={openNewChat}
                         className="p-2 hover:bg-gray-700/55 rounded-full text-signal-accent transition-colors" 

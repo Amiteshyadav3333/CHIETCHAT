@@ -79,7 +79,7 @@ const MessageInput = ({
     showAiFeature = false,
     showSmartReplies = false,
     currentUserId, gamePlayers = [], payeeId, payeeName,
-    onSchedule, token, drawSource = null, onDrawSourceConsumed, onOpenDraw, onOpenAiChat,
+    onSchedule, token, drawSource = null, onDrawSourceConsumed, onOpenDraw,
     showSmartSpaceShortcut = false, onOpenSmartSpace,
     cameraOpenRequest = 0, photoReactionSource = null, onPhotoReactionComplete
 }) => {
@@ -1010,7 +1010,7 @@ const MessageInput = ({
             {/* ─── WhatsApp-style Input Row ─── */}
             <div className="flex items-end gap-2 px-2 py-2">
 
-                {/* Left icons: Attach + AI + Translate (emoji moved inside chatbox) */}
+                {/* Left icons: Attach + Translate (emoji moved inside chatbox) */}
                 {!isRecording && !disabled && (
                     <div className="flex items-center gap-0.5 flex-shrink-0 pb-1">
                         {/* Attach */}
@@ -1023,18 +1023,6 @@ const MessageInput = ({
                         >
                             <PaperClipIcon className="w-6 h-6" />
                         </button>
-
-                        {onOpenAiChat && (
-                            <button
-                                type="button"
-                                onClick={() => { setShowAttachMenu(false); setShowEmoji(false); onOpenAiChat(); }}
-                                className="flex h-10 w-10 items-center justify-center rounded-full text-violet-300 transition-all hover:bg-violet-400/10 hover:text-violet-200 active:scale-90"
-                                title="Talk to Aria AI"
-                                aria-label="Talk to Aria AI"
-                            >
-                                <SparklesIcon className="h-5 w-5" />
-                            </button>
-                        )}
 
                         {/* AI Grammar Fix */}
                         {showAiFeature && (

@@ -37,7 +37,6 @@ export const ChatWindowView = ({
     formatLastSeen,
     smartSpaceButtonEnabled,
     setShowSmartSpace,
-    setShowAiChat,
     showMessageSearch,
     setShowMessageSearch,
     messageSearchQuery,
@@ -555,7 +554,6 @@ export const ChatWindowView = ({
                 placeholderOverride={visibleActiveChat.isChatDisabled && visibleActiveChat.groupAdminId !== user?.id ? "Only admins can send messages in this group" : ""}
                 lastMessageText={messages.length > 0 && messages[messages.length - 1].senderId !== user?.id && (!messages[messages.length - 1].type || messages[messages.length - 1].type === 'text') ? messages[messages.length - 1].content : ''}
                 showAiFeature={aiEnabled}
-                onOpenAiChat={() => { setShowTopDropdown(false); setShowAiChat(true); }}
                 showSmartSpaceShortcut={smartSpaceButtonEnabled}
                 onOpenSmartSpace={() => { setShowTopDropdown(false); setShowSmartSpace(true); }}
                 showSmartReplies={smartRepliesEnabled}

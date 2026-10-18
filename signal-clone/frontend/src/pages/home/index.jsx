@@ -1851,6 +1851,7 @@ export const Home = () => {
                 user={user}
                 token={token}
                 openNewChat={openNewChat}
+                onOpenAiChat={() => nav.setShowAiChat(true)}
                 avatarInputRef={avatarInputRef}
                 handleAvatarChange={handleAvatarChange}
                 handleDeleteAvatar={handleDeleteAvatar}
@@ -1900,7 +1901,6 @@ export const Home = () => {
                 formatLastSeen={formatLastSeen}
                 smartSpaceButtonEnabled={nav.smartSpaceButtonEnabled}
                 setShowSmartSpace={nav.setShowSmartSpace}
-                setShowAiChat={nav.setShowAiChat}
                 showMessageSearch={showMessageSearch}
                 setShowMessageSearch={setShowMessageSearch}
                 messageSearchQuery={messageSearchQuery}

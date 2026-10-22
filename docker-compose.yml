@@ -1,0 +1,52 @@
+services:
+  backend:
+    build:
+      context: ./signal-clone/backend
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV: development
+      DATABASE_URL: sqlite:////data/cheetchat.db
+      REDIS_URL: redis://redis:6379/0
+      FRONTEND_URL: http://localhost:3000
+      BACKEND_URL: http://localhost:5000
+      SECRET_KEY: local-docker-secret-change-before-deployment
+      JWT_SECRET_KEY: local-docker-jwt-secret-change-before-deployment
+    volumes:
+      - chietchat-data:/data
+      - chietchat-uploads:/app/uploads
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:5000/health/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  frontend:
+    build:
+      context: ./signal-clone/frontend
+      dockerfile: Dockerfile
+    environment:
+      VITE_API_TARGET: http://backend:5000
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - chietchat-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  chietchat-data:
+  chietchat-uploads:
+  chietchat-redis:

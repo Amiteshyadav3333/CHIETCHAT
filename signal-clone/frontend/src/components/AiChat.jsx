@@ -216,7 +216,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
             const uname = user?.username || '';
             const greeting = botInfo?.name === 'Arjun'
                 ? (uname ? `ha ${uname}, bol kya scene hai` : `ha bol, kya scene hai`)
-                : (uname ? `heyy ${uname}, chalo start karte hain ❤️` : `heyy, chalo start karte hain ❤️`);
+                : (uname ? `heyy ${uname}, chalo start karte hain` : `heyy, chalo start karte hain`);
             speakAiResponse(greeting);
         }, 2500);
     };
@@ -615,8 +615,8 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
             : user?.gender || localStorage.getItem('user_gender') || 'unknown').toLowerCase();
         if (profileGender !== 'male' && profileGender !== 'female') return;
         const persona = profileGender === 'female'
-            ? { name: 'Arjun', avatar: '/ai/arjun-royal.jpg', bio: 'Tera dost Arjun — hamesha yahan hoon tere liye 💙' }
-            : { name: 'Aria', avatar: '/ai/aria-royal.jpg', bio: 'Main Aria hoon — teri apni AI companion ✨' };
+            ? { name: 'Arjun', avatar: '/ai/arjun-royal.jpg', bio: 'Tera dost Arjun — hamesha yahan hoon tere liye' }
+            : { name: 'Aria', avatar: '/ai/aria-royal.jpg', bio: 'Main Aria hoon — teri apni AI companion' };
         setBotInfo(current => ({ ...(current || {}), ...persona }));
     }, [userGender, user?.gender]);
 
@@ -652,8 +652,8 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         if (botInfo && messages.length === 0) {
             const isArjun = botInfo.name === 'Arjun';
             const welcome = isArjun
-                ? `hey, main ${botInfo.name} 😄 bolo kya scene hai?`
-                : `heyy, main ${botInfo.name} 😊 bolo na`;
+                ? `hey, main ${botInfo.name} bolo kya scene hai aaj ka ?`
+                : `heyy, main ${botInfo.name} bolo kaise ho? `;
             setMessages([{
                 id: 0,
                 role: 'assistant',
@@ -784,7 +784,8 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         } else if (!abortRef.current) {
             setMessages(prev => [...prev, {
                 id: Date.now(), role: 'assistant',
-                content: "thodi der baad try karo, abhi AI busy hai 🙏",
+                content: "thodi der baad try karo, abhi Aria busy hai, kuchh der me baat karte hain 🙏",
+                content: "thodi der baad try karo, abhi Arjun busy hai , kuchh der me baat karte hain 🙏",
                 timestamp: new Date().toISOString()
             }]);
         }
@@ -801,8 +802,8 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         setMessages([{
             id: 0, role: 'assistant',
             content: isArjun
-                ? "Fresh start! Bata, kya poochna tha? 😎"
-                : "Okay, sab clear! Ab se naya shuru karte hain 🧹✨",
+                ? "Fresh start! Bata, kya poochna tha?"
+                : "Okay, sab clear! Ab se naya shuru karte hain 🧹",
             timestamp: new Date().toISOString()
         }]);
     };

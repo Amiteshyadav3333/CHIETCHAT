@@ -12,9 +12,17 @@ const normalizePath = (target) => {
 };
 
 export const BrowserRouter = ({ children }) => {
-    const [path, setPath] = React.useState(() => window.location.pathname);
+    const [location, setLocation] = React.useState(() => ({
+        pathname: window.location.pathname,
+        search: window.location.search,
+        hash: window.location.hash,
+    }));
     React.useEffect(() => {
-        const onPopState = () => setPath(window.location.pathname);
+        const onPopState = () => setLocation({
+            pathname: window.location.pathname,
+            search: window.location.search,
+            hash: window.location.hash,
+        });
         window.addEventListener('popstate', onPopState);
         return () => window.removeEventListener('popstate', onPopState);
     }, []);
@@ -25,10 +33,10 @@ export const BrowserRouter = ({ children }) => {
         }
         const safeTarget = normalizePath(target);
         window.history[options.replace ? 'replaceState' : 'pushState']({}, '', safeTarget);
-        setPath(window.location.pathname);
+        setLocation({ pathname: window.location.pathname, search: window.location.search, hash: window.location.hash });
         window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     }, []);
-    return <RouterContext.Provider value={{ path, params: {}, navigate }}>{children}</RouterContext.Provider>;
+    return <RouterContext.Provider value={{ ...location, path: location.pathname, params: {}, navigate }}>{children}</RouterContext.Provider>;
 };
 
 const matchPath = (pattern, actual) => {
@@ -64,6 +72,10 @@ export const Navigate = ({ to, replace = false }) => {
 
 export const useNavigate = () => React.useContext(RouterContext).navigate;
 export const usePathname = () => React.useContext(RouterContext).path;
+export const useLocation = () => {
+    const { pathname, search, hash } = React.useContext(RouterContext);
+    return { pathname, search, hash };
+};
 export const useParams = () => React.useContext(RouterContext).params;
 
 export const Link = ({ to, onClick, children, ...props }) => {

@@ -9,9 +9,13 @@ import ReelReactor from '../components/ReelReactor';
 import { loadReelCache, saveReelCache } from '../utils/reelCache';
 import { REEL_CATEGORIES } from '../utils/reelCategories';
 import { useBackHandler } from '../utils/backNavigation';
+import { useLocation, useNavigate } from '../utils/clientRouter';
 
 const Reels = ({ active, onBack, onShareToChat, initialReel = null, onInitialReelConsumed }) => {
     const { user, token } = useContext(AuthContext);
+    const { pathname, search } = useLocation();
+    const navigate = useNavigate();
+    const reelFeedRef = useRef(null);
     const [reels, setReels] = useState(() => {
         return loadReelCache(user?.id);
     });
@@ -35,6 +39,33 @@ const Reels = ({ active, onBack, onShareToChat, initialReel = null, onInitialRee
     const [showFeedCustomizer, setShowFeedCustomizer] = useState(false);
     const [savingFeed, setSavingFeed] = useState(false);
     const hasFetched = useRef(false);
+
+    // Keep the address bar in sync with the Reel currently in view. Shared
+    // links use /reels/:id for the standalone public Reel page.
+    useEffect(() => {
+        const root = reelFeedRef.current;
+        if (!root || pathname !== '/reels' || typeof IntersectionObserver === 'undefined') return undefined;
+        const observer = new IntersectionObserver(entries => {
+            const visible = entries
+                .filter(entry => entry.isIntersecting)
+                .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+            const reelId = visible?.target?.dataset?.reelId;
+            if (!reelId) return;
+            const nextSearch = `?reel=${encodeURIComponent(reelId)}`;
+            if (window.location.search !== nextSearch) navigate(`${pathname}${nextSearch}`, { replace: true });
+        }, { root, threshold: [0.6, 0.8] });
+        root.querySelectorAll('[data-reel-id]').forEach(card => observer.observe(card));
+        return () => observer.disconnect();
+    }, [reels, filter, pathname, navigate]);
+
+    // Restore a Reel when someone opens a feed URL copied from the address bar.
+    useEffect(() => {
+        const requestedId = new URLSearchParams(search).get('reel');
+        if (!requestedId || !reels.length) return;
+        const target = Array.from(reelFeedRef.current?.querySelectorAll('[data-reel-id]') || [])
+            .find(card => card.dataset.reelId === requestedId);
+        if (target) requestAnimationFrame(() => target.scrollIntoView({ block: 'start' }));
+    }, [search, reels]);
 
     useBackHandler(Boolean(showFeedCustomizer), () => setShowFeedCustomizer(false), 'reels-feed-customizer');
     useBackHandler(Boolean(showSuggestions), () => setShowSuggestions(false), 'reels-suggestions');
@@ -268,22 +299,23 @@ const Reels = ({ active, onBack, onShareToChat, initialReel = null, onInitialRee
             )}
 
             {/* Scroll Container */}
-            <div className={`flex-1 overflow-y-auto snap-y snap-mandatory hide-scrollbar ${showUploader ? 'hidden' : ''}`}>
+            <div ref={reelFeedRef} className={`flex-1 overflow-y-auto snap-y snap-mandatory hide-scrollbar ${showUploader ? 'hidden' : ''}`}>
                 {visibleReels.length > 0 ? (
                     visibleReels.map(reel => (
-                        <ReelCard 
-                            key={reel.id} 
-                            reel={reel} 
-                            currentUser={user} 
-                            onShare={onShareToChat}
-                            onProfileClick={(uid) => setSelectedProfileUserId(uid)}
-                            onReact={(r) => setReactingToReel(r)}
-                            onDelete={(id) => setReels(prev => prev.filter(r => r.id !== id))}
-                            active={active}
-                            autoplay={playbackPrefs.autoplay}
-                            startMuted={playbackPrefs.muted}
-                            dataSaver={playbackPrefs.dataSaver}
-                        />
+                        <div key={reel.id} data-reel-id={String(reel.id)} className="h-full w-full snap-start">
+                            <ReelCard
+                                reel={reel}
+                                currentUser={user}
+                                onShare={onShareToChat}
+                                onProfileClick={(uid) => setSelectedProfileUserId(uid)}
+                                onReact={(r) => setReactingToReel(r)}
+                                onDelete={(id) => setReels(prev => prev.filter(r => r.id !== id))}
+                                active={active}
+                                autoplay={playbackPrefs.autoplay}
+                                startMuted={playbackPrefs.muted}
+                                dataSaver={playbackPrefs.dataSaver}
+                            />
+                        </div>
                     ))
                 ) : (
                     <div className="h-full flex flex-col items-center justify-center text-white px-8 text-center gap-4">

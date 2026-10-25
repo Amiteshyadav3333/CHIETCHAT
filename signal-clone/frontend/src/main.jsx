@@ -119,6 +119,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                             <Route path="/reels/:reelId" element={<PublicReel />} />
                             <Route path="/posts/:postId" element={<ProtectedRoute><Home /></ProtectedRoute>} />
                             <Route path="/profile/:profileId" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+                            <Route path="/chats/:chatId" element={<ProtectedRoute><Home /></ProtectedRoute>} />
                             <Route path="/chats" element={<ProtectedRoute><Home /></ProtectedRoute>} />
                             <Route path="/social" element={<ProtectedRoute><Home /></ProtectedRoute>} />
                             <Route path="/reels" element={<ProtectedRoute><Home /></ProtectedRoute>} />

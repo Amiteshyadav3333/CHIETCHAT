@@ -1125,6 +1125,11 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
     }, [deepLink]);
 
     useEffect(() => {
+        if (!highlightedPostId || !highlightedRef.current) return;
+        requestAnimationFrame(() => highlightedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+    }, [highlightedPostId, posts, channelPosts, activeTab]);
+
+    useEffect(() => {
         if (!media.length) { setPreview([]); return; }
         const urls = media.map(file => URL.createObjectURL(file));
         setPreview(urls);

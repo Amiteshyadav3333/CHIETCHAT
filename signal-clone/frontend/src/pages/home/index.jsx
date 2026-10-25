@@ -25,6 +25,7 @@ import { applyPollVoteUpdate } from '../../features/polls';
 import { playMessageNotification } from '../../utils/customNotificationSounds';
 
 import { useHomeNavigation } from './hooks/useHomeNavigation';
+import { useNavigate, useParams, usePathname } from '../../utils/clientRouter';
 import { useChatPreferences } from './hooks/useChatPreferences';
 import { useCallManager } from './hooks/useCallManager';
 import { useGroupDetails } from './hooks/useGroupDetails';
@@ -60,6 +61,10 @@ const readVideoDuration = (file) => new Promise(resolve => {
 });
 
 export const Home = () => {
+    const { chatId: routeChatId } = useParams();
+    const pathname = usePathname();
+    const navigate = useNavigate();
+    const previousPathname = useRef(pathname);
     const { user, token, logout, updateUser } = useContext(AuthContext);
     const { socket } = useContext(SocketContext);
     const { publicKey, privateKey } = useEncryption(user, token);
@@ -420,6 +425,23 @@ export const Home = () => {
             setChats(prev => prev.map(chat => chat.id === activeChat.id ? { ...chat, unreadCount: 0 } : chat));
         }
     }, [activeChat]);
+
+    // Keep selected conversations addressable and restore them from a shared URL.
+    useEffect(() => {
+        if (routeChatId) {
+            const selected = chats.find(chat => String(chat.id) === routeChatId);
+            if (selected && String(activeChat?.id) !== routeChatId) setActiveChat(selected);
+            previousPathname.current = pathname;
+            return;
+        }
+        if (pathname === '/chats' && previousPathname.current.startsWith('/chats/') && activeChat) {
+            setActiveChat(null);
+            localStorage.removeItem('activeChatId');
+        } else if (activeChat && pathname === '/chats') {
+            navigate(`/chats/${encodeURIComponent(activeChat.id)}`);
+        }
+        previousPathname.current = pathname;
+    }, [routeChatId, chats, activeChat, pathname, navigate]);
 
     useEffect(() => {
         if (user?.id && chats && chats.length > 0) {

@@ -11,4 +11,12 @@ describe('Social sharing', () => {
         expect(targets.sms).toMatch(/^sms:/);
         expect(targets.twitter).toContain('twitter.com/intent/tweet');
     });
+
+    it('creates a different link for each post', () => {
+        const first = getSocialShareData({ id: 9 }, 'https://chat.example');
+        const second = getSocialShareData({ id: 10 }, 'https://chat.example');
+        expect(first.url).toBe('https://chat.example/posts/9');
+        expect(second.url).toBe('https://chat.example/posts/10');
+        expect(first.url).not.toBe(second.url);
+    });
 });

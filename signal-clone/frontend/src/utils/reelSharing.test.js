@@ -11,4 +11,12 @@ describe('Reel sharing', () => {
         expect(targets.sms).toMatch(/^sms:/);
         expect(targets.twitter).toContain('twitter.com/intent/tweet');
     });
+
+    it('creates a different link for each Reel', () => {
+        const first = getReelShareData({ id: 42 }, 'https://chat.example');
+        const second = getReelShareData({ id: 43 }, 'https://chat.example');
+        expect(first.url).toBe('https://chat.example/reels/42');
+        expect(second.url).toBe('https://chat.example/reels/43');
+        expect(first.url).not.toBe(second.url);
+    });
 });

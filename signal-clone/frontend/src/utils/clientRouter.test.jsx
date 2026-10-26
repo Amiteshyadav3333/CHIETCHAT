@@ -2,7 +2,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { BrowserRouter, Route, Routes, useParams, usePathname } from './clientRouter';
+import { BrowserRouter, Route, Routes, useNavigate, useParams, usePathname } from './clientRouter';
 
 let container;
 let root;
@@ -13,8 +13,14 @@ const CurrentRoute = () => {
     return <output>{`${pathname}|${params.reelId || params.postId || params.chatId || ''}`}</output>;
 };
 
+const SectionLinks = () => {
+    const navigate = useNavigate();
+    return <><button onClick={() => navigate('/reels')}>Reels</button><button onClick={() => navigate('/podlive')}>PodLive</button></>;
+};
+
 beforeEach(() => {
     window.history.replaceState({}, '', '/');
+    window.scrollTo = () => {};
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -38,5 +44,21 @@ describe('client router direct URLs', () => {
             </BrowserRouter>
         ));
         expect(container.textContent).toBe(expected);
+    });
+
+    it.each([['Reels', '/reels'], ['PodLive', '/podlive']])('updates the browser URL when %s is selected', (label, path) => {
+        act(() => root.render(
+            <BrowserRouter>
+                <SectionLinks />
+                <Routes>
+                    <Route path="/" element={<CurrentRoute />} />
+                    <Route path="/reels" element={<CurrentRoute />} />
+                    <Route path="/podlive" element={<CurrentRoute />} />
+                </Routes>
+            </BrowserRouter>
+        ));
+        act(() => [...container.querySelectorAll('button')].find(button => button.textContent === label).click());
+        expect(window.location.pathname).toBe(path);
+        expect(container.querySelector('output').textContent).toBe(`${path}|`);
     });
 });

@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
-import { generateKeys, generateRecoveryCode, importPrivateKey, protectPrivateKeyWithPassword, restorePrivateKeyWithPassword } from '../utils/encryption';
+import { generateKeys, importPrivateKey, restorePrivateKeyWithPassword } from '../utils/encryption';
 import axios from 'axios';
 import { loadDevicePrivateKey, saveDevicePrivateKey } from '../utils/secureKeyStore';
+import { useRecoveryCodePrompt } from '../context/RecoveryCodePromptContext';
 
 export const useEncryption = (user, token) => {
     const [privateKey, setPrivateKey] = useState(null);
     const [publicKey, setPublicKey] = useState(null);
     const recoveryPromptedRef = useRef(false);
+    const { requestRecoveryCode } = useRecoveryCodePrompt();
 
     useEffect(() => {
         const initKeys = async () => {
@@ -39,7 +41,7 @@ export const useEncryption = (user, token) => {
                         headers: { Authorization: `Bearer ${token}` }
                     });
                     if (response.data.recoveryKeyBackup) {
-                        const recoveryCode = window.prompt('Enter your Ducor recovery code to restore encrypted chats on this device:');
+                        const recoveryCode = await requestRecoveryCode();
                         if (recoveryCode?.trim()) {
                             const restoredPrivateKey = await restorePrivateKeyWithPassword(response.data.recoveryKeyBackup, recoveryCode.trim());
                             await saveDevicePrivateKey(user.id, restoredPrivateKey);
@@ -47,26 +49,12 @@ export const useEncryption = (user, token) => {
                             setPrivateKey(await importPrivateKey(restoredPrivateKey));
                             return;
                         }
+                        return;
                     }
                 } catch (error) {
                     console.warn('Encrypted chat key recovery was not completed.', error);
+                    return;
                 }
-                const resetApproved = window.confirm('This device cannot recover your chat key. Reset encryption so new messages work? Old encrypted messages may remain unreadable.');
-                if (!resetApproved) return;
-                const replacementKeys = await generateKeys();
-                const recoveryCode = generateRecoveryCode();
-                const encryptedRecoveryKey = await protectPrivateKeyWithPassword(replacementKeys.privateKeyString, recoveryCode);
-                await axios.post('/api/user/key', {
-                    publicKey: replacementKeys.publicKeyString,
-                    encryptedRecoveryKey,
-                    resetExisting: true,
-                }, { headers: { Authorization: `Bearer ${token}` } });
-                await saveDevicePrivateKey(user.id, replacementKeys.privateKeyString);
-                localStorage.setItem(storageKeyPub, replacementKeys.publicKeyString);
-                setPrivateKey(replacementKeys.privateKey);
-                setPublicKey(replacementKeys.publicKeyString);
-                sessionStorage.setItem('recovery_code_once', recoveryCode);
-                window.location.assign('/recovery-code');
                 return;
             }
 
@@ -101,7 +89,7 @@ export const useEncryption = (user, token) => {
         };
 
         initKeys();
-    }, [user, token]);
+    }, [user, token, requestRecoveryCode]);
 
     return { privateKey, publicKey };
 };

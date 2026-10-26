@@ -1,6 +1,7 @@
 import React, { useState, useContext } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
+import { useRecoveryCodePrompt } from '../context/RecoveryCodePromptContext';
 import { useNavigate } from '../utils/clientRouter';
 import { generateKeys, generateRecoveryCode, protectPrivateKeyWithPassword, restorePrivateKeyWithPassword } from '../utils/encryption';
 import { EnvelopeIcon, KeyIcon, LockClosedIcon, UserPlusIcon } from '@heroicons/react/24/outline';
@@ -37,6 +38,7 @@ const Login = () => {
     const [submitting, setSubmitting] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
     const { login, token } = useContext(AuthContext);
+    const { requestRecoveryCode } = useRecoveryCodePrompt();
     const navigate = useNavigate();
 
     React.useEffect(() => {
@@ -147,7 +149,7 @@ const Login = () => {
                 }
             }
             if (!devicePrivateKey && recoveryKeyBackup) {
-                const enteredRecoveryCode = window.prompt('Enter your Ducor recovery code to restore encrypted chats on this device:');
+                const enteredRecoveryCode = await requestRecoveryCode();
                 if (enteredRecoveryCode?.trim()) {
                     try {
                         devicePrivateKey = await restorePrivateKeyWithPassword(recoveryKeyBackup, enteredRecoveryCode.trim());

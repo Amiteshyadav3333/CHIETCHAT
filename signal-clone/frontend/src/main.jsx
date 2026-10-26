@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from './utils/clientRouter';
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
+import { RecoveryCodePromptProvider } from './context/RecoveryCodePromptContext';
 const Login = React.lazy(() => import('./pages/Login'));
 const ResetPassword = React.lazy(() => import('./pages/ResetPassword'));
 const Home = React.lazy(() => import('./pages/Home'));
@@ -105,10 +106,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <SplashScreen />
         <BrowserRouter>
             <AuthProvider>
-                <AppLanguage />
-                <SocketProvider>
-                    <React.Suspense fallback={<SplashScreen />}>
-                        <Routes>
+                <RecoveryCodePromptProvider>
+                    <AppLanguage />
+                    <SocketProvider>
+                        <React.Suspense fallback={<SplashScreen />}>
+                            <Routes>
                             <Route path="/login" element={<Login />} />
                             <Route path="/signup" element={<Login />} />
                             <Route path="/reset-password" element={<ResetPassword />} />
@@ -143,9 +145,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                                     <Home />
                                 </ProtectedRoute>
                             } />
-                        </Routes>
-                    </React.Suspense>
-                </SocketProvider>
+                            </Routes>
+                        </React.Suspense>
+                    </SocketProvider>
+                </RecoveryCodePromptProvider>
             </AuthProvider>
         </BrowserRouter>
     </React.StrictMode>,

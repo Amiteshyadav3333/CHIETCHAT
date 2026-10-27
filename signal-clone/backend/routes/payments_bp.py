@@ -26,6 +26,7 @@ def mark_marketplace_order_paid(payment):
         return
     if order.status == 'awaiting_payment':
         order.status = 'paid'
+    order.payment_status = 'provider_verified'
     tag = db.session.get(AffiliateProductTag, order.affiliate_tag_id) if order.affiliate_tag_id else None
     if tag and tag.commission_bps > 0 and not AffiliateCommission.query.filter_by(order_id=order.id, promoter_id=tag.promoter_id).first():
         line = MarketplaceOrderLine.query.filter_by(order_id=order.id, product_id=tag.product_id).first()
@@ -39,6 +40,7 @@ def mark_marketplace_order_refunded(payment):
     order = MarketplaceOrder.query.filter_by(payment_order_id=payment.id).first()
     if order:
         order.status = 'refunded'
+        order.payment_status = 'refunded'
         for commission in AffiliateCommission.query.filter_by(order_id=order.id).all():
             commission.status = 'reversed'
 

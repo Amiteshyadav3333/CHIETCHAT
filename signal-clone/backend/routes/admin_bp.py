@@ -1,12 +1,15 @@
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, current_app, jsonify, request, send_file
 from werkzeug.security import check_password_hash
 import jwt
 import os
 import datetime
 import hmac
+import io
+from werkzeug.utils import secure_filename
 from utils import get_json_data, utc_now
-from models import db, PaymentOrder, User, SellerAccount, BusinessProfile
+from models import db, PaymentOrder, User, SellerAccount, BusinessProfile, SellerVerificationDocument, SellerVerificationAudit
 from extensions import socketio
+from seller_kyc import SellerKycUnavailable, decrypt_private_profile, decrypt_private_bytes, mask_identifier, required_document_types
 
 admin_bp = Blueprint('admin_bp', __name__)
 
@@ -16,12 +19,71 @@ def list_seller_applications():
     status = request.args.get('status', 'submitted')
     if status not in {'submitted', 'approved', 'rejected', 'needs_changes'}: return jsonify({'error': 'Invalid status'}), 400
     rows = SellerAccount.query.filter_by(status=status).order_by(SellerAccount.submitted_at.asc()).limit(100).all()
-    return jsonify({'sellers': [{'userId': row.user_id, 'legalName': row.legal_name,
-        'sellerType': row.seller_type, 'businessAddress': row.business_address,
-        'returnAddress': row.return_address or '', 'status': row.status,
-        'submittedAt': row.submitted_at.isoformat() if row.submitted_at else None,
-        'shop': (BusinessProfile.query.filter_by(user_id=row.user_id).first().business_name
-                 if BusinessProfile.query.filter_by(user_id=row.user_id).first() else '')} for row in rows]})
+    try:
+        sellers = []
+        for row in rows:
+            private = decrypt_private_profile(row)
+            documents = SellerVerificationDocument.query.filter_by(seller_id=row.id).order_by(SellerVerificationDocument.document_type.asc()).all()
+            profile = BusinessProfile.query.filter_by(user_id=row.user_id).first()
+            sellers.append({'userId': row.user_id, 'legalName': private.get('legalName', ''),
+                'sellerType': row.seller_type, 'businessAddress': private.get('businessAddress', ''),
+                'returnAddress': private.get('returnAddress', ''),
+                'taxIdentifierMasked': mask_identifier(private.get('taxIdentifier')),
+                'registrationNumberMasked': mask_identifier(private.get('registrationNumber')),
+                'status': row.status, 'reviewNote': row.review_note or '',
+                'submittedAt': row.submitted_at.isoformat() if row.submitted_at else None,
+                'requiredDocuments': required_document_types(row.seller_type),
+                'documents': [{'id': doc.id, 'documentType': doc.document_type, 'filename': doc.original_filename,
+                    'status': doc.status, 'uploadedAt': doc.uploaded_at.isoformat() if doc.uploaded_at else None,
+                    'reviewerNote': doc.reviewer_note or ''} for doc in documents],
+                'shop': profile.business_name if profile else ''})
+        return jsonify({'sellers': sellers})
+    except SellerKycUnavailable as error:
+        return jsonify({'error': str(error)}), 503
+
+@admin_bp.get('/api/admin/sellers/<int:user_id>/documents/<int:document_id>')
+def download_seller_verification_document(user_id, document_id):
+    admin_email = verify_admin_token()
+    if not admin_email: return jsonify({'error': 'Unauthorized'}), 401
+    seller = SellerAccount.query.filter_by(user_id=user_id).first()
+    document = SellerVerificationDocument.query.filter_by(id=document_id, seller_id=seller.id if seller else -1).first()
+    if not seller or not document: return jsonify({'error': 'Verification document not found'}), 404
+    try:
+        raw = decrypt_private_bytes(document.encrypted_content, f'seller-document:{seller.id}:{document.document_type}')
+    except SellerKycUnavailable as error:
+        return jsonify({'error': str(error)}), 503
+    db.session.add(SellerVerificationAudit(seller_id=seller.id, document_id=document.id,
+        admin_email=admin_email, action='viewed'))
+    db.session.commit()
+    response = send_file(io.BytesIO(raw), mimetype=document.mime_type,
+        as_attachment=True, download_name=secure_filename(document.original_filename), max_age=0)
+    response.headers['Cache-Control'] = 'no-store, private'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    return response
+
+@admin_bp.patch('/api/admin/sellers/<int:user_id>/documents/<int:document_id>')
+def review_seller_verification_document(user_id, document_id):
+    admin_email = verify_admin_token()
+    if not admin_email: return jsonify({'error': 'Unauthorized'}), 401
+    seller = SellerAccount.query.filter_by(user_id=user_id).first()
+    document = SellerVerificationDocument.query.filter_by(id=document_id, seller_id=seller.id if seller else -1).first()
+    if not seller or not document: return jsonify({'error': 'Verification document not found'}), 404
+    if seller.status != 'submitted': return jsonify({'error': 'Submit the seller application before reviewing documents'}), 409
+    data = request.get_json(silent=True) or {}
+    decision = str(data.get('status') or '')
+    if decision not in {'verified', 'rejected'}: return jsonify({'error': 'Choose verified or rejected'}), 400
+    document.status = decision
+    document.reviewer_note = str(data.get('note') or '').strip()[:500] or None
+    document.reviewed_at = utc_now()
+    document.reviewed_by = admin_email
+    db.session.add(SellerVerificationAudit(seller_id=seller.id, document_id=document.id,
+        admin_email=admin_email, action=decision))
+    if decision == 'rejected':
+        seller.status = 'needs_changes'
+        seller.review_note = document.reviewer_note or f'Please replace the {document.document_type.replace("_", " ")}.'
+    db.session.commit()
+    return jsonify({'userId': user_id, 'documentId': document.id, 'status': document.status,
+        'sellerStatus': seller.status, 'reviewerNote': document.reviewer_note})
 
 @admin_bp.patch('/api/admin/sellers/<int:user_id>')
 def review_seller_application(user_id):
@@ -32,9 +94,15 @@ def review_seller_application(user_id):
     data = request.get_json(silent=True) or {}
     status = str(data.get('status') or '')
     if status not in {'approved', 'rejected', 'needs_changes'}: return jsonify({'error': 'Invalid review decision'}), 400
+    if status == 'approved':
+        documents = {row.document_type: row for row in SellerVerificationDocument.query.filter_by(seller_id=seller.id).all()}
+        if any(item not in documents or documents[item].status != 'verified' for item in required_document_types(seller.seller_type)):
+            return jsonify({'error': 'Verify every required seller document before approving this shop'}), 409
     seller.status = status
     seller.review_note = str(data.get('note') or '').strip()[:500] or None
     seller.reviewed_at = utc_now()
+    db.session.add(SellerVerificationAudit(seller_id=seller.id, document_id=None,
+        admin_email=admin_email, action=f'seller_{status}'))
     if status != 'approved':
         profile = BusinessProfile.query.filter_by(user_id=user_id).first()
         if profile: profile.marketplace_enabled = False

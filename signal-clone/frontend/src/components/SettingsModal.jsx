@@ -57,7 +57,7 @@ const businessDefaults = (user) => ({
     profile: { businessName: user?.username || '', category: 'Other', description: '', address: '', supportEmail: user?.email || '', supportPhone: user?.phone || '', websiteUrl: '', openingHours: '', catalogVisible: true, marketplaceEnabled: false },
     products: [],
     automation: { enabled: false, aiEnabled: false, welcomeMessage: '', awayMessage: '', keywordRules: {} },
-    seller: { status: 'not_started' },
+    seller: { status: 'not_started', documents: [] },
     schedule: Array.from({ length: 7 }, (_, weekday) => ({ weekday, opensAt: '09:00', closesAt: '18:00', isClosed: weekday === 0, timezone: 'Asia/Kolkata' })),
     deliveryOptions: [], orders: [],
 });
@@ -68,7 +68,7 @@ const normalizeBusinessData = (data, user) => {
         profile: { ...defaults.profile, ...(data?.profile || {}) },
         products: Array.isArray(data?.products) ? data.products.filter(Boolean) : [],
         automation: { ...defaults.automation, ...(data?.automation || {}), keywordRules: data?.automation?.keywordRules || {} },
-        seller: data?.seller || { status: 'not_started' },
+        seller: data?.seller || { status: 'not_started', documents: [] },
         schedule: Array.from({ length: 7 }, (_, weekday) => ({ ...defaults.schedule[weekday], ...(data?.schedule || []).find(day => day.weekday === weekday) })),
         deliveryOptions: Array.isArray(data?.deliveryOptions) ? data.deliveryOptions : [],
         orders: Array.isArray(data?.orders) ? data.orders : [],
@@ -233,7 +233,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     const [businessData, setBusinessData] = useState(() => businessDefaults(user));
     const [businessAnalytics, setBusinessAnalytics] = useState(null);
     const [newProduct, setNewProduct] = useState({ name: '', description: '', price: '', imageUrl: '', inStock: true, affiliateCommissionPercent: '0' });
-    const [sellerForm, setSellerForm] = useState({ legalName: '', sellerType: 'individual', businessAddress: '', returnAddress: '' });
+    const [sellerForm, setSellerForm] = useState({ legalName: '', sellerType: 'individual', businessAddress: '', returnAddress: '', taxIdentifier: '', registrationNumber: '' });
     const [deliveryForm, setDeliveryForm] = useState({ mode: 'seller_delivery', label: 'Local delivery', area: '', fee: '0', etaDays: '1' });
     const [editingPriceId, setEditingPriceId] = useState(null);
     const [editingPrice, setEditingPrice] = useState('');
@@ -477,8 +477,31 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
         try {
             const { data } = await axios.post('/api/business/seller', sellerForm, { headers: { Authorization: `Bearer ${token}` } });
             setBusinessData(current => ({ ...current, seller: data.seller }));
-            setMessage({ type: 'success', text: 'Seller application submitted for review.' });
+            setMessage({ type: 'success', text: 'Seller details saved. Upload the required documents, then submit for review.' });
         } catch (err) { setMessage({ type: 'error', text: err.response?.data?.error || 'Could not submit seller application.' }); }
+        finally { setBusy(false); }
+    };
+
+    const uploadSellerDocument = async (documentType, file) => {
+        if (!file) return;
+        setBusy(true); setMessage(null);
+        try {
+            const form = new FormData(); form.append('documentType', documentType); form.append('file', file);
+            await axios.post('/api/business/seller/documents', form, { headers: { Authorization: `Bearer ${token}` } });
+            const { data } = await axios.get('/api/business/me', { headers: { Authorization: `Bearer ${token}` } });
+            setBusinessData(current => ({ ...current, seller: data.seller }));
+            setMessage({ type: 'success', text: 'Verification document uploaded securely.' });
+        } catch (err) { setMessage({ type: 'error', text: err.response?.data?.error || 'Could not upload document.' }); }
+        finally { setBusy(false); }
+    };
+
+    const submitSellerApplication = async () => {
+        setBusy(true); setMessage(null);
+        try {
+            const { data } = await axios.post('/api/business/seller/submit', {}, { headers: { Authorization: `Bearer ${token}` } });
+            setBusinessData(current => ({ ...current, seller: { ...current.seller, ...data.seller, documents: data.documents || current.seller.documents } }));
+            setMessage({ type: 'success', text: 'Seller application submitted for review.' });
+        } catch (err) { setMessage({ type: 'error', text: err.response?.data?.error || 'Could not submit application.' }); }
         finally { setBusy(false); }
     };
 
@@ -505,7 +528,8 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     const updateMarketplaceOrder = async (orderId, status) => {
         setBusy(true);
         try {
-            const { data } = await axios.put('/api/business/orders', { orderId, status }, { headers: { Authorization: `Bearer ${token}` } });
+            const payload = status === 'seller_confirmed' ? { orderId, paymentStatus: status } : { orderId, status };
+            const { data } = await axios.put('/api/business/orders', payload, { headers: { Authorization: `Bearer ${token}` } });
             setBusinessData(current => ({ ...current, orders: current.orders.map(order => order.id === orderId ? data : order) }));
         } catch (err) { setMessage({ type: 'error', text: err.response?.data?.error || 'Could not update order.' }); }
         finally { setBusy(false); }
@@ -1283,13 +1307,16 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                             {businessTitle === 'Seller setup & hours' && (
                                 <div className="space-y-5 p-5">
                                     <div className="rounded-xl border border-white/10 bg-[#182329] p-4"><p className="text-sm font-bold text-white">Seller review: <span className="capitalize text-emerald-300">{businessData.seller.status.replaceAll('_', ' ')}</span></p><p className="mt-1 text-xs leading-5 text-gray-400">Complete your shop profile first. The marketplace listing opens after seller review. Legal information is private and only available to authorized review staff.</p>{businessData.seller.reviewNote && <p className="mt-2 text-sm text-amber-300">{businessData.seller.reviewNote}</p>}</div>
-                                    {businessData.seller.status !== 'approved' && <SettingsForm onSubmit={submitSellerRegistration}>
+                                    {['not_started', 'draft', 'needs_changes', 'rejected'].includes(businessData.seller.status) && <SettingsForm onSubmit={submitSellerRegistration}>
                                         <Field label="Legal owner / business name" value={sellerForm.legalName || businessData.seller.legalName || ''} onChange={value => setSellerForm(current => ({ ...current, legalName: value }))} required />
                                         <label className="block"><span className="mb-2 block text-sm font-medium text-gray-200">Seller type</span><select value={sellerForm.sellerType} onChange={event => setSellerForm(current => ({ ...current, sellerType: event.target.value }))} className="w-full rounded-lg border border-gray-700 bg-[#202c33] px-4 py-3 text-sm text-white"><option value="individual">Individual</option><option value="company">Company</option><option value="partnership">Partnership</option></select></label>
                                         <Field label="Business address" value={sellerForm.businessAddress || businessData.seller.businessAddress || ''} onChange={value => setSellerForm(current => ({ ...current, businessAddress: value }))} required />
                                         <Field label="Return address (optional)" value={sellerForm.returnAddress || businessData.seller.returnAddress || ''} onChange={value => setSellerForm(current => ({ ...current, returnAddress: value }))} />
-                                        <PrimaryButton busy={busy}>Submit seller details</PrimaryButton>
+                                        <Field label="PAN or GSTIN" value={sellerForm.taxIdentifier || businessData.seller.taxIdentifier || ''} onChange={value => setSellerForm(current => ({ ...current, taxIdentifier: value.toUpperCase() }))} required />
+                                        {sellerForm.sellerType !== 'individual' && <Field label="Company / partnership registration number" value={sellerForm.registrationNumber || businessData.seller.registrationNumber || ''} onChange={value => setSellerForm(current => ({ ...current, registrationNumber: value }))} required />}
+                                        <PrimaryButton busy={busy}>Save seller details</PrimaryButton>
                                     </SettingsForm>}
+                                    {['draft', 'needs_changes', 'rejected'].includes(businessData.seller.status) && <section className="space-y-3 rounded-xl border border-gray-800 bg-[#182329] p-4"><h3 className="font-semibold text-white">Identity and business documents</h3><p className="text-xs leading-5 text-gray-400">PDF, JPG or PNG · up to 10 MB. Files and tax identifiers are encrypted for private review.</p>{(businessData.seller.sellerType === 'company' || businessData.seller.sellerType === 'partnership' ? ['identity_proof', 'address_proof', 'tax_document', 'business_registration'] : ['identity_proof', 'address_proof', 'tax_document']).map(type => { const doc = businessData.seller.documents?.find(item => item.documentType === type); return <label key={type} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[#202c33] p-3 text-xs"><span className="font-semibold text-white">{type.replaceAll('_', ' ')} · <span className="capitalize text-emerald-300">{doc?.status || 'required'}</span></span><input type="file" accept="application/pdf,image/jpeg,image/png" disabled={busy} onChange={event => { uploadSellerDocument(type, event.target.files?.[0]); event.target.value = ''; }} className="max-w-full text-gray-300" /></label>; })}<button type="button" disabled={busy} onClick={submitSellerApplication} className="w-full rounded-lg bg-violet-500 px-4 py-3 text-sm font-bold text-white disabled:opacity-50">Submit for verification review</button></section>}
                                     <form onSubmit={saveShopSchedule} className="space-y-3 rounded-xl border border-gray-800 bg-[#182329] p-4"><h3 className="font-semibold text-white">Weekly shop hours · India time</h3>{['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((label, weekday) => { const day = businessData.schedule.find(item => item.weekday === weekday) || { weekday, opensAt: '09:00', closesAt: '18:00', isClosed: false, timezone: 'Asia/Kolkata' }; return <div key={label} className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-2 text-xs"><span className="text-gray-200">{label}</span><input aria-label={`${label} opening time`} type="time" disabled={day.isClosed} value={day.opensAt} onChange={event => setBusinessData(current => ({ ...current, schedule: current.schedule.map(item => item.weekday === weekday ? { ...item, opensAt: event.target.value } : item) }))} className="rounded-md bg-[#202c33] p-2 text-white disabled:opacity-40" /><input aria-label={`${label} closing time`} type="time" disabled={day.isClosed} value={day.closesAt} onChange={event => setBusinessData(current => ({ ...current, schedule: current.schedule.map(item => item.weekday === weekday ? { ...item, closesAt: event.target.value } : item) }))} className="rounded-md bg-[#202c33] p-2 text-white disabled:opacity-40" /><label className="flex items-center gap-1 text-gray-400"><input type="checkbox" checked={day.isClosed} onChange={event => setBusinessData(current => ({ ...current, schedule: current.schedule.map(item => item.weekday === weekday ? { ...item, isClosed: event.target.checked } : item) }))} />Closed</label></div>; })}<PrimaryButton busy={busy}>Save opening hours</PrimaryButton></form>
                                 </div>
                             )}
@@ -1297,7 +1324,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 <div className="space-y-5 p-5">
                                     <form onSubmit={addDeliveryOption} className="space-y-3 rounded-xl border border-gray-800 bg-[#182329] p-4"><h3 className="font-semibold text-white">Add delivery or pickup option</h3><label className="block"><span className="mb-2 block text-sm text-gray-200">Type</span><select value={deliveryForm.mode} onChange={event => setDeliveryForm(current => ({ ...current, mode: event.target.value }))} className="w-full rounded-lg border border-gray-700 bg-[#202c33] px-3 py-2 text-white"><option value="seller_delivery">Seller-managed delivery</option><option value="pickup">Customer pickup</option></select></label><Field label="Customer-facing label" value={deliveryForm.label} onChange={value => setDeliveryForm(current => ({ ...current, label: value }))} required /><Field label="Covered area (optional)" value={deliveryForm.area} onChange={value => setDeliveryForm(current => ({ ...current, area: value }))} /><div className="grid grid-cols-2 gap-3"><Field label="Fee (₹)" type="number" value={deliveryForm.fee} onChange={value => setDeliveryForm(current => ({ ...current, fee: value }))} /><Field label="ETA days" type="number" value={deliveryForm.etaDays} onChange={value => setDeliveryForm(current => ({ ...current, etaDays: value }))} /></div><PrimaryButton busy={busy}>Add option</PrimaryButton></form>
                                     <div className="space-y-2">{businessData.deliveryOptions.map(option => <div key={option.id} className="rounded-xl border border-white/10 bg-[#182329] p-3 text-sm"><strong>{option.label}</strong><p className="mt-1 text-xs text-gray-400">{option.mode === 'pickup' ? 'Pickup' : 'Seller delivery'} · ₹{Number(option.fee).toFixed(2)} · {option.etaDays} day ETA {option.area ? `· ${option.area}` : ''}</p></div>)}{!businessData.deliveryOptions.length && <p className="text-xs text-gray-500">Add a delivery option before customers can place orders.</p>}</div>
-                                    <section className="space-y-3"><h3 className="font-semibold">Recent orders</h3>{businessData.orders.map(order => { const next = ({ paid: 'accepted', accepted: 'preparing', preparing: order.deliveryMode === 'pickup' ? 'ready_for_pickup' : 'out_for_delivery', out_for_delivery: 'completed', ready_for_pickup: 'completed' })[order.status]; return <article key={order.id} className="rounded-xl border border-white/10 bg-[#182329] p-3"><div className="flex justify-between gap-2"><strong>Order #{order.id}</strong><span className="text-xs capitalize text-emerald-300">{order.status.replaceAll('_', ' ')}</span></div><p className="mt-1 text-xs text-gray-400">{order.items.map(item => `${item.quantity} × ${item.name}`).join(', ')} · ₹{Number(order.total).toFixed(2)}</p>{order.deliveryAddress && <p className="mt-1 text-xs text-gray-400">{order.deliveryAddress}</p>}{next && <button disabled={busy} onClick={() => updateMarketplaceOrder(order.id, next)} className="mt-3 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-bold text-black disabled:opacity-50">Mark {next.replaceAll('_', ' ')}</button>}</article>; })}{!businessData.orders.length && <p className="text-xs text-gray-500">Orders will appear here after customers pay.</p>}</section>
+                                    <section className="space-y-3"><h3 className="font-semibold">Recent orders</h3>{businessData.orders.map(order => { const next = order.status === 'requested' && !['seller_confirmed', 'provider_verified'].includes(order.paymentStatus) ? null : ({ requested: 'accepted', paid: 'accepted', accepted: 'preparing', preparing: order.deliveryMode === 'pickup' ? 'ready_for_pickup' : 'out_for_delivery', out_for_delivery: 'completed', ready_for_pickup: 'completed' })[order.status]; return <article key={order.id} className="rounded-xl border border-white/10 bg-[#182329] p-3"><div className="flex justify-between gap-2"><strong>Order #{order.id}</strong><span className="text-xs capitalize text-emerald-300">{order.status.replaceAll('_', ' ')}</span></div><p className="mt-1 text-xs text-gray-400">{order.items.map(item => `${item.quantity} × ${item.name}`).join(', ')} · ₹{Number(order.total).toFixed(2)} · payment {order.paymentStatus?.replaceAll('_', ' ') || 'pending'}</p>{order.deliveryAddress && <p className="mt-1 text-xs text-gray-400">{order.deliveryAddress}</p>}{order.status === 'requested' && order.paymentStatus === 'seller_arranged' && <button disabled={busy} onClick={() => updateMarketplaceOrder(order.id, 'seller_confirmed')} className="mt-3 rounded-lg bg-amber-400 px-3 py-2 text-xs font-bold text-black disabled:opacity-50">Confirm payment received</button>}{next && order.status !== 'requested' && <button disabled={busy} onClick={() => updateMarketplaceOrder(order.id, next)} className="mt-3 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-bold text-black disabled:opacity-50">Mark {next.replaceAll('_', ' ')}</button>}</article>; })}{!businessData.orders.length && <p className="text-xs text-gray-500">Customer order requests will appear here.</p>}</section>
                                     <section className="space-y-2"><h3 className="font-semibold">Affiliate earnings</h3>{businessData.affiliateCommissions.map((entry, index) => <div key={`${entry.orderId}-${index}`} className="flex justify-between rounded-lg bg-[#182329] p-3 text-xs"><span>Order #{entry.orderId}</span><span>₹{Number(entry.amount).toFixed(2)} · {entry.status.replaceAll('_', ' ')}</span></div>)}{!businessData.affiliateCommissions.length && <p className="text-xs text-gray-500">Conversions from your product links will appear here. Commissions stay pending until seller payouts are configured.</p>}</section>
                                 </div>
                             )}

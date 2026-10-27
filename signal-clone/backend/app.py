@@ -121,6 +121,8 @@ _sensitive_limits = {
     '/api/business/automation/claim': (30, 60),
     '/api/business/shop-chat': (12, 60),
     '/api/business/seller': (10, 60 * 60),
+    '/api/business/seller/documents': (12, 60 * 60),
+    '/api/business/seller/submit': (10, 60 * 60),
     '/api/business/schedule': (20, 60),
     '/api/business/delivery-options': (30, 60),
     '/api/business/orders': (30, 60),
@@ -135,7 +137,7 @@ _token_scoped_rate_paths = {
     '/api/status/:id/reply', '/api/messages/:id',
     '/api/business/automation/claim',
     '/api/business/shop-chat',
-    '/api/business/seller', '/api/business/schedule', '/api/business/delivery-options',
+    '/api/business/seller', '/api/business/seller/documents', '/api/business/seller/submit', '/api/business/schedule', '/api/business/delivery-options',
     '/api/business/orders', '/api/business/affiliate-tags', '/api/marketplace/orders/:id/checkout',
     '/api/affiliate/:code/click',
 }

@@ -15,37 +15,41 @@ status, and tracked affiliate links that can be placed into Chat, Reels and
 Social posts. The existing private chat and in-app voice/video contact remain
 available for questions and item inspection.
 
-This document now describes the **complete target architecture** for seller
-onboarding, shop schedules, seller-managed delivery, checkout and creator
-affiliate marketing. The existing marketplace and business tools are the
-starting layer; sections marked target are design, not features already
-implemented in the current app. See the implementation boundary below for
-provider and launch requirements.
+This document describes the implemented seller and affiliate workflows plus
+the target payment settlement architecture. Razorpay marketplace checkout and
+seller payouts remain deliberately disabled until a compliant settlement
+provider and full jurisdiction-specific verification are selected.
 
 ## Implementation state and launch boundary
 
-- Seller applications capture legal owner name, seller type, shop address and
-  return address. Admins review applications in the Admin panel. Sensitive
-  application data is excluded from public shop responses.
+- Seller applications capture legal owner name, seller type, address, PAN or
+  GSTIN and (for registered businesses) registration number. Seller private
+  fields and uploaded identity, address, tax and registration documents are
+  encrypted with AES-GCM. Admins use authenticated, audited review and download
+  endpoints. Public shop responses never include these fields or documents.
 - Approved sellers configure a seven-day schedule, timezone, delivery/pickup
   choices, products, prices and product commission rates. Discovery lists only
   approved shops that the seller has enabled.
-- Buyers can create server-priced orders. The backend checks stock, seller,
-  delivery choice and address; sellers advance paid orders through accepted,
-  preparing, out-for-delivery/pickup and completed states.
-- Affiliate links are attached to a Social post or Reel when it is published.
-  Captured orders create a pending commission ledger entry; refunds reverse
-  that entry. Chat and public share links use the same referral code.
+- Buyers can create server-priced order requests while platform checkout is
+  disabled. The backend checks stock, seller, delivery choice and address.
+  Buyer and seller coordinate payment directly; the seller must explicitly
+  confirm receipt before fulfillment starts. The app does not claim to verify
+  this off-platform payment.
+- Affiliate links can be shared in Chat, Reels and Social posts. A server-priced
+  order tied to a referral creates a pending payout commission only after a
+  verified capture or the seller confirms direct payment. Refunds reverse the
+  commission. Payout execution remains unavailable.
 - Secure marketplace checkout is disabled by default with
   `MARKETPLACE_CHECKOUT_ENABLED=false`. It also requires Razorpay keys and a
   verified webhook. The current payment integration accepts funds into the
   configured platform Razorpay account; a marketplace settlement or connected
   seller payout integration is not included. Keep checkout disabled until the
   operator has a compliant seller settlement process and has enabled it.
-- This release does not collect seller identity documents, tax IDs, bank
-  credentials or provider-connected payout accounts. The application review
-  is an initial seller gate, not a substitute for jurisdiction-specific KYC,
-  tax, consumer-protection or payment-provider onboarding.
+- The app collects encrypted seller documents and tax identifiers for manual
+  application review, but this is not a complete Amazon-grade or provider
+  KYC/tax verification. It does not collect bank details or create payout
+  accounts. Razorpay checkout stays disabled until seller settlement,
+  reconciliation, refunds and compliance review are ready.
 
 ## Architecture overview
 
@@ -119,9 +123,9 @@ stateDiagram-v2
 
 ### Amazon-style seller setup
 
-The setup is a private, resumable wizard in Business tools. It collects only
-what is needed to identify the seller, operate the shop, fulfil orders and pay
-the seller:
+The setup is a private workflow in Business tools. The current implementation
+collects seller identity and operating details for manual review; it does not
+establish payout eligibility:
 
 1. **Seller type and legal identity:** individual or registered business,
    legal name, owner/authorized representative, country/region, date of birth
@@ -133,12 +137,14 @@ the seller:
 3. **Shop profile:** public shop name and unique handle, logo, cover image,
    category, description, website, public pickup/location choice, currency and
    customer-service preferences.
-4. **Verification:** upload requested identity or business documents to
-   private storage and submit for review. Store only provider references,
-   verification outcome, timestamps and masked identifiers in the app database.
-5. **Settlement setup:** connect a supported payment provider and retain its
-   account token plus masked account details. Never store online banking
-   passwords, card security codes or raw payout credentials.
+4. **Manual document review:** upload required identity, address, tax and (for
+   registered businesses) registration documents. App-level AES-GCM encryption
+   protects document bytes and private fields. Authenticated admin review and
+   download actions are audited; seller approval requires every required
+   document to be verified.
+5. **Settlement setup (future):** connect a compliant provider only after
+   seller payouts, reconciliation and region-specific verification are ready.
+   The current app does not collect bank information or create payout accounts.
 6. **Fulfilment setup:** choose self-delivery, pickup, carrier shipping, or a
    combination; configure delivery areas, fees, handling time and service
    windows.
@@ -441,7 +447,7 @@ existing chat privacy rules do not change.
 ### Seller setup and publication
 
 1. Seller opens Shopping and chooses **List your shop**, or opens Settings →
-   Business tools → Business profile.
+   Business tools → Seller setup & hours.
 2. Seller registers the business name, category, description, address, support
    details, website and opening hours.
 3. Seller adds products/projects in Catalog / Products, with price, image,
@@ -458,8 +464,10 @@ existing chat privacy rules do not change.
 1. Customer opens Chats → Shopping and searches by shop name, category or
    location.
 2. Customer opens a shop and reviews its website, address, hours and catalog.
-3. **Chat to buy** opens or creates the existing direct chat with a prefilled
-   product inquiry. The customer reviews and sends it. Product questions, order details, delivery arrangements and payment
+3. **Request order** creates a server-priced request with seller-selected delivery.
+   While checkout is disabled, buyer and seller agree payment in chat; the seller
+   confirms receipt before fulfillment. **Chat to buy** opens or creates the
+   existing direct chat with a prefilled product inquiry. The customer reviews and sends it. Product questions, order details, delivery arrangements and payment
    confirmation stay in that private conversation.
 4. Customer or seller can use the existing UPI/payment composer within chat.
    Marketplace UI does not mark a payment as successful; server-verified

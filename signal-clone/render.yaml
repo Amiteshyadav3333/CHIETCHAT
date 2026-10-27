@@ -95,6 +95,8 @@ services:
         sync: false
       - key: DATA_RETENTION_PEPPER
         sync: false
+      - key: SELLER_KYC_ENCRYPTION_KEY
+        generateValue: true
       - key: PAYMENT_RETENTION_DAYS
         value: "2555"
       - key: CALL_RECORD_RETENTION_DAYS

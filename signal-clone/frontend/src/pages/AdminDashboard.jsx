@@ -152,6 +152,23 @@ const AdminDashboard = () => {
         } catch (error) { alert(error.response?.data?.error || 'Could not review seller.'); }
     };
 
+    const reviewSellerDocument = async (seller, document, status) => {
+        const note = status === 'rejected' ? window.prompt('Tell the seller what needs to be corrected:') || '' : '';
+        if (status === 'rejected' && !note.trim()) return;
+        try {
+            await axios.patch(`/api/admin/sellers/${seller.userId}/documents/${document.id}`, { status, note }, { headers: { Authorization: `Bearer ${adminToken}` } });
+            fetchSellerApplications();
+        } catch (error) { alert(error.response?.data?.error || 'Could not review document.'); }
+    };
+
+    const downloadSellerDocument = async (seller, document) => {
+        try {
+            const response = await axios.get(`/api/admin/sellers/${seller.userId}/documents/${document.id}`, { headers: { Authorization: `Bearer ${adminToken}` }, responseType: 'blob' });
+            const link = URL.createObjectURL(response.data); const anchor = window.document.createElement('a');
+            anchor.href = link; anchor.download = document.filename || 'seller-verification-document'; anchor.click(); URL.revokeObjectURL(link);
+        } catch (error) { alert(error.response?.data?.error || 'Could not download verification document.'); }
+    };
+
     const reviewPremiumPayment = async (payment, action) => {
         const label = action === 'approve' ? 'approve and activate Premium' : 'reject';
         if (!window.confirm(`Do you want to ${label} for ${payment.user?.username || 'this user'}?`)) return;
@@ -516,10 +533,12 @@ const AdminDashboard = () => {
 
                     {activeTab === 'sellers' && (
                         <div className="premium-payments-section">
-                            <div className="section-header"><div><h2>Marketplace seller applications</h2><p>Review seller identity and business address before publishing shops.</p></div><button className="add-ad-btn" onClick={fetchSellerApplications}>Refresh</button></div>
+                            <div className="section-header"><div><h2>Marketplace seller applications</h2><p>Review private seller details and each required document before publishing a shop.</p></div><button className="add-ad-btn" onClick={fetchSellerApplications}>Refresh</button></div>
                             {sellerLoading ? <p>Loading seller applications…</p> : sellerApplications.length === 0 ? <div className="settings-card"><p>No applications waiting for review.</p></div> : <div className="premium-payment-list">
                                 {sellerApplications.map(seller => <article className="premium-payment-card" key={seller.userId}>
-                                    <div><strong>{seller.shop || seller.legalName}</strong><span>{seller.legalName} · {seller.sellerType}</span><small>User #{seller.userId} · {seller.businessAddress}{seller.returnAddress ? ` · Return: ${seller.returnAddress}` : ''}</small></div>
+                                    <div><strong>{seller.shop || seller.legalName}</strong><span>{seller.legalName} · {seller.sellerType}</span><small>User #{seller.userId} · {seller.businessAddress}{seller.returnAddress ? ` · Return: ${seller.returnAddress}` : ''} · Tax ID {seller.taxIdentifierMasked || 'not supplied'}</small>{seller.reviewNote && <small className="text-amber-300">Seller note: {seller.reviewNote}</small>}
+                                        <div className="mt-3 space-y-2">{(seller.documents || []).map(document => <div key={document.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-black/20 p-2 text-xs"><span className="min-w-40 flex-1">{document.documentType.replaceAll('_', ' ')} · <strong className="capitalize">{document.status}</strong>{document.reviewerNote ? ` · ${document.reviewerNote}` : ''}</span><button className="add-ad-btn" onClick={() => downloadSellerDocument(seller, document)}>Download securely</button>{document.status === 'pending' && <><button className="approve-premium-btn" onClick={() => reviewSellerDocument(seller, document, 'verified')}>Verify</button><button className="reject-premium-btn" onClick={() => reviewSellerDocument(seller, document, 'rejected')}>Request replacement</button></>}</div>)}</div>
+                                    </div>
                                     <div className="premium-payment-actions"><button className="approve-premium-btn" onClick={() => reviewSeller(seller, 'approved')}>Approve shop</button><button className="reject-premium-btn" onClick={() => reviewSeller(seller, 'needs_changes')}>Request changes</button><button className="reject-premium-btn" onClick={() => reviewSeller(seller, 'rejected')}>Reject</button></div>
                                 </article>)}
                             </div>}

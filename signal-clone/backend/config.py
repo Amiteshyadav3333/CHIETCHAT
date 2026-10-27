@@ -64,6 +64,7 @@ class Config:
     MAX_UPLOAD_BYTES = int(os.environ.get('MAX_UPLOAD_BYTES', 100 * 1024 * 1024))
     MAX_CONTENT_LENGTH = MAX_UPLOAD_BYTES
     DATA_RETENTION_PEPPER = os.environ.get('DATA_RETENTION_PEPPER') or ''
+    SELLER_KYC_ENCRYPTION_KEY = os.environ.get('SELLER_KYC_ENCRYPTION_KEY', '').strip()
     PAYMENT_RETENTION_DAYS = int(os.environ.get('PAYMENT_RETENTION_DAYS', '2555'))
     CALL_RECORD_RETENTION_DAYS = int(os.environ.get('CALL_RECORD_RETENTION_DAYS', '90'))
     AI_MEMORY_RETENTION_DAYS = int(os.environ.get('AI_MEMORY_RETENTION_DAYS', '30'))
@@ -89,6 +90,8 @@ class Config:
             raise RuntimeError('JWT_SECRET_KEY must contain at least 32 characters in production')
         if not SUPABASE_URL or not SUPABASE_ANON_KEY:
             raise RuntimeError('SUPABASE_URL and SUPABASE_ANON_KEY must be configured in production')
+        if len(SELLER_KYC_ENCRYPTION_KEY) < 32:
+            raise RuntimeError('SELLER_KYC_ENCRYPTION_KEY must be a stable random secret of at least 32 characters')
         if not SUPABASE_URL.startswith('https://'):
             raise RuntimeError('SUPABASE_URL must be an HTTPS URL in production')
         if not _is_postgres:

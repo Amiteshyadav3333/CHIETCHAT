@@ -290,7 +290,7 @@ def add_missing_columns(inspector, table_name, columns):
 # Bump this marker whenever models gain columns or tables. Production runs
 # ensure_database_schema() in the pre-deploy step and skips versions it has
 # already applied.
-SCHEMA_VERSION = '20261028_37_marketplace_payment_tieback'
+SCHEMA_VERSION = '20261028_38_private_seller_verification'
 
 def ensure_runtime_compat_schema():
     """Repair columns required by the currently deployed models.
@@ -384,6 +384,17 @@ def ensure_runtime_compat_schema():
     add_missing_columns(inspector, 'payment_order', {
         'marketplace_order_id': db.Integer(),
     })
+    inspector = inspect(db.engine)
+    add_missing_columns(inspector, 'seller_account', {
+        'private_data_encrypted': db.LargeBinary(),
+    })
+    inspector = inspect(db.engine)
+    add_missing_columns(inspector, 'marketplace_order', {
+        'payment_status': db.String(24),
+    })
+    if 'marketplace_order' in inspect(db.engine).get_table_names():
+        db.session.execute(text("UPDATE marketplace_order SET payment_status = COALESCE(payment_status, 'not_started')"))
+        db.session.commit()
     inspector = inspect(db.engine)
     if 'user' in inspector.get_table_names():
         if db.engine.dialect.name == 'postgresql':

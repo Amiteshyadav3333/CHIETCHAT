@@ -1,18 +1,28 @@
 import json
 import secrets
 import re
+import io
+import hashlib
+import mimetypes
 from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 from sqlalchemy import or_
+from werkzeug.utils import secure_filename
 from models import (
     db, User, Chat, ChatParticipant, Message, BusinessProfile, CatalogProduct,
     BusinessAutomation, BusinessProfileView, BusinessAutoReplyLog, SellerAccount,
     ShopSchedule, ShopDeliveryOption, MarketplaceOrder, MarketplaceOrderLine,
-    AffiliateProductTag, AffiliateCommission, utc_now
+    AffiliateProductTag, AffiliateCommission, SellerVerificationDocument,
+    SellerVerificationAudit, utc_now
 )
 from features.business_ai import generate_business_reply
 from utils import get_current_user_id, get_json_data, has_contact, is_blocked, iso_utc
+from utils import validate_upload
+from seller_kyc import (
+    SellerKycUnavailable, decrypt_private_profile, encrypt_private_profile,
+    encrypt_private_bytes, mask_identifier, required_document_types,
+)
 
 business_bp = Blueprint('business_bp', __name__)
 
@@ -39,13 +49,22 @@ def product_payload(product):
     }
 
 def seller_payload(seller):
+    private = decrypt_private_profile(seller)
     return {'status': seller.status, 'sellerType': seller.seller_type,
-            'legalName': seller.legal_name, 'businessAddress': seller.business_address,
-            'returnAddress': seller.return_address or '', 'reviewNote': seller.review_note or ''}
+            'legalName': private.get('legalName', ''), 'businessAddress': private.get('businessAddress', ''),
+            'returnAddress': private.get('returnAddress', ''), 'taxIdentifier': private.get('taxIdentifier', ''),
+            'registrationNumber': private.get('registrationNumber', ''),
+            'taxIdentifierMasked': mask_identifier(private.get('taxIdentifier')),
+            'reviewNote': seller.review_note or '', 'submittedAt': iso_utc(seller.submitted_at)}
+
+def seller_document_payload(document):
+    return {'id': document.id, 'documentType': document.document_type,
+            'filename': document.original_filename, 'status': document.status,
+            'uploadedAt': iso_utc(document.uploaded_at), 'reviewerNote': document.reviewer_note or ''}
 
 def order_payload(order):
     return {'id': order.id, 'sellerId': order.seller_id, 'buyerId': order.buyer_id,
-            'status': order.status, 'deliveryMode': order.delivery_mode,
+            'status': order.status, 'paymentStatus': order.payment_status, 'deliveryMode': order.delivery_mode,
             'deliveryAddress': order.delivery_address or '', 'subtotal': order.subtotal_paise / 100,
             'deliveryFee': order.delivery_fee_paise / 100, 'total': order.total_paise / 100,
             'currency': order.currency,
@@ -68,6 +87,17 @@ def current_shop_open(user_id):
         return today.opens_at <= current < today.closes_at
     except (ZoneInfoNotFoundError, ValueError):
         return False
+
+def record_affiliate_commission(order, status='pending_payout'):
+    tag = db.session.get(AffiliateProductTag, order.affiliate_tag_id) if order.affiliate_tag_id else None
+    if not tag or not tag.commission_bps or AffiliateCommission.query.filter_by(order_id=order.id, promoter_id=tag.promoter_id).first():
+        return
+    line = MarketplaceOrderLine.query.filter_by(order_id=order.id, product_id=tag.product_id).first()
+    if not line: return
+    amount = (line.unit_price_paise * line.quantity * tag.commission_bps) // 10000
+    if amount > 0:
+        db.session.add(AffiliateCommission(order_id=order.id, promoter_id=tag.promoter_id,
+            seller_id=order.seller_id, amount_paise=amount, status=status))
 
 def amount_to_paise(value):
     try:
@@ -98,7 +128,8 @@ def get_my_business():
             'marketplaceEnabled': False,
         },
         'products': [product_payload(product) for product in products],
-        'seller': seller_payload(seller) if seller else {'status': 'not_started'},
+        'seller': ({**seller_payload(seller), 'documents': [seller_document_payload(row) for row in SellerVerificationDocument.query.filter_by(seller_id=seller.id).order_by(SellerVerificationDocument.document_type.asc()).all()]}
+                   if seller else {'status': 'not_started', 'documents': []}),
         'schedule': [{'weekday': row.weekday, 'opensAt': row.opens_at or '', 'closesAt': row.closes_at or '',
                       'isClosed': bool(row.is_closed), 'timezone': row.timezone} for row in schedule],
         'deliveryOptions': [{'id': row.id, 'mode': row.mode, 'label': row.label, 'area': row.area or '',
@@ -123,28 +154,103 @@ def seller_registration():
     if not user_id: return jsonify({'error': 'Unauthorized'}), 401
     seller = SellerAccount.query.filter_by(user_id=user_id).first()
     if request.method == 'GET':
-        return jsonify({'seller': seller_payload(seller) if seller else {'status': 'not_started'}})
+        if not seller: return jsonify({'seller': {'status': 'not_started'}, 'documents': []})
+        try:
+            return jsonify({'seller': seller_payload(seller), 'documents': [seller_document_payload(row) for row in SellerVerificationDocument.query.filter_by(seller_id=seller.id).order_by(SellerVerificationDocument.document_type.asc()).all()]})
+        except SellerKycUnavailable as error:
+            return jsonify({'error': str(error)}), 503
     data = get_json_data()
     legal_name = str(data.get('legalName') or '').strip()
     address = str(data.get('businessAddress') or '').strip()
     seller_type = str(data.get('sellerType') or 'individual').strip().lower()
+    tax_identifier = re.sub(r'\s+', '', str(data.get('taxIdentifier') or '')).upper()
+    registration_number = str(data.get('registrationNumber') or '').strip().upper()
     if len(legal_name) < 2 or len(address) < 8 or seller_type not in {'individual', 'company', 'partnership'}:
-        return jsonify({'error': 'Enter the legal name, seller type, and complete business address'}), 400
+        return jsonify({'error': 'Enter your legal name, seller type, and complete business address'}), 400
+    if not re.fullmatch(r'(?:[A-Z]{5}[0-9]{4}[A-Z]|[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z])', tax_identifier):
+        return jsonify({'error': 'Enter a valid PAN or GSTIN'}), 400
+    if seller_type in {'company', 'partnership'} and len(registration_number) < 4:
+        return jsonify({'error': 'Enter the company or partnership registration number'}), 400
     if not BusinessProfile.query.filter_by(user_id=user_id).first():
         return jsonify({'error': 'Save your shop profile before seller registration'}), 409
     if seller and seller.status == 'approved':
         return jsonify({'error': 'Your seller account is already approved. Contact support to change legal details.'}), 409
     if not seller:
-        seller = SellerAccount(user_id=user_id)
-    seller.legal_name = legal_name[:160]
-    seller.business_address = address[:500]
-    seller.return_address = str(data.get('returnAddress') or '').strip()[:500]
+        seller = SellerAccount(user_id=user_id, legal_name='[encrypted]', business_address='[encrypted]')
+    if seller.status == 'submitted':
+        return jsonify({'error': 'Your application is under review. Wait for the review result before editing it.'}), 409
+    private_profile = {
+        'legalName': legal_name[:160], 'businessAddress': address[:500],
+        'returnAddress': str(data.get('returnAddress') or '').strip()[:500],
+        'taxIdentifier': tax_identifier,
+        'registrationNumber': registration_number[:80] if seller_type in {'company', 'partnership'} else '',
+    }
+    try: seller.private_data_encrypted = encrypt_private_profile(user_id, private_profile)
+    except SellerKycUnavailable as error: return jsonify({'error': str(error)}), 503
+    seller.legal_name = '[encrypted]'
+    seller.business_address = '[encrypted]'
+    seller.return_address = None
     seller.seller_type = seller_type
-    seller.status = 'submitted'
+    seller.status = 'draft'
     seller.review_note = None
-    seller.submitted_at = utc_now()
     db.session.add(seller); db.session.commit()
-    return jsonify({'seller': seller_payload(seller)}), 201
+    return jsonify({'seller': seller_payload(seller), 'documents': [seller_document_payload(row) for row in SellerVerificationDocument.query.filter_by(seller_id=seller.id).all()]}), 201
+
+@business_bp.route('/api/business/seller/documents', methods=['POST'])
+def upload_seller_verification_document():
+    user_id = get_current_user_id()
+    if not user_id: return jsonify({'error': 'Unauthorized'}), 401
+    seller = SellerAccount.query.filter_by(user_id=user_id).first()
+    if not seller: return jsonify({'error': 'Save your seller details first'}), 409
+    if seller.status not in {'draft', 'needs_changes', 'rejected'}:
+        return jsonify({'error': 'Documents can be changed only while preparing or correcting an application'}), 409
+    upload = request.files.get('file')
+    if not upload or not upload.filename: return jsonify({'error': 'Choose a verification document'}), 400
+    document_type = str(request.form.get('documentType') or '').strip()
+    if document_type not in required_document_types(seller.seller_type):
+        return jsonify({'error': 'This document is not required for the selected seller type'}), 400
+    try:
+        kind = validate_upload(upload, {'image', 'document'}, 10 * 1024 * 1024)
+        upload.stream.seek(0)
+        raw = upload.read(10 * 1024 * 1024 + 1)
+        if len(raw) > 10 * 1024 * 1024: return jsonify({'error': 'Verification files must be 10 MB or smaller'}), 400
+        encrypted = encrypt_private_bytes(raw, f'seller-document:{seller.id}:{document_type}')
+    except ValueError as error:
+        return jsonify({'error': str(error)}), 400
+    except SellerKycUnavailable as error:
+        return jsonify({'error': str(error)}), 503
+    document = SellerVerificationDocument.query.filter_by(seller_id=seller.id, document_type=document_type).first()
+    safe_name = secure_filename(upload.filename)[:180] or f'{document_type}.bin'
+    mime_type = 'application/pdf' if safe_name.lower().endswith('.pdf') else mimetypes.guess_type(safe_name)[0]
+    if kind == 'image' and not mime_type: mime_type = 'image/jpeg'
+    if not mime_type: mime_type = 'application/octet-stream'
+    document = document or SellerVerificationDocument(seller_id=seller.id, document_type=document_type)
+    document.original_filename = safe_name
+    document.mime_type = mime_type
+    document.sha256 = hashlib.sha256(raw).hexdigest()
+    document.encrypted_content = encrypted
+    document.status = 'pending'
+    document.reviewer_note = None
+    document.uploaded_at = utc_now()
+    db.session.add(document); db.session.commit()
+    return jsonify({'document': seller_document_payload(document)}), 201
+
+@business_bp.post('/api/business/seller/submit')
+def submit_seller_application():
+    user_id = get_current_user_id()
+    if not user_id: return jsonify({'error': 'Unauthorized'}), 401
+    seller = SellerAccount.query.filter_by(user_id=user_id).first()
+    if not seller: return jsonify({'error': 'Save your seller details first'}), 409
+    if seller.status == 'approved': return jsonify({'error': 'Your seller account is already approved'}), 409
+    document_types = {row.document_type: row for row in SellerVerificationDocument.query.filter_by(seller_id=seller.id).all()}
+    missing = [item for item in required_document_types(seller.seller_type) if item not in document_types or document_types[item].status == 'rejected']
+    if missing:
+        return jsonify({'error': 'Upload each required document before submitting', 'missingDocuments': missing}), 409
+    seller.status = 'submitted'
+    seller.submitted_at = utc_now()
+    seller.review_note = None
+    db.session.commit()
+    return jsonify({'seller': seller_payload(seller), 'documents': [seller_document_payload(row) for row in document_types.values()]})
 
 @business_bp.route('/api/business/schedule', methods=['PUT'])
 def save_shop_schedule():
@@ -431,8 +537,16 @@ def marketplace_orders():
         except (TypeError, ValueError): return jsonify({'error': 'Valid order is required'}), 400
         order = MarketplaceOrder.query.filter_by(id=order_id, seller_id=user_id).first()
         if not order: return jsonify({'error': 'Order not found'}), 404
+        if data.get('paymentStatus') == 'seller_confirmed':
+            if order.payment_status != 'seller_arranged': return jsonify({'error': 'Only seller-arranged orders can be confirmed here'}), 409
+            order.payment_status = 'seller_confirmed'
+            record_affiliate_commission(order)
+            db.session.commit()
+            return jsonify(order_payload(order))
         target = str(data.get('status') or '')
-        transitions = {'paid': {'accepted'}, 'accepted': {'preparing'}, 'preparing': {'out_for_delivery', 'ready_for_pickup'}, 'out_for_delivery': {'completed'}, 'ready_for_pickup': {'completed'}}
+        transitions = {'requested': {'accepted'}, 'paid': {'accepted'}, 'accepted': {'preparing'}, 'preparing': {'out_for_delivery', 'ready_for_pickup'}, 'out_for_delivery': {'completed'}, 'ready_for_pickup': {'completed'}}
+        if order.status == 'requested' and order.payment_status not in {'seller_confirmed', 'provider_verified'}:
+            return jsonify({'error': 'Confirm receipt of the agreed payment before accepting this order'}), 409
         if target not in transitions.get(order.status, set()): return jsonify({'error': 'That order status change is not allowed'}), 409
         order.status = target; db.session.commit(); return jsonify(order_payload(order))
     try:
@@ -473,9 +587,13 @@ def marketplace_orders():
         affiliate_tag = AffiliateProductTag.query.filter_by(code=str(data.get('affiliateCode'))[:32]).first()
         if not affiliate_tag or affiliate_tag.promoter_id == seller_id or affiliate_tag.product_id not in quantity_by_id:
             return jsonify({'error': 'Affiliate link does not match the selected item'}), 400
+    payment_mode = str(data.get('paymentMode') or 'verified_checkout')
+    if payment_mode not in {'verified_checkout', 'seller_arranged'}: return jsonify({'error': 'Invalid payment method'}), 400
     order = MarketplaceOrder(buyer_id=user_id, seller_id=seller_id, delivery_option_id=option.id,
         delivery_mode=option.mode, delivery_address=address if option.mode == 'seller_delivery' else '',
-        delivery_fee_paise=fee, subtotal_paise=subtotal, total_paise=subtotal + fee, status='awaiting_payment',
+        delivery_fee_paise=fee, subtotal_paise=subtotal, total_paise=subtotal + fee,
+        status='requested' if payment_mode == 'seller_arranged' else 'awaiting_payment',
+        payment_status='seller_arranged' if payment_mode == 'seller_arranged' else 'awaiting_provider',
         affiliate_tag_id=affiliate_tag.id if affiliate_tag else None)
     db.session.add(order); db.session.flush()
     for product, quantity, price in line_prices:

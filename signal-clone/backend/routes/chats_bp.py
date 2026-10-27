@@ -222,7 +222,9 @@ def get_chats():
             part_data = []
             for p in participants:
                 s_user = serialize_user(p.user, viewer_id=user_id)
-                if chat.is_group and p.user_id != user_id:
+                if chat.is_shop_chat and p.user_id != user_id:
+                    s_user['phone'] = 'Hidden'
+                elif chat.is_group and p.user_id != user_id:
                     s_user['phone'] = 'Hidden'
                     s_user['bio'] = ''
                     s_user['websiteUrl'] = ''

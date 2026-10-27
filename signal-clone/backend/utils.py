@@ -290,7 +290,7 @@ def add_missing_columns(inspector, table_name, columns):
 # Bump this marker whenever models gain columns or tables. Production runs
 # ensure_database_schema() in the pre-deploy step and skips versions it has
 # already applied.
-SCHEMA_VERSION = '20261015_31_profile_privacy_follow_requests'
+SCHEMA_VERSION = '20261028_34_private_shop_chats'
 
 def ensure_runtime_compat_schema():
     """Repair columns required by the currently deployed models.
@@ -363,6 +363,18 @@ def ensure_runtime_compat_schema():
         'cover_url': db.String(500),
         'college': db.String(150),
         'location': db.String(150),
+    })
+    inspector = inspect(db.engine)
+    add_missing_columns(inspector, 'business_profile', {
+        'marketplace_enabled': db.Boolean(),
+    })
+    inspector = inspect(db.engine)
+    add_missing_columns(inspector, 'business_automation', {
+        'ai_enabled': db.Boolean(),
+    })
+    inspector = inspect(db.engine)
+    add_missing_columns(inspector, 'chat', {
+        'is_shop_chat': db.Boolean(),
     })
     inspector = inspect(db.engine)
     if 'user' in inspector.get_table_names():

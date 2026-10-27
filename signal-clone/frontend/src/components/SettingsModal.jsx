@@ -54,9 +54,9 @@ const timeAgo = (dateStr) => {
 };
 
 const businessDefaults = (user) => ({
-    profile: { businessName: user?.username || '', category: 'Other', description: '', address: '', supportEmail: user?.email || '', supportPhone: user?.phone || '', websiteUrl: '', openingHours: '', catalogVisible: true },
+    profile: { businessName: user?.username || '', category: 'Other', description: '', address: '', supportEmail: user?.email || '', supportPhone: user?.phone || '', websiteUrl: '', openingHours: '', catalogVisible: true, marketplaceEnabled: false },
     products: [],
-    automation: { enabled: false, welcomeMessage: '', awayMessage: '', keywordRules: {} }
+    automation: { enabled: false, aiEnabled: false, welcomeMessage: '', awayMessage: '', keywordRules: {} }
 });
 
 const normalizeBusinessData = (data, user) => {
@@ -225,6 +225,8 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     const [businessData, setBusinessData] = useState(() => businessDefaults(user));
     const [businessAnalytics, setBusinessAnalytics] = useState(null);
     const [newProduct, setNewProduct] = useState({ name: '', description: '', price: '', imageUrl: '', inStock: true });
+    const [editingPriceId, setEditingPriceId] = useState(null);
+    const [editingPrice, setEditingPrice] = useState('');
     const [keywordRulesText, setKeywordRulesText] = useState('');
     const [appLanguage, setAppLanguage] = useState(() => localStorage.getItem('app_language') || 'en');
     const [showDownloadPopup, setShowDownloadPopup] = useState(false);
@@ -476,6 +478,22 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
             await axios.delete(`/api/business/products/${productId}`, { headers: { Authorization: `Bearer ${token}` } });
             setBusinessData(current => ({ ...current, products: current.products.filter(product => product.id !== productId) }));
         } catch (err) { setMessage({ type: 'error', text: err.response?.data?.error || 'Could not delete product.' }); }
+    };
+
+    const saveCatalogPrice = async (productId) => {
+        const price = Number(editingPrice);
+        if (!Number.isFinite(price) || price < 0) {
+            setMessage({ type: 'error', text: 'Enter a valid product price.' });
+            return;
+        }
+        setBusy(true);
+        try {
+            const res = await axios.put(`/api/business/products/${productId}`, { price }, { headers: { Authorization: `Bearer ${token}` } });
+            setBusinessData(current => ({ ...current, products: current.products.map(product => product.id === productId ? res.data : product) }));
+            setEditingPriceId(null);
+            setMessage({ type: 'success', text: 'Product price updated.' });
+        } catch (err) { setMessage({ type: 'error', text: err.response?.data?.error || 'Could not update price.' }); }
+        finally { setBusy(false); }
     };
 
     const saveBusinessAutomation = async (event) => {
@@ -1182,7 +1200,8 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                     <Field label="Support phone" value={businessData.profile.supportPhone} onChange={value => setBusinessData(current => ({ ...current, profile: { ...current.profile, supportPhone: value } }))} />
                                     <Field label="Website" value={businessData.profile.websiteUrl} onChange={value => setBusinessData(current => ({ ...current, profile: { ...current.profile, websiteUrl: value } }))} />
                                     <Field label="Opening hours" value={businessData.profile.openingHours} onChange={value => setBusinessData(current => ({ ...current, profile: { ...current.profile, openingHours: value } }))} placeholder="Mon–Sat, 9:00 AM–7:00 PM" />
-                                    <SettingsToggle icon={<ShoppingBagIcon />} title="Show catalog to contacts" subtitle="Products appear on your business profile" value={businessData.profile.catalogVisible} onClick={() => setBusinessData(current => ({ ...current, profile: { ...current.profile, catalogVisible: !current.profile.catalogVisible } }))} />
+                                    <SettingsToggle icon={<ShoppingBagIcon />} title="List my shop in Shopping" subtitle="Let customers discover your shop and catalog" value={businessData.profile.marketplaceEnabled} onClick={() => setBusinessData(current => ({ ...current, profile: { ...current.profile, marketplaceEnabled: !current.profile.marketplaceEnabled, catalogVisible: true } }))} />
+                                    <SettingsToggle icon={<EyeSlashIcon />} title="Show catalog on my profile" subtitle="Display products on your business profile" value={businessData.profile.catalogVisible} onClick={() => setBusinessData(current => ({ ...current, profile: { ...current.profile, catalogVisible: !current.profile.catalogVisible } }))} />
                                     <PrimaryButton busy={busy}>Save business profile</PrimaryButton>
                                 </SettingsForm>
                             )}
@@ -1190,8 +1209,8 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 <div className="space-y-5 p-5">
                                     <form onSubmit={addCatalogProduct} className="space-y-3 rounded-xl border border-gray-800 bg-[#182329] p-4">
                                         <h3 className="font-semibold text-white">Add catalog product</h3>
-                                        <Field label="Product name" value={newProduct.name} onChange={value => setNewProduct({ ...newProduct, name: value })} required />
-                                        <Field label="Description" value={newProduct.description} onChange={value => setNewProduct({ ...newProduct, description: value })} />
+                                        <Field label="Product or project name" value={newProduct.name} onChange={value => setNewProduct({ ...newProduct, name: value })} required />
+                                        <Field label="Product or project description" value={newProduct.description} onChange={value => setNewProduct({ ...newProduct, description: value })} />
                                         <Field label="Price (₹)" type="number" value={newProduct.price} onChange={value => setNewProduct({ ...newProduct, price: value })} required />
                                         <Field label="Product image URL" value={newProduct.imageUrl} onChange={value => setNewProduct({ ...newProduct, imageUrl: value })} placeholder="https://…" />
                                         <SettingsToggle icon={<ShoppingBagIcon />} title="In stock" subtitle="Customers can see availability" value={newProduct.inStock} onClick={() => setNewProduct({ ...newProduct, inStock: !newProduct.inStock })} />
@@ -1201,7 +1220,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                         {businessData.products.map(product => (
                                             <div key={product.id} className="flex items-center gap-3 rounded-xl border border-gray-800 bg-[#182329] p-3">
                                                 {product.imageUrl ? <img src={product.imageUrl} alt="" className="h-14 w-14 rounded-lg object-cover" /> : <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-emerald-500/10"><ShoppingBagIcon className="h-6 w-6 text-emerald-400" /></div>}
-                                                <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-white">{product.name}</p><p className="text-xs text-emerald-400">₹{Number(product.price).toFixed(2)} · {product.inStock ? 'In stock' : 'Out of stock'}</p><p className="truncate text-xs text-gray-500">{product.description}</p></div>
+                                                <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-white">{product.name}</p><p className="text-xs text-emerald-400">₹{Number(product.price).toFixed(2)} · {product.inStock ? 'In stock' : 'Out of stock'}</p><p className="truncate text-xs text-gray-500">{product.description}</p>{editingPriceId === product.id ? <div className="mt-2 flex items-center gap-2"><input aria-label={`New price for ${product.name}`} type="number" min="0" step="0.01" value={editingPrice} onChange={event => setEditingPrice(event.target.value)} className="w-28 rounded-lg border border-gray-700 bg-[#202c33] px-2 py-1.5 text-xs text-white" /><button type="button" disabled={busy} onClick={() => saveCatalogPrice(product.id)} className="rounded-lg bg-emerald-500 px-2.5 py-1.5 text-xs font-bold text-black disabled:opacity-50">Save price</button><button type="button" onClick={() => setEditingPriceId(null)} className="px-1 text-xs text-gray-400">Cancel</button></div> : <button type="button" onClick={() => { setEditingPriceId(product.id); setEditingPrice(String(product.price)); }} className="mt-1 text-xs font-semibold text-emerald-300 hover:underline">Change price</button>}</div>
                                                 <button onClick={() => deleteCatalogProduct(product.id)} type="button" className="rounded-lg p-2 text-red-400 hover:bg-red-500/10"><TrashIcon className="h-5 w-5" /></button>
                                             </div>
                                         ))}
@@ -1212,6 +1231,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                             {businessTitle === 'Auto reply / Chatbot' && (
                                 <SettingsForm onSubmit={saveBusinessAutomation}>
                                     <SettingsToggle icon={<ChatBubbleBottomCenterTextIcon />} title="Enable business auto reply" subtitle="Respond automatically when a customer messages" value={businessData.automation.enabled} onClick={() => setBusinessData(current => ({ ...current, automation: { ...current.automation, enabled: !current.automation.enabled } }))} />
+                                    <SettingsToggle icon={<SparklesIcon />} title="AI customer support" subtitle="Opt in: while your app is online, customer messages are processed by the configured AI provider. Enabling this also turns on auto-replies; AI replies are labeled." value={businessData.automation.aiEnabled} onClick={() => setBusinessData(current => { const aiEnabled = !current.automation.aiEnabled; return { ...current, automation: { ...current.automation, aiEnabled, enabled: aiEnabled || current.automation.enabled } }; })} />
                                     <Field label="Welcome reply" value={businessData.automation.welcomeMessage} onChange={value => setBusinessData(current => ({ ...current, automation: { ...current.automation, welcomeMessage: value } }))} />
                                     <Field label="Away message" value={businessData.automation.awayMessage} onChange={value => setBusinessData(current => ({ ...current, automation: { ...current.automation, awayMessage: value } }))} />
                                     <label className="block"><span className="mb-2 block text-sm font-medium text-gray-200">Keyword chatbot rules</span><textarea rows={6} value={keywordRulesText} onChange={e => setKeywordRulesText(e.target.value)} placeholder={'price => Our price list is in the catalog.\nhours => We are open Mon–Sat, 9 AM–7 PM.'} className="w-full rounded-lg border border-gray-700 bg-[#202c33] px-4 py-3 text-sm text-white outline-none focus:border-violet-500" /><p className="mt-1 text-xs text-gray-500">One rule per line: keyword =&gt; reply</p></label>

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { 
     PaperAirplaneIcon, FaceSmileIcon, PaperClipIcon, MicrophoneIcon,
@@ -9,7 +9,6 @@ import { ArrowUturnLeftIcon, GiftIcon, ShoppingBagIcon } from '@heroicons/react/
 import RideModal from './RideModal';
 import GiftModal from './GiftModal';
 import BirthdayModal from './BirthdayModal';
-import ShoppingSearchModal from './ShoppingSearchModal';
 import PollCreatorModal from './PollCreatorModal';
 import ScheduleMessageModal from './ScheduleMessageModal';
 import VerifiedPaymentComposer from './VerifiedPaymentComposer';
@@ -97,9 +96,18 @@ const MessageInput = ({
     const [liveLocationDuration, setLiveLocationDuration] = useState(30);
     const [smartReplies, setSmartReplies] = useState([]);
     const [showScheduleModal, setShowScheduleModal] = useState(false);
-    const [showShoppingModal, setShowShoppingModal] = useState(false);
     const [showPaymentComposer, setShowPaymentComposer] = useState(false);
     const [showDrawStudio, setShowDrawStudio] = useState(false);
+
+    useEffect(() => {
+        const prefillMessage = event => {
+            const detail = event.detail || {};
+            if (detail.chatId && String(detail.chatId) !== String(chatId)) return;
+            if (typeof detail.text === 'string') setText(detail.text);
+        };
+        window.addEventListener('ducor-prefill-chat-message', prefillMessage);
+        return () => window.removeEventListener('ducor-prefill-chat-message', prefillMessage);
+    }, [chatId]);
 
     const [showCameraModal, setShowCameraModal] = useState(false);
     const [cameraFacing, setCameraFacing] = useState('user');
@@ -580,7 +588,6 @@ const MessageInput = ({
 
             {showScheduleModal && <ScheduleMessageModal chatId={chatId} message={text} onClose={() => setShowScheduleModal(false)} onSchedule={onSchedule} onScheduled={() => { setText(''); setShowScheduleModal(false); }} token={token} />}
 
-            {showShoppingModal && <ShoppingSearchModal onClose={() => setShowShoppingModal(false)} />}
 
             {showDrawStudio && <DrawStudio initialSource={drawSource} onClose={() => { setShowDrawStudio(false); onDrawSourceConsumed?.(); }} onSendDrawing={drawing => { onSend(JSON.stringify(drawing), 'drawing', disappearingTtl); setShowDrawStudio(false); onDrawSourceConsumed?.(); }} onSend={(file, caption) => { onUpload(file); if (caption) onSend(caption, 'text', disappearingTtl); setShowDrawStudio(false); onDrawSourceConsumed?.(); }} />}
 
@@ -768,12 +775,6 @@ const MessageInput = ({
                             color="bg-sky-600"
                             icon={<span className="text-2xl text-white">◷</span>}
                             onClick={() => { setShowScheduleModal(true); setShowAttachMenu(false); }}
-                        />
-                        <AttachOption
-                            label="Shopping"
-                            color="bg-[#ff9900]"
-                            icon={<ShoppingBagIcon className="w-6 h-6 text-white" />}
-                            onClick={() => { setShowShoppingModal(true); setShowAttachMenu(false); }}
                         />
                         <AttachOption
                             label="Document"

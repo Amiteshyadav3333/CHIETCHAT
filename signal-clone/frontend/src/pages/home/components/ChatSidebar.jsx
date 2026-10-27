@@ -32,6 +32,7 @@ export const ChatSidebar = ({
     pinnedChats,
     totalUnreadMessages,
     startCallForChat,
+    onOpenShopping,
 }) => {
     return (
         <div className={`reddit-chat-sidebar h-full min-h-0 w-full overflow-hidden md:w-[360px] lg:w-[390px] border-r border-gray-800 flex flex-col ${activeChat ? 'hidden md:flex' : 'flex'}`}>
@@ -178,6 +179,7 @@ export const ChatSidebar = ({
                 setMobileHomeTab={setMobileHomeTab}
                 totalUnreadMessages={totalUnreadMessages}
                 setShowArchive={setShowArchive}
+                onOpenShopping={onOpenShopping}
             />
         </div>
     );

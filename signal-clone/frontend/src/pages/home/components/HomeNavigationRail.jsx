@@ -1,6 +1,6 @@
 import React from 'react';
 import AvatarZoom from '../../../components/AvatarZoom';
-import { ChatBubbleLeftRightIcon, ClockIcon, PhoneIcon, UserGroupIcon, PlusIcon, BellIcon, ChevronDownIcon, UserCircleIcon, PencilSquareIcon, DocumentTextIcon, CurrencyRupeeIcon, SparklesIcon, ComputerDesktopIcon, Cog6ToothIcon, XMarkIcon, PlayIcon, MicrophoneIcon } from '@heroicons/react/24/outline';
+import { ChatBubbleLeftRightIcon, ClockIcon, PhoneIcon, UserGroupIcon, PlusIcon, BellIcon, ChevronDownIcon, UserCircleIcon, PencilSquareIcon, DocumentTextIcon, CurrencyRupeeIcon, SparklesIcon, ComputerDesktopIcon, Cog6ToothIcon, XMarkIcon, PlayIcon, MicrophoneIcon, ShoppingBagIcon } from '@heroicons/react/24/outline';
 import { GlobalSearchBar } from './GlobalSearchBar';
 
 const accountActions = [
@@ -146,21 +146,23 @@ export const MobileBottomNavigation = ({
     setMobileHomeTab,
     totalUnreadMessages,
     setShowArchive,
+    onOpenShopping,
 }) => {
     const tabs = [
         { id: 'chats', label: 'Chats', Icon: ChatBubbleLeftRightIcon, badge: totalUnreadMessages },
         { id: 'stories', label: 'Stories', Icon: ClockIcon },
         { id: 'groups', label: 'Groups', Icon: UserGroupIcon },
         { id: 'calls', label: 'Calls', Icon: PhoneIcon },
+        { id: 'shopping', label: 'Shop', Icon: ShoppingBagIcon },
     ];
     return (
-        <nav className="reddit-mobile-nav md:hidden grid grid-cols-4 border-t px-1 pb-[max(6px,env(safe-area-inset-bottom))] pt-1">
+        <nav className="reddit-mobile-nav md:hidden grid grid-cols-5 border-t px-1 pb-[max(6px,env(safe-area-inset-bottom))] pt-1">
             {tabs.map(({ Icon, ...tab }) => (
                 <button
                     key={tab.id}
                     type="button"
                     data-tour-mobile={tab.id}
-                    onClick={() => { setMobileHomeTab(tab.id); if (setShowArchive) setShowArchive(false); }}
+                    onClick={() => { if (tab.id === 'shopping') { onOpenShopping?.(); return; } setMobileHomeTab(tab.id); if (setShowArchive) setShowArchive(false); }}
                     className={`relative flex flex-col items-center gap-0.5 rounded-xl py-2 text-[11px] font-semibold transition ${
                         mobileHomeTab === tab.id ? 'reddit-mobile-nav-active' : ''
                     }`}

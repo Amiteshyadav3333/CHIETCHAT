@@ -72,6 +72,7 @@ class PendingRegistration(db.Model):
 class Chat(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     is_group = db.Column(db.Boolean, default=False)
+    is_shop_chat = db.Column(db.Boolean, nullable=False, default=False, index=True)
     name = db.Column(db.String(100), nullable=True)
     avatar = db.Column(db.String(500), nullable=True)
     group_admin_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
@@ -166,6 +167,7 @@ class BusinessProfile(db.Model):
     website_url = db.Column(db.String(200), default='')
     opening_hours = db.Column(db.String(160), default='')
     catalog_visible = db.Column(db.Boolean, default=True)
+    marketplace_enabled = db.Column(db.Boolean, nullable=False, default=False, index=True)
     created_at = db.Column(db.DateTime, default=utc_now)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
 
@@ -185,6 +187,7 @@ class BusinessAutomation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), unique=True, nullable=False)
     enabled = db.Column(db.Boolean, default=False)
+    ai_enabled = db.Column(db.Boolean, nullable=False, default=False)
     welcome_message = db.Column(db.String(500), default='Thanks for contacting us. How can we help?')
     away_message = db.Column(db.String(500), default='We are currently away and will reply soon.')
     keyword_rules = db.Column(db.Text, default='{}')

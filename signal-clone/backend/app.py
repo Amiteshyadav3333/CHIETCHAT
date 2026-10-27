@@ -118,12 +118,16 @@ _sensitive_limits = {
     '/api/chats/:id/scheduled-messages': (30, 15 * 60),
     '/api/status/:id/reply': (20, 15 * 60),
     '/api/messages/:id': (30, 15 * 60),
+    '/api/business/automation/claim': (30, 60),
+    '/api/business/shop-chat': (12, 60),
 }
 _token_scoped_rate_paths = {
     '/api/ai/chat', '/api/ai/chat/stream', '/api/ai/image', '/api/ai/tts',
     '/api/translate', '/api/upload', '/api/payments/orders',
     '/api/chats/:id/scheduled-messages',
     '/api/status/:id/reply', '/api/messages/:id',
+    '/api/business/automation/claim',
+    '/api/business/shop-chat',
 }
 
 def canonical_sensitive_path():

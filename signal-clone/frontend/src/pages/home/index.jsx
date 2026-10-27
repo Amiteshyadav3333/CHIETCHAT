@@ -37,12 +37,13 @@ import { ChatInfoDrawer } from './components/ChatInfoDrawer';
 import { CallOverlayContainer } from './components/CallOverlayContainer';
 import { FeatureOverlays } from './components/FeatureOverlays';
 import { HomeModalsContainer } from './components/HomeModalsContainer';
+import ShopMarketplace from '../../components/ShopMarketplace';
 import ImageCropperModal from '../../components/cropper/ImageCropperModal';
 import { useBackHandler } from '../../utils/backNavigation';
 import AppFeatureTour from '../../components/AppFeatureTour';
 
 import {
-    ChatBubbleLeftRightIcon, PlayIcon, PhotoIcon,
+    ChatBubbleLeftRightIcon, PlayIcon, PhotoIcon, ShoppingBagIcon,
     MicrophoneIcon, BellIcon, PlusIcon,
     Cog6ToothIcon
 } from '@heroicons/react/24/outline';
@@ -71,6 +72,7 @@ export const Home = () => {
 
     const [chats, setChats] = useState(() => loadChatMetadata(user?.id));
     const [activeChat, setActiveChat] = useState(null);
+    const [showShoppingMarketplace, setShowShoppingMarketplace] = useState(false);
     const [chatWallpaperPrefs, setChatWallpaperPrefs] = useState(() => {
         try { return JSON.parse(localStorage.getItem('chat_wallpaper_preferences') || '{}'); } catch { return {}; }
     });
@@ -574,17 +576,27 @@ export const Home = () => {
                 const chat = chatsRef.current.find(item => item.id === readableMsg.chatId);
                 if (chat?.participants?.length === 2) {
                     let autoReplyClaimed = false;
+                    let aiReply = '';
                     try {
-                        const claim = await axios.post('/api/business/automation/claim', { messageId: readableMsg.id }, { headers: { Authorization: `Bearer ${token}` } });
+                        const claim = await axios.post('/api/business/automation/claim', {
+                            messageId: readableMsg.id,
+                            customerMessage: automation.aiEnabled && readableMsg.type === 'text' ? readableMsg.content : undefined,
+                        }, { headers: { Authorization: `Bearer ${token}` } });
                         autoReplyClaimed = Boolean(claim.data.claimed);
+                        aiReply = String(claim.data.reply || '').trim();
                     } catch (error) {
                         console.error('Could not claim business auto reply', error);
                     }
                     if (autoReplyClaimed) {
-                        let autoReply = automation.welcomeMessage || 'Thanks for contacting us. How can we help?';
+                        let autoReply = aiReply || automation.welcomeMessage || 'Thanks for contacting us. How can we help?';
                         const incomingText = String(readableMsg.content || '').toLowerCase();
-                        for (const [keyword, reply] of Object.entries(automation.keywordRules || {})) {
-                            if (incomingText.includes(keyword.toLowerCase())) { autoReply = reply; break; }
+                        if (!aiReply) {
+                            for (const [keyword, reply] of Object.entries(automation.keywordRules || {})) {
+                                if (incomingText.includes(keyword.toLowerCase())) { autoReply = reply; break; }
+                            }
+                            if (automation.aiEnabled) {
+                                autoReply = `Shop auto-reply: ${autoReply}`;
+                            }
                         }
                         try {
                             const recipientPublicKeys = {};
@@ -1179,6 +1191,7 @@ export const Home = () => {
     };
 
     const openChats = () => {
+        setShowShoppingMarketplace(false);
         setShowNotifications(false);
         setShowSearchModal(false);
         nav.setShowSettings(false);
@@ -1562,7 +1575,7 @@ export const Home = () => {
     };
 
     const startChat = async (targetUser = searchedUser) => {
-        if (!targetUser || !user || !token) return;
+        if (!targetUser || !user || !token) return null;
         const existingChat = chats.find(chat =>
             !chat.isGroup && chat.participants?.some(participant => participant.id === targetUser.id)
         );
@@ -1571,7 +1584,7 @@ export const Home = () => {
             setShowSearchModal(false);
             setSearchQuery('');
             setSearchedUser(null);
-            return;
+            return existingChat;
         }
         try {
             const res = await axios.post('/api/chats/create', { participants: [user.id, targetUser.id], isGroup: false }, {
@@ -1583,10 +1596,49 @@ export const Home = () => {
             setShowSearchModal(false);
             setSearchQuery('');
             setSearchedUser(null);
+            return newChat || null;
         } catch (err) {
             console.error(err);
             setSearchError(err.response?.data?.error || "Could not start chat");
+            return null;
         }
+    };
+
+    const startShopChat = async (seller) => {
+        if (!seller?.id || !token) return null;
+        try {
+            const response = await axios.post('/api/business/shop-chat', { businessUserId: seller.id }, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const updatedChats = await fetchChats();
+            const shopChat = updatedChats.find(chat => String(chat.id) === String(response.data.id));
+            if (shopChat) setActiveChat(shopChat);
+            return shopChat || null;
+        } catch (err) {
+            setSearchError(err.response?.data?.error || 'Could not open a chat with this seller.');
+            return null;
+        }
+    };
+
+    const openShoppingMarketplace = () => {
+        setShowNotifications(false);
+        setShowSearchModal(false);
+        nav.setShowSettings(false);
+        nav.setShowSocial(false);
+        nav.setShowReels(false);
+        nav.setShowPodlive(false);
+        nav.setShowAiChat(false);
+        nav.setShowSmartSpace(false);
+        nav.setShowSaskatAI(false);
+        setActiveChat(null);
+        localStorage.removeItem('activeChatId');
+        setShowShoppingMarketplace(true);
+    };
+
+    const openShopBusinessTools = () => {
+        setShowShoppingMarketplace(false);
+        setSettingsInitialScreen('settings');
+        nav.setShowSettings(true);
     };
 
     const handleGlobalSearchResult = (type, item) => {
@@ -1737,11 +1789,12 @@ export const Home = () => {
         { label: 'PodLive', icon: MicrophoneIcon, active: nav.showPodlive, action: () => { nav.hideAppNavForFeature(); nav.setShowReels(false); nav.setShowSocial(false); nav.setShowPodlive(true); nav.setShowAiChat(false); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false); }, badge: nav.podliveLiveCount || 0 },
         { label: 'Notify', icon: BellIcon, active: showNotifications, action: openNotifications, badge: unreadCount },
         { label: 'Publish', icon: PlusIcon, active: nav.showSocial, action: openContentPublisher },
-        { label: 'Chats', icon: ChatBubbleLeftRightIcon, active: !nav.showSocial && !nav.showReels && !nav.showPodlive && !nav.showAiChat && !nav.showSmartSpace && !nav.showSaskatAI, action: openChats },
+        { label: 'Chats', icon: ChatBubbleLeftRightIcon, active: !showShoppingMarketplace && !nav.showSocial && !nav.showReels && !nav.showPodlive && !nav.showAiChat && !nav.showSmartSpace && !nav.showSaskatAI, action: openChats },
+        { label: 'Shopping', icon: ShoppingBagIcon, active: showShoppingMarketplace, action: openShoppingMarketplace },
         { label: 'Settings', icon: Cog6ToothIcon, active: nav.showSettings, action: () => { setShowNotifications(false); setShowSearchModal(false); nav.setShowSettings(true); } }
     ];
 
-    const featureOverlayOpen = showSearchModal || showLinkPhoneModal || showNotifications || nav.showSettings || nav.showSaskatAI || calls.showCallModal || calls.incomingCall;
+    const featureOverlayOpen = showSearchModal || showLinkPhoneModal || showNotifications || nav.showSettings || nav.showSaskatAI || calls.showCallModal || calls.incomingCall || showShoppingMarketplace;
     const appNavHidden = featureOverlayOpen || Boolean(activeChat);
     const activeChatWallpaperPref = visibleActiveChat ? chatWallpaperPrefs[String(visibleActiveChat.id)] : null;
     const activeChatWallpaper = activeChatWallpaperPref?.type === 'preset' ? activeChatWallpaperPref.value : prefs.wallpaper;
@@ -1916,6 +1969,7 @@ export const Home = () => {
                 pinnedChats={prefs.pinnedChats}
                 totalUnreadMessages={totalUnreadMessages}
                 startCallForChat={calls.startCallForChat}
+                onOpenShopping={openShoppingMarketplace}
             />
 
             {/* Main Chat View */}
@@ -2056,6 +2110,14 @@ export const Home = () => {
                 fetchChats={fetchChats}
                 token={token}
             />
+
+            {showShoppingMarketplace && <ShopMarketplace
+                token={token}
+                onClose={() => setShowShoppingMarketplace(false)}
+                onManageShop={openShopBusinessTools}
+                onStartChat={startShopChat}
+                onStartCall={calls.startCallForChat}
+            />}
 
             {/* Heavy Feature Overlays */}
             <FeatureOverlays

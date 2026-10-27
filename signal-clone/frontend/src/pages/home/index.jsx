@@ -34,6 +34,7 @@ import { AppTopBar, HomeNavigationRail } from './components/HomeNavigationRail';
 import { ChatSidebar } from './components/ChatSidebar';
 import { ChatWindowView } from './components/ChatWindowView';
 import { ChatInfoDrawer } from './components/ChatInfoDrawer';
+import IncomingChatBell from './components/IncomingChatBell';
 import { CallOverlayContainer } from './components/CallOverlayContainer';
 import { FeatureOverlays } from './components/FeatureOverlays';
 import { HomeModalsContainer } from './components/HomeModalsContainer';
@@ -154,6 +155,13 @@ export const Home = () => {
     const [disappearingTtl, setDisappearingTtl] = useState(0);
     const [snapMode, setSnapMode] = useState(false);
     const [snapNotice, setSnapNotice] = useState(null);
+    const [liveNoteEnabled, setLiveNoteEnabled] = useState(false);
+    const [liveNotePreviews, setLiveNotePreviews] = useState({});
+    const [incomingBells, setIncomingBells] = useState([]);
+    const liveNoteTimerRef = useRef(null);
+    const liveNoteSequenceRef = useRef(0);
+    const liveNoteExpiryRef = useRef({});
+    const liveNoteSessionRef = useRef({ chatId: null, enabled: false });
     const [cameraOpenRequest, setCameraOpenRequest] = useState(0);
     const [photoReactionSource, setPhotoReactionSource] = useState(null);
     const [showTopDropdown, setShowTopDropdown] = useState(false);
@@ -470,8 +478,28 @@ export const Home = () => {
             setChatTranslationLang('');
             setDisappearingTtl(0);
             setSnapMode(false);
+            setLiveNoteEnabled(false);
         }
     }, [activeChat?.id]);
+
+    useEffect(() => {
+        const chatId = activeChat?.id || null;
+        const previous = liveNoteSessionRef.current;
+        if (previous.enabled && previous.chatId && previous.chatId !== chatId) {
+            window.clearTimeout(liveNoteTimerRef.current);
+            liveNoteSequenceRef.current += 1;
+            socket?.emit('live_note_end', { chatId: previous.chatId });
+        }
+        const enabled = chatId ? localStorage.getItem(`chat_live_note_${chatId}`) === '1' : false;
+        setLiveNoteEnabled(enabled);
+        liveNoteSessionRef.current = { chatId, enabled };
+    }, [activeChat?.id, socket]);
+
+    useEffect(() => () => {
+        window.clearTimeout(liveNoteTimerRef.current);
+        const session = liveNoteSessionRef.current;
+        if (session.enabled && session.chatId) socket?.emit('live_note_end', { chatId: session.chatId });
+    }, [socket]);
 
     const updateDisappearingTtl = (value) => {
         const ttl = value === 'custom' ? 'custom' : Number(value);
@@ -483,6 +511,54 @@ export const Home = () => {
         setSnapMode(enabled);
         if (visibleActiveChat) localStorage.setItem(`chat_snap_mode_${visibleActiveChat.id}`, enabled ? '1' : '0');
         if (visibleActiveChat?.id) socket?.emit('set_snap_mode', { chatId: visibleActiveChat.id, enabled });
+    };
+
+    const updateLiveNote = enabled => {
+        const chatId = visibleActiveChat?.id;
+        if (!chatId) return;
+        const next = Boolean(enabled);
+        setLiveNoteEnabled(next);
+        localStorage.setItem(`chat_live_note_${chatId}`, next ? '1' : '0');
+        liveNoteSessionRef.current = { chatId, enabled: next };
+        if (!next) {
+            window.clearTimeout(liveNoteTimerRef.current);
+            liveNoteSequenceRef.current += 1;
+            socket?.emit('live_note_end', { chatId });
+        }
+    };
+
+    const handleLiveNoteDraft = text => {
+        const chat = activeChatRef.current;
+        if (!liveNoteEnabled || !socket?.connected || !chat || !publicKey || !user) return;
+        window.clearTimeout(liveNoteTimerRef.current);
+        const sequence = ++liveNoteSequenceRef.current;
+        const draft = String(text || '').slice(0, 2000);
+        if (!draft.trim()) {
+            socket.emit('live_note_end', { chatId: chat.id });
+            return;
+        }
+        liveNoteTimerRef.current = window.setTimeout(async () => {
+            if (sequence !== liveNoteSequenceRef.current || !liveNoteSessionRef.current.enabled || liveNoteSessionRef.current.chatId !== chat.id) return;
+            try {
+                const recipients = {};
+                for (const participant of chat.participants || []) {
+                    const participantPublicKey = Number(participant.id) === Number(user.id) ? publicKey : participant.publicKey;
+                    if (!participantPublicKey) throw new Error('A chat participant encryption key is unavailable');
+                    if (Number(participant.id) !== Number(user.id)) await assertPinnedPublicKey(participant.id, participantPublicKey);
+                    recipients[participant.id] = participantPublicKey;
+                }
+                const content = await encryptForRecipients(recipients, draft);
+                if (sequence === liveNoteSequenceRef.current && liveNoteSessionRef.current.enabled && liveNoteSessionRef.current.chatId === chat.id) {
+                    socket.emit('live_note_update', { chatId: chat.id, content });
+                }
+            } catch (error) { console.warn('Could not share encrypted live note:', error.message); }
+        }, 250);
+    };
+
+    const ringChatBell = async () => {
+        if (!socket?.connected || !visibleActiveChat?.id) throw new Error('Connect to chat to ring the bell.');
+        const result = await emitWithAcknowledgement(socket, 'ring_chat_bell', { chatId: visibleActiveChat.id });
+        if (!result?.ok) throw new Error(result?.error || 'Could not ring the bell.');
     };
 
     // Snap & TTL timer
@@ -569,6 +645,44 @@ export const Home = () => {
                     message: `${initiatorName || affectedChat?.name || 'A participant'} started Snap Mode. Previous normal chat content is hidden, and capture and download restrictions apply to this session.`,
                 });
             }
+        });
+
+        socket.on('live_note_preview', async payload => {
+            if (!payload?.chatId || !payload?.userId || !payload?.content || !privateKey || !user) return;
+            try {
+                const text = await decryptEnvelope(privateKey, user.id, payload.content);
+                if (typeof text !== 'string') return;
+                const chatId = payload.chatId;
+                const senderId = payload.userId;
+                const updatedAt = Date.now();
+                const key = `${chatId}:${senderId}`;
+                window.clearTimeout(liveNoteExpiryRef.current[key]);
+                setLiveNotePreviews(current => ({ ...current, [chatId]: {
+                    ...(current[chatId] || {}), [senderId]: { userId: senderId, username: payload.username || 'Someone', text, updatedAt },
+                } }));
+                liveNoteExpiryRef.current[key] = window.setTimeout(() => {
+                    setLiveNotePreviews(current => {
+                        if (current[chatId]?.[senderId]?.updatedAt !== updatedAt) return current;
+                        const nextChat = { ...current[chatId] }; delete nextChat[senderId];
+                        const next = { ...current }; if (Object.keys(nextChat).length) next[chatId] = nextChat; else delete next[chatId];
+                        return next;
+                    });
+                }, 8000);
+            } catch { /* Ignore live previews that cannot be decrypted for this account. */ }
+        });
+        socket.on('live_note_end', ({ chatId, userId }) => {
+            if (!chatId || !userId) return;
+            window.clearTimeout(liveNoteExpiryRef.current[`${chatId}:${userId}`]);
+            setLiveNotePreviews(current => {
+                if (!current[chatId]?.[userId]) return current;
+                const nextChat = { ...current[chatId] }; delete nextChat[userId];
+                const next = { ...current }; if (Object.keys(nextChat).length) next[chatId] = nextChat; else delete next[chatId];
+                return next;
+            });
+        });
+        socket.on('chat_bell_ringing', bell => {
+            if (!bell?.bellId) return;
+            setIncomingBells(current => current.some(item => item.bellId === bell.bellId) ? current : [...current, bell]);
         });
 
         socket.on('receive_message', async (newMsg) => {
@@ -824,10 +938,13 @@ export const Home = () => {
             socket.off('message_reaction_update');
             socket.off('message_pin_update');
             socket.off('snap_mode_update');
+            socket.off('live_note_preview');
+            socket.off('live_note_end');
+            socket.off('chat_bell_ringing');
             socket.off('typing_update');
             socket.off('live_location_update');
         };
-    }, [socket, user, publicKey, fetchChats, decryptMessageForCurrentUser, processQueue, chats]);
+    }, [socket, user, publicKey, privateKey, fetchChats, decryptMessageForCurrentUser, processQueue, chats]);
 
     // Active chat messages loader
     useEffect(() => {
@@ -1530,6 +1647,11 @@ export const Home = () => {
     const handleTyping = (isTyping) => {
         if (!socket || !visibleActiveChat) return;
         socket.emit('typing', { chatId: visibleActiveChat.id, isTyping });
+        if (!isTyping && liveNoteEnabled) {
+            window.clearTimeout(liveNoteTimerRef.current);
+            liveNoteSequenceRef.current += 1;
+            socket.emit('live_note_end', { chatId: visibleActiveChat.id });
+        }
     };
 
     const openActiveChatInfo = async () => {
@@ -2076,6 +2198,8 @@ export const Home = () => {
                 setCameraOpenRequest={setCameraOpenRequest}
                 cameraOpenRequest={cameraOpenRequest}
                 typingUsers={typingUsers}
+                liveNotePreviews={liveNotePreviews}
+                handleLiveNoteDraft={handleLiveNoteDraft}
                 handleSendMessage={handleSendMessage}
                 handleUpload={handleUpload}
                 startLiveLocation={startLiveLocation}
@@ -2109,6 +2233,9 @@ export const Home = () => {
                 setShowChatDraw={setShowChatDraw}
                 snapMode={snapMode}
                 updateSnapMode={updateSnapMode}
+                liveNoteEnabled={liveNoteEnabled}
+                updateLiveNote={updateLiveNote}
+                ringChatBell={ringChatBell}
                 getOtherParticipant={getOtherParticipant}
                 blockedUsers={blockedUsers}
                 handleBlockUser={handleBlockUser}
@@ -2213,6 +2340,7 @@ export const Home = () => {
                 }}
                 user={user}
             />
+            {incomingBells.map(bell => <IncomingChatBell key={bell.bellId} bell={bell} onSilence={bellId => setIncomingBells(current => current.filter(item => item.bellId !== bellId))} />)}
         </div>
     );
 };

@@ -11,6 +11,7 @@ from utils import (
 from extensions import socket_users, user_connection_counts, socket_presence_lock
 from scheduled_messages import valid_encrypted_envelope
 import datetime
+import uuid
 import time
 import threading
 from collections import defaultdict, deque
@@ -30,6 +31,10 @@ _call_signal_windows_lock = threading.Lock()
 _call_invites = CallInviteRegistry()
 _game_presence = defaultdict(dict)
 _game_presence_lock = threading.Lock()
+_live_note_windows = defaultdict(deque)
+_live_note_windows_lock = threading.Lock()
+_bell_windows = defaultdict(deque)
+_bell_windows_lock = threading.Lock()
 
 def register_socket_events(socketio):
     register_location_socket_handlers(socketio)
@@ -121,6 +126,32 @@ def register_socket_events(socketio):
         return Message.query.filter(
             Message.sender_id == user_id, Message.timestamp >= cutoff,
         ).count() < 120
+
+    def allow_ephemeral_socket_event(user_id, chat_id, event_name, limit, window_seconds):
+        redis_client = current_app.extensions.get('cheetchat_redis')
+        if redis_client is not None:
+            try:
+                key = f'cheetchat:{event_name}:{user_id}:{chat_id}'
+                count = redis_client.eval(
+                    "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('EXPIRE',KEYS[1],ARGV[1]) end; return n",
+                    1, key, window_seconds,
+                )
+                return count <= limit
+            except Exception:
+                current_app.logger.exception('%s rate limiter unavailable', event_name)
+                if current_app.config.get('IS_PRODUCTION'):
+                    return False
+        windows = _live_note_windows if event_name == 'live-note' else _bell_windows
+        lock = _live_note_windows_lock if event_name == 'live-note' else _bell_windows_lock
+        now = time.monotonic()
+        with lock:
+            attempts = windows[(user_id, chat_id)]
+            while attempts and attempts[0] <= now - window_seconds:
+                attempts.popleft()
+            if len(attempts) >= limit:
+                return False
+            attempts.append(now)
+        return True
 
     def authorized_call_target(data):
         """Allow signaling only between sockets inside the same authorized call."""
@@ -498,6 +529,80 @@ def register_socket_events(socketio):
             "username": user.username if user else "Someone",
             "isTyping": bool(data.get('isTyping'))
         }, room=str(chat_id), include_self=False)
+
+    @socketio.on('live_note_update')
+    def on_live_note_update(data):
+        user_id = get_socket_user_id()
+        if not isinstance(data, dict):
+            return {'ok': False, 'error': 'Invalid live note'}
+        try:
+            chat_id = int(data.get('chatId'))
+        except (TypeError, ValueError):
+            return {'ok': False, 'error': 'Invalid chat'}
+        content = data.get('content')
+        if not user_id or not user_can_access_chat(user_id, chat_id):
+            return {'ok': False, 'error': 'Forbidden'}
+        if not isinstance(content, str) or len(content.encode('utf-8')) > 12_000 or not valid_encrypted_envelope(content):
+            return {'ok': False, 'error': 'Live notes must use a valid encrypted envelope'}
+        participants = get_chat_participant_ids(chat_id)
+        if len(participants) == 2:
+            other_id = next(participant_id for participant_id in participants if participant_id != user_id)
+            if is_blocked(user_id, other_id) or is_blocked(other_id, user_id):
+                return {'ok': False, 'error': 'Live notes are unavailable for this chat'}
+        try:
+            recipient_ids = set(json.loads(content).get('recipients', {}))
+        except (TypeError, ValueError):
+            return {'ok': False, 'error': 'Invalid encrypted live note'}
+        if not {str(participant_id) for participant_id in participants}.issubset(recipient_ids):
+            return {'ok': False, 'error': 'Encrypted live note is missing a participant'}
+        if not allow_ephemeral_socket_event(user_id, chat_id, 'live-note', 40, 10):
+            return {'ok': False, 'error': 'Live note is updating too quickly'}
+        user = db.session.get(User, user_id)
+        payload = {'chatId': chat_id, 'userId': user_id,
+            'username': user.username if user else 'Someone', 'content': content}
+        for participant_id in participants:
+            if participant_id != user_id:
+                socketio.emit('live_note_preview', payload, room=f'user_{participant_id}')
+        return {'ok': True}
+
+    @socketio.on('live_note_end')
+    def on_live_note_end(data):
+        user_id = get_socket_user_id()
+        try:
+            chat_id = int(data.get('chatId'))
+        except (TypeError, ValueError, AttributeError):
+            return {'ok': False, 'error': 'Invalid chat'}
+        if not user_id or not user_can_access_chat(user_id, chat_id):
+            return {'ok': False, 'error': 'Forbidden'}
+        for participant_id in get_chat_participant_ids(chat_id):
+            if participant_id != user_id:
+                socketio.emit('live_note_end', {'chatId': chat_id, 'userId': user_id}, room=f'user_{participant_id}')
+        return {'ok': True}
+
+    @socketio.on('ring_chat_bell')
+    def on_ring_chat_bell(data):
+        user_id = get_socket_user_id()
+        try:
+            chat_id = int(data.get('chatId'))
+        except (TypeError, ValueError, AttributeError):
+            return {'ok': False, 'error': 'Invalid chat'}
+        if not user_id or not user_can_access_chat(user_id, chat_id):
+            return {'ok': False, 'error': 'Forbidden'}
+        participant_ids = get_chat_participant_ids(chat_id)
+        if len(participant_ids) != 2:
+            return {'ok': False, 'error': 'Bell is available in one-to-one chats'}
+        target_id = next((participant_id for participant_id in participant_ids if participant_id != user_id), None)
+        if not target_id or is_blocked(user_id, target_id) or is_blocked(target_id, user_id):
+            return {'ok': False, 'error': 'This person cannot be reached from this chat'}
+        if not is_user_online(target_id):
+            return {'ok': False, 'error': 'This person is offline'}
+        if not allow_ephemeral_socket_event(user_id, chat_id, 'chat-bell', 1, 20):
+            return {'ok': False, 'error': 'Wait a little before ringing again'}
+        caller = db.session.get(User, user_id)
+        payload = {'bellId': uuid.uuid4().hex, 'chatId': chat_id,
+            'callerId': user_id, 'callerName': caller.username if caller else 'Your contact'}
+        socketio.emit('chat_bell_ringing', payload, room=f'user_{target_id}')
+        return {'ok': True, 'message': 'Bell rang'}
 
     @socketio.on('set_snap_mode')
     def on_set_snap_mode(data):

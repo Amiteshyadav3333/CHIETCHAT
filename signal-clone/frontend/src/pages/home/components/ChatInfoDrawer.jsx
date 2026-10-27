@@ -28,6 +28,9 @@ export const ChatInfoDrawer = ({
     setShowChatDraw,
     snapMode,
     updateSnapMode,
+    liveNoteEnabled,
+    updateLiveNote,
+    ringChatBell,
     getOtherParticipant,
     blockedUsers,
     handleBlockUser,
@@ -154,6 +157,10 @@ export const ChatInfoDrawer = ({
                             onOpenDraw={() => { setShowInfoPanel(false); setShowChatDraw(true); }}
                             snapMode={snapMode}
                             onSnapModeChange={updateSnapMode}
+                            liveNoteEnabled={liveNoteEnabled}
+                            onLiveNoteChange={updateLiveNote}
+                            onRingBell={ringChatBell}
+                            canRingBell={!visibleActiveChat.isGroup}
                             user={user}
                             token={token}
                             onUserUpdated={onUserUpdated}

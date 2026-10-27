@@ -89,6 +89,8 @@ export const ChatWindowView = ({
     setCameraOpenRequest,
     cameraOpenRequest,
     typingUsers,
+    liveNotePreviews,
+    handleLiveNoteDraft,
     handleSendMessage,
     handleUpload,
     startLiveLocation,
@@ -534,6 +536,7 @@ export const ChatWindowView = ({
                         </span>
                     </div>
                 )}
+                {Object.values(liveNotePreviews[visibleActiveChat.id] || {}).map(preview => <div key={`live-note-${preview.userId}`} className="mx-3 mb-2 rounded-xl border border-sky-400/25 bg-sky-400/[.08] px-3 py-2" aria-live="polite"><p className="text-[10px] font-bold uppercase tracking-wide text-sky-200">📝 {preview.username} · NoteIt Live</p><p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-100">{preview.text}</p></div>)}
                 <div ref={messagesEndRef} />
             </div>
 
@@ -549,6 +552,7 @@ export const ChatWindowView = ({
                 chatTranslationLang={chatTranslationLang}
                 onChangeTranslationLang={setChatTranslationLang}
                 onTyping={handleTyping}
+                onLiveNoteDraft={handleLiveNoteDraft}
                 disappearingTtl={disappearingTtl}
                 disabled={visibleActiveChat.isChatDisabled && visibleActiveChat.groupAdminId !== user?.id}
                 placeholderOverride={visibleActiveChat.isChatDisabled && visibleActiveChat.groupAdminId !== user?.id ? "Only admins can send messages in this group" : ""}

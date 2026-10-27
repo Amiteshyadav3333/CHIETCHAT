@@ -71,7 +71,7 @@ const cleanBaseUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
 const MessageInput = ({ 
     onSend, onUpload, onStartLiveLocation, replyTo, onCancelReply, 
     onTranslate, chatId, chatTranslationLang, onChangeTranslationLang,
-    onTyping,
+    onTyping, onLiveNoteDraft,
     disappearingTtl = 0,
     disabled = false, placeholderOverride = "",
     lastMessageText = "",
@@ -396,6 +396,7 @@ const MessageInput = ({
         }
         onSend(finalWord, 'text', disappearingTtl);
         setText('');
+        onLiveNoteDraft?.('');
         setShowEmoji(false);
         onTyping?.(false);
     };
@@ -1065,6 +1066,7 @@ const MessageInput = ({
                                 value={text}
                                 onChange={e => {
                                     setText(e.target.value);
+                                    onLiveNoteDraft?.(e.target.value);
                                     onTyping?.(e.target.value.length > 0);
                                     clearTimeout(typingTimerRef.current);
                                     typingTimerRef.current = setTimeout(() => onTyping?.(false), 1400);
@@ -1075,7 +1077,7 @@ const MessageInput = ({
                                 className="w-full bg-[#2a3942] text-gray-100 placeholder-gray-500 rounded-3xl pl-4 pr-24 py-3 text-[15px] focus:outline-none resize-none max-h-32 overflow-y-auto leading-relaxed"
                                 style={{ scrollbarWidth: 'none' }}
                                 onClick={() => { setShowEmoji(false); setShowAttachMenu(false); }}
-                                onBlur={() => onTyping?.(false)}
+                                onBlur={() => { onTyping?.(false); onLiveNoteDraft?.(''); }}
                             />
                             {/* Translate button — RIGHT INSIDE chatbox */}
                             <button

@@ -44,7 +44,6 @@ export const ChatInfoDrawer = ({
     if (!showInfoPanel || !visibleActiveChat) return null;
 
     if (visibleActiveChat.isGroup) {
-        const isAdmin = visibleActiveChat.groupAdminId === user?.id;
         return (
             <TelegramGroupInfo
                 chat={visibleActiveChat}

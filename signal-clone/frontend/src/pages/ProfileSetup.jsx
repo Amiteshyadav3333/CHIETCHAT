@@ -10,7 +10,6 @@ import {
     AcademicCapIcon,
     MapPinIcon,
     UserPlusIcon,
-    ChatBubbleLeftRightIcon,
     CheckIcon,
     SparklesIcon,
     ShareIcon,

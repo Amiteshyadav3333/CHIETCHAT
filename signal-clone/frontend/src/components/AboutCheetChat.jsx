@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowDownTrayIcon, BriefcaseIcon, ChatBubbleLeftRightIcon, FilmIcon, LockClosedIcon, MicrophoneIcon, SparklesIcon, UserGroupIcon, VideoCameraIcon } from '@heroicons/react/24/outline';
+import { ArrowDownTrayIcon, BriefcaseIcon, ChatBubbleLeftRightIcon, FilmIcon, LockClosedIcon, SparklesIcon, UserGroupIcon, VideoCameraIcon } from '@heroicons/react/24/outline';
 
 const FEATURES = [
     ['social', UserGroupIcon, 'Social — a feed you control', 'Ducor Social is built around user choice. People can create posts, share photos and videos, write articles, comment, reply, react, follow creators, build communities and choose the feed they want to see. Instead of forcing a single opaque algorithmic timeline, Social offers customizable feed controls so users can shape their own experience, discover relevant voices and decide which content categories and communities matter to them.'],

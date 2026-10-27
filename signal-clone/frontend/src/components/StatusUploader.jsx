@@ -49,7 +49,6 @@ const StatusUploader = ({ user, token, onClose, onUploaded }) => {
     const [customExpiryHours, setCustomExpiryHours] = useState(24);
     const [customExpiryMinutes, setCustomExpiryMinutes] = useState(0);
     const [customExpirySeconds, setCustomExpirySeconds] = useState(0);
-    const [customDurationValue, setCustomDurationValue] = useState(15);
     const [audienceOpen, setAudienceOpen] = useState(false);
     const [storyPrivacy, setStoryPrivacy] = useState(user?.storyPrivacy || localStorage.getItem('story_privacy') || 'contacts');
     const [storyExceptions, setStoryExceptions] = useState(user?.storyPrivacyExceptions || localStorage.getItem('story_privacy_exceptions') || '');
@@ -532,10 +531,7 @@ const StatusUploader = ({ user, token, onClose, onUploaded }) => {
                                             <button
                                                 key={s}
                                                 type="button"
-                                                onClick={() => {
-                                                    setSlideDuration(s);
-                                                    setCustomDurationValue(s);
-                                                }}
+                                                onClick={() => setSlideDuration(s)}
                                                 className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
                                                     slideDuration === s
                                                         ? 'bg-emerald-500 text-black shadow-md font-bold'
@@ -556,19 +552,17 @@ const StatusUploader = ({ user, token, onClose, onUploaded }) => {
                                             onChange={e => {
                                                 const val = Number(e.target.value);
                                                 setSlideDuration(val);
-                                                setCustomDurationValue(val);
                                             }}
                                             className="flex-1 accent-emerald-500 cursor-pointer h-1.5 bg-gray-700 rounded-lg"
                                         />
                                         <input
                                             type="number"
                                             min="1"
-                                            max="86400"
+                                            max="60"
                                             value={slideDuration}
                                             onChange={e => {
-                                                const val = Math.max(1, Math.min(Number(e.target.value) || 1, 86400));
+                                                const val = Math.max(1, Math.min(Number(e.target.value) || 1, 60));
                                                 setSlideDuration(val);
-                                                setCustomDurationValue(val);
                                             }}
                                             className="w-14 bg-gray-900 border border-gray-700 text-white rounded px-1.5 py-0.5 text-xs text-center font-mono outline-none focus:border-emerald-400"
                                         />

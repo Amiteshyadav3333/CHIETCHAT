@@ -16,16 +16,19 @@ const VoiceMode = ({ onTranscript, isLoading }) => {
             recognitionRef.current.onend = () => setIsListening(false);
 
             recognitionRef.current.onresult = (event) => {
+                let finalTranscript = '';
                 let interimTranscript = '';
                 for (let i = event.resultIndex; i < event.results.length; i++) {
                     const transcriptSegment = event.results[i][0].transcript;
                     if (event.results[i].isFinal) {
-                        setTranscript(transcriptSegment);
-                        onTranscript(transcriptSegment);
+                        finalTranscript += transcriptSegment;
                     } else {
                         interimTranscript += transcriptSegment;
                     }
                 }
+                const recognizedText = `${finalTranscript}${interimTranscript}`.trim();
+                if (recognizedText) setTranscript(recognizedText);
+                if (finalTranscript.trim()) onTranscript(finalTranscript.trim());
             };
         }
     }, [onTranscript]);

@@ -26,6 +26,7 @@ class ProductionConfigTests(unittest.TestCase):
             'TURN_URLS': 'turns:turn.example.com:5349',
             'TURN_SECRET': 't' * 32,
             'DATA_RETENTION_PEPPER': 'p' * 32,
+            'SELLER_KYC_ENCRYPTION_KEY': 'k' * 48,
             'PAYMENT_RETENTION_DAYS': '2555',
             'CALL_RECORD_RETENTION_DAYS': '90',
             'AI_MEMORY_RETENTION_DAYS': '30',

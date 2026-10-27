@@ -18,9 +18,6 @@ export default function HumanoidAiAvatar({
     isArjun = false,
     aiSpeaking = false,
     userSpeaking = false,
-    loading = false,
-    callState = 'connected',
-    fullScreen = true,
 }) {
     const [blink, setBlink] = useState(false);
     const [mouthAperture, setMouthAperture] = useState(0); // 0 (closed) to 1.0 (open)

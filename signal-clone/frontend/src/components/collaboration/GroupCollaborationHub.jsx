@@ -4,8 +4,7 @@ import {
     XMarkIcon, PlusIcon, TrashIcon, CheckIcon,
     CalendarDaysIcon, ClipboardDocumentListIcon, DocumentTextIcon,
     FlagIcon, UserCircleIcon, ArrowPathIcon, ShareIcon,
-    PencilSquareIcon, CheckCircleIcon, SparklesIcon,
-    ArrowRightIcon
+    SparklesIcon
 } from '@heroicons/react/24/outline';
 import { API_BASE_URL } from '../../utils/apiBaseUrl';
 
@@ -25,7 +24,6 @@ const PRIORITY_BADGES = {
 
 export default function GroupCollaborationHub({
     chat,
-    currentUser,
     token,
     socket,
     onClose,

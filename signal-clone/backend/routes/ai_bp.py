@@ -114,7 +114,16 @@ def _detect_language(text: str) -> str:
 
 
 def _response_language_instruction(text: str, language_code: str | None) -> str:
-    """Strictly use the UI selected language so TTS works correctly."""
+    """Let the current turn's script override a stale UI language preference."""
+    detected = _detect_language(text)
+    if detected == 'devanagari':
+        return 'Hindi (Devanagari script)'
+    if detected in {'Bengali (Bengali script)', 'Tamil (Tamil script)', 'Telugu (Telugu script)',
+                    'Gujarati (Gujarati script)', 'Punjabi (Gurmukhi script)', 'Arabic (Arabic script)',
+                    'Roman Hinglish'}:
+        return detected
+    if detected.startswith('the language used in the current message'):
+        return 'the language used in the current message (auto-detect the Latin-script language)'
     return SUPPORTED_LANGUAGES.get(language_code, 'the language used in the current message')
 
 
@@ -520,6 +529,7 @@ def _build_messages(user_id, new_user_msg, user_gender=None, user_name=None, lan
     system_prompt = _build_system_prompt(user_gender or 'unknown', user_name or 'User')
     system_prompt += f"\n\n🎯 LIVE STYLE MEMORY:\n{_conversation_style_hint(history)}"
     system_prompt += (
+        "\n- Memory describes style only; never let it override clear current-message language."
         f"\n\nCURRENT TURN:\n- Language: {current_language}. You MUST reply ONLY in this selected language and script. "
         "Do NOT reply in the language the user types in if it differs from this selected language. "
         "This is critical because the Text-to-Speech engine is locked to the selected language, and will break if you use another language."

@@ -147,7 +147,6 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     const [profileExceptions, setProfileExceptions] = useState(() => user?.profilePhotoExceptions || localStorage.getItem('profile_privacy_exceptions') || '');
     const [phonePrivacy, setPhonePrivacy] = useState(() => user?.phoneNumberPrivacy || 'nobody');
     const [customFont, setCustomFont] = useState(() => serverUi.customFont || localStorage.getItem('chat_custom_font') || 'system');
-    const [notificationSoundName, setNotificationSoundName] = useState(() => localStorage.getItem('custom_notification_name') || '');
     const [globalMsgSound, setGlobalMsgSound] = useState(() => getGlobalSoundSetting('msg'));
     const [globalCallSound, setGlobalCallSound] = useState(() => getGlobalSoundSetting('call'));
     const [soundPreviewType, setSoundPreviewType] = useState(null);

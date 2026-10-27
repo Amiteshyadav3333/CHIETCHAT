@@ -317,7 +317,6 @@ const AdminDashboard = () => {
                                     setShowForm(true);
                                 }}
                                 onDelete={handleDeleteAd}
-                                adminToken={adminToken}
                             />
                         </div>
                     )}

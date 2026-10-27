@@ -7,6 +7,7 @@ import io
 import re
 import sys
 import tempfile
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from datetime import timedelta
@@ -26,6 +27,7 @@ from models import (
     PaymentOrder, Message, PushSubscription, Reel, SocialPost, Status, MediaDeletionTask,
     UploadAsset, ScheduledMessage, Contact, CallRecord, WorkerHeartbeat, AiConversation,
     SellerAccount, ShopSchedule, ShopDeliveryOption, MarketplaceOrder, MarketplaceOrderLine,
+    SellerVerificationDocument,
 )
 from scheduled_messages import deliver_due_scheduled_messages
 from call_records import maintain_call_records
@@ -108,18 +110,30 @@ class SecurityTests(unittest.TestCase):
             'businessName': 'Local Studio', 'category': 'Services', 'marketplaceEnabled': False,
         }, headers=headers)
         self.assertEqual(profile.status_code, 200)
-        registration = self.client.post('/api/business/seller', json={
-            'legalName': 'Amitesh Yadav', 'sellerType': 'individual',
-            'businessAddress': '22 Market Road, New Delhi',
-        }, headers=headers)
-        self.assertEqual(registration.status_code, 201)
-        self.assertEqual(registration.json['seller']['status'], 'submitted')
+        with patch.dict(os.environ, {'SELLER_KYC_ENCRYPTION_KEY': 'test-kyc-encryption-key-' * 3}):
+            registration = self.client.post('/api/business/seller', json={
+                'legalName': 'Amitesh Yadav', 'sellerType': 'individual',
+                'businessAddress': '22 Market Road, New Delhi', 'taxIdentifier': 'ABCDE1234F',
+            }, headers=headers)
+            self.assertEqual(registration.status_code, 201)
+            self.assertEqual(registration.json['seller']['status'], 'draft')
+            for document_type in ('identity_proof', 'address_proof', 'tax_document'):
+                upload = self.client.post('/api/business/seller/documents', data={
+                    'documentType': document_type,
+                    'file': (io.BytesIO(b'%PDF-1.4 test verification document'), f'{document_type}.pdf'),
+                }, headers=headers, content_type='multipart/form-data')
+                self.assertEqual(upload.status_code, 201, upload.json)
+            submitted = self.client.post('/api/business/seller/submit', json={}, headers=headers)
+            self.assertEqual(submitted.status_code, 200)
+            self.assertEqual(submitted.json['seller']['status'], 'submitted')
         blocked = self.client.put('/api/business/profile', json={
             'businessName': 'Local Studio', 'marketplaceEnabled': True,
         }, headers=headers)
         self.assertEqual(blocked.status_code, 409)
         with app.app_context():
             seller = SellerAccount.query.filter_by(user_id=self.user_id).one()
+            for document in SellerVerificationDocument.query.filter_by(seller_id=seller.id):
+                document.status = 'verified'
             seller.status = 'approved'
             db.session.commit()
         enabled = self.client.put('/api/business/profile', json={
@@ -587,6 +601,7 @@ class SecurityTests(unittest.TestCase):
             ('GET', '/api/gifs'), ('GET', '/api/reels/<int:reel_id>/public'),
             ('GET', '/api/reels/<int:reel_id>/comments'),
             ('GET', '/api/user/check-platform-id/<string:handle>'),
+            ('POST', '/api/affiliate/<string:code>/click'),
         }
         failures = []
         for rule in app.url_map.iter_rules():

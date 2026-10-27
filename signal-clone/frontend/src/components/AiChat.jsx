@@ -784,8 +784,7 @@ const AiChat = ({ onClose, onBack, onActionCall }) => {
         } else if (!abortRef.current) {
             setMessages(prev => [...prev, {
                 id: Date.now(), role: 'assistant',
-                content: "thodi der baad try karo, abhi Aria busy hai, kuchh der me baat karte hain 🙏",
-                content: "thodi der baad try karo, abhi Arjun busy hai , kuchh der me baat karte hain 🙏",
+                content: `thodi der baad try karo, abhi ${botInfo?.name || 'Aria'} busy hai, kuchh der me baat karte hain 🙏`,
                 timestamp: new Date().toISOString()
             }]);
         }

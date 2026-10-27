@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   ArrowTopRightOnSquareIcon, BriefcaseIcon, ChatBubbleLeftRightIcon,
-  CheckCircleIcon, FilmIcon, LanguageIcon, LockClosedIcon, MicrophoneIcon,
+  CheckCircleIcon, FilmIcon, LanguageIcon, LockClosedIcon,
   SparklesIcon, UserGroupIcon, VideoCameraIcon
 } from '@heroicons/react/24/outline';
 
@@ -99,16 +99,6 @@ const appScreens = [
   ['/marketing/chat-actions.jpg', 'Draw, translate and message actions'], ['/marketing/chat-list.jpg', 'Chats, stories, groups and calls'],
   ['/marketing/social-compose.jpg', 'Social posts and communities'], ['/marketing/social-video.jpg', 'Social video publishing'],
   ['/marketing/chat-attachments.jpg', 'Rich chat attachments'], ['/marketing/desktop-chat.jpg', 'Ducor desktop experience'],
-];
-
-const productOverview = [
-  ['/marketing/chat-list.jpg', 'Connect', 'Chats, groups, stories and calls in one familiar inbox.'],
-  ['/marketing/chat-actions.jpg', 'Express', 'Translate, draw, react and use smart actions inside every conversation.'],
-  ['/marketing/social-profile.jpg', 'Create', 'Build a creator identity with posts, videos and community activity.'],
-  ['/marketing/social-video.jpg', 'Watch', 'Discover vertical video and publish rich social content.'],
-  ['/marketing/indiasearch-ui.png', 'Discover', 'Search the web and explore India-first multilingual products.'],
-  ['/marketing/indiasearch-ai.png', 'Ask AI', 'Get concise AI answers and continue the conversation naturally.'],
-  ['/marketing/cheetchat-splash.jpg', 'One ecosystem', 'A consistent India-first identity across mobile and desktop.'],
 ];
 
 const Phone = ({ src, alt, className = '' }) => <div className={`phone-3d ${className}`}><div className="phone-speaker"/><img src={src} alt={alt}/></div>;

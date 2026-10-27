@@ -1,7 +1,7 @@
 import React from 'react';
 import './AdList.css';
 
-const AdList = ({ ads, onEdit, onDelete, adminToken }) => {
+const AdList = ({ ads, onEdit, onDelete }) => {
     if (ads.length === 0) {
         return (
             <div className="empty-state">

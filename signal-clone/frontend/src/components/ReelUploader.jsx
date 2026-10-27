@@ -8,11 +8,11 @@ import { REEL_CATEGORIES } from '../utils/reelCategories';
 
 const MAX_DURATION = 60;
 
-const ReelUploader = ({ onClose, onSuccess }) => {
+const ReelUploader = ({ onClose, onSuccess, initialCaption = '', affiliateCode = '' }) => {
     const { token, user } = useContext(AuthContext);
     const [file, setFile] = useState(null);
     const [preview, setPreview] = useState(null);
-    const [caption, setCaption] = useState('');
+    const [caption, setCaption] = useState(initialCaption);
     const [uploading, setUploading] = useState(false);
     const [recording, setRecording] = useState(false);
     const [recordTime, setRecordTime] = useState(0);
@@ -48,6 +48,10 @@ const ReelUploader = ({ onClose, onSuccess }) => {
     const chunksRef = useRef([]);
     const timerRef = useRef(null);
     const recordingRef = useRef(false);
+
+    useEffect(() => {
+        if (initialCaption) setCaption(initialCaption);
+    }, [initialCaption]);
 
     const filters = [
         { name: 'None', class: 'none', filter: '' },
@@ -265,6 +269,7 @@ const ReelUploader = ({ onClose, onSuccess }) => {
         const formData = new FormData();
         formData.append('video', file);
         formData.append('caption', caption);
+        if (affiliateCode) formData.append('affiliateCode', affiliateCode);
         formData.append('category', category);
         if (selectedSong) {
             formData.append('musicUrl', selectedSong.previewUrl);

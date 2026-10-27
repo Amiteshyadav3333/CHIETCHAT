@@ -2,7 +2,7 @@ import datetime
 import requests
 import urllib.parse
 from flask import Blueprint, Response, jsonify, request
-from models import db, Reel, ReelLike, ReelView, ReelShare, ReelRepost, ReelComment, Follow, User, Status, UserReport
+from models import db, Reel, ReelLike, ReelView, ReelShare, ReelRepost, ReelComment, Follow, User, Status, UserReport, AffiliateProductTag
 from utils import (
     get_current_user_id, iso_utc, serialize_user, upload_to_cloudinary,
     get_json_data, create_notification, queue_media_deletion, process_media_deletion_task, utc_now
@@ -260,6 +260,12 @@ def create_reel():
             ,is_monetized=is_monetized
         )
         db.session.add(new_reel)
+        db.session.flush()
+        affiliate_code = str(request.form.get('affiliateCode') or '').strip()[:32]
+        if affiliate_code:
+            tag = AffiliateProductTag.query.filter_by(code=affiliate_code, promoter_id=user_id, content_type='share').first()
+            if tag:
+                tag.content_type, tag.content_id = 'reel', new_reel.id
         db.session.commit()
         return jsonify({"message": "Reel posted", "id": new_reel.id}), 201
     except ValueError as e:

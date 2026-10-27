@@ -25,6 +25,7 @@ from models import (
     db, User, ActiveSession, Chat, ChatParticipant, BusinessProfile, CatalogProduct,
     PaymentOrder, Message, PushSubscription, Reel, SocialPost, Status, MediaDeletionTask,
     UploadAsset, ScheduledMessage, Contact, CallRecord, WorkerHeartbeat, AiConversation,
+    SellerAccount, ShopSchedule, ShopDeliveryOption, MarketplaceOrder, MarketplaceOrderLine,
 )
 from scheduled_messages import deliver_due_scheduled_messages
 from call_records import maintain_call_records
@@ -100,6 +101,71 @@ class SecurityTests(unittest.TestCase):
             'encrypted': True, 'iv': 'opaque-iv', 'data': label,
             'recipients': {str(self.user_id): 'wrapped-a', str(self.payee_id): 'wrapped-b'},
         })
+
+    def test_seller_onboarding_gates_marketplace_listing_and_saves_hours(self):
+        headers = self.auth_headers()
+        profile = self.client.put('/api/business/profile', json={
+            'businessName': 'Local Studio', 'category': 'Services', 'marketplaceEnabled': False,
+        }, headers=headers)
+        self.assertEqual(profile.status_code, 200)
+        registration = self.client.post('/api/business/seller', json={
+            'legalName': 'Amitesh Yadav', 'sellerType': 'individual',
+            'businessAddress': '22 Market Road, New Delhi',
+        }, headers=headers)
+        self.assertEqual(registration.status_code, 201)
+        self.assertEqual(registration.json['seller']['status'], 'submitted')
+        blocked = self.client.put('/api/business/profile', json={
+            'businessName': 'Local Studio', 'marketplaceEnabled': True,
+        }, headers=headers)
+        self.assertEqual(blocked.status_code, 409)
+        with app.app_context():
+            seller = SellerAccount.query.filter_by(user_id=self.user_id).one()
+            seller.status = 'approved'
+            db.session.commit()
+        enabled = self.client.put('/api/business/profile', json={
+            'businessName': 'Local Studio', 'marketplaceEnabled': True,
+        }, headers=headers)
+        self.assertEqual(enabled.status_code, 200)
+        days = [{'weekday': day, 'opensAt': '09:00', 'closesAt': '18:00', 'isClosed': day == 6}
+                for day in range(7)]
+        saved = self.client.put('/api/business/schedule', json={'timezone': 'Asia/Kolkata', 'days': days}, headers=headers)
+        self.assertEqual(saved.status_code, 200)
+        with app.app_context(): self.assertEqual(len(ShopSchedule.query.all()), 7)
+
+    def test_marketplace_order_uses_server_prices_and_seller_controls_fulfillment(self):
+        with app.app_context():
+            profile = BusinessProfile.query.filter_by(user_id=self.payee_id).one()
+            profile.marketplace_enabled = True
+            db.session.add(SellerAccount(user_id=self.payee_id, legal_name='Local Merchant',
+                business_address='10 Shop Lane, Delhi', status='approved'))
+            delivery = ShopDeliveryOption(user_id=self.payee_id, mode='seller_delivery',
+                label='Local delivery', area='Delhi', fee_paise=250, eta_days=2)
+            product = CatalogProduct(owner_id=self.payee_id, name='Handmade Project',
+                description='Test catalog item', price=129.99, in_stock=True)
+            db.session.add_all([delivery, product]); db.session.commit()
+            option_id, product_id = delivery.id, product.id
+        created = self.client.post('/api/business/orders', json={
+            'sellerId': self.payee_id, 'deliveryOptionId': option_id,
+            'deliveryAddress': '8 Buyer Street, Delhi',
+            'items': [{'productId': product_id, 'quantity': 2}],
+        }, headers=self.auth_headers())
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(created.json['subtotal'], 259.98)
+        self.assertEqual(created.json['deliveryFee'], 2.5)
+        self.assertEqual(created.json['status'], 'awaiting_payment')
+        premature = self.client.put('/api/business/orders', json={
+            'orderId': created.json['id'], 'status': 'accepted',
+        }, headers={'Authorization': f'Bearer {self.payee_token}'})
+        self.assertEqual(premature.status_code, 409)
+        with app.app_context():
+            order = db.session.get(MarketplaceOrder, created.json['id'])
+            order.status = 'paid'
+            db.session.commit()
+        accepted = self.client.put('/api/business/orders', json={
+            'orderId': created.json['id'], 'status': 'accepted',
+        }, headers={'Authorization': f'Bearer {self.payee_token}'})
+        self.assertEqual(accepted.status_code, 200)
+        self.assertEqual(accepted.json['status'], 'accepted')
 
     def test_private_routes_reject_anonymous_requests(self):
         self.assertEqual(self.client.get('/api/chats').status_code, 401)

@@ -9,7 +9,7 @@ from werkzeug.utils import secure_filename
 
 from models import (
     db, User, Follow, Reel, SocialPost, SocialPostLike, SocialPostShare, SocialPostComment, SocialPostCommentVote, SocialPollVote,
-    Channel, ChannelMembership, CommentReply, Status, UserReport, ProfileFollowRequest
+    Channel, ChannelMembership, CommentReply, Status, UserReport, ProfileFollowRequest, AffiliateProductTag
 )
 from utils import (
     get_current_user_id, get_json_data, iso_utc, serialize_user,
@@ -420,6 +420,12 @@ def create_social_post():
         is_monetized=is_monetized,
     )
     db.session.add(post)
+    db.session.flush()
+    affiliate_code = str(request.form.get('affiliateCode') or '').strip()[:32]
+    if affiliate_code:
+        tag = AffiliateProductTag.query.filter_by(code=affiliate_code, promoter_id=user_id, content_type='share').first()
+        if tag:
+            tag.content_type, tag.content_id = 'post', post.id
     db.session.commit()
     return jsonify(serialize_post(post, user_id)), 201
 

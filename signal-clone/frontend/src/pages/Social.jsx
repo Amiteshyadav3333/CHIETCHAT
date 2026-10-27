@@ -967,6 +967,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
     const [channelPosts, setChannelPosts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [caption, setCaption] = useState('');
+    const [affiliateCode, setAffiliateCode] = useState('');
     const [media, setMedia] = useState([]);
     const [pollOptions, setPollOptions] = useState(['', '']);
     const [preview, setPreview] = useState([]);
@@ -1069,6 +1070,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
         const openDraft = event => {
             setProfileView(null); setSelectedChannel(null); setActiveTab('for-you');
             setCaption(event.detail?.text || '');
+            setAffiliateCode(event.detail?.affiliateCode || '');
             window.setTimeout(() => document.querySelector('[data-ducor-composer] textarea')?.focus(), 160);
         };
         window.addEventListener('ducor-open-social-draft', openDraft);
@@ -1143,6 +1145,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
         const fd = new FormData();
         fd.append('caption', caption);
         fd.append('postKind', postKind);
+        if (affiliateCode) fd.append('affiliateCode', affiliateCode);
         if (premiumOptions.postTitle) fd.append('postTitle', premiumOptions.postTitle);
         if (premiumOptions.linkUrl) fd.append('linkUrl', premiumOptions.linkUrl);
         if (premiumOptions.articleTitle) fd.append('articleTitle', premiumOptions.articleTitle);
@@ -1156,7 +1159,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
             const res = await axios.post('/api/social/posts', fd, { headers: { ...authHeaders(token), 'Content-Type': 'multipart/form-data' } });
             channelId ? setChannelPosts(p => [res.data, ...p]) : updateCachedFeed(activeTab, p => [res.data, ...p]);
             axios.get('/api/social/trends', { headers: authHeaders(token) }).then(({ data }) => setTrends(Array.isArray(data) ? data : data.trends || [])).catch(() => {});
-            setCaption(''); setMedia([]); setPollOptions(['', '']); if (fileRef.current) fileRef.current.value = '';
+            setCaption(''); setAffiliateCode(''); setMedia([]); setPollOptions(['', '']); if (fileRef.current) fileRef.current.value = '';
             return true;
         } catch (err) {
             if (err.response?.data?.code === 'DAILY_POST_LIMIT_REACHED') {

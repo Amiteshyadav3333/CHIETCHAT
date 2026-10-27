@@ -3,6 +3,7 @@ import axios from 'axios';
 import {
     ArrowLeftIcon, ArrowTopRightOnSquareIcon, BuildingStorefrontIcon, ChatBubbleLeftRightIcon,
     MagnifyingGlassIcon, MapPinIcon, PhoneIcon, ShoppingBagIcon, VideoCameraIcon, XMarkIcon,
+    ShareIcon,
 } from '@heroicons/react/24/outline';
 
 const categories = ['All', 'Fashion', 'Electronics', 'Food', 'Home', 'Books', 'Services', 'Other'];
@@ -16,8 +17,13 @@ const websiteHref = value => {
     } catch { return ''; }
 };
 const money = (price, currency = 'INR') => new Intl.NumberFormat('en-IN', { style: 'currency', currency }).format(Number(price || 0));
+const loadRazorpay = () => new Promise((resolve, reject) => {
+    if (window.Razorpay) return resolve();
+    const script = document.createElement('script'); script.src = 'https://checkout.razorpay.com/v1/checkout.js'; script.async = true;
+    script.onload = resolve; script.onerror = () => reject(new Error('Secure checkout could not be loaded.')); document.head.appendChild(script);
+});
 
-export default function ShopMarketplace({ token, onClose, onManageShop, onStartChat, onStartCall }) {
+export default function ShopMarketplace({ token, onClose, onManageShop, onStartChat, onStartCall, onShareProduct }) {
     const [query, setQuery] = useState('');
     const [location, setLocation] = useState('');
     const [category, setCategory] = useState('All');
@@ -26,6 +32,12 @@ export default function ShopMarketplace({ token, onClose, onManageShop, onStartC
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [working, setWorking] = useState(false);
+    const [deliveryOptionId, setDeliveryOptionId] = useState('');
+    const [deliveryAddress, setDeliveryAddress] = useState('');
+    const [referralCode, setReferralCode] = useState('');
+    const [referralProductId, setReferralProductId] = useState(null);
+    const [marketplacePaymentEnabled, setMarketplacePaymentEnabled] = useState(false);
+    const [myOrders, setMyOrders] = useState([]);
 
     const loadShops = useCallback(async () => {
         setLoading(true);
@@ -45,16 +57,85 @@ export default function ShopMarketplace({ token, onClose, onManageShop, onStartC
         return () => window.clearTimeout(timer);
     }, [loadShops]);
 
+    useEffect(() => {
+        axios.get('/api/payments/config', auth(token)).then(({ data }) => setMarketplacePaymentEnabled(Boolean(data.marketplaceCheckoutEnabled))).catch(() => setMarketplacePaymentEnabled(false));
+    }, [token]);
+
+    useEffect(() => {
+        axios.get('/api/business/orders', auth(token)).then(({ data }) => setMyOrders(data.orders || [])).catch(() => setMyOrders([]));
+    }, [token]);
+
     const openShop = async shop => {
         if (!shop?.owner?.id) return;
         setSelected(shop);
         try {
             const { data } = await axios.get(`/api/business/storefront/${shop.owner.id}`, auth(token));
             setSelected(data);
+            setDeliveryOptionId(String(data.deliveryOptions?.[0]?.id || ''));
+            setDeliveryAddress('');
         } catch (err) {
             setError(err.response?.data?.error || 'This shop is currently unavailable.');
             setSelected(null);
         }
+    };
+
+    useEffect(() => {
+        const code = new URLSearchParams(window.location.search).get('ref');
+        if (!code || referralCode) return;
+        let active = true;
+        axios.post(`/api/affiliate/${encodeURIComponent(code)}/click`, {}, auth(token)).then(async ({ data }) => {
+            if (!active) return;
+            setReferralCode(code);
+            setReferralProductId(data.product?.id || null);
+            await openShop({ owner: { id: data.sellerId } });
+        }).catch(() => {});
+        return () => { active = false; };
+    }, [token, referralCode]);
+
+    const shareProduct = async (product, destination = 'chat') => {
+        setWorking(true); setError('');
+        try {
+            const contentType = destination === 'chat' ? 'chat' : 'share';
+            const { data } = await axios.post('/api/business/affiliate-tags', { productId: product.id, contentType }, auth(token));
+            const url = new URL(data.url, window.location.origin).href;
+            const shareText = `${product.name} · ${money(product.price, product.currency)}\n${url}`;
+            const handled = await onShareProduct?.({ destination, product, url, text: shareText, affiliateCode: data.code });
+            if (!handled && navigator.share) await navigator.share({ title: product.name, text: shareText, url });
+            else if (!handled) { await navigator.clipboard.writeText(shareText); setError('Product link copied. Paste it into a Chat, Reel caption, or Social post.'); }
+        } catch (err) {
+            if (err.name !== 'AbortError') setError(err.response?.data?.error || 'Could not create product link.');
+        } finally { setWorking(false); }
+    };
+
+    const buyProduct = async product => {
+        if (!selected?.owner?.id || !deliveryOptionId || working) return;
+        setWorking(true); setError('');
+        try {
+            const headers = { Authorization: `Bearer ${token}` };
+            const created = await axios.post('/api/business/orders', {
+                sellerId: selected.owner.id, deliveryOptionId: Number(deliveryOptionId),
+                deliveryAddress, items: [{ productId: product.id, quantity: 1 }],
+                affiliateCode: referralProductId === product.id ? referralCode : undefined,
+            }, { headers });
+            const response = await axios.post(`/api/marketplace/orders/${created.data.id}/checkout`, {
+                clientRequestId: crypto.randomUUID ? crypto.randomUUID() : `shop_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+            }, { headers });
+            await loadRazorpay();
+            const { payment, checkout } = response.data;
+            const instance = new window.Razorpay({ key: checkout.keyId, amount: Math.round(payment.amount * 100), currency: payment.currency, name: 'Ducor Shopping', description: `Order #${created.data.id}`, order_id: payment.providerOrderId,
+                handler: async providerResult => {
+                    try {
+                        const verified = await axios.post(`/api/payments/orders/${payment.id}/verify`, providerResult, { headers });
+                        setError(verified.data.status === 'captured' ? `Payment verified. Order #${created.data.id} is with the seller.` : `Payment is ${verified.data.status}. The order updates after provider confirmation.`);
+                        axios.get('/api/business/orders', { headers }).then(({ data }) => setMyOrders(data.orders || [])).catch(() => {});
+                    } catch (err) { setError(err.response?.data?.error || 'Payment status is being checked. Please check your order before retrying.'); }
+                },
+                modal: { ondismiss: () => setError('Checkout closed; no order should be assumed paid.') }, theme: { color: '#10b981' },
+            });
+            instance.on('payment.failed', responseEvent => setError(responseEvent.error?.description || 'Payment failed.'));
+            instance.open();
+        } catch (err) { setError(err.response?.data?.error || err.message || 'Could not start secure checkout.'); }
+        finally { setWorking(false); }
     };
 
     const startConversation = async product => {
@@ -102,7 +183,7 @@ export default function ShopMarketplace({ token, onClose, onManageShop, onStartC
                     <section className="grid gap-5 rounded-3xl border border-white/10 bg-gradient-to-br from-[#13272b] to-[#121a20] p-5 sm:grid-cols-[1fr_auto] sm:items-center sm:p-7">
                         <div className="flex min-w-0 items-start gap-4">
                             <img src={selected.owner?.avatar || '/ducor-mark.svg'} alt="" className="h-14 w-14 rounded-2xl bg-white/10 object-cover" />
-                            <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-wider text-emerald-300">{selected.business?.category || 'Local shop'}{selected.owner?.verified ? ' · Verified' : ''}</p><h2 className="mt-1 text-2xl font-black">{selected.business?.businessName}</h2><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-300">{selected.business?.description || 'Discover products from this seller.'}</p><p className="mt-2 text-sm text-gray-400">{selected.business?.address || 'Location not provided'}{selected.business?.openingHours ? ` · ${selected.business.openingHours}` : ''}</p></div>
+                        <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-wider text-emerald-300">{selected.business?.category || 'Local shop'}{selected.owner?.verified ? ' · Verified' : ''} · Seller approved{selected.business?.openNow === null ? '' : selected.business?.openNow ? ' · Open now' : ' · Closed now'}</p><h2 className="mt-1 text-2xl font-black">{selected.business?.businessName}</h2><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-300">{selected.business?.description || 'Discover products from this seller.'}</p><p className="mt-2 text-sm text-gray-400">{selected.business?.address || 'Location not provided'}{selected.business?.openingHours ? ` · ${selected.business.openingHours}` : ''}</p></div>
                         </div>
                         <div className="flex flex-wrap gap-2">
                             <button type="button" disabled={working} onClick={() => startConversation()} className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-bold text-[#06251f] disabled:opacity-50"><ChatBubbleLeftRightIcon className="h-5 w-5" />Chat with seller</button>
@@ -114,15 +195,17 @@ export default function ShopMarketplace({ token, onClose, onManageShop, onStartC
                         {selected.business?.aiSupportEnabled && <p className="text-xs text-violet-200 sm:col-span-2">This shop uses AI customer support while the seller is online. Your message may be processed by its configured AI provider, and AI replies are labeled.</p>}
                     </section>
                     <div className="mb-4 mt-8 flex items-end justify-between"><div><p className="text-xs font-bold uppercase tracking-[.16em] text-gray-500">Seller catalogue</p><h3 className="mt-1 text-xl font-black">Products and projects</h3></div><span className="text-xs text-gray-500">{selected.products?.length || 0} items</span></div>
+                    {selected.deliveryOptions?.length > 0 && <section className="mb-4 grid gap-3 rounded-2xl border border-white/10 bg-[#111b21] p-4 sm:grid-cols-2"><label className="text-xs font-semibold text-gray-300">Delivery or pickup<select value={deliveryOptionId} onChange={event => setDeliveryOptionId(event.target.value)} className="mt-2 w-full rounded-lg border border-white/10 bg-[#202c33] p-3 text-sm text-white">{selected.deliveryOptions.map(option => <option key={option.id} value={option.id}>{option.label} · {money(option.fee)} · {option.etaDays} day ETA</option>)}</select></label>{selected.deliveryOptions.find(option => String(option.id) === String(deliveryOptionId))?.mode === 'seller_delivery' && <label className="text-xs font-semibold text-gray-300">Delivery address<input value={deliveryAddress} onChange={event => setDeliveryAddress(event.target.value)} maxLength={500} placeholder="House, street, locality, city" className="mt-2 w-full rounded-lg border border-white/10 bg-[#202c33] p-3 text-sm text-white" /></label>}</section>}
                     {selected.products?.length ? <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">{selected.products.map(product => <article key={product.id} className="overflow-hidden rounded-2xl border border-white/10 bg-[#111b21]">
                         {product.imageUrl ? <img src={product.imageUrl} alt={product.name} className="aspect-[4/3] w-full object-cover" loading="lazy" /> : <div className="grid aspect-[4/3] place-items-center bg-gradient-to-br from-emerald-900/50 to-slate-800"><ShoppingBagIcon className="h-10 w-10 text-emerald-300/70" /></div>}
-                        <div className="p-3"><h4 className="line-clamp-1 text-sm font-bold">{product.name}</h4><p className="mt-1 line-clamp-2 min-h-9 text-xs leading-4 text-gray-400">{product.description || 'Ask the seller for more details.'}</p><div className="mt-3 flex items-center justify-between gap-2"><span className="font-black text-emerald-300">{money(product.price, product.currency)}</span><span className={`text-[10px] font-bold ${product.inStock ? 'text-emerald-400' : 'text-gray-500'}`}>{product.inStock ? 'Available' : 'Out of stock'}</span></div><button type="button" disabled={!product.inStock || working} onClick={() => startConversation(product)} className="mt-3 w-full rounded-xl bg-white/10 px-3 py-2.5 text-xs font-bold hover:bg-emerald-400/15 hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-40">{product.inStock ? 'Chat to buy' : 'Unavailable'}</button></div>
+                        <div className="p-3"><h4 className="line-clamp-1 text-sm font-bold">{product.name}</h4><p className="mt-1 line-clamp-2 min-h-9 text-xs leading-4 text-gray-400">{product.description || 'Ask the seller for more details.'}</p><div className="mt-3 flex items-center justify-between gap-2"><span className="font-black text-emerald-300">{money(product.price, product.currency)}</span><span className={`text-[10px] font-bold ${product.inStock ? 'text-emerald-400' : 'text-gray-500'}`}>{product.inStock ? 'Available' : 'Out of stock'}</span></div>{marketplacePaymentEnabled && <button type="button" disabled={!product.inStock || working || !selected.deliveryOptions?.length} onClick={() => buyProduct(product)} className="mt-3 w-full rounded-xl bg-emerald-500 px-3 py-2.5 text-xs font-bold text-black hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40">{product.inStock ? 'Buy securely' : 'Unavailable'}</button>}<div className="mt-2 grid grid-cols-2 gap-2"><button type="button" disabled={working} onClick={() => startConversation(product)} className="rounded-xl bg-white/10 px-2 py-2.5 text-xs font-bold hover:bg-emerald-400/15 hover:text-emerald-200 disabled:opacity-40">Chat to buy</button><button type="button" disabled={working} onClick={() => shareProduct(product)} className="inline-flex items-center justify-center gap-1 rounded-xl bg-violet-500/15 px-2 py-2.5 text-xs font-bold text-violet-200 hover:bg-violet-500/25 disabled:opacity-40"><ShareIcon className="h-4 w-4" />Share link</button></div><div className="mt-2 grid grid-cols-3 gap-1"><button type="button" disabled={working} onClick={() => shareProduct(product, 'chat')} className="rounded-lg bg-white/5 px-1 py-2 text-[10px] font-semibold">Chat</button><button type="button" disabled={working} onClick={() => shareProduct(product, 'reel')} className="rounded-lg bg-white/5 px-1 py-2 text-[10px] font-semibold">Reel</button><button type="button" disabled={working} onClick={() => shareProduct(product, 'social')} className="rounded-lg bg-white/5 px-1 py-2 text-[10px] font-semibold">Social</button></div>{referralCode && <p className="mt-2 text-[10px] text-emerald-300">Affiliate order link active</p>}</div>
                     </article>)}</div> : <div className="rounded-2xl border border-dashed border-white/15 p-8 text-center text-sm text-gray-400">This shop has no items listed yet.</div>}
-                    <p className="mt-6 text-xs leading-5 text-gray-500">Purchases are arranged directly with the seller in chat. Confirm item details, delivery, and payment with the shop before paying.</p>
+                    <p className="mt-6 text-xs leading-5 text-gray-500">Payments are verified by the payment provider. Delivery is managed by the seller; contact the shop in chat for support.</p>
                 </main>
             ) : (
                 <main className="mx-auto w-full max-w-7xl flex-1 overflow-y-auto p-4 sm:p-8">
                     <section className="mb-6 rounded-3xl bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,.2),transparent_38%),linear-gradient(135deg,#10231f,#111b21_55%,#152333)] p-5 sm:p-8"><p className="text-xs font-bold uppercase tracking-[.18em] text-emerald-300">Discover independent sellers</p><h2 className="mt-2 max-w-2xl text-3xl font-black tracking-tight sm:text-4xl">Your next great find is closer than you think.</h2><p className="mt-2 max-w-xl text-sm leading-6 text-gray-300">Browse local businesses, explore their products, and talk face to face before you buy.</p><div className="mt-5 grid max-w-3xl gap-2 sm:grid-cols-[1fr_220px]"><div className="flex min-w-0 items-center gap-3 rounded-2xl border border-white/10 bg-black/25 px-4 py-3"><MagnifyingGlassIcon className="h-5 w-5 shrink-0 text-gray-400" /><input aria-label="Search shops" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search shops, products or categories" className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-gray-500" /></div><div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/25 px-4 py-3"><MapPinIcon className="h-5 w-5 shrink-0 text-gray-400" /><input aria-label="Filter by location" value={location} onChange={event => setLocation(event.target.value)} placeholder="City or locality" className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-gray-500" /></div></div></section>
+                    {myOrders.length > 0 && <section className="mb-6 rounded-2xl border border-white/10 bg-[#111b21] p-4"><h3 className="font-bold">Your recent orders</h3><div className="mt-3 grid gap-2 sm:grid-cols-2">{myOrders.slice(0, 4).map(order => <div key={order.id} className="rounded-xl bg-white/5 p-3 text-xs"><div className="flex justify-between gap-2"><strong>Order #{order.id}</strong><span className="capitalize text-emerald-300">{order.status.replaceAll('_', ' ')}</span></div><p className="mt-1 text-gray-400">{order.items.map(item => `${item.quantity} × ${item.name}`).join(', ')} · {money(order.total, order.currency)}</p></div>)}</div></section>}
                     <div className="mb-5 flex gap-2 overflow-x-auto pb-2">{categories.map(item => <button key={item} type="button" onClick={() => setCategory(item)} className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold transition ${category === item ? 'bg-emerald-400 text-[#06251f]' : 'bg-white/[.06] text-gray-300 hover:bg-white/10'}`}>{item}</button>)}</div>
                     {error && <div role="alert" className="mb-4 rounded-xl border border-rose-400/20 bg-rose-400/10 p-3 text-sm text-rose-200">{error}</div>}
                     {loading ? <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">{Array.from({ length: 8 }, (_, i) => <div key={i} className="h-64 animate-pulse rounded-2xl bg-white/[.05]" />)}</div> : shops.length ? <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">{shops.map(shop => <button key={shop.owner.id} type="button" onClick={() => openShop(shop)} className="group overflow-hidden rounded-2xl border border-white/10 bg-[#111b21] text-left transition hover:-translate-y-0.5 hover:border-emerald-300/40 hover:bg-[#15232a]">

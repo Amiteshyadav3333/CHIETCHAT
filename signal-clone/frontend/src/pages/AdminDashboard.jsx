@@ -15,6 +15,8 @@ const AdminDashboard = () => {
     const [activeTab, setActiveTab] = useState('ads');
     const [premiumPayments, setPremiumPayments] = useState([]);
     const [premiumLoading, setPremiumLoading] = useState(false);
+    const [sellerApplications, setSellerApplications] = useState([]);
+    const [sellerLoading, setSellerLoading] = useState(false);
     const [usersList, setUsersList] = useState([]);
     const [usersLoading, setUsersLoading] = useState(false);
     const [userCollegeFilter, setUserCollegeFilter] = useState('');
@@ -132,6 +134,24 @@ const AdminDashboard = () => {
         } finally { setPremiumLoading(false); }
     };
 
+    const fetchSellerApplications = async () => {
+        setSellerLoading(true);
+        try {
+            const response = await axios.get('/api/admin/sellers', { headers: { Authorization: `Bearer ${adminToken}` } });
+            setSellerApplications(response.data.sellers || []);
+        } catch (error) { alert(error.response?.data?.error || 'Could not load seller applications.'); }
+        finally { setSellerLoading(false); }
+    };
+
+    const reviewSeller = async (seller, status) => {
+        const note = status === 'approved' ? '' : window.prompt('Add a short reason for the seller:') || '';
+        if (status !== 'approved' && !note.trim()) return;
+        try {
+            await axios.patch(`/api/admin/sellers/${seller.userId}`, { status, note }, { headers: { Authorization: `Bearer ${adminToken}` } });
+            fetchSellerApplications();
+        } catch (error) { alert(error.response?.data?.error || 'Could not review seller.'); }
+    };
+
     const reviewPremiumPayment = async (payment, action) => {
         const label = action === 'approve' ? 'approve and activate Premium' : 'reject';
         if (!window.confirm(`Do you want to ${label} for ${payment.user?.username || 'this user'}?`)) return;
@@ -234,6 +254,9 @@ const AdminDashboard = () => {
                         onClick={() => { setActiveTab('premium'); fetchPremiumPayments(); }}
                     >
                         💎 Premium approvals
+                    </button>
+                    <button className={`nav-item ${activeTab === 'sellers' ? 'active' : ''}`} onClick={() => { setActiveTab('sellers'); fetchSellerApplications(); }}>
+                        🛍️ Seller approvals
                     </button>
                     <button 
                         className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`}
@@ -486,6 +509,18 @@ const AdminDashboard = () => {
                                 {premiumPayments.map(payment => <article className="premium-payment-card" key={payment.id}>
                                     <div><strong>{payment.user?.username || 'Deleted user'}</strong><span>{payment.user?.email || payment.user?.platformId || `User #${payment.user?.id || ''}`}</span><small>Order #{payment.id} · ₹{payment.amount} · {payment.providerPaymentId || 'Payment ID pending'}</small></div>
                                     <div className="premium-payment-actions"><span className={`payment-status ${payment.status}`}>{payment.status.replace(/_/g, ' ')}</span>{payment.status === 'approval_pending' && <><button className="approve-premium-btn" onClick={() => reviewPremiumPayment(payment, 'approve')}>Approve & activate</button><button className="reject-premium-btn" onClick={() => reviewPremiumPayment(payment, 'reject')}>Reject</button></>}</div>
+                                </article>)}
+                            </div>}
+                        </div>
+                    )}
+
+                    {activeTab === 'sellers' && (
+                        <div className="premium-payments-section">
+                            <div className="section-header"><div><h2>Marketplace seller applications</h2><p>Review seller identity and business address before publishing shops.</p></div><button className="add-ad-btn" onClick={fetchSellerApplications}>Refresh</button></div>
+                            {sellerLoading ? <p>Loading seller applications…</p> : sellerApplications.length === 0 ? <div className="settings-card"><p>No applications waiting for review.</p></div> : <div className="premium-payment-list">
+                                {sellerApplications.map(seller => <article className="premium-payment-card" key={seller.userId}>
+                                    <div><strong>{seller.shop || seller.legalName}</strong><span>{seller.legalName} · {seller.sellerType}</span><small>User #{seller.userId} · {seller.businessAddress}{seller.returnAddress ? ` · Return: ${seller.returnAddress}` : ''}</small></div>
+                                    <div className="premium-payment-actions"><button className="approve-premium-btn" onClick={() => reviewSeller(seller, 'approved')}>Approve shop</button><button className="reject-premium-btn" onClick={() => reviewSeller(seller, 'needs_changes')}>Request changes</button><button className="reject-premium-btn" onClick={() => reviewSeller(seller, 'rejected')}>Reject</button></div>
                                 </article>)}
                             </div>}
                         </div>

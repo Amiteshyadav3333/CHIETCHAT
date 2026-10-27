@@ -29,6 +29,7 @@ const Reels = ({ active, onBack, onShareToChat, initialReel = null, onInitialRee
         dataSaver: user?.uiPreferences?.reelsDataSaver ?? localStorage.getItem('reels_data_saver') === '1',
     }));
     const [showUploader, setShowUploader] = useState(false);
+    const [productDraft, setProductDraft] = useState({ caption: '', affiliateCode: '' });
     const [selectedProfileUserId, setSelectedProfileUserId] = useState(null);
     const [selectedProfileReel, setSelectedProfileReel] = useState(null);
     const [reactingToReel, setReactingToReel] = useState(null);
@@ -73,6 +74,15 @@ const Reels = ({ active, onBack, onShareToChat, initialReel = null, onInitialRee
     useBackHandler(Boolean(reactingToReel), () => setReactingToReel(null), 'reels-reacting');
     useBackHandler(Boolean(selectedProfileReel), () => setSelectedProfileReel(null), 'reels-profile-reel');
     useBackHandler(Boolean(selectedProfileUserId), () => setSelectedProfileUserId(null), 'reels-profile-user');
+
+    useEffect(() => {
+        const openProductDraft = event => {
+            setProductDraft({ caption: event.detail?.text || '', affiliateCode: event.detail?.affiliateCode || '' });
+            setShowUploader(true);
+        };
+        window.addEventListener('ducor-open-reel-product-draft', openProductDraft);
+        return () => window.removeEventListener('ducor-open-reel-product-draft', openProductDraft);
+    }, []);
 
     useEffect(() => {
         if (!initialReel?.id) return;
@@ -333,6 +343,8 @@ const Reels = ({ active, onBack, onShareToChat, initialReel = null, onInitialRee
 
             {showUploader && (
                 <ReelUploader 
+                    initialCaption={productDraft.caption}
+                    affiliateCode={productDraft.affiliateCode}
                     onClose={() => setShowUploader(false)} 
                     onSuccess={() => { setShowUploader(false); fetchReels(); }}
                 />

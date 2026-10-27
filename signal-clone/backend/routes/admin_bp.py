@@ -5,10 +5,41 @@ import os
 import datetime
 import hmac
 from utils import get_json_data, utc_now
-from models import db, PaymentOrder, User
+from models import db, PaymentOrder, User, SellerAccount, BusinessProfile
 from extensions import socketio
 
 admin_bp = Blueprint('admin_bp', __name__)
+
+@admin_bp.get('/api/admin/sellers')
+def list_seller_applications():
+    if not verify_admin_token(): return jsonify({'error': 'Unauthorized'}), 401
+    status = request.args.get('status', 'submitted')
+    if status not in {'submitted', 'approved', 'rejected', 'needs_changes'}: return jsonify({'error': 'Invalid status'}), 400
+    rows = SellerAccount.query.filter_by(status=status).order_by(SellerAccount.submitted_at.asc()).limit(100).all()
+    return jsonify({'sellers': [{'userId': row.user_id, 'legalName': row.legal_name,
+        'sellerType': row.seller_type, 'businessAddress': row.business_address,
+        'returnAddress': row.return_address or '', 'status': row.status,
+        'submittedAt': row.submitted_at.isoformat() if row.submitted_at else None,
+        'shop': (BusinessProfile.query.filter_by(user_id=row.user_id).first().business_name
+                 if BusinessProfile.query.filter_by(user_id=row.user_id).first() else '')} for row in rows]})
+
+@admin_bp.patch('/api/admin/sellers/<int:user_id>')
+def review_seller_application(user_id):
+    admin_email = verify_admin_token()
+    if not admin_email: return jsonify({'error': 'Unauthorized'}), 401
+    seller = SellerAccount.query.filter_by(user_id=user_id).first()
+    if not seller: return jsonify({'error': 'Seller application not found'}), 404
+    data = request.get_json(silent=True) or {}
+    status = str(data.get('status') or '')
+    if status not in {'approved', 'rejected', 'needs_changes'}: return jsonify({'error': 'Invalid review decision'}), 400
+    seller.status = status
+    seller.review_note = str(data.get('note') or '').strip()[:500] or None
+    seller.reviewed_at = utc_now()
+    if status != 'approved':
+        profile = BusinessProfile.query.filter_by(user_id=user_id).first()
+        if profile: profile.marketplace_enabled = False
+    db.session.commit()
+    return jsonify({'userId': user_id, 'status': seller.status, 'reviewNote': seller.review_note})
 
 def admin_config():
     """Never ship a default administrator account or secret in source code."""

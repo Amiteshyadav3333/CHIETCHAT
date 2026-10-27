@@ -120,6 +120,13 @@ _sensitive_limits = {
     '/api/messages/:id': (30, 15 * 60),
     '/api/business/automation/claim': (30, 60),
     '/api/business/shop-chat': (12, 60),
+    '/api/business/seller': (10, 60 * 60),
+    '/api/business/schedule': (20, 60),
+    '/api/business/delivery-options': (30, 60),
+    '/api/business/orders': (30, 60),
+    '/api/business/affiliate-tags': (30, 60),
+    '/api/affiliate/:code/click': (60, 60),
+    '/api/marketplace/orders/:id/checkout': (10, 60),
 }
 _token_scoped_rate_paths = {
     '/api/ai/chat', '/api/ai/chat/stream', '/api/ai/image', '/api/ai/tts',
@@ -128,9 +135,16 @@ _token_scoped_rate_paths = {
     '/api/status/:id/reply', '/api/messages/:id',
     '/api/business/automation/claim',
     '/api/business/shop-chat',
+    '/api/business/seller', '/api/business/schedule', '/api/business/delivery-options',
+    '/api/business/orders', '/api/business/affiliate-tags', '/api/marketplace/orders/:id/checkout',
+    '/api/affiliate/:code/click',
 }
 
 def canonical_sensitive_path():
+    if request.method == 'POST' and re.fullmatch(r'/api/marketplace/orders/\d+/checkout', request.path):
+        return '/api/marketplace/orders/:id/checkout'
+    if request.method == 'POST' and re.fullmatch(r'/api/affiliate/[A-Za-z0-9_-]+/click', request.path):
+        return '/api/affiliate/:code/click'
     if request.method == 'POST' and re.fullmatch(r'/api/chats/\d+/scheduled-messages', request.path):
         return '/api/chats/:id/scheduled-messages'
     if request.method == 'POST' and re.fullmatch(r'/api/status/\d+/reply', request.path):

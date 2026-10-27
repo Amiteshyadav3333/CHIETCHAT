@@ -290,7 +290,7 @@ def add_missing_columns(inspector, table_name, columns):
 # Bump this marker whenever models gain columns or tables. Production runs
 # ensure_database_schema() in the pre-deploy step and skips versions it has
 # already applied.
-SCHEMA_VERSION = '20261028_34_private_shop_chats'
+SCHEMA_VERSION = '20261028_37_marketplace_payment_tieback'
 
 def ensure_runtime_compat_schema():
     """Repair columns required by the currently deployed models.
@@ -375,6 +375,14 @@ def ensure_runtime_compat_schema():
     inspector = inspect(db.engine)
     add_missing_columns(inspector, 'chat', {
         'is_shop_chat': db.Boolean(),
+    })
+    inspector = inspect(db.engine)
+    add_missing_columns(inspector, 'catalog_product', {
+        'affiliate_commission_bps': db.Integer(),
+    })
+    inspector = inspect(db.engine)
+    add_missing_columns(inspector, 'payment_order', {
+        'marketplace_order_id': db.Integer(),
     })
     inspector = inspect(db.engine)
     if 'user' in inspector.get_table_names():

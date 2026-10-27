@@ -220,6 +220,10 @@ export const Home = () => {
     const messageRefsMap = useRef({});
     const businessAutomationRef = useRef(null);
 
+    useEffect(() => {
+        if (new URLSearchParams(window.location.search).get('ref')) setShowShoppingMarketplace(true);
+    }, []);
+
     // Decryption helpers
     const decryptMessageForCurrentUser = useCallback(async (message) => {
         if (!privateKey || !user) return message;
@@ -1641,6 +1645,27 @@ export const Home = () => {
         nav.setShowSettings(true);
     };
 
+    const shareMarketplaceProduct = ({ destination, text, affiliateCode }) => {
+        if (destination === 'chat') {
+            if (!activeChat?.id) return false;
+            setShowShoppingMarketplace(false);
+            window.setTimeout(() => window.dispatchEvent(new CustomEvent('ducor-prefill-chat-message', { detail: { chatId: activeChat.id, text } })), 100);
+            return true;
+        }
+        setShowShoppingMarketplace(false);
+        nav.setShowSettings(false); nav.setShowSocial(false); nav.setShowReels(false);
+        nav.setShowPodlive(false); nav.setShowAiChat(false); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false);
+        setActiveChat(null); localStorage.removeItem('activeChatId');
+        if (destination === 'social') {
+            nav.setShowSocial(true);
+            window.setTimeout(() => window.dispatchEvent(new CustomEvent('ducor-open-social-draft', { detail: { text, affiliateCode } })), 250);
+        } else {
+            nav.setShowReels(true);
+            window.setTimeout(() => window.dispatchEvent(new CustomEvent('ducor-open-reel-product-draft', { detail: { text, affiliateCode } })), 250);
+        }
+        return true;
+    };
+
     const handleGlobalSearchResult = (type, item) => {
         if (type === 'chat') {
             nav.setShowSocial(false);
@@ -2117,6 +2142,7 @@ export const Home = () => {
                 onManageShop={openShopBusinessTools}
                 onStartChat={startShopChat}
                 onStartCall={calls.startCallForChat}
+                onShareProduct={shareMarketplaceProduct}
             />}
 
             {/* Heavy Feature Overlays */}

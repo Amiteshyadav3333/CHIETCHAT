@@ -77,6 +77,8 @@ services:
         sync: false
       - key: RAZORPAY_WEBHOOK_SECRET
         sync: false
+      - key: MARKETPLACE_CHECKOUT_ENABLED
+        value: "false"
       - key: PREMIUM_PRICE_PAISE
         value: "19900"
       - key: VAPID_PUBLIC_KEY

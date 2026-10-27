@@ -171,6 +171,87 @@ class BusinessProfile(db.Model):
     created_at = db.Column(db.DateTime, default=utc_now)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
 
+class SellerAccount(db.Model):
+    """Private seller onboarding and review state; public shop payloads never expose legal data."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), unique=True, nullable=False, index=True)
+    seller_type = db.Column(db.String(24), nullable=False, default='individual')
+    legal_name = db.Column(db.String(160), nullable=False)
+    business_address = db.Column(db.String(500), nullable=False)
+    return_address = db.Column(db.String(500), nullable=True)
+    status = db.Column(db.String(24), nullable=False, default='submitted', index=True)
+    review_note = db.Column(db.String(500), nullable=True)
+    submitted_at = db.Column(db.DateTime, nullable=False, default=utc_now)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utc_now)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utc_now, onupdate=utc_now)
+
+class ShopSchedule(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    weekday = db.Column(db.Integer, nullable=False)
+    opens_at = db.Column(db.String(5), nullable=True)
+    closes_at = db.Column(db.String(5), nullable=True)
+    is_closed = db.Column(db.Boolean, nullable=False, default=False)
+    timezone = db.Column(db.String(64), nullable=False, default='Asia/Kolkata')
+    __table_args__ = (db.UniqueConstraint('user_id', 'weekday', name='uq_shop_schedule_day'),)
+
+class ShopDeliveryOption(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    mode = db.Column(db.String(24), nullable=False)  # seller_delivery | pickup
+    label = db.Column(db.String(100), nullable=False)
+    area = db.Column(db.String(160), nullable=True)
+    fee_paise = db.Column(db.Integer, nullable=False, default=0)
+    eta_days = db.Column(db.Integer, nullable=False, default=1)
+    active = db.Column(db.Boolean, nullable=False, default=True)
+
+class MarketplaceOrder(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    buyer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    seller_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    delivery_option_id = db.Column(db.Integer, db.ForeignKey('shop_delivery_option.id'), nullable=True)
+    affiliate_tag_id = db.Column(db.Integer, db.ForeignKey('affiliate_product_tag.id'), nullable=True)
+    delivery_mode = db.Column(db.String(24), nullable=False)
+    delivery_address = db.Column(db.String(500), nullable=True)
+    delivery_fee_paise = db.Column(db.Integer, nullable=False, default=0)
+    subtotal_paise = db.Column(db.Integer, nullable=False)
+    total_paise = db.Column(db.Integer, nullable=False)
+    currency = db.Column(db.String(3), nullable=False, default='INR')
+    status = db.Column(db.String(24), nullable=False, default='awaiting_payment', index=True)
+    payment_order_id = db.Column(db.Integer, db.ForeignKey('payment_order.id'), nullable=True, unique=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utc_now)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utc_now, onupdate=utc_now)
+
+class MarketplaceOrderLine(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('marketplace_order.id', ondelete='CASCADE'), nullable=False, index=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('catalog_product.id'), nullable=True)
+    product_name = db.Column(db.String(120), nullable=False)
+    unit_price_paise = db.Column(db.Integer, nullable=False)
+    quantity = db.Column(db.Integer, nullable=False)
+
+class AffiliateCommission(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('marketplace_order.id'), nullable=False, index=True)
+    promoter_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    seller_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    amount_paise = db.Column(db.Integer, nullable=False)
+    status = db.Column(db.String(24), nullable=False, default='pending_payout')
+    created_at = db.Column(db.DateTime, nullable=False, default=utc_now)
+    __table_args__ = (db.UniqueConstraint('order_id', 'promoter_id', name='uq_affiliate_order_promoter'),)
+
+class AffiliateProductTag(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    promoter_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('catalog_product.id'), nullable=False, index=True)
+    content_type = db.Column(db.String(16), nullable=False)  # share | reel | post | chat
+    content_id = db.Column(db.Integer, nullable=True)
+    code = db.Column(db.String(32), unique=True, nullable=False, index=True)
+    commission_bps = db.Column(db.Integer, nullable=False, default=0)
+    click_count = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, nullable=False, default=utc_now)
+
 class CatalogProduct(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -180,6 +261,7 @@ class CatalogProduct(db.Model):
     currency = db.Column(db.String(3), default='INR')
     image_url = db.Column(db.String(500), default='')
     in_stock = db.Column(db.Boolean, default=True)
+    affiliate_commission_bps = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, default=utc_now)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
 
@@ -214,6 +296,7 @@ class PaymentOrder(db.Model):
     payer_ref = db.Column(db.String(64), nullable=True, index=True)
     payee_ref = db.Column(db.String(64), nullable=True, index=True)
     chat_id = db.Column(db.Integer, db.ForeignKey('chat.id'), nullable=True)
+    marketplace_order_id = db.Column(db.Integer, nullable=True, index=True)
     chat_ref = db.Column(db.String(64), nullable=True, index=True)
     amount_paise = db.Column(db.Integer, nullable=False)
     currency = db.Column(db.String(3), default='INR', nullable=False)

@@ -7,7 +7,8 @@ const pathToView = {
     '/ai-chat': 'ai-chat', '/saskat-ai': 'saskat-ai',
 };
 const resolveHomeView = pathname => pathToView[pathname]
-    || (/^\/chats\/[^/]+\/?$/.test(pathname) ? 'chats' : 'social');
+    || (/^\/chats\/[^/]+\/?$/.test(pathname) || /^\/direct\/t\/[^/]+\/?$/.test(pathname) ? 'chats' : 'social');
+export const directChatPath = chatId => `/direct/t/${encodeURIComponent(String(chatId))}/`;
 const viewToPath = Object.fromEntries(Object.entries(pathToView).map(([path, view]) => [view, path]));
 const readSocialDeepLink = pathname => {
     const match = pathname.match(/^\/(posts|profile)\/([^/]+)\/?$/);

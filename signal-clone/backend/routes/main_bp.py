@@ -187,7 +187,8 @@ def serve(path):
         'smart-space', 'settings', 'ai-chat', 'saskat-ai',
     }
     is_public_reel = bool(re.fullmatch(r'reels/[^/]+', path or ''))
-    if (path in app_routes or is_public_reel) and os.path.isfile(os.path.join(static_folder, 'index.html')):
+    is_chat_deep_link = bool(re.fullmatch(r'(?:chats/[^/]+|direct/t/[^/]+)/?', path or ''))
+    if (path in app_routes or is_public_reel or is_chat_deep_link) and os.path.isfile(os.path.join(static_folder, 'index.html')):
         return send_from_directory(static_folder, 'index.html')
 
     if path.startswith('api/'):

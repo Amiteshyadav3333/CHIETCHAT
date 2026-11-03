@@ -36,6 +36,7 @@ describe('client router direct URLs', () => {
         ['/reels/42', '/reels/:reelId', '/reels/42|42'],
         ['/posts/post-9', '/posts/:postId', '/posts/post-9|post-9'],
         ['/chats/chat-3', '/chats/:chatId', '/chats/chat-3|chat-3'],
+        ['/direct/t/chat-3/', '/direct/t/:chatId/', '/direct/t/chat-3/|chat-3'],
     ])('restores %s from the browser URL', (url, route, expected) => {
         window.history.replaceState({}, '', url);
         act(() => root.render(

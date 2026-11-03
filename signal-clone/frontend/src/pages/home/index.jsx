@@ -24,7 +24,7 @@ import { useRealtimeNotifications } from '../../features/notifications';
 import { applyPollVoteUpdate } from '../../features/polls';
 import { playMessageNotification } from '../../utils/customNotificationSounds';
 
-import { useHomeNavigation } from './hooks/useHomeNavigation';
+import { directChatPath, useHomeNavigation } from './hooks/useHomeNavigation';
 import { useNavigate, useParams, usePathname } from '../../utils/clientRouter';
 import { useChatPreferences } from './hooks/useChatPreferences';
 import { useCallManager } from './hooks/useCallManager';
@@ -447,11 +447,13 @@ export const Home = () => {
             previousPathname.current = pathname;
             return;
         }
-        if (previousPathname.current.startsWith('/chats/') && !pathname.startsWith('/chats/')) {
+        const wasChatRoute = previousPathname.current.startsWith('/chats/') || previousPathname.current.startsWith('/direct/t/');
+        const isChatRoute = pathname.startsWith('/chats/') || pathname.startsWith('/direct/t/');
+        if (wasChatRoute && !isChatRoute) {
             setActiveChat(null);
             localStorage.removeItem('activeChatId');
-        } else if (activeChat && pathname !== `/chats/${encodeURIComponent(activeChat.id)}`) {
-            navigate(`/chats/${encodeURIComponent(activeChat.id)}`);
+        } else if (activeChat && pathname !== directChatPath(activeChat.id)) {
+            navigate(directChatPath(activeChat.id));
         }
         previousPathname.current = pathname;
     }, [routeChatId, chats, activeChat, chatsResolved, pathname, navigate]);
@@ -1311,7 +1313,7 @@ export const Home = () => {
     const closeActiveChat = () => {
         setActiveChat(null);
         localStorage.removeItem('activeChatId');
-        if (routeChatId || pathname.startsWith('/chats/')) navigate('/chats');
+        if (routeChatId || pathname.startsWith('/chats/') || pathname.startsWith('/direct/t/')) navigate('/chats');
     };
 
     const openUserProfile = (userId) => {

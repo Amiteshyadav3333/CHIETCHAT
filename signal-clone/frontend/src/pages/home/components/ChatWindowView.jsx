@@ -7,7 +7,7 @@ import {
     ArrowLeftIcon, PhoneIcon, VideoCameraIcon, EllipsisVerticalIcon,
     XMarkIcon, MapPinIcon, InformationCircleIcon, ClipboardDocumentIcon,
     ForwardIcon, PencilSquareIcon, MagnifyingGlassIcon,
-    LockClosedIcon, ClipboardDocumentCheckIcon
+    LockClosedIcon, ClipboardDocumentCheckIcon, LinkIcon
 } from '@heroicons/react/24/outline';
 import GroupCollaborationHub from '../../../components/collaboration/GroupCollaborationHub';
 
@@ -111,6 +111,31 @@ export const ChatWindowView = ({
     }, [showTopDropdown, setShowTopDropdown]);
 
     const [showCollaborationHub, setShowCollaborationHub] = React.useState(false);
+    const [chatLinkCopied, setChatLinkCopied] = React.useState(false);
+
+    const copyChatLink = async () => {
+        const chatUrl = `${window.location.origin}/direct/t/${encodeURIComponent(String(visibleActiveChat.id))}/`;
+        try {
+            if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(chatUrl);
+            } else {
+                const field = document.createElement('textarea');
+                field.value = chatUrl;
+                field.setAttribute('readonly', '');
+                field.style.position = 'fixed';
+                field.style.opacity = '0';
+                document.body.appendChild(field);
+                field.select();
+                const copied = document.execCommand('copy');
+                field.remove();
+                if (!copied) throw new Error('Clipboard unavailable');
+            }
+            setChatLinkCopied(true);
+            window.setTimeout(() => setChatLinkCopied(false), 1800);
+        } catch {
+            window.alert('Could not copy this chat link. Check clipboard permission and try again.');
+        }
+    };
 
     if (!visibleActiveChat) {
         return (
@@ -228,6 +253,14 @@ export const ChatWindowView = ({
                             const lastMessage = messages[messages.length - 1];
                             return (
                                 <div className="absolute right-0 top-8 z-50 w-52 overflow-hidden rounded-xl bg-[#111b21] shadow-2xl border border-white/10 text-white text-xs">
+                                    <button
+                                        onClick={copyChatLink}
+                                        className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-gray-200 hover:bg-white/10"
+                                        aria-label="Copy chat link"
+                                    >
+                                        <LinkIcon className="h-4 w-4 text-[#53bdeb]" />
+                                        <span>{chatLinkCopied ? 'Chat link copied' : 'Copy chat link'}</span>
+                                    </button>
                                     <button 
                                         onClick={() => {
                                             const newVal = !aiEnabled;

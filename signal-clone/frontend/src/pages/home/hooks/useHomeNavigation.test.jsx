@@ -3,7 +3,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { BrowserRouter, useLocation } from '../../../utils/clientRouter';
-import { useHomeNavigation } from './useHomeNavigation';
+import { directChatPath, useHomeNavigation } from './useHomeNavigation';
 
 let container;
 let root;
@@ -60,6 +60,18 @@ describe('main section navigation', () => {
         act(() => [...container.querySelectorAll('button')].find(button => button.textContent === view).click());
         expect(window.location.pathname).toBe(path);
         expect(container.querySelector('output').textContent).toBe(path);
+    });
+});
+
+describe('Instagram-style direct chat links', () => {
+    it('resolves a shared conversation URL to Chats instead of Social', () => {
+        window.history.replaceState({}, '', '/direct/t/chat-3/');
+        act(() => root.render(<BrowserRouter><NavigationProbe /></BrowserRouter>));
+        expect(container.querySelector('[data-testid="show-social"]').textContent).toBe('false');
+    });
+
+    it('builds a safe same-origin path for chat IDs that need URL encoding', () => {
+        expect(directChatPath('chat 3')).toBe('/direct/t/chat%203/');
     });
 });
 

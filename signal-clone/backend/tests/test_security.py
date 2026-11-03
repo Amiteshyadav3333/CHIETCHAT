@@ -2001,6 +2001,21 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(result['poll']['counts'], [0, 1])
         self.assertEqual(result['poll']['selectedOption'], 1)
 
+    def test_direct_chat_share_url_serves_app_shell_and_unknown_paths_stay_404(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, 'index.html').write_text('<main>chat app</main>', encoding='utf-8')
+            original_static_folder = app.static_folder
+            app.static_folder = directory
+            try:
+                for path in (f'/chats/{self.chat_id}', f'/direct/t/{self.chat_id}/'):
+                    response = self.client.get(path)
+                    self.assertEqual(response.status_code, 200)
+                    self.assertIn('chat app', response.get_data(as_text=True))
+                unknown = self.client.get('/direct/t/nonexistent/extra')
+                self.assertEqual(unknown.status_code, 404)
+            finally:
+                app.static_folder = original_static_folder
+
     def test_structured_values_are_rejected_at_text_input_boundaries(self):
         created = self.client.post(
             '/api/social/posts', data={'caption': 'Input boundary post'}, headers=self.auth_headers(),

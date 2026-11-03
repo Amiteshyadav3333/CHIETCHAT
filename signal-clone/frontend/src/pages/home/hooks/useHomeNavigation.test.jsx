@@ -15,6 +15,8 @@ const NavigationProbe = () => {
         <output data-testid="pathname">{pathname}</output>
         <output data-testid="location">{`${pathname}${search}`}</output>
         <output data-testid="mobile-tab">{navigation.mobileHomeTab}</output>
+        <output data-testid="social-deep-link">{navigation.socialDeepLink ? `${navigation.socialDeepLink.type}:${navigation.socialDeepLink.id}` : ""}</output>
+        <button onClick={() => navigation.navigateToProfile('profile-42')}>view-profile</button>
         {['chats', 'stories', 'groups', 'calls'].map(tab => (
             <button key={`tab-${tab}`} onClick={() => navigation.setMobileHomeTab(tab)}>tab-{tab}</button>
         ))}
@@ -82,5 +84,15 @@ describe('mobile chat tabs', () => {
         });
         expect(container.querySelector('[data-testid="location"]').textContent).toBe('/chats?tab=groups');
         expect(container.querySelector('[data-testid="mobile-tab"]').textContent).toBe('groups');
+    });
+});
+
+
+describe('profile navigation', () => {
+    it('opens the selected profile directly and preserves its deep link', () => {
+        act(() => root.render(<BrowserRouter><NavigationProbe /></BrowserRouter>));
+        act(() => [...container.querySelectorAll('button')].find(button => button.textContent === 'view-profile').click());
+        expect(window.location.pathname).toBe('/profile/profile-42');
+        expect(container.querySelector('[data-testid="social-deep-link"]').textContent).toBe('profile:profile-42');
     });
 });

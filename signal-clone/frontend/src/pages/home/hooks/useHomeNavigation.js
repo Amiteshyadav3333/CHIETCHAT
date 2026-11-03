@@ -89,6 +89,14 @@ export const useHomeNavigation = () => {
         activateView(view, false);
     }, [activateView]);
 
+    const navigateToProfile = useCallback((userId) => {
+        if (userId === null || userId === undefined || userId === '') return;
+        const id = String(userId);
+        setSocialDeepLink({ type: 'profile', id });
+        activateView('social', false);
+        navigate(`/profile/${encodeURIComponent(id)}`);
+    }, [activateView, navigate]);
+
     const setMobileHomeTab = useCallback((tab) => {
         const nextTab = ['chats', 'stories', 'groups', 'calls'].includes(tab) ? tab : 'chats';
         setMobileHomeTabState(nextTab);
@@ -134,18 +142,16 @@ export const useHomeNavigation = () => {
         const { type, targetId } = notification;
 
         if (['like', 'comment', 'comment_reply', 'retweet', 'share'].includes(type)) {
-            setSocialDeepLink({ type: 'post', id: targetId });
-            setShowSocial(true);
+            navigate(`/posts/${encodeURIComponent(targetId)}`);
         } else if (type === 'follow') {
-            setSocialDeepLink({ type: 'profile', id: notification.sender?.id || targetId });
-            setShowSocial(true);
+            navigateToProfile(notification.sender?.id || targetId);
         } else if (type === 'channel_request') {
             setSocialDeepLink({ type: 'channel', id: targetId });
             setShowSocial(true);
         } else {
             setShowSocial(true);
         }
-    }, []);
+    }, [navigate, navigateToProfile, setShowReels, setShowSocial, setSocialDeepLink]);
 
     const receivePodliveInvite = useCallback((invite) => {
         setPodliveInvite(invite);
@@ -170,6 +176,7 @@ export const useHomeNavigation = () => {
         socialDeepLink, setSocialDeepLink,
         showSettings, setShowSettings,
         navigateToView: activateView,
+        navigateToProfile,
         navPeekOpen, setNavPeekOpen,
         navCollapsed, setNavCollapsed,
         isMobile, setIsMobile,

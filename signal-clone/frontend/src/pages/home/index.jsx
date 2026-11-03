@@ -1314,6 +1314,15 @@ export const Home = () => {
         if (routeChatId || pathname.startsWith('/chats/')) navigate('/chats');
     };
 
+    const openUserProfile = (userId) => {
+        setShowShoppingMarketplace(false);
+        setShowNotifications(false);
+        setShowSearchModal(false);
+        setActiveChat(null);
+        localStorage.removeItem('activeChatId');
+        nav.navigateToProfile(userId);
+    };
+
     const openChats = () => {
         setShowShoppingMarketplace(false);
         setShowNotifications(false);
@@ -1337,10 +1346,7 @@ export const Home = () => {
         setShowNotifications(false);
         setShowSearchModal(false);
         if (action === 'profile') {
-            nav.setShowSettings(false);
-            nav.setShowReels(false); nav.setShowPodlive(false); nav.setShowAiChat(false); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false);
-            nav.setSocialDeepLink({ type: 'profile', id: user?.id });
-            nav.setShowSocial(true);
+            openUserProfile(user?.id);
             return;
         }
         if (action === 'drafts' || action === 'earn') {
@@ -1432,7 +1438,7 @@ export const Home = () => {
             return 'Profile settings khol diye. Avatar controls wahan milenge.';
         }
         if (/\b(profile|my profile|view profile|meri profile)\b/.test(command) || command.includes('प्रोफाइल')) {
-            clearCurrentView(); nav.setSocialDeepLink({ type: 'profile', id: user?.id }); nav.setShowSocial(true);
+            openUserProfile(user?.id);
             return 'Aapki profile khol di.';
         }
         if (/\b(drafts?|draft dikhao)\b/.test(command)) {
@@ -1800,13 +1806,7 @@ export const Home = () => {
             return;
         }
         if (type === 'profile') {
-            nav.setShowReels(false);
-            nav.setShowPodlive(false);
-            nav.setShowAiChat(false);
-            nav.setShowSmartSpace(false);
-            nav.setShowSaskatAI(false);
-            nav.setShowSocial(true);
-            nav.setSocialDeepLink({ type: 'profile', id: item.id });
+            openUserProfile(item.id);
             return;
         }
         if (type === 'reel') {

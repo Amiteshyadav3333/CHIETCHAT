@@ -15,6 +15,7 @@ export const ChatWindowView = ({
     visibleActiveChat,
     activeChat,
     setActiveChat,
+    onCloseChat,
     showChatDraw,
     setShowChatDraw,
     drawSource,
@@ -186,7 +187,7 @@ export const ChatWindowView = ({
             {/* Chat Header */}
             <div className="h-16 bg-signal-bg border-b border-gray-800 flex items-center justify-between px-4">
                 <div className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer" onClick={openActiveChatInfo}>
-                    <button onClick={(e) => { e.stopPropagation(); setActiveChat(null); localStorage.removeItem('activeChatId'); }} className="md:hidden p-2 -ml-2">
+                    <button onClick={(e) => { e.stopPropagation(); onCloseChat?.(); }} className="md:hidden p-2 -ml-2">
                         <ArrowLeftIcon className="w-6 h-6 text-gray-300" />
                     </button>
                     <AvatarZoom

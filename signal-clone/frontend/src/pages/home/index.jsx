@@ -83,6 +83,7 @@ export const Home = () => {
         return [];
     });
     const [loadingChats, setLoadingChats] = useState(() => !loadChatMetadata(user?.id).length);
+    const [chatsResolved, setChatsResolved] = useState(false);
 
     // Custom Hooks
     const nav = useHomeNavigation();
@@ -190,15 +191,6 @@ export const Home = () => {
     useBackHandler(Boolean(msgToDelete), () => setMsgToDelete(null), 'del-msg');
     useBackHandler(Boolean(chatToDelete), () => setChatToDelete(null), 'del-chat');
     useBackHandler(Boolean(prefs.showArchive), () => prefs.setShowArchive(false), 'show-archive');
-    useBackHandler(Boolean(nav.showSmartSpace), () => nav.setShowSmartSpace(false), 'smart-space');
-    useBackHandler(Boolean(nav.showSaskatAI), () => nav.setShowSaskatAI(false), 'saskat-ai');
-    useBackHandler(Boolean(nav.showAiChat), () => nav.setShowAiChat(false), 'ai-chat');
-    useBackHandler(Boolean(nav.showSettings), () => nav.setShowSettings(false), 'settings');
-    useBackHandler(Boolean(nav.showReels), () => nav.setShowReels(false), 'reels');
-    useBackHandler(Boolean(nav.showSocial), () => nav.setShowSocial(false), 'social');
-    useBackHandler(Boolean(nav.showPodlive), () => nav.setShowPodlive(false), 'podlive');
-    useBackHandler(Boolean(activeChat), () => { setActiveChat(null); localStorage.removeItem('activeChatId'); }, 'active-chat');
-    useBackHandler(Boolean(nav.isMobile && nav.mobileHomeTab !== 'chats'), () => nav.setMobileHomeTab('chats'), 'mobile-tab');
 
     // Computed Chat State
     const visibleActiveChat = activeChat
@@ -293,6 +285,7 @@ export const Home = () => {
             return [];
         } finally {
             setLoadingChats(false);
+            setChatsResolved(true);
         }
     }, [token, privateKey, user]);
 
@@ -446,17 +439,22 @@ export const Home = () => {
         if (routeChatId) {
             const selected = chats.find(chat => String(chat.id) === routeChatId);
             if (selected && String(activeChat?.id) !== routeChatId) setActiveChat(selected);
+            else if (!selected && chatsResolved) {
+                setActiveChat(null);
+                localStorage.removeItem('activeChatId');
+                navigate('/chats', { replace: true });
+            }
             previousPathname.current = pathname;
             return;
         }
-        if (pathname === '/chats' && previousPathname.current.startsWith('/chats/') && activeChat) {
+        if (previousPathname.current.startsWith('/chats/') && !pathname.startsWith('/chats/')) {
             setActiveChat(null);
             localStorage.removeItem('activeChatId');
-        } else if (activeChat && pathname === '/chats') {
+        } else if (activeChat && pathname !== `/chats/${encodeURIComponent(activeChat.id)}`) {
             navigate(`/chats/${encodeURIComponent(activeChat.id)}`);
         }
         previousPathname.current = pathname;
-    }, [routeChatId, chats, activeChat, pathname, navigate]);
+    }, [routeChatId, chats, activeChat, chatsResolved, pathname, navigate]);
 
     useEffect(() => {
         if (user?.id && chats && chats.length > 0) {
@@ -1310,6 +1308,12 @@ export const Home = () => {
         setOpenComposerRequest(value => value + 1);
     };
 
+    const closeActiveChat = () => {
+        setActiveChat(null);
+        localStorage.removeItem('activeChatId');
+        if (routeChatId || pathname.startsWith('/chats/')) navigate('/chats');
+    };
+
     const openChats = () => {
         setShowShoppingMarketplace(false);
         setShowNotifications(false);
@@ -2121,6 +2125,7 @@ export const Home = () => {
                 visibleActiveChat={visibleActiveChat}
                 activeChat={activeChat}
                 setActiveChat={setActiveChat}
+                onCloseChat={closeActiveChat}
                 showChatDraw={showChatDraw}
                 setShowChatDraw={setShowChatDraw}
                 drawSource={drawSource}

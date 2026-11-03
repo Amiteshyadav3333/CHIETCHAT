@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate, usePathname } from '../../../utils/clientRouter';
+import { useNavigate, useLocation } from '../../../utils/clientRouter';
 
 const pathToView = {
     '/': 'social', '/chats': 'chats', '/social': 'social', '/reels': 'reels',
@@ -19,7 +19,7 @@ const readSocialDeepLink = pathname => {
 };
 
 export const useHomeNavigation = () => {
-    const pathname = usePathname();
+    const { pathname, search } = useLocation();
     const navigate = useNavigate();
     const currentView = pathToView[pathname] || 'social';
     const routeSyncPending = useRef(false);
@@ -37,7 +37,10 @@ export const useHomeNavigation = () => {
     const [navPeekOpen, setNavPeekOpen] = useState(false);
     const [navCollapsed, setNavCollapsed] = useState(() => localStorage.getItem('app_nav_collapsed') === '1');
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-    const [mobileHomeTab, setMobileHomeTab] = useState('chats');
+    const [mobileHomeTab, setMobileHomeTabState] = useState(() => {
+        const requestedTab = new URLSearchParams(window.location.search).get('tab');
+        return ['chats', 'stories', 'groups', 'calls'].includes(requestedTab) ? requestedTab : 'chats';
+    });
 
     // Selecting a main section updates its shareable URL immediately. Keeping
     // this in the same handler as the view change avoids stale URLs when
@@ -85,6 +88,20 @@ export const useHomeNavigation = () => {
     const setCurrentView = useCallback((view) => {
         activateView(view, false);
     }, [activateView]);
+
+    const setMobileHomeTab = useCallback((tab) => {
+        const nextTab = ['chats', 'stories', 'groups', 'calls'].includes(tab) ? tab : 'chats';
+        setMobileHomeTabState(nextTab);
+        if (!isMobile || window.location.pathname !== '/chats') return;
+        const target = nextTab === 'chats' ? '/chats' : `/chats?tab=${encodeURIComponent(nextTab)}`;
+        if (`${window.location.pathname}${window.location.search}` !== target) navigate(target);
+    }, [isMobile, navigate, pathname, search]);
+
+    useEffect(() => {
+        if (pathname !== '/chats') return;
+        const requestedTab = new URLSearchParams(search).get('tab');
+        setMobileHomeTabState(['chats', 'stories', 'groups', 'calls'].includes(requestedTab) ? requestedTab : 'chats');
+    }, [pathname, search]);
 
     // A direct URL or browser back/forward restores the matching app section.
     useEffect(() => {

@@ -2,7 +2,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { BrowserRouter, usePathname } from '../../../utils/clientRouter';
+import { BrowserRouter, useLocation } from '../../../utils/clientRouter';
 import { useHomeNavigation } from './useHomeNavigation';
 
 let container;
@@ -10,9 +10,14 @@ let root;
 
 const NavigationProbe = () => {
     const navigation = useHomeNavigation();
-    const pathname = usePathname();
+    const { pathname, search } = useLocation();
     return <>
-        <output>{pathname}</output>
+        <output data-testid="pathname">{pathname}</output>
+        <output data-testid="location">{`${pathname}${search}`}</output>
+        <output data-testid="mobile-tab">{navigation.mobileHomeTab}</output>
+        {['chats', 'stories', 'groups', 'calls'].map(tab => (
+            <button key={`tab-${tab}`} onClick={() => navigation.setMobileHomeTab(tab)}>tab-{tab}</button>
+        ))}
         {['chats', 'social', 'reels', 'podlive', 'settings', 'ai-chat', 'smart-space', 'saskat-ai'].map(view => (
             <button key={view} onClick={() => navigation.navigateToView(view)}>{view}</button>
         ))}
@@ -21,6 +26,7 @@ const NavigationProbe = () => {
 
 beforeEach(() => {
     window.history.replaceState({}, '', '/');
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
     window.scrollTo = () => {};
     const storage = new Map();
     Object.defineProperty(window, 'localStorage', { configurable: true, value: {
@@ -51,5 +57,30 @@ describe('main section navigation', () => {
         act(() => [...container.querySelectorAll('button')].find(button => button.textContent === view).click());
         expect(window.location.pathname).toBe(path);
         expect(container.querySelector('output').textContent).toBe(path);
+    });
+});
+
+
+describe('mobile chat tabs', () => {
+    it.each(['stories', 'groups', 'calls'])('writes the %s tab to a shareable URL immediately', tab => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+        window.history.replaceState({}, '', '/chats');
+        act(() => root.render(<BrowserRouter><NavigationProbe /></BrowserRouter>));
+        act(() => [...container.querySelectorAll('button')].find(button => button.textContent === `tab-${tab}`).click());
+        expect(window.location.pathname).toBe('/chats');
+        expect(window.location.search).toBe(`?tab=${tab}`);
+        expect(container.querySelector('[data-testid="location"]').textContent).toBe(`/chats?tab=${tab}`);
+    });
+
+    it('restores the selected tab after browser back or forward navigation', () => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+        window.history.replaceState({}, '', '/chats');
+        act(() => root.render(<BrowserRouter><NavigationProbe /></BrowserRouter>));
+        act(() => {
+            window.history.replaceState({}, '', '/chats?tab=groups');
+            window.dispatchEvent(new PopStateEvent('popstate'));
+        });
+        expect(container.querySelector('[data-testid="location"]').textContent).toBe('/chats?tab=groups');
+        expect(container.querySelector('[data-testid="mobile-tab"]').textContent).toBe('groups');
     });
 });

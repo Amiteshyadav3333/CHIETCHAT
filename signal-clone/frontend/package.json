@@ -18,7 +18,7 @@
         "@livekit/components-react": "^2.9.20",
         "@livekit/components-styles": "^1.2.0",
         "@supabase/supabase-js": "^2.112.2",
-        "axios": "^1.6.0",
+        "axios": "^1.21.0",
         "chess.js": "^1.4.0",
         "clsx": "^2.0.0",
         "date-fns": "^2.30.0",

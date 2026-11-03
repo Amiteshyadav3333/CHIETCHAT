@@ -6,6 +6,8 @@ const pathToView = {
     '/podlive': 'podlive', '/smart-space': 'smart-space', '/settings': 'settings',
     '/ai-chat': 'ai-chat', '/saskat-ai': 'saskat-ai',
 };
+const resolveHomeView = pathname => pathToView[pathname]
+    || (/^\/chats\/[^/]+\/?$/.test(pathname) ? 'chats' : 'social');
 const viewToPath = Object.fromEntries(Object.entries(pathToView).map(([path, view]) => [view, path]));
 const readSocialDeepLink = pathname => {
     const match = pathname.match(/^\/(posts|profile)\/([^/]+)\/?$/);
@@ -21,7 +23,7 @@ const readSocialDeepLink = pathname => {
 export const useHomeNavigation = () => {
     const { pathname, search } = useLocation();
     const navigate = useNavigate();
-    const currentView = pathToView[pathname] || 'social';
+    const currentView = resolveHomeView(pathname);
     const routeSyncPending = useRef(false);
     const [showReels, setShowReelsState] = useState(() => currentView === 'reels');
     const [showSocial, setShowSocialState] = useState(() => currentView === 'social');
@@ -117,7 +119,7 @@ export const useHomeNavigation = () => {
         const deepLink = readSocialDeepLink(pathname);
         if (deepLink) setSocialDeepLink(deepLink);
         else setSocialDeepLink(null);
-        setCurrentView(pathToView[pathname] || 'social');
+        setCurrentView(resolveHomeView(pathname));
     }, [pathname, setCurrentView]);
 
     // Keep section changes in browser history so the back button works naturally.

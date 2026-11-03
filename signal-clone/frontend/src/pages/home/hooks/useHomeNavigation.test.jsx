@@ -15,6 +15,7 @@ const NavigationProbe = () => {
         <output data-testid="pathname">{pathname}</output>
         <output data-testid="location">{`${pathname}${search}`}</output>
         <output data-testid="mobile-tab">{navigation.mobileHomeTab}</output>
+        <output data-testid="show-social">{String(navigation.showSocial)}</output>
         <output data-testid="social-deep-link">{navigation.socialDeepLink ? `${navigation.socialDeepLink.type}:${navigation.socialDeepLink.id}` : ""}</output>
         <button onClick={() => navigation.navigateToProfile('profile-42')}>view-profile</button>
         {['chats', 'stories', 'groups', 'calls'].map(tab => (
@@ -94,5 +95,14 @@ describe('profile navigation', () => {
         act(() => [...container.querySelectorAll('button')].find(button => button.textContent === 'view-profile').click());
         expect(window.location.pathname).toBe('/profile/profile-42');
         expect(container.querySelector('[data-testid="social-deep-link"]').textContent).toBe('profile:profile-42');
+    });
+});
+
+describe('direct chat URLs', () => {
+    it.each(['/chats/42', '/chats/abc-123/'])('keeps %s in the chat section', path => {
+        window.history.replaceState({}, '', path);
+        act(() => root.render(<BrowserRouter><NavigationProbe /></BrowserRouter>));
+        expect(container.querySelector('[data-testid="show-social"]').textContent).toBe('false');
+        expect(container.querySelector('[data-testid="pathname"]').textContent).toBe(path);
     });
 });

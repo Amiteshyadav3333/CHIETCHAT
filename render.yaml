@@ -57,6 +57,19 @@ services:
       - key: MUSIC_SERVICE_HMAC_KEY
         generateValue: true
   - type: web
+    name: chietchat-social-feed
+    env: python
+    region: oregon
+    rootDir: signal-clone
+    buildCommand: pip install -r services/social-feed/requirements.txt
+    startCommand: gunicorn --workers 2 --threads 8 --timeout 10 --chdir services/social-feed app:app --bind 0.0.0.0:$PORT
+    healthCheckPath: /health/ready
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: SOCIAL_FEED_SERVICE_HMAC_KEY
+        generateValue: true
+  - type: web
     name: chietchat
     env: python
     region: oregon
@@ -102,6 +115,13 @@ services:
           name: chietchat-music
           type: web
           envVarKey: MUSIC_SERVICE_HMAC_KEY
+      - key: SOCIAL_FEED_SERVICE_URL
+        value: https://chietchat-social-feed.onrender.com
+      - key: SOCIAL_FEED_SERVICE_HMAC_KEY
+        fromService:
+          name: chietchat-social-feed
+          type: web
+          envVarKey: SOCIAL_FEED_SERVICE_HMAC_KEY
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET

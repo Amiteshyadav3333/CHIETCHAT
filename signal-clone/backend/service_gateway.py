@@ -12,6 +12,7 @@ import requests
 
 MUSIC_SEARCH_PATH = '/internal/v1/music/search'
 TRANSLATE_PATH = '/internal/v1/translate'
+SOCIAL_FEED_RANK_PATH = '/internal/v1/social-feed/rank'
 
 
 def canonical_service_signature(secret, timestamp, request_id, method, path, body):
@@ -76,3 +77,32 @@ def call_translation_service(user_id, text, source_lang, target_lang, timeout=(2
     if not isinstance(translated, str) or not translated.strip():
         raise ValueError('Translation service returned invalid text')
     return translated
+
+
+def call_social_feed_ranker(user_id, posts, engagement, limit, now=None, timeout=(1, 3)):
+    """Ask the isolated Social Feed service to rank already-authorized candidates."""
+    payload = {
+        'userId': int(user_id),
+        'limit': int(limit),
+        'now': now.isoformat() if hasattr(now, 'isoformat') else now,
+        'posts': [
+            {'id': int(post.id), 'userId': int(post.user_id),
+             'createdAt': post.created_at.isoformat() if post.created_at else None}
+            for post in posts
+        ],
+        'engagement': {
+            str(int(post.id)): engagement.get(post.id, {}) for post in posts
+        },
+    }
+    result = call_signed_domain_service(
+        'SOCIAL_FEED_SERVICE_URL', 'SOCIAL_FEED_SERVICE_HMAC_KEY',
+        SOCIAL_FEED_RANK_PATH, payload, timeout=timeout, response_field='orderedIds',
+    )
+    ordered_ids = result['orderedIds']
+    known_ids = {int(post.id) for post in posts}
+    expected_count = min(max(int(limit), 0), len(posts))
+    if (not isinstance(ordered_ids, list) or len(ordered_ids) != expected_count
+            or any(type(post_id) is not int or post_id not in known_ids for post_id in ordered_ids)
+            or len(set(ordered_ids)) != len(ordered_ids)):
+        raise ValueError('Social feed service returned an invalid ranking')
+    return ordered_ids

@@ -11,6 +11,8 @@ services:
       BACKEND_URL: http://localhost:5000
       MUSIC_SERVICE_URL: http://music-service:5001
       MUSIC_SERVICE_HMAC_KEY: local-compose-music-service-key-change-me-32chars
+      SOCIAL_FEED_SERVICE_URL: http://social-feed-service:5003
+      SOCIAL_FEED_SERVICE_HMAC_KEY: local-compose-social-feed-service-key-32chars
       TRANSLATION_SERVICE_URL: http://translation-service:5002
       TRANSLATION_SERVICE_HMAC_KEY: local-compose-translation-service-key-32chars
       SECRET_KEY: local-docker-secret-change-before-deployment
@@ -24,6 +26,8 @@ services:
       music-service:
         condition: service_healthy
       translation-service:
+        condition: service_healthy
+      social-feed-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:5000/health/ready', timeout=3)"]
@@ -74,6 +78,18 @@ services:
       TRANSLATION_SERVICE_HMAC_KEY: local-compose-translation-service-key-32chars
     healthcheck:
       test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:5002/health/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  social-feed-service:
+    build:
+      context: ./signal-clone/services/social-feed
+      dockerfile: Dockerfile
+    environment:
+      SOCIAL_FEED_SERVICE_HMAC_KEY: local-compose-social-feed-service-key-32chars
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:5003/health/ready', timeout=3)"]
       interval: 10s
       timeout: 5s
       retries: 5

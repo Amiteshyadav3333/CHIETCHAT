@@ -1,5 +1,6 @@
 import datetime
 import json
+import os
 import re
 import urllib.parse
 from collections import Counter
@@ -21,6 +22,8 @@ from utils import (
 )
 from content_moderation import ModerationUnavailable, reject_adult_content
 from features.social.feed import rank_public_posts
+from service_gateway import call_social_feed_ranker
+from observability import report_safe_exception
 
 social_bp = Blueprint('social_bp', __name__)
 
@@ -324,7 +327,17 @@ def get_social_posts():
         creator_counts = dict(author_counts)
         for post in candidates:
             engagement.setdefault(post.id, {})['creator_posts'] = creator_counts.get(post.user_id, 1)
-    posts = rank_public_posts(candidates, engagement, now=utc_now(), limit=limit)
+    feed_now = utc_now()
+    if current_app.config.get('SOCIAL_FEED_SERVICE_URL') or os.environ.get('SOCIAL_FEED_SERVICE_URL'):
+        try:
+            ordered_ids = call_social_feed_ranker(user_id, candidates, engagement, limit, now=feed_now)
+            candidate_by_id = {post.id: post for post in candidates}
+            posts = [candidate_by_id[post_id] for post_id in ordered_ids]
+        except Exception as error:
+            report_safe_exception('social_feed_rank_service_failed', error)
+            posts = rank_public_posts(candidates, engagement, now=feed_now, limit=limit)
+    else:
+        posts = rank_public_posts(candidates, engagement, now=feed_now, limit=limit)
     post_ids = [post.id for post in posts]
     feed_context = {
         'liked_ids': set(), 'followed_ids': set(followed_ids),

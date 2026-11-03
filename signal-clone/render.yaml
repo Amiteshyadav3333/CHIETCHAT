@@ -55,12 +55,25 @@ services:
       - key: MUSIC_SERVICE_HMAC_KEY
         generateValue: true
   - type: web
+    name: chietchat-social-feed
+    runtime: python
+    region: singapore
+    rootDir: .
+    buildCommand: pip install -r services/social-feed/requirements.txt
+    startCommand: gunicorn --workers 2 --threads 8 --timeout 10 --chdir services/social-feed app:app --bind 0.0.0.0:$PORT
+    healthCheckPath: /health/ready
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: SOCIAL_FEED_SERVICE_HMAC_KEY
+        generateValue: true
+  - type: web
     name: chietchat-backend
     runtime: python
     region: singapore
     plan: free
     rootDir: .
-    buildCommand: pip install -r backend/requirements.txt
+    buildCommand: ./render-build.sh
     preDeployCommand: python backend/migrate.py
     startCommand: gunicorn -w ${WEB_CONCURRENCY:-1} --threads 100 --timeout 120 --chdir backend wsgi:app --bind 0.0.0.0:$PORT
     healthCheckPath: /health/ready
@@ -109,6 +122,13 @@ services:
           name: chietchat-music
           type: web
           envVarKey: MUSIC_SERVICE_HMAC_KEY
+      - key: SOCIAL_FEED_SERVICE_URL
+        value: https://chietchat-social-feed.onrender.com
+      - key: SOCIAL_FEED_SERVICE_HMAC_KEY
+        fromService:
+          name: chietchat-social-feed
+          type: web
+          envVarKey: SOCIAL_FEED_SERVICE_HMAC_KEY
       - key: PODLIVE_URL
         value: https://podlive-sigma.vercel.app
       - key: PODLIVE_API_URL

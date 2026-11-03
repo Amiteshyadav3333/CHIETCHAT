@@ -2,10 +2,38 @@ import os
 import unittest
 from unittest.mock import patch
 
-from service_gateway import call_music_service, call_translation_service, canonical_service_signature
+from service_gateway import call_music_service, call_social_feed_ranker, call_translation_service, canonical_service_signature
 
 
 class ServiceGatewayTests(unittest.TestCase):
+    @patch('service_gateway.requests.post')
+    @patch.dict(os.environ, {
+        'SOCIAL_FEED_SERVICE_URL': 'https://feed.example.test',
+        'SOCIAL_FEED_SERVICE_HMAC_KEY': 'social-feed-gateway-test-secret-' * 2,
+    })
+    def test_social_feed_gateway_sends_candidates_and_maps_a_signed_contract(self, post):
+        from datetime import datetime, timezone
+        from types import SimpleNamespace
+        response = post.return_value
+        response.json.return_value = {'orderedIds': [2, 1]}
+        candidates = [
+            SimpleNamespace(id=1, user_id=10, created_at=datetime(2026, 11, 4, tzinfo=timezone.utc)),
+            SimpleNamespace(id=2, user_id=11, created_at=datetime(2026, 11, 3, tzinfo=timezone.utc)),
+        ]
+        ordered = call_social_feed_ranker(42, candidates, {1: {'likes': 2}, 99: {'shares': 1}}, 2)
+        self.assertEqual(ordered, [2, 1])
+        args, kwargs = post.call_args
+        self.assertEqual(args[0], 'https://feed.example.test/internal/v1/social-feed/rank')
+        body = kwargs['data']
+        headers = kwargs['headers']
+        self.assertEqual(headers['X-Internal-Signature'], canonical_service_signature(
+            'social-feed-gateway-test-secret-' * 2,
+            headers['X-Internal-Timestamp'], headers['X-Internal-Request-Id'],
+            'POST', '/internal/v1/social-feed/rank', body,
+        ))
+        payload = __import__('json').loads(body)
+        self.assertEqual(set(payload['engagement']), {'1', '2'})
+
     @patch('service_gateway.requests.post')
     @patch.dict(os.environ, {
         'MUSIC_SERVICE_URL': 'https://music.example.test',

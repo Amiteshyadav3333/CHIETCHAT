@@ -32,6 +32,7 @@ from models import (
     db, User, ActiveSession, Chat, ChatParticipant, BusinessProfile, CatalogProduct,
     PaymentOrder, Message, PushSubscription, Reel, SocialPost, Status, MediaDeletionTask, BusinessAutomation,
     UploadAsset, ScheduledMessage, Contact, CallRecord, WorkerHeartbeat, AiConversation,
+    SocialPostLike, SocialPostComment, SocialPollVote,
     SellerAccount, ShopSchedule, ShopDeliveryOption, MarketplaceOrder, MarketplaceOrderLine,
     SellerVerificationDocument,
 )
@@ -1975,6 +1976,30 @@ class SecurityTests(unittest.TestCase):
             '/api/reels/999999/comments', json={'content': 'orphan'}, headers=self.auth_headers(),
         )
         self.assertEqual(missing_reel_comment.status_code, 404)
+
+    def test_social_feed_uses_aggregate_counts_for_likes_comments_and_poll_votes(self):
+        with app.app_context():
+            post = SocialPost(
+                user_id=self.user_id, caption='Community poll', post_kind='poll',
+                title='Which option?', poll_options=json.dumps(['A', 'B']),
+            )
+            db.session.add(post)
+            db.session.flush()
+            db.session.add_all([
+                SocialPostLike(post_id=post.id, user_id=self.user_id),
+                SocialPostComment(post_id=post.id, user_id=self.user_id, content='I voted'),
+                SocialPollVote(post_id=post.id, user_id=self.user_id, option_index=1),
+            ])
+            db.session.commit()
+            post_id = post.id
+
+        response = self.client.get('/api/social/posts?feed=news', headers=self.auth_headers())
+        self.assertEqual(response.status_code, 200)
+        result = next(row for row in response.json if row['id'] == post_id)
+        self.assertEqual(result['likesCount'], 1)
+        self.assertEqual(result['commentsCount'], 1)
+        self.assertEqual(result['poll']['counts'], [0, 1])
+        self.assertEqual(result['poll']['selectedOption'], 1)
 
     def test_structured_values_are_rejected_at_text_input_boundaries(self):
         created = self.client.post(

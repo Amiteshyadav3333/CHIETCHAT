@@ -5,7 +5,7 @@ import urllib.parse
 from collections import Counter
 from flask import Blueprint, current_app, jsonify, request
 from sqlalchemy import case, func, or_
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import joinedload
 from werkzeug.utils import secure_filename
 from urllib.parse import urlparse
 
@@ -77,6 +77,8 @@ def serialize_post(post, current_user_id, feed_context=None):
     if post.retweet_of_id and post.retweet_of:
         orig = post.retweet_of
         orig_user = serialize_user(orig.user, viewer_id=current_user_id)
+        original_likes = feed_context.get('like_counts', {}).get(orig.id)
+        original_comments = feed_context.get('comment_counts', {}).get(orig.id)
         original_post = {
             "id": orig.id,
             "caption": orig.caption or "",
@@ -89,9 +91,9 @@ def serialize_post(post, current_user_id, feed_context=None):
             "articleTitle": orig.article_title or "",
             "createdAt": iso_utc(orig.created_at),
             "user": orig_user,
-            "likesCount": len(orig.likes),
-            "commentsCount": len(orig.comments),
-            "retweetCount": SocialPost.query.filter_by(retweet_of_id=orig.id).count()
+            "likesCount": original_likes if original_likes is not None else len(orig.likes),
+            "commentsCount": original_comments if original_comments is not None else len(orig.comments),
+            "retweetCount": feed_context.get('retweet_counts', {}).get(orig.id, 0) if 'retweet_counts' in feed_context else SocialPost.query.filter_by(retweet_of_id=orig.id).count()
         }
     retweet_count = feed_context['retweet_counts'].get(post.id, 0) if 'retweet_counts' in feed_context else SocialPost.query.filter_by(retweet_of_id=post.id).count()
     poll_options = []
@@ -99,13 +101,20 @@ def serialize_post(post, current_user_id, feed_context=None):
         poll_options = json.loads(post.poll_options or '[]')
     except (TypeError, ValueError):
         poll_options = []
-    vote_counts = [0] * len(poll_options)
-    selected_poll_option = None
-    for vote in post.poll_votes:
-        if 0 <= vote.option_index < len(vote_counts):
-            vote_counts[vote.option_index] += 1
-        if vote.user_id == current_user_id:
-            selected_poll_option = vote.option_index
+    poll_stats = feed_context.get('poll_stats', {}).get(post.id)
+    if poll_stats is not None:
+        vote_counts = poll_stats['counts']
+        selected_poll_option = poll_stats['selected_option']
+    else:
+        vote_counts = [0] * len(poll_options)
+        selected_poll_option = None
+        for vote in post.poll_votes:
+            if 0 <= vote.option_index < len(vote_counts):
+                vote_counts[vote.option_index] += 1
+            if vote.user_id == current_user_id:
+                selected_poll_option = vote.option_index
+    likes_count = feed_context.get('like_counts', {}).get(post.id)
+    comments_count = feed_context.get('comment_counts', {}).get(post.id)
     return {
         "id": post.id,
         "caption": post.caption or "",
@@ -115,8 +124,8 @@ def serialize_post(post, current_user_id, feed_context=None):
         "createdAt": iso_utc(post.created_at),
         "user": user_data,
         "channel": channel_data,
-        "likesCount": len(post.likes),
-        "commentsCount": len(post.comments),
+        "likesCount": likes_count if likes_count is not None else len(post.likes),
+        "commentsCount": comments_count if comments_count is not None else len(post.comments),
         "retweetCount": retweet_count,
         "shareCount": post.share_count or 0,
         "isLiked": is_liked,
@@ -253,8 +262,7 @@ def get_social_posts():
     blocked_rows = Block.query.filter(or_(Block.blocker_id == user_id, Block.blocked_id == user_id)).all()
     blocked_ids = {row.blocked_id if row.blocker_id == user_id else row.blocker_id for row in blocked_rows}
     query = SocialPost.query.options(
-        joinedload(SocialPost.user), selectinload(SocialPost.likes),
-        selectinload(SocialPost.comments), selectinload(SocialPost.poll_votes),
+        joinedload(SocialPost.user), joinedload(SocialPost.retweet_of).joinedload(SocialPost.user),
     ).join(User, SocialPost.user_id == User.id).filter(
         SocialPost.channel_id.is_(None),
         or_(User.is_profile_private.is_(False), User.id == user_id, User.id.in_(followed_ids) if followed_ids else User.id == user_id),
@@ -275,12 +283,41 @@ def get_social_posts():
     limit = bounded_limit(FEED_DEFAULT_LIMIT, FEED_MAX_LIMIT)
     candidates = query.order_by(SocialPost.created_at.desc()).limit(500).all()
     candidate_ids = [post.id for post in candidates]
+    aggregate_ids = set(candidate_ids)
+    aggregate_ids.update(post.retweet_of_id for post in candidates if post.retweet_of_id is not None)
     engagement = {}
-    if candidate_ids:
+    poll_stats = {}
+    if aggregate_ids:
         for model, key in ((SocialPostLike, 'likes'), (SocialPostComment, 'comments'), (SocialPostShare, 'shares')):
-            rows = db.session.query(model.post_id, func.count(model.id)).filter(model.post_id.in_(candidate_ids)).group_by(model.post_id).all()
+            rows = db.session.query(model.post_id, func.count(model.id)).filter(model.post_id.in_(aggregate_ids)).group_by(model.post_id).all()
             for post_id, count in rows:
                 engagement.setdefault(post_id, {})[key] = count
+        poll_option_counts = {}
+        for post in candidates:
+            try:
+                options = json.loads(post.poll_options or '[]')
+            except (TypeError, ValueError):
+                options = []
+            if options:
+                poll_option_counts[post.id] = len(options)
+        poll_stats = {
+            post_id: {'counts': [0] * option_count, 'selected_option': None}
+            for post_id, option_count in poll_option_counts.items()
+        }
+        if poll_option_counts:
+            poll_rows = db.session.query(
+                SocialPollVote.post_id,
+                SocialPollVote.option_index,
+                func.count(SocialPollVote.id),
+                func.max(case((SocialPollVote.user_id == user_id, 1), else_=0)),
+            ).filter(SocialPollVote.post_id.in_(poll_option_counts)).group_by(
+                SocialPollVote.post_id, SocialPollVote.option_index
+            ).all()
+            for post_id, option_index, count, selected in poll_rows:
+                if 0 <= option_index < len(poll_stats[post_id]['counts']):
+                    poll_stats[post_id]['counts'][option_index] = count
+                    if selected:
+                        poll_stats[post_id]['selected_option'] = option_index
         author_counts = db.session.query(SocialPost.user_id, func.count(SocialPost.id)).filter(
             SocialPost.channel_id.is_(None), SocialPost.user_id.in_({post.user_id for post in candidates})
         ).group_by(SocialPost.user_id).all()
@@ -291,7 +328,9 @@ def get_social_posts():
     post_ids = [post.id for post in posts]
     feed_context = {
         'liked_ids': set(), 'followed_ids': set(followed_ids),
-        'retweeted_ids': set(), 'retweet_counts': {},
+        'retweeted_ids': set(), 'retweet_counts': {}, 'poll_stats': poll_stats,
+        'like_counts': {post_id: stats.get('likes', 0) for post_id, stats in engagement.items()},
+        'comment_counts': {post_id: stats.get('comments', 0) for post_id, stats in engagement.items()},
     }
     if post_ids:
         feed_context['liked_ids'] = {row.post_id for row in SocialPostLike.query.filter(
@@ -302,7 +341,7 @@ def get_social_posts():
         ).all()}
         feed_context['retweet_counts'] = dict(db.session.query(
             SocialPost.retweet_of_id, func.count(SocialPost.id)
-        ).filter(SocialPost.retweet_of_id.in_(post_ids)).group_by(SocialPost.retweet_of_id).all())
+        ).filter(SocialPost.retweet_of_id.in_(aggregate_ids)).group_by(SocialPost.retweet_of_id).all())
     return jsonify([serialize_post(post, user_id, feed_context) for post in posts])
 
 

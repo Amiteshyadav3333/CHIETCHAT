@@ -8,6 +8,7 @@ import { EnvelopeIcon, KeyIcon, LockClosedIcon, UserPlusIcon } from '@heroicons/
 import { getDeviceFingerprint } from '../utils/deviceIdentity';
 import { loadDevicePrivateKey, saveDevicePrivateKey } from '../utils/secureKeyStore';
 import { getSupabaseClient } from '../utils/supabaseClient';
+import { getGoogleLoginErrorMessage, isExistingPasswordAccountError } from '../utils/googleLoginErrors';
 import MarketingLanding from '../components/MarketingLanding';
 
 const Login = () => {
@@ -58,6 +59,7 @@ const Login = () => {
         let cancelled = false;
         const finishGoogleCallback = async () => {
             setGoogleLoading(true);
+            let googleEmail = '';
             try {
                 const supabase = await getSupabaseClient();
                 const code = new URLSearchParams(window.location.search).get('code');
@@ -67,6 +69,7 @@ const Login = () => {
                 if (authResult.error) throw authResult.error;
                 const session = authResult.data.session;
                 if (!session?.access_token) throw new Error('Google session was not returned');
+                googleEmail = String(session.user?.email || '').trim().toLowerCase();
                 const response = await axios.post('/api/auth/google/exchange', {
                     accessToken: session.access_token,
                     deviceFingerprint,
@@ -94,7 +97,12 @@ const Login = () => {
                 if (!cancelled) {
                     setMode('login');
                     setAuthOpen(true);
-                    setMessage(error.response?.data?.error || error.message || 'Google sign-in failed');
+                    if (isExistingPasswordAccountError(error)) {
+                        if (googleEmail) setEmail(googleEmail);
+                        setAuthStep('password');
+                        setPassword('');
+                    }
+                    setMessage(getGoogleLoginErrorMessage(error));
                 }
             } finally {
                 if (!cancelled) setGoogleLoading(false);

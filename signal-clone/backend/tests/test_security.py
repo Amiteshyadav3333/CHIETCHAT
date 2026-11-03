@@ -29,7 +29,7 @@ import app as app_module
 from app import app, socketio, _rate_windows, _sensitive_limits
 from models import (
     db, User, ActiveSession, Chat, ChatParticipant, BusinessProfile, CatalogProduct,
-    PaymentOrder, Message, PushSubscription, Reel, SocialPost, Status, MediaDeletionTask,
+    PaymentOrder, Message, PushSubscription, Reel, SocialPost, Status, MediaDeletionTask, BusinessAutomation,
     UploadAsset, ScheduledMessage, Contact, CallRecord, WorkerHeartbeat, AiConversation,
     SellerAccount, ShopSchedule, ShopDeliveryOption, MarketplaceOrder, MarketplaceOrderLine,
     SellerVerificationDocument,
@@ -1775,6 +1775,15 @@ class SecurityTests(unittest.TestCase):
         analytics = self.client.get('/api/business/analytics', headers=self.auth_headers())
         self.assertEqual(analytics.status_code, 200)
         self.assertEqual(analytics.json['products'], 1)
+
+    def test_business_dashboard_recovers_from_invalid_automation_rules(self):
+        with app.app_context():
+            db.session.add(BusinessAutomation(user_id=self.user_id, keyword_rules='not-json'))
+            db.session.commit()
+
+        dashboard = self.client.get('/api/business/me', headers=self.auth_headers())
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertEqual(dashboard.json['automation']['keywordRules'], {})
 
     def test_business_dashboard_stays_available_without_exposing_unreadable_kyc(self):
         from seller_kyc import encrypt_private_profile

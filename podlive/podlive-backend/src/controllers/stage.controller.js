@@ -68,6 +68,7 @@ exports.inviteUser = async (req, res) => {
 };
 
 exports.getPendingInvite = async (req, res) => {
+    res.set('Cache-Control', 'no-store');
     try {
         const invite = await prisma.stageInvite.findFirst({
             where: {
@@ -79,7 +80,6 @@ exports.getPendingInvite = async (req, res) => {
             orderBy: { invited_at: 'desc' }
         });
 
-        res.set('Cache-Control', 'no-store');
         if (!invite) return res.json({ invite: null });
         return res.json({
             invite: {

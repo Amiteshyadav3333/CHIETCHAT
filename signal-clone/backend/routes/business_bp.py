@@ -100,6 +100,14 @@ def record_affiliate_commission(order, status='pending_payout'):
         db.session.add(AffiliateCommission(order_id=order.id, promoter_id=tag.promoter_id,
             seller_id=order.seller_id, amount_paise=amount, status=status))
 
+def parse_keyword_rules(raw_value):
+    try:
+        parsed = json.loads(raw_value or '{}')
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 def amount_to_paise(value):
     try:
         amount = Decimal(str(value))
@@ -163,7 +171,7 @@ def get_my_business():
             'aiEnabled': bool(automation.ai_enabled) if automation else False,
             'welcomeMessage': automation.welcome_message if automation else 'Thanks for contacting us. How can we help?',
             'awayMessage': automation.away_message if automation else 'We are currently away and will reply soon.',
-            'keywordRules': json.loads(automation.keyword_rules or '{}') if automation else {}
+            'keywordRules': parse_keyword_rules(automation.keyword_rules) if automation else {}
         }
     })
 
@@ -404,7 +412,7 @@ def save_automation():
     if not isinstance(rules, dict): return jsonify({'error': 'Keyword rules must be an object'}), 400
     automation.keyword_rules = json.dumps({str(k)[:60].lower(): str(v)[:500] for k, v in rules.items() if str(k).strip() and str(v).strip()})
     db.session.add(automation); db.session.commit()
-    return jsonify({'enabled': automation.enabled, 'aiEnabled': automation.ai_enabled, 'welcomeMessage': automation.welcome_message, 'awayMessage': automation.away_message, 'keywordRules': json.loads(automation.keyword_rules)})
+    return jsonify({'enabled': automation.enabled, 'aiEnabled': automation.ai_enabled, 'welcomeMessage': automation.welcome_message, 'awayMessage': automation.away_message, 'keywordRules': parse_keyword_rules(automation.keyword_rules)})
 
 @business_bp.route('/api/business/automation/claim', methods=['POST'])
 def claim_auto_reply():

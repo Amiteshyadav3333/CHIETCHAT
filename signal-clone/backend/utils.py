@@ -296,7 +296,7 @@ def add_missing_columns(inspector, table_name, columns):
 # Bump this marker whenever models gain columns or tables. Production runs
 # ensure_database_schema() in the pre-deploy step and skips versions it has
 # already applied.
-SCHEMA_VERSION = '20261028_38_private_seller_verification'
+SCHEMA_VERSION = '20261104_39_business_dashboard_schema_repair'
 
 def ensure_runtime_compat_schema():
     """Repair columns required by the currently deployed models.

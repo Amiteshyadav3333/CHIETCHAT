@@ -639,6 +639,8 @@ class SocialPostComment(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     parent_id = db.Column(db.Integer, db.ForeignKey('social_post_comment.id'), nullable=True)
     content = db.Column(db.Text, nullable=False)
+    media_url = db.Column(db.String(1000), nullable=True)
+    media_type = db.Column(db.String(16), nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now)
     user = db.relationship('User')
     replies = db.relationship('SocialPostComment', backref=db.backref('parent', remote_side=[id]), lazy=True, cascade='all, delete-orphan')

@@ -136,7 +136,10 @@ const NestedComment = ({ comment, onReply, onEdit, onDelete, onVote, currentUser
                                     <button type="submit" disabled={savingEdit || !editText.trim()} className="rounded-full bg-orange-500 px-4 py-1.5 text-xs font-bold text-white disabled:opacity-50">{savingEdit ? 'Saving…' : 'Save edit'}</button>
                                 </div>
                             </form>
-                        ) : <div className="break-words text-left text-[13px] leading-6 text-gray-200"><LinkifiedText>{comment.content}</LinkifiedText></div>}
+                        ) : <>
+                            {comment.content && <div className="break-words text-left text-[13px] leading-6 text-gray-200"><LinkifiedText>{comment.content}</LinkifiedText></div>}
+                            {comment.mediaUrl && <img src={comment.mediaUrl} alt={comment.mediaType === 'gif' ? 'GIF comment' : 'Comment attachment'} loading="lazy" referrerPolicy="no-referrer" className="mt-2 max-h-72 max-w-full rounded-xl border border-white/10 object-contain" />}
+                        </>}
                     </div>
 
                     <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[11px] font-semibold text-gray-500">

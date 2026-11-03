@@ -6,6 +6,7 @@ from collections import Counter
 from flask import Blueprint, current_app, jsonify, request
 from sqlalchemy import case, func, or_
 from werkzeug.utils import secure_filename
+from urllib.parse import urlparse
 
 from models import (
     db, User, Follow, Reel, SocialPost, SocialPostLike, SocialPostShare, SocialPostComment, SocialPostCommentVote, SocialPollVote,
@@ -15,6 +16,7 @@ from utils import (
     get_current_user_id, get_json_data, iso_utc, serialize_user,
     upload_to_cloudinary, create_notification, queue_media_deletion, process_media_deletion_task, utc_now,
     MediaStorageUnavailable,
+    validate_upload,
 )
 from content_moderation import ModerationUnavailable, reject_adult_content
 
@@ -145,6 +147,8 @@ def serialize_comment(comment, current_user_id, vote_stats=None):
     return {
         "id": comment.id,
         "content": comment.content,
+        "mediaUrl": comment.media_url,
+        "mediaType": comment.media_type,
         "createdAt": iso_utc(comment.created_at),
         "user": serialize_user(comment.user, viewer_id=current_user_id),
         "parentId": comment.parent_id,
@@ -587,7 +591,11 @@ def create_social_post_comment(post_id):
     if not isinstance(raw_content, str):
         return jsonify({"error": "Comment must be text"}), 400
     content = raw_content.strip()
-    if not content:
+    try:
+        media_url, media_type = _comment_media_payload(data)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    if not content and not media_url:
         return jsonify({"error": "Comment cannot be empty"}), 400
     if len(content) > MAX_COMMENT_LENGTH:
         return jsonify({"error": f"Comment must be {MAX_COMMENT_LENGTH} characters or less"}), 400
@@ -598,11 +606,53 @@ def create_social_post_comment(post_id):
             return jsonify({"error": "Invalid parent comment"}), 400
         if comment_depth(parent) >= MAX_COMMENT_DEPTH:
             return jsonify({"error": f"Replies can be nested up to {MAX_COMMENT_DEPTH} levels"}), 400
-    comment = SocialPostComment(post_id=post_id, user_id=user_id, content=content, parent_id=parent_id)
+    comment = SocialPostComment(post_id=post_id, user_id=user_id, content=content, parent_id=parent_id,
+                                media_url=media_url, media_type=media_type)
     db.session.add(comment)
     db.session.commit()
     create_notification(post.user_id, user_id, 'comment', f"commented: {content[:50]}", post_id)
     return jsonify(serialize_comment(comment, user_id, comment_vote_stats([comment], user_id))), 201
+
+
+def _comment_media_payload(data):
+    media_url = data.get('mediaUrl')
+    media_type = data.get('mediaType')
+    if media_url is None and media_type is None:
+        return None, None
+    if not isinstance(media_url, str) or len(media_url) > 1000 or media_type not in {'image', 'gif'}:
+        raise ValueError('Invalid comment attachment')
+    parsed = urlparse(media_url)
+    host = (parsed.hostname or '').lower()
+    allowed_host = host.endswith('.giphy.com') or host.endswith('.tenor.com') or host == 'res.cloudinary.com'
+    if parsed.scheme != 'https' or not allowed_host:
+        raise ValueError('Comment attachment URL is not allowed')
+    return media_url, media_type
+
+
+@social_bp.route('/api/social/comments/media', methods=['POST'])
+def upload_social_comment_media():
+    if not get_current_user_id():
+        return jsonify({"error": "Unauthorized"}), 401
+    upload = request.files.get('file')
+    if not upload or not upload.filename:
+        return jsonify({"error": "Choose an image first"}), 400
+    try:
+        kind = validate_upload(upload, {'image'}, 10 * 1024 * 1024)
+        blocked, _ = reject_adult_content(upload, kind)
+        if blocked:
+            return jsonify({"error": "This image cannot be used in a comment."}), 422
+        url = upload_to_cloudinary(upload, folder='chietchat/social-comments', resource_type='image')
+        return jsonify({"mediaUrl": url, "mediaType": "image"}), 201
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    except ModerationUnavailable:
+        return jsonify({"error": "Image safety checks are temporarily unavailable. Try again."}), 503
+    except MediaStorageUnavailable as error:
+        return jsonify({"error": str(error)}), 503
+    except Exception as error:
+        db.session.rollback()
+        current_app.logger.exception('social_comment_media_upload_failed')
+        return jsonify({"error": "Could not upload this image right now."}), 503
 
 # ─── COMMENT REPLIES ──────────────────────────────────────────────────────────
 

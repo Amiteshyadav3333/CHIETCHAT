@@ -294,6 +294,14 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
     const [commentsLoading, setCommentsLoading] = useState(false);
     const [commentSort, setCommentSort] = useState('best');
     const [comment, setComment] = useState('');
+    const [commentMedia, setCommentMedia] = useState(null);
+    const [commentMediaBusy, setCommentMediaBusy] = useState(false);
+    const [showCommentEmoji, setShowCommentEmoji] = useState(false);
+    const [showCommentGifs, setShowCommentGifs] = useState(false);
+    const [commentGifQuery, setCommentGifQuery] = useState('trending');
+    const [commentGifs, setCommentGifs] = useState([]);
+    const [commentGifsBusy, setCommentGifsBusy] = useState(false);
+    const commentImageInput = useRef(null);
     const [submitting, setSubmitting] = useState(false);
     const [showRetweetMenu, setShowRetweetMenu] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
@@ -321,12 +329,35 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
     };
     const submitComment = async (e) => {
         e.preventDefault();
-        if (!comment.trim()) return;
+        if (!comment.trim() && !commentMedia) return;
         setSubmitting(true);
         try {
-            await axios.post('/api/social/posts/' + post.id + '/comments', { content: comment }, { headers: authHeaders(token) });
-            setComment(''); fetchComments();
-        } catch { } finally { setSubmitting(false); }
+            await axios.post('/api/social/posts/' + post.id + '/comments', {
+                content: comment, mediaUrl: commentMedia?.mediaUrl, mediaType: commentMedia?.mediaType,
+            }, { headers: authHeaders(token) });
+            setComment(''); setCommentMedia(null); fetchComments();
+        } catch (error) { alert(error.response?.data?.error || 'Could not post comment'); }
+        finally { setSubmitting(false); }
+    };
+    const uploadCommentImage = async event => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        const form = new FormData(); form.append('file', file);
+        setCommentMediaBusy(true);
+        try {
+            const { data } = await axios.post('/api/social/comments/media', form, { headers: authHeaders(token) });
+            setCommentMedia(data);
+        } catch (error) { alert(error.response?.data?.error || 'Could not upload image'); }
+        finally { setCommentMediaBusy(false); }
+    };
+    const loadCommentGifs = async (query = commentGifQuery) => {
+        setCommentGifsBusy(true);
+        try {
+            const { data } = await axios.get('/api/gifs', { params: { q: query || 'trending' } });
+            setCommentGifs(Array.isArray(data.gifs) ? data.gifs : []);
+        } catch { setCommentGifs([]); }
+        finally { setCommentGifsBusy(false); }
     };
     const handleReplyToComment = async (commentId, content) => {
         await axios.post('/api/social/comments/' + commentId + '/replies', { content }, { headers: authHeaders(token) });
@@ -509,13 +540,22 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
                             </div>
                         </div>
 
-                        <form onSubmit={submitComment} className="flex items-center gap-2.5 border-b border-[#27333b] px-3 py-3 sm:px-4">
+                        <form onSubmit={submitComment} className="border-b border-[#27333b] px-3 py-3 sm:px-4">
+                            {commentMedia && <div className="relative mb-2 inline-block"><img src={commentMedia.mediaUrl} alt="Comment attachment preview" className="max-h-36 max-w-48 rounded-xl object-cover" /><button type="button" onClick={() => setCommentMedia(null)} aria-label="Remove attachment" className="absolute -right-2 -top-2 rounded-full bg-black p-1 text-white"><XMarkIcon className="h-4 w-4" /></button></div>}
+                            <div className="flex items-center gap-2.5">
                             <img src={currentUser?.avatar || '/default-avatar.png'} alt="" className="h-9 w-9 shrink-0 rounded-full border border-white/10 object-cover" />
                             <input value={comment} onChange={event => setComment(event.target.value)} maxLength={1000} placeholder="Add a thoughtful comment…"
                                 className="min-w-0 flex-1 rounded-xl border border-white/[0.07] bg-[#151a20] px-3.5 py-2.5 text-sm text-white outline-none placeholder:text-gray-600 focus:border-orange-400/50" />
-                            <button type="submit" disabled={submitting || !comment.trim()} className="shrink-0 rounded-xl bg-orange-500 px-3.5 py-2.5 text-xs font-extrabold text-white transition hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-40">
+                            <button type="button" title="Add emoji" aria-label="Add emoji" onClick={() => { setShowCommentEmoji(value => !value); setShowCommentGifs(false); }} className="rounded-lg p-2 text-lg hover:bg-white/10">😊</button>
+                            <button type="button" title="Add image" aria-label="Add image" disabled={commentMediaBusy} onClick={() => commentImageInput.current?.click()} className="rounded-lg p-2 text-gray-300 hover:bg-white/10 disabled:opacity-50"><PhotoIcon className="h-5 w-5" /></button>
+                            <input ref={commentImageInput} type="file" accept="image/jpeg,image/png,image/gif,image/webp" hidden onChange={uploadCommentImage} />
+                            <button type="button" title="Add GIF" aria-label="Add GIF" onClick={() => { const opening = !showCommentGifs; setShowCommentGifs(opening); setShowCommentEmoji(false); if (opening) loadCommentGifs('trending'); }} className="rounded-lg px-2 py-2 text-xs font-black text-gray-300 hover:bg-white/10">GIF</button>
+                            <button type="submit" disabled={submitting || commentMediaBusy || (!comment.trim() && !commentMedia)} className="shrink-0 rounded-xl bg-orange-500 px-3.5 py-2.5 text-xs font-extrabold text-white transition hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-40">
                                 {submitting ? 'Posting…' : 'Comment'}
                             </button>
+                            </div>
+                            {showCommentEmoji && <div className="mt-2 flex flex-wrap gap-1 rounded-xl border border-white/10 bg-[#151a20] p-2">{['😀','😂','🥰','😍','😊','😭','😮','😎','🤔','🙏','👏','🔥','❤️','💯','🎉','✨','👍','👎'].map(emoji => <button key={emoji} type="button" onClick={() => setComment(value => (value + emoji).slice(0, 1000))} className="rounded-lg p-1.5 text-xl hover:bg-white/10">{emoji}</button>)}</div>}
+                            {showCommentGifs && <div className="mt-2 rounded-xl border border-white/10 bg-[#151a20] p-2"><form onSubmit={event => { event.preventDefault(); loadCommentGifs(commentGifQuery); }} className="mb-2 flex gap-2"><input value={commentGifQuery} onChange={event => setCommentGifQuery(event.target.value)} placeholder="Search GIFs" className="min-w-0 flex-1 rounded-lg bg-black/40 px-3 py-2 text-sm text-white outline-none" /><button className="rounded-lg bg-white/10 px-3 text-xs font-bold text-white">Search</button></form><div className="grid max-h-52 grid-cols-3 gap-2 overflow-y-auto">{commentGifsBusy ? <p className="col-span-3 py-6 text-center text-xs text-gray-400">Loading GIFs…</p> : commentGifs.map(url => <button key={url} type="button" onClick={() => { setCommentMedia({ mediaUrl: url, mediaType: 'gif' }); setShowCommentGifs(false); }} className="overflow-hidden rounded-lg"><img src={url} alt="Choose GIF" loading="lazy" className="h-20 w-full object-cover" /></button>)}</div></div>}
                         </form>
 
                         <div className="space-y-4 px-3 py-4 sm:px-4">

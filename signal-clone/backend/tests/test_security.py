@@ -12,7 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from datetime import timedelta
 from unittest.mock import patch
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 
 os.environ.setdefault('DATABASE_URL', 'sqlite:///:memory:')
 os.environ.setdefault('SECRET_KEY', 'test-secret-key-at-least-32-characters')
@@ -1792,6 +1792,15 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(response.json['websiteUrl'], 'https://shop.example')
         self.assertEqual(response.json['openingHours'], '09:00–18:00')
 
+    def test_business_dashboard_runtime_migration_recreates_missing_seller_tables(self):
+        with app.app_context():
+            db.session.execute(text('DROP TABLE seller_account'))
+            db.session.commit()
+            ensure_runtime_compat_schema()
+            self.assertIn('seller_account', inspect(db.engine).get_table_names())
+        dashboard = self.client.get('/api/business/me', headers=self.auth_headers())
+        self.assertEqual(dashboard.status_code, 200)
+
     def test_business_dashboard_recovers_from_invalid_automation_rules(self):
         with app.app_context():
             db.session.add(BusinessAutomation(user_id=self.user_id, keyword_rules='not-json'))
@@ -1923,6 +1932,26 @@ class SecurityTests(unittest.TestCase):
         )
         self.assertEqual(social_comment.status_code, 400)
         self.assertEqual(ai_message.status_code, 400)
+
+    def test_social_comment_accepts_emoji_and_safe_media_attachments(self):
+        created = self.client.post(
+            '/api/social/posts', data={'caption': 'Comment media test'}, headers=self.auth_headers(),
+        )
+        comment = self.client.post(
+            f"/api/social/posts/{created.json['id']}/comments",
+            json={'content': '❤️ Great!', 'mediaUrl': 'https://media.giphy.com/media/test/giphy.gif', 'mediaType': 'gif'},
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(comment.status_code, 201)
+        self.assertEqual(comment.json['content'], '❤️ Great!')
+        self.assertEqual(comment.json['mediaType'], 'gif')
+        self.assertTrue(comment.json['mediaUrl'].endswith('.gif'))
+        rejected = self.client.post(
+            f"/api/social/posts/{created.json['id']}/comments",
+            json={'content': '', 'mediaUrl': 'https://attacker.example/pixel.gif', 'mediaType': 'gif'},
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(rejected.status_code, 400)
 
     @patch('routes.payments_bp.create_provider_order', side_effect=RuntimeError('private-provider-body'))
     def test_payment_provider_failures_are_generic_in_every_environment(self, _create_order):

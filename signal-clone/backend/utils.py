@@ -15,6 +15,7 @@ from models import (
     db, User, Chat, ChatParticipant, Contact, Block, Notification,
     ProfileAudienceAvatar, MediaDeletionTask, UploadAsset,
     CollaborationTask, CollaborationNote, CollaborationMilestone,
+    BusinessProfile, SellerAccount, SellerVerificationDocument, SellerVerificationAudit,
 )
 import cloudinary.uploader
 from observability import report_safe_exception
@@ -296,7 +297,7 @@ def add_missing_columns(inspector, table_name, columns):
 # Bump this marker whenever models gain columns or tables. Production runs
 # ensure_database_schema() in the pre-deploy step and skips versions it has
 # already applied.
-SCHEMA_VERSION = '20261104_40_business_profile_compat_schema'
+SCHEMA_VERSION = '20261104_41_social_comment_media_and_seller_tables'
 
 def ensure_runtime_compat_schema():
     """Repair columns required by the currently deployed models.
@@ -307,6 +308,16 @@ def ensure_runtime_compat_schema():
     """
     db.session.execute(text('SELECT 1'))
     db.session.commit()
+    # These seller tables are queried by /api/business/me. Some existing
+    # production databases predate seller onboarding, and the historical
+    # migration hook is not guaranteed to run on every Render deploy.
+    if 'user' in inspect(db.engine).get_table_names():
+        db.metadata.create_all(
+            bind=db.engine,
+            tables=[BusinessProfile.__table__, SellerAccount.__table__,
+                    SellerVerificationDocument.__table__, SellerVerificationAudit.__table__],
+            checkfirst=True,
+        )
     # Do not call db.create_all() here. On large PostgreSQL schemas SQLAlchemy
     # reflects every index and can hit the provider's statement timeout before
     # Gunicorn binds its port. Create only the new runtime-critical table.
@@ -369,6 +380,11 @@ def ensure_runtime_compat_schema():
         'cover_url': db.String(500),
         'college': db.String(150),
         'location': db.String(150),
+    })
+    inspector = inspect(db.engine)
+    add_missing_columns(inspector, 'social_post_comment', {
+        'media_url': db.String(1000),
+        'media_type': db.String(16),
     })
     inspector = inspect(db.engine)
     add_missing_columns(inspector, 'business_profile', {

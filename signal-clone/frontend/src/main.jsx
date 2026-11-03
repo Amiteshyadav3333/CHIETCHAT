@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Routes, Route, Navigate } from './utils/clientRouter';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from './utils/clientRouter';
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import { RecoveryCodePromptProvider } from './context/RecoveryCodePromptContext';
@@ -11,6 +11,8 @@ const LegalPage = React.lazy(() => import('./pages/LegalPage'));
 const About = React.lazy(() => import('./pages/About'));
 const ProfileSetup = React.lazy(() => import('./pages/ProfileSetup'));
 const PublicReel = React.lazy(() => import('./pages/PublicReel'));
+const PublicShopping = React.lazy(() => import('./pages/PublicShopping'));
+const PublicPodLiveVideo = React.lazy(() => import('./pages/PublicPodLiveVideo'));
 const RecoveryCode = React.lazy(() => import('./pages/RecoveryCode'));
 const FounderPage = React.lazy(() => import('./pages/FounderPage'));
 const AdminLogin = React.lazy(() => import('./pages/AdminLogin'));
@@ -77,6 +79,10 @@ const WhiteCheetChatMark = () => (
 
 const ProtectedRoute = ({ children }) => {
     const { token, loading } = React.useContext(AuthContext);
+    const location = useLocation();
+    React.useEffect(() => {
+        if (!loading && !token) sessionStorage.setItem('pending_nav', `${location.pathname}${location.search}${location.hash}`);
+    }, [loading, token, location.pathname, location.search, location.hash]);
     if (loading) return <div className="flex h-[100dvh] items-center justify-center bg-black"><WhiteCheetChatMark /></div>;
     return token ? children : <Navigate to="/login" />;
 };
@@ -119,6 +125,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                             <Route path="/about" element={<About />} />
                             <Route path="/founder" element={<FounderPage />} />
                             <Route path="/reels/:reelId" element={<PublicReel />} />
+                            <Route path="/podlive/videos/:videoId" element={<PublicPodLiveVideo />} />
+                            <Route path="/shopping" element={<PublicShopping />} />
+                            <Route path="/shop/:sellerId/products/:productId" element={<PublicShopping />} />
+                            <Route path="/shop/:sellerId" element={<PublicShopping />} />
                             <Route path="/posts/:postId" element={<ProtectedRoute><Home /></ProtectedRoute>} />
                             <Route path="/profile/:profileId" element={<ProtectedRoute><Home /></ProtectedRoute>} />
                             <Route path="/chats/:chatId" element={<ProtectedRoute><Home /></ProtectedRoute>} />

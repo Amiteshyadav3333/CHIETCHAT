@@ -57,7 +57,10 @@ exports.inviteUser = async (req, res) => {
             invite: newInvite,
             host: host && { id: host.id, display_name: host.display_name, unique_handle: host.unique_handle, avatar_url: host.avatar_url }
         });
-        res.status(201).json({ message: 'Invite sent', invite: newInvite, invitee });
+        res.status(201).json({
+            message: 'Invite sent', invite: newInvite,
+            invitee: { id: invitee.id, unique_handle: invitee.unique_handle, display_name: invitee.display_name, avatar_url: invitee.avatar_url }
+        });
     } catch (error) {
         console.error('Invite Error:', error);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -101,18 +104,24 @@ exports.acceptInvite = async (req, res) => {
         const { id } = req.params;
         const invite = await prisma.stageInvite.findUnique({ where: { id }, include: { session: true, invitee: true } });
 
-        if (!invite || invite.invitee_id !== req.user.id) {
+        if (!invite || invite.invitee_id !== req.user.id || invite.session.status !== 'live') {
             return res.status(403).json({ error: 'Unauthorized' });
         }
 
-        const updatedInvite = await prisma.stageInvite.update({
-            where: { id },
-            data: { status: 'accepted', accepted_at: new Date() }
-        });
+        if (invite.status !== 'accepted') {
+            if (invite.status !== 'pending') return res.status(409).json({ error: 'Invite is no longer active' });
+            const updated = await prisma.stageInvite.updateMany({
+                where: { id, invitee_id: req.user.id, status: 'pending' },
+                data: { status: 'accepted', accepted_at: new Date() }
+            });
+            if (!updated.count) return res.status(409).json({ error: 'Invite is no longer active' });
+        }
 
         // Generate token for the stage participant
         const token = await createToken(invite.session.livekit_room_name, invite.invitee.unique_handle);
 
+        req.io?.to(invite.host_id).emit('invite_accepted', { sessionId: invite.session_id, inviteeHandle: invite.invitee.unique_handle });
+        res.set('Cache-Control', 'no-store');
         res.json({ message: 'Invite accepted', token, roomName: invite.session.livekit_room_name, livekitUrl: process.env.LIVEKIT_URL });
     } catch (error) {
         console.error('Accept Invite Error:', error);
@@ -125,14 +134,17 @@ exports.rejectInvite = async (req, res) => {
         const { id } = req.params;
         const invite = await prisma.stageInvite.findUnique({ where: { id } });
 
-        if (!invite || invite.invitee_id !== req.user.id) {
+        if (!invite || invite.invitee_id !== req.user.id || invite.status !== 'pending') {
             return res.status(403).json({ error: 'Unauthorized' });
         }
 
-        await prisma.stageInvite.update({
-            where: { id },
+        const updated = await prisma.stageInvite.updateMany({
+            where: { id, invitee_id: req.user.id, status: 'pending' },
             data: { status: 'rejected' }
         });
+        if (!updated.count) return res.status(409).json({ error: 'Invite is no longer active' });
+        const invitee = await prisma.user.findUnique({ where: { id: req.user.id }, select: { unique_handle: true } });
+        req.io?.to(invite.host_id).emit('invite_rejected', { sessionId: invite.session_id, inviteeHandle: invitee?.unique_handle });
 
         res.json({ message: 'Invite rejected' });
     } catch (error) {
@@ -248,9 +260,17 @@ exports.disableGuestCamera = async (req, res) => {
 exports.getGuests = async (req, res) => {
     try {
         const { sessionId } = req.params;
+        const session = await prisma.liveSession.findUnique({ where: { id: sessionId }, select: { host_user_id: true } });
+        if (!session || session.host_user_id !== req.user.id) {
+            return res.status(403).json({ error: 'Unauthorized' });
+        }
         const guests = await prisma.stageInvite.findMany({
             where: { session_id: sessionId, status: 'accepted' },
-            include: { invitee: true }
+            select: {
+                id: true, session_id: true, host_id: true, invitee_id: true, status: true,
+                invited_at: true, accepted_at: true, left_at: true,
+                invitee: { select: { id: true, unique_handle: true, display_name: true, avatar_url: true } }
+            }
         });
 
         res.json(guests);

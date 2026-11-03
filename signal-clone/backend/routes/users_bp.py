@@ -193,21 +193,29 @@ def search_user():
         return jsonify({"error": "Unauthorized"}), 401
     data = get_json_data()
     query = str(data.get('query') or data.get('phone') or '').strip()
-    phone = normalize_phone(query)
     if not query:
         return jsonify({"error": "Enter a phone number or @userid"}), 400
 
-    # Phone search — exactly 10 digits
-    if query.isdigit() and len(query) == 10:
-        user = User.query.filter_by(phone=query).first()
-    else:
-        # Search by platform_id (with or without @)
+    # Accept 10 digit phone numbers, optionally prefixed with India's country
+    # code, as well as @handles/platform IDs and numeric account IDs.
+    digits = normalize_phone(query)
+    phone_digits = digits[2:] if len(digits) == 12 and digits.startswith('91') else digits
+    user = None
+    if len(phone_digits) == 10:
+        user = User.query.filter_by(phone=phone_digits).first()
+
+    if not user:
         handle = query.lstrip('@').strip().lower()
         user = User.query.filter(
             db.func.lower(User.platform_id) == handle
         ).first()
 
+    if not user and query.isdigit():
+        user = db.session.get(User, int(query))
+
     if user:
+        if user.id == user_id:
+            return jsonify({"error": "You cannot start a chat with yourself"}), 400
         added = add_contact(user_id, user.id)
         payload = serialize_user(user)
         payload["isContact"] = True

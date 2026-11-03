@@ -23,7 +23,7 @@ const loadRazorpay = () => new Promise((resolve, reject) => {
     script.onload = resolve; script.onerror = () => reject(new Error('Secure checkout could not be loaded.')); document.head.appendChild(script);
 });
 
-export default function ShopMarketplace({ token, onClose, onManageShop, onStartChat, onStartCall, onShareProduct }) {
+export default function ShopMarketplace({ token, onClose, onManageShop, onStartChat, onStartCall, onShareProduct, initialShopId = null }) {
     const [query, setQuery] = useState('');
     const [location, setLocation] = useState('');
     const [category, setCategory] = useState('All');
@@ -78,6 +78,10 @@ export default function ShopMarketplace({ token, onClose, onManageShop, onStartC
             setSelected(null);
         }
     };
+
+    useEffect(() => {
+        if (initialShopId) openShop({ owner: { id: initialShopId } });
+    }, [initialShopId]);
 
     useEffect(() => {
         const code = new URLSearchParams(window.location.search).get('ref');

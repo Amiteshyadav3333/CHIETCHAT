@@ -16,6 +16,11 @@ from unittest.mock import patch
 os.environ.setdefault('DATABASE_URL', 'sqlite:///:memory:')
 os.environ.setdefault('SECRET_KEY', 'test-secret-key-at-least-32-characters')
 os.environ.setdefault('JWT_SECRET_KEY', 'test-jwt-secret-key-at-least-32-characters')
+# Prevent dotenv-loaded Redis settings from attaching tests to an external queue.
+os.environ['UNIT_TESTING'] = '1'
+# Never attach the Socket.IO test client or rate-limit tests to a developer's
+# Redis instance loaded from .env. These tests exercise their in-process paths.
+os.environ['REDIS_URL'] = ''
 
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.datastructures import FileStorage
@@ -145,6 +150,25 @@ class SecurityTests(unittest.TestCase):
         saved = self.client.put('/api/business/schedule', json={'timezone': 'Asia/Kolkata', 'days': days}, headers=headers)
         self.assertEqual(saved.status_code, 200)
         with app.app_context(): self.assertEqual(len(ShopSchedule.query.all()), 7)
+
+    def test_public_shops_and_storefront_are_viewable_without_login(self):
+        with app.app_context():
+            profile = BusinessProfile.query.filter_by(user_id=self.payee_id).one()
+            profile.marketplace_enabled = True
+            db.session.add(SellerAccount(user_id=self.payee_id, legal_name='Local Merchant',
+                business_address='10 Shop Lane, Delhi', status='approved'))
+            product = CatalogProduct(owner_id=self.payee_id, name='Public Product',
+                description='Public product description', price=99.0, in_stock=True)
+            db.session.add(product)
+            db.session.commit()
+            product_id = product.id
+
+        shops = self.client.get('/api/business/shops')
+        self.assertEqual(shops.status_code, 200)
+        self.assertTrue(any(shop['owner']['id'] == self.payee_id for shop in shops.json['shops']))
+        storefront = self.client.get(f'/api/business/storefront/{self.payee_id}')
+        self.assertEqual(storefront.status_code, 200)
+        self.assertTrue(any(item['id'] == product_id for item in storefront.json['products']))
 
     def test_marketplace_order_uses_server_prices_and_seller_controls_fulfillment(self):
         with app.app_context():
@@ -602,6 +626,8 @@ class SecurityTests(unittest.TestCase):
             ('GET', '/api/reels/<int:reel_id>/comments'),
             ('GET', '/api/user/check-platform-id/<string:handle>'),
             ('POST', '/api/affiliate/<string:code>/click'),
+            ('GET', '/api/business/shops'),
+            ('GET', '/api/business/storefront/<int:business_user_id>'),
         }
         failures = []
         for rule in app.url_map.iter_rules():

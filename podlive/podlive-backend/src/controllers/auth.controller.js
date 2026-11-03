@@ -4,8 +4,8 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const usedSsoTickets = new Map();
 
-const ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || 'podlive-default-jwt-access-secret-key-2026';
-const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'podlive-default-jwt-refresh-secret-key-2026';
+const ACCESS_SECRET = process.env.JWT_ACCESS_SECRET;
+const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
 
 const generateTokens = (userId) => {
     const accessToken = jwt.sign({ id: userId }, ACCESS_SECRET, { expiresIn: '7d' });
@@ -64,7 +64,7 @@ exports.register = async (req, res) => {
 
     } catch (error) {
         console.error('Register Error:', error);
-        res.status(500).json({ error: 'Internal Server Error', details: error.message });
+        res.status(500).json({ error: 'Internal Server Error' });
     }
 };
 
@@ -119,7 +119,7 @@ exports.login = async (req, res) => {
 
     } catch (error) {
         console.error('Login Error:', error);
-        res.status(500).json({ error: 'Internal Server Error', details: error.message });
+        res.status(500).json({ error: 'Internal Server Error' });
     }
 };
 
@@ -134,12 +134,13 @@ exports.checkHandle = async (req, res) => {
 
         return res.status(200).json({ available: true });
     } catch (error) {
-        res.status(500).json({ error: 'Internal Server Error', details: error.message });
+        res.status(500).json({ error: 'Internal Server Error' });
     }
 };
 
 exports.cheetchatSso = async (req, res) => {
     let claimedTicketId = null;
+    let redisTicketClaim = false;
     try {
         const { ticket } = req.body || {};
         if (!ticket) return res.status(400).json({ error: 'SSO ticket is required.' });
@@ -193,10 +194,19 @@ exports.cheetchatSso = async (req, res) => {
             return res.status(401).json({ error: 'CHEETCHAT could not verify this sign-in ticket. Please log in again.' });
         }
         if (!identity.jti || !identity.sub || !identity.email) return res.status(401).json({ error: 'Invalid SSO identity.' });
-        const now = Date.now();
-        for (const [jti, expiresAt] of usedSsoTickets) if (expiresAt <= now) usedSsoTickets.delete(jti);
-        if (usedSsoTickets.has(identity.jti)) return res.status(409).json({ error: 'SSO ticket was already used.' });
-        usedSsoTickets.set(identity.jti, now + 65000);
+        const redisClient = req.app.locals.redisClient;
+        if (redisClient?.isReady) {
+            redisTicketClaim = Boolean(await redisClient.set(`podlive:sso:${identity.jti}`, '1', { NX: true, EX: 90 }));
+            if (!redisTicketClaim) return res.status(409).json({ error: 'SSO ticket was already used.' });
+        } else {
+            if (process.env.NODE_ENV === 'production' || process.env.RENDER === 'true') {
+                return res.status(503).json({ error: 'Single sign-on is temporarily unavailable.' });
+            }
+            const now = Date.now();
+            for (const [jti, expiresAt] of usedSsoTickets) if (expiresAt <= now) usedSsoTickets.delete(jti);
+            if (usedSsoTickets.has(identity.jti)) return res.status(409).json({ error: 'SSO ticket was already used.' });
+            usedSsoTickets.set(identity.jti, now + 90000);
+        }
         claimedTicketId = identity.jti;
 
         let user = await prisma.user.findFirst({
@@ -229,7 +239,13 @@ exports.cheetchatSso = async (req, res) => {
         const tokens = generateTokens(user.id);
         return res.json({ user: { id: user.id, unique_handle: user.unique_handle, email: user.email, display_name: user.display_name, avatar_url: user.avatar_url }, ...tokens });
     } catch (error) {
-        if (claimedTicketId) usedSsoTickets.delete(claimedTicketId);
+        if (claimedTicketId) {
+            if (redisTicketClaim && req.app.locals.redisClient?.isReady) {
+                await req.app.locals.redisClient.del(`podlive:sso:${claimedTicketId}`).catch(() => {});
+            } else {
+                usedSsoTickets.delete(claimedTicketId);
+            }
+        }
         console.error('CHEETCHAT SSO Error:', error);
         return res.status(500).json({ error: 'Could not complete single sign-on.' });
     }

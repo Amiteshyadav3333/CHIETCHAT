@@ -65,9 +65,7 @@ exports.createLiveSession = async (req, res) => {
     } catch (error) {
         console.error('Create Live Session Error:', error);
         res.status(500).json({
-            error: 'Internal Server Error',
-            message: error.message,
-            code: error.code || error.errorCode
+            error: 'Internal Server Error'
         });
     }
 };
@@ -116,7 +114,7 @@ exports.startHlsEgress = async (req, res) => {
         });
     } catch (error) {
         console.error('Start HLS Egress Error:', error);
-        res.status(500).json({ error: 'Failed to start HLS egress', details: error.message });
+        res.status(500).json({ error: 'Failed to start HLS egress' });
     }
 };
 
@@ -196,10 +194,19 @@ exports.getViewerToken = async (req, res) => {
             return res.status(404).json({ error: 'Active live session not found' });
         }
 
-        const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+        const [user, acceptedInvite] = await Promise.all([
+            prisma.user.findUnique({ where: { id: req.user.id }, select: { unique_handle: true } }),
+            prisma.stageInvite.findFirst({
+                where: { session_id: id, invitee_id: req.user.id, status: 'accepted' },
+                select: { id: true }
+            })
+        ]);
+        if (!user) return res.status(401).json({ error: 'User not found' });
         const isHost = session.host_user_id === req.user.id;
-        const token = await createToken(session.livekit_room_name, user.unique_handle, isHost);
+        const canPublish = isHost || Boolean(acceptedInvite);
+        const token = await createToken(session.livekit_room_name, user.unique_handle, canPublish);
 
+        res.set('Cache-Control', 'no-store');
         res.json({ token, roomName: session.livekit_room_name, livekitUrl: publicLivekitUrl(), isHost });
     } catch (error) {
         console.error('Get Viewer Token Error:', error);
@@ -216,9 +223,19 @@ exports.upgradeViewerToken = async (req, res) => {
             return res.status(404).json({ error: 'Active live session not found' });
         }
 
-        const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+        const [user, acceptedInvite] = await Promise.all([
+            prisma.user.findUnique({ where: { id: req.user.id }, select: { unique_handle: true } }),
+            prisma.stageInvite.findFirst({
+                where: { session_id: id, invitee_id: req.user.id, status: 'accepted' },
+                select: { id: true }
+            })
+        ]);
+        const isHost = session.host_user_id === req.user.id;
+        if (!user) return res.status(401).json({ error: 'User not found' });
+        if (!isHost && !acceptedInvite) return res.status(403).json({ error: 'A stage invitation is required to publish' });
         const token = await createToken(session.livekit_room_name, user.unique_handle, true);
 
+        res.set('Cache-Control', 'no-store');
         res.json({ token, roomName: session.livekit_room_name, livekitUrl: publicLivekitUrl() });
     } catch (error) {
         console.error('Upgrade Viewer Token Error:', error);
@@ -230,10 +247,15 @@ exports.getActiveLives = async (req, res) => {
     try {
         const sessions = await prisma.liveSession.findMany({
             where: { status: 'live' },
-            include: { host: true },
-            orderBy: { started_at: 'desc' }
+            select: {
+                id: true, title: true, description: true, thumbnail_url: true,
+                status: true, started_at: true, created_at: true, category: true,
+                viewer_count_peak: true, views: true, like_count: true,
+                host: { select: { id: true, unique_handle: true, display_name: true, avatar_url: true, is_verified: true } }
+            },
+            orderBy: { started_at: 'desc' }, take: 100
         });
-        res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+        res.set('Cache-Control', 'public, max-age=3, stale-while-revalidate=10');
         res.json(sessions);
     } catch (error) {
         console.error('Get Active Lives Error:', error);
@@ -267,12 +289,13 @@ exports.getRecordingDetails = async (req, res) => {
         const { id } = req.params;
         const session = await prisma.liveSession.findUnique({
             where: { id },
-            include: {
-                host: true,
-                subtitles: true,
-                chat_messages: {
-                    orderBy: { created_at: 'asc' }
-                }
+            select: {
+                id: true, title: true, description: true, thumbnail_url: true,
+                status: true, started_at: true, ended_at: true, category: true,
+                recording_url: true, viewer_count_peak: true, views: true, like_count: true,
+                host: { select: { id: true, unique_handle: true, display_name: true, avatar_url: true, bio: true, is_verified: true } },
+                subtitles: { select: { id: true, session_id: true, language: true, label: true, vtt_url: true, created_at: true }, orderBy: { created_at: 'asc' } },
+                chat_messages: { select: { id: true, session_id: true, sender_handle: true, message: true, created_at: true }, orderBy: { created_at: 'desc' }, take: 100 }
             }
         });
 
@@ -280,16 +303,8 @@ exports.getRecordingDetails = async (req, res) => {
             return res.status(404).json({ error: 'Recording not found' });
         }
 
-        // We can expose the details even if the session is not ended yet for future-proofing,
-        // but it's typically for 'ended' status.
-        // Also exclude sensitive host data
-        const { host, ...sessionData } = session;
-        const { password_hash, ...publicHost } = host;
-
-        res.json({
-            ...sessionData,
-            host: publicHost
-        });
+        res.set('Cache-Control', session.status === 'ended' ? 'public, max-age=10, stale-while-revalidate=30' : 'no-store');
+        res.json({ ...session, chat_messages: session.chat_messages.reverse() });
 
     } catch (error) {
         console.error('Get Recording Details Error:', error);
@@ -485,6 +500,8 @@ exports.deleteRecording = async (req, res) => {
 exports.getPublicVODs = async (req, res) => {
     try {
         const { category, sort = 'latest', limit = 24 } = req.query;
+        const parsedLimit = Number.parseInt(limit, 10);
+        const boundedLimit = Number.isFinite(parsedLimit) ? Math.min(100, Math.max(1, parsedLimit)) : 24;
         const where = { status: 'ended', recording_url: { not: null } };
         if (category && category !== 'All') where.category = category;
 
@@ -494,10 +511,16 @@ exports.getPublicVODs = async (req, res) => {
 
         const sessions = await prisma.liveSession.findMany({
             where,
-            include: { host: { select: { id: true, unique_handle: true, display_name: true, avatar_url: true, is_verified: true } } },
+            select: {
+                id: true, title: true, description: true, thumbnail_url: true, status: true,
+                started_at: true, ended_at: true, created_at: true, category: true,
+                recording_url: true, viewer_count_peak: true, views: true, like_count: true,
+                host: { select: { id: true, unique_handle: true, display_name: true, avatar_url: true, is_verified: true } }
+            },
             orderBy,
-            take: parseInt(limit)
+            take: boundedLimit
         });
+        res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
         res.json(sessions);
     } catch (error) {
         console.error('Get Public VODs Error:', error);

@@ -83,14 +83,15 @@ logging.basicConfig(level=os.environ.get('LOG_LEVEL', 'INFO'))
 runtime_logger = logging.getLogger('cheetchat.runtime')
 _app_started_at = time.monotonic()
 
-# Process-local abuse protection for the current single-worker deployment.
-# Move this state to Redis before enabling multiple workers or instances.
+# Process-local fallback is used only when Redis is absent or temporarily down.
+# Production readiness requires Redis; keep deployments on one worker until all
+# presence and call state is stored outside process memory.
 _rate_windows = defaultdict(deque)
 _rate_windows_lock = threading.Lock()
 _redis_client = redis.Redis.from_url(
     os.environ['REDIS_URL'], decode_responses=True,
     socket_connect_timeout=2, socket_timeout=2, health_check_interval=30,
-) if redis and os.environ.get('REDIS_URL') else None
+) if redis and os.environ.get('REDIS_URL') and not os.environ.get('UNIT_TESTING') else None
 app.extensions['cheetchat_redis'] = _redis_client
 _sensitive_limits = {
     '/api/register': (5, 15 * 60),
@@ -283,11 +284,10 @@ cors.init_app(app, resources={r"/*": {"origins": ALLOWED_ORIGINS}}, supports_cre
 db.init_app(app)
 socketio.init_app(
     app,
-    # A Redis pub/sub manager is only needed when multiple web workers publish
-    # socket events to each other. The production command intentionally uses one
-    # worker; avoiding a broken external pub/sub connection keeps chat realtime.
-    message_queue=(os.environ.get('REDIS_URL') or None)
-        if int(os.environ.get('WEB_CONCURRENCY', '1')) > 1 else None,
+    # Share Socket.IO rooms and broadcasts across processes and instances.
+    # Production config requires Redis so horizontal scaling does not silently
+    # split chats, calls, presence events, or notifications by worker.
+    message_queue=(os.environ.get('REDIS_URL') or None) if not os.environ.get('UNIT_TESTING') else None,
     channel='cheetchat',
 )
 

@@ -20,7 +20,15 @@ function LiveCard({ session, open }) {
 }
 
 function VideoCard({ video, open }) {
-    return <button onClick={() => open('video', video.id)} className="group min-w-0 text-left"><div className="relative aspect-video overflow-hidden rounded-xl bg-zinc-900">{video.thumbnail_url && <img src={video.thumbnail_url} alt="" className="h-full w-full object-cover"/>}<span className="absolute inset-0 grid place-items-center bg-black/25"><span className="grid h-11 w-11 place-items-center rounded-full bg-white/20"><PlayIcon className="h-5 w-5"/></span></span></div><p className="mt-2 line-clamp-2 text-sm font-bold">{video.title}</p><p className="text-xs text-zinc-500">{video.host?.display_name} · {Number(video.views || video.viewer_count_peak || 0).toLocaleString()} views · {video.like_count || 0} likes</p></button>;
+    const share = async (event) => {
+        event.stopPropagation();
+        const url = `${window.location.origin}/podlive/videos/${encodeURIComponent(video.id)}`;
+        try {
+            if (navigator.share) await navigator.share({ title: video.title, url });
+            else { await navigator.clipboard.writeText(url); window.alert('Video link copied'); }
+        } catch (error) { if (error?.name !== 'AbortError') console.warn('Unable to share PodLive video', error); }
+    };
+    return <article className="group min-w-0"><button onClick={() => open('video', video.id)} className="block w-full text-left"><div className="relative aspect-video overflow-hidden rounded-xl bg-zinc-900">{video.thumbnail_url && <img src={video.thumbnail_url} alt="" className="h-full w-full object-cover"/>}<span className="absolute inset-0 grid place-items-center bg-black/25"><span className="grid h-11 w-11 place-items-center rounded-full bg-white/20"><PlayIcon className="h-5 w-5"/></span></span></div><p className="mt-2 line-clamp-2 text-sm font-bold">{video.title}</p><p className="text-xs text-zinc-500">{video.host?.display_name} · {Number(video.views || video.viewer_count_peak || 0).toLocaleString()} views · {video.like_count || 0} likes</p></button><button onClick={share} className="mt-2 inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold text-zinc-200"><ShareIcon className="h-3.5 w-3.5"/>Share video</button></article>;
 }
 
 function Browse({ open }) {

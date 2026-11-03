@@ -36,13 +36,15 @@ services:
     rootDir: .
     buildCommand: pip install -r backend/requirements.txt
     preDeployCommand: python backend/migrate.py
-    startCommand: gunicorn -w 1 --threads 100 --timeout 120 --chdir backend wsgi:app --bind 0.0.0.0:$PORT
+    startCommand: gunicorn -w ${WEB_CONCURRENCY:-1} --threads 100 --timeout 120 --chdir backend wsgi:app --bind 0.0.0.0:$PORT
     healthCheckPath: /health/ready
     envVars:
       - key: DATABASE_URL
         sync: false
       - key: REDIS_URL
         sync: false
+      - key: WEB_CONCURRENCY
+        value: "1"
       - key: SECRET_KEY
         sync: false
       - key: JWT_SECRET_KEY

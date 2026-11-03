@@ -3,7 +3,8 @@
 import { useEffect, useState, createContext, useContext } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useRouter } from 'next/navigation';
-import { getSocketUrl } from '@/lib/api';
+import axios from 'axios';
+import { buildApiUrl, getSocketUrl } from '@/lib/api';
 
 interface SocketContextData {
     socket: Socket | null;
@@ -20,8 +21,6 @@ export default function SocketProvider({ children }: { children: React.ReactNode
 
     useEffect(() => {
         const token = localStorage.getItem('accessToken');
-        const userData = localStorage.getItem('user');
-
         const newSocket = io(getSocketUrl(), { auth: { token } });
 
         newSocket.on('connect', () => {
@@ -45,21 +44,11 @@ export default function SocketProvider({ children }: { children: React.ReactNode
 
     const handleAccept = async () => {
         try {
-            const token = localStorage.getItem("accessToken");
-            // Hit backend REST API to accept if needed, but for now we'll just emit via socket and navigate
             if (socket && inviteData) {
-                const userData = localStorage.getItem('user');
-                const user = userData ? JSON.parse(userData) : null;
-
-                socket.emit('accept_invite', {
-                    sessionId: inviteData.sessionId,
-                    hostId: inviteData.host.id,
-                    inviteeHandle: user?.unique_handle
+                const token = localStorage.getItem('accessToken');
+                await axios.post(buildApiUrl(`/api/stage/invite/${inviteData.inviteId}/accept`), {}, {
+                    headers: { Authorization: `Bearer ${token}` },
                 });
-
-                // Also notify REST to create DB entry as accepted
-                // (Assuming the backend might need a route for this, or just proceed)
-
                 router.push(`/live/${inviteData.sessionId}`);
                 setInviteData(null);
             }
@@ -70,13 +59,8 @@ export default function SocketProvider({ children }: { children: React.ReactNode
 
     const handleReject = () => {
         if (socket && inviteData) {
-            const userData = localStorage.getItem('user');
-            const user = userData ? JSON.parse(userData) : null;
-
             socket.emit('reject_invite', {
-                sessionId: inviteData.sessionId,
-                hostId: inviteData.host.id,
-                inviteeHandle: user?.unique_handle
+                inviteId: inviteData.inviteId
             });
             setInviteData(null);
         }

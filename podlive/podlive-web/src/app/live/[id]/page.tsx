@@ -471,7 +471,7 @@ function GuestManager({ sessionId, isHost, socket }: { sessionId: string; isHost
             await axios.post(buildApiUrl(`/api/stage/guest/${sessionId}/${g.invitee_id}/mute`), {}, {
                 headers: { Authorization: `Bearer ${token}` },
             });
-            socket?.emit("mute_guest", { guestId: g.invitee_id });
+            socket?.emit("mute_guest", { sessionId, guestId: g.invitee_id });
             showToast(`🔇 Muted @${g.invitee?.unique_handle?.replace("@","")}`);
         } catch { showToast("Failed to mute"); }
         finally { setBusy(p => { const n = {...p}; delete n[g.invitee_id]; return n; }); }
@@ -484,7 +484,7 @@ function GuestManager({ sessionId, isHost, socket }: { sessionId: string; isHost
             await axios.post(buildApiUrl(`/api/stage/guest/${sessionId}/${g.invitee_id}/disable-camera`), {}, {
                 headers: { Authorization: `Bearer ${token}` },
             });
-            socket?.emit("disable_camera_guest", { guestId: g.invitee_id });
+            socket?.emit("disable_camera_guest", { sessionId, guestId: g.invitee_id });
             showToast(`📷 Camera off for @${g.invitee?.unique_handle?.replace("@","")}`);
         } catch { showToast("Failed to disable camera"); }
         finally { setBusy(p => { const n = {...p}; delete n[g.invitee_id]; return n; }); }
@@ -497,7 +497,7 @@ function GuestManager({ sessionId, isHost, socket }: { sessionId: string; isHost
             await axios.delete(buildApiUrl(`/api/stage/guest/${sessionId}/${g.invitee_id}`), {
                 headers: { Authorization: `Bearer ${token}` },
             });
-            socket?.emit("remove_guest", { guestId: g.invitee_id });
+            socket?.emit("remove_guest", { sessionId, guestId: g.invitee_id });
             showToast(`❌ Removed @${g.invitee?.unique_handle?.replace("@","")}`);
             fetchGuests();
         } catch { showToast("Failed to remove"); }
@@ -849,19 +849,15 @@ export default function LiveRoom() {
         try {
             const lsToken = localStorage.getItem("accessToken");
             if (!lsToken) return;
-            const res = await axios.get(buildApiUrl(`/api/live/${id}/upgrade`), {
+            const res = await axios.post(buildApiUrl(`/api/stage/invite/${receivedInvite?.inviteId}/accept`), {}, {
                 headers: { Authorization: `Bearer ${lsToken}` },
             });
             setToken(res.data.token);
             setOnStage(true);
             setPreJoinComplete(false);
             if (socket) {
-                const userData = localStorage.getItem("user");
-                const user = userData ? JSON.parse(userData) : null;
                 socket.emit("accept_invite", {
-                    sessionId: id,
-                    hostId: receivedInvite?.host?.id,
-                    inviteeHandle: user?.unique_handle,
+                    inviteId: receivedInvite?.inviteId,
                 });
             }
             setReceivedInvite(null);
@@ -922,11 +918,8 @@ export default function LiveRoom() {
                                 onClick={() => {
                                     if (socket) {
                                         const userData = localStorage.getItem("user");
-                                        const user = userData ? JSON.parse(userData) : null;
                                         socket.emit("reject_invite", {
-                                            sessionId: id,
-                                            hostId: receivedInvite?.host?.id,
-                                            inviteeHandle: user?.unique_handle,
+                                            inviteId: receivedInvite?.inviteId,
                                         });
                                     }
                                     setReceivedInvite(null);

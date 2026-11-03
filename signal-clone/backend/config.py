@@ -1,4 +1,5 @@
 import os
+import secrets
 from datetime import timedelta
 from urllib.parse import urlparse
 
@@ -21,7 +22,9 @@ def normalized_env_value(name):
     return value.strip('"\'').strip()
 
 class Config:
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'super-secret-signal-key-change-this'
+    # A fresh local-only key keeps an unconfigured development instance from
+    # silently sharing a predictable signing secret with every other checkout.
+    SECRET_KEY = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
     # Production DB (PostgreSQL) or Local DB (SQLite)
     # Render provides 'postgres://' but SQLAlchemy needs 'postgresql://'
     database_url = os.environ.get('DATABASE_URL')
@@ -40,10 +43,10 @@ class Config:
     _is_postgres = bool(database_url and database_url.startswith('postgresql://'))
     SQLALCHEMY_ENGINE_OPTIONS = ({
         "pool_pre_ping": True,
-        "pool_recycle": 300,
-        "pool_size": 5,
-        "max_overflow": 10,
-        "pool_timeout": 30,
+        "pool_recycle": int(os.environ.get('DB_POOL_RECYCLE_SECONDS', '300')),
+        "pool_size": int(os.environ.get('DB_POOL_SIZE', '5')),
+        "max_overflow": int(os.environ.get('DB_MAX_OVERFLOW', '10')),
+        "pool_timeout": int(os.environ.get('DB_POOL_TIMEOUT_SECONDS', '30')),
         "connect_args": {
             "connect_timeout": 10,
             "keepalives": 1,
@@ -54,7 +57,7 @@ class Config:
             "sslmode": "require",
         },
     } if _is_postgres else {})
-    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'jwt-secret-key-change-this'
+    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or secrets.token_hex(32)
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=7)
     SUPABASE_URL = (os.environ.get('SUPABASE_URL') or '').rstrip('/')
     SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY') or ''
@@ -84,9 +87,9 @@ class Config:
     AUTH_COOKIE_SECURE = _is_production
     AUTH_COOKIE_SAMESITE = 'None' if _is_production else 'Lax'
     if _is_production:
-        if SECRET_KEY == 'super-secret-signal-key-change-this' or len(SECRET_KEY) < 32:
+        if len(SECRET_KEY) < 32:
             raise RuntimeError('SECRET_KEY must contain at least 32 characters in production')
-        if JWT_SECRET_KEY == 'jwt-secret-key-change-this' or len(JWT_SECRET_KEY) < 32:
+        if len(JWT_SECRET_KEY) < 32:
             raise RuntimeError('JWT_SECRET_KEY must contain at least 32 characters in production')
         if not SUPABASE_URL or not SUPABASE_ANON_KEY:
             raise RuntimeError('SUPABASE_URL and SUPABASE_ANON_KEY must be configured in production')

@@ -114,6 +114,7 @@ def get_my_business():
     user_id = get_current_user_id()
     if not user_id: return jsonify({'error': 'Unauthorized'}), 401
     user = db.session.get(User, user_id)
+    if not user: return jsonify({'error': 'User not found'}), 404
     profile = BusinessProfile.query.filter_by(user_id=user_id).first()
     automation = BusinessAutomation.query.filter_by(user_id=user_id).first()
     seller = SellerAccount.query.filter_by(user_id=user_id).first()
@@ -469,10 +470,6 @@ def marketplace_shop_payload(profile, products=None):
 
 @business_bp.route('/api/business/shops', methods=['GET'])
 def discover_business_shops():
-    user_id = get_current_user_id()
-    if not user_id:
-        return jsonify({'error': 'Unauthorized'}), 401
-
     query = str(request.args.get('q') or '').strip()[:100]
     category = str(request.args.get('category') or '').strip()[:80]
     location = str(request.args.get('location') or '').strip()[:100]
@@ -505,8 +502,6 @@ def discover_business_shops():
 @business_bp.route('/api/business/storefront/<int:business_user_id>', methods=['GET'])
 def public_storefront(business_user_id):
     viewer_id = get_current_user_id()
-    if not viewer_id:
-        return jsonify({'error': 'Unauthorized'}), 401
     profile = BusinessProfile.query.filter_by(
         user_id=business_user_id, marketplace_enabled=True, catalog_visible=True
     ).first()
@@ -515,7 +510,7 @@ def public_storefront(business_user_id):
     seller = SellerAccount.query.filter_by(user_id=business_user_id, status='approved').first()
     if not seller:
         return jsonify({'error': 'Seller onboarding is not approved'}), 404
-    if viewer_id != business_user_id:
+    if viewer_id and viewer_id != business_user_id:
         db.session.add(BusinessProfileView(business_user_id=business_user_id, viewer_id=viewer_id))
         db.session.commit()
     products = CatalogProduct.query.filter_by(owner_id=business_user_id).order_by(CatalogProduct.created_at.desc()).all()
@@ -627,7 +622,7 @@ def create_affiliate_tag():
     if not tag:
         tag = AffiliateProductTag(promoter_id=promoter_id, product_id=product_id, content_type=content_type, content_id=content_id, code=secrets.token_urlsafe(12)[:24], commission_bps=int(product.affiliate_commission_bps or 0))
         db.session.add(tag); db.session.commit()
-    return jsonify({'code': tag.code, 'url': f'/?ref={tag.code}', 'clicks': tag.click_count,
+    return jsonify({'code': tag.code, 'url': f'/shop/{product.owner_id}/products/{product.id}?ref={tag.code}', 'sellerId': product.owner_id, 'clicks': tag.click_count,
                     'product': product_payload(product), 'commissionBps': tag.commission_bps}), 201
 
 @business_bp.route('/api/affiliate/<string:code>/click', methods=['POST'])

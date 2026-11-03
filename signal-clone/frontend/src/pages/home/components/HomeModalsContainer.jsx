@@ -170,7 +170,7 @@ export const HomeModalsContainer = ({
                                             type="text"
                                             value={searchQuery}
                                             onChange={(e) => setSearchQuery(e.target.value)}
-                                            placeholder="9876543210 or @userid"
+                                            placeholder="Phone number, numeric ID, or @handle"
                                             className="flex-1 bg-signal-input border-none rounded-lg px-4 py-2 focus:ring-1 focus:ring-signal-accent outline-none text-white text-sm"
                                             autoFocus
                                         />

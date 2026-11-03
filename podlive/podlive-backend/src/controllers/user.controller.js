@@ -7,7 +7,11 @@ exports.getProfile = async (req, res) => {
         const user = await prisma.user.findUnique({
             where: { id: req.user.id }
         });
-        res.json(user);
+        if (!user) return res.status(404).json({ error: 'Profile not found' });
+        const safeUser = { ...user };
+        delete safeUser.password_hash;
+        res.set('Cache-Control', 'no-store');
+        res.json(safeUser);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch profile' });
     }
@@ -21,7 +25,10 @@ exports.updateProfile = async (req, res) => {
             where: { id: req.user.id },
             data: { display_name, bio }
         });
-        res.json({ message: 'Profile updated', user });
+        const safeUser = { ...user };
+        delete safeUser.password_hash;
+        res.set('Cache-Control', 'no-store');
+        res.json({ message: 'Profile updated', user: safeUser });
     } catch (error) {
         res.status(500).json({ error: 'Failed to update profile' });
     }
@@ -71,9 +78,19 @@ exports.getCreatorProfile = async (req, res) => {
         const { id } = req.params;
         const creator = await prisma.user.findUnique({
             where: { id },
-            include: {
+            select: {
+                id: true, unique_handle: true, display_name: true, avatar_url: true,
+                bio: true, is_verified: true, follower_count: true, following_count: true,
+                created_at: true,
                 hosted_sessions: {
-                    orderBy: { created_at: 'desc' }
+                    where: { status: 'ended' },
+                    select: {
+                        id: true, title: true, description: true, thumbnail_url: true,
+                        status: true, created_at: true, started_at: true, ended_at: true,
+                        category: true, recording_url: true, viewer_count_peak: true,
+                        views: true, like_count: true
+                    },
+                    orderBy: { created_at: 'desc' }, take: 20
                 }
             }
         });
@@ -82,18 +99,18 @@ exports.getCreatorProfile = async (req, res) => {
             return res.status(404).json({ error: 'Creator not found' });
         }
 
-        const totalLives = creator.hosted_sessions.length;
-        const totalViews = creator.hosted_sessions.reduce((acc, curr) => acc + curr.viewer_count_peak, 0);
-        const recordings = creator.hosted_sessions.filter(s => s.status === 'ended');
+        const totals = await prisma.liveSession.aggregate({
+            where: { host_user_id: id },
+            _count: { _all: true },
+            _sum: { viewer_count_peak: true }
+        });
 
-        // We don't want to expose the password hash
-        const { password_hash, ...publicProfile } = creator;
-
+        res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
         res.json({
-            ...publicProfile,
-            totalLives,
-            totalViews,
-            recordings
+            ...creator,
+            totalLives: totals._count._all,
+            totalViews: totals._sum.viewer_count_peak || 0,
+            recordings: creator.hosted_sessions
         });
     } catch (error) {
         console.error("Error fetching creator profile:", error);

@@ -229,7 +229,8 @@ export const Home = () => {
     const businessAutomationRef = useRef(null);
 
     useEffect(() => {
-        if (new URLSearchParams(window.location.search).get('ref')) setShowShoppingMarketplace(true);
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('ref') || params.get('shop')) setShowShoppingMarketplace(true);
     }, []);
 
     // Decryption helpers
@@ -1276,12 +1277,13 @@ export const Home = () => {
         const query = searchQuery.trim();
         const isHandleSearch = query.startsWith('@');
         const phoneDigits = query.replace(/\D/g, '');
-        const isPhoneSearch = !isHandleSearch && phoneDigits.length > 0 && phoneDigits.length === query.replace(/\s/g, '').length;
+        const compactQuery = query.replace(/[\s()+-]/g, '');
+        const isPhoneSearch = !isHandleSearch && /^\d+$/.test(compactQuery) &&
+            (phoneDigits.length === 10 || (phoneDigits.length === 12 && phoneDigits.startsWith('91')));
 
-        if (!query) { setSearchError('Enter a phone number, @handle, or name'); return; }
-        if (isPhoneSearch && phoneDigits.length !== 10) { setSearchError('Phone number must be exactly 10 digits'); return; }
+        if (!query) { setSearchError('Enter a phone number, numeric ID, or @handle'); return; }
 
-        const searchPayload = isPhoneSearch ? phoneDigits : query;
+        const searchPayload = isPhoneSearch ? phoneDigits.slice(-10) : query;
         try {
             const res = await axios.post('/api/user/search', { query: searchPayload }, { headers: { Authorization: `Bearer ${token}` } });
             if (res.data.error) setSearchError(res.data.error);
@@ -1702,6 +1704,12 @@ export const Home = () => {
 
     const startChat = async (targetUser = searchedUser) => {
         if (!targetUser || !user || !token) return null;
+        if (!targetUser.id || String(targetUser.id) === String(user.id)) {
+            setSearchError(String(targetUser.id) === String(user.id)
+                ? 'You cannot start a chat with yourself'
+                : 'Search for a valid user before starting a chat');
+            return null;
+        }
         const existingChat = chats.find(chat =>
             !chat.isGroup && chat.participants?.some(participant => participant.id === targetUser.id)
         );
@@ -1758,7 +1766,7 @@ export const Home = () => {
         nav.setShowSaskatAI(false);
         setActiveChat(null);
         localStorage.removeItem('activeChatId');
-        setShowShoppingMarketplace(true);
+        navigate('/shopping');
     };
 
     const openShopBusinessTools = () => {
@@ -2265,6 +2273,7 @@ export const Home = () => {
 
             {showShoppingMarketplace && <ShopMarketplace
                 token={token}
+                initialShopId={new URLSearchParams(window.location.search).get('shop')}
                 onClose={() => setShowShoppingMarketplace(false)}
                 onManageShop={openShopBusinessTools}
                 onStartChat={startShopChat}

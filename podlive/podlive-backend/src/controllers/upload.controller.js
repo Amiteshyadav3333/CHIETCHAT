@@ -125,8 +125,7 @@ exports.uploadVideo = async (req, res) => {
 
         if (!res.headersSent) {
             res.status(500).json({
-                error: 'Failed to upload video',
-                details: error.message
+                error: 'Failed to upload video'
             });
         }
     }

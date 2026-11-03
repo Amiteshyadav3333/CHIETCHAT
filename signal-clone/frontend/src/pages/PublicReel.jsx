@@ -14,6 +14,10 @@ import { HeartIcon as HeartSolid } from '@heroicons/react/24/solid';
 const PublicReel = () => {
     const { reelId } = useParams();
     const navigate = useNavigate();
+    const continueWithLogin = () => {
+        sessionStorage.setItem('pending_nav', `${window.location.pathname}${window.location.search}`);
+        navigate('/login?mode=login');
+    };
     const [reel, setReel] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -131,7 +135,7 @@ const PublicReel = () => {
                     <h2 className="text-2xl font-bold mb-3">Reel Not Found</h2>
                     <p className="text-gray-400 text-sm mb-8 leading-relaxed">{error}. This reel may have been deleted or is no longer available.</p>
                     <button 
-                        onClick={() => navigate('/login')}
+                        onClick={continueWithLogin}
                         className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-bold text-sm hover:from-blue-500 hover:to-purple-500 transition-all shadow-lg shadow-blue-500/25"
                     >
                         Explore Ducor
@@ -183,7 +187,7 @@ const PublicReel = () => {
                     </div>
                 </div>
                 <button 
-                    onClick={() => navigate('/login')}
+                    onClick={continueWithLogin}
                     className="px-4 py-2 bg-white text-black rounded-full text-xs font-bold hover:bg-gray-100 transition-colors shadow-lg"
                 >
                     Open App
@@ -287,7 +291,7 @@ const PublicReel = () => {
                                 </div>
                             </div>
                             <button 
-                                onClick={(e) => { e.stopPropagation(); navigate('/login'); }}
+                                onClick={(e) => { e.stopPropagation(); continueWithLogin(); }}
                                 className="px-4 py-2 bg-white text-black rounded-full text-xs font-bold hover:bg-gray-100 transition-colors"
                             >
                                 Sign Up
@@ -334,13 +338,13 @@ const PublicReel = () => {
                         {/* Action buttons */}
                         <div className="space-y-3">
                             <button 
-                                onClick={() => navigate('/login')}
+                                onClick={continueWithLogin}
                                 className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-bold text-sm hover:from-blue-500 hover:to-purple-500 transition-all shadow-lg shadow-blue-500/25 active:scale-[0.98]"
                             >
                                 Create Account
                             </button>
                             <button 
-                                onClick={() => navigate('/login')}
+                                onClick={continueWithLogin}
                                 className="w-full py-3.5 bg-white/5 text-white rounded-xl font-bold text-sm border border-white/10 hover:bg-white/10 transition-all active:scale-[0.98]"
                             >
                                 Already have an account? Log in

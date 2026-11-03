@@ -113,6 +113,7 @@ _sensitive_limits = {
     '/api/ai/tts': (30, 60 * 60),
     '/api/saskat/chat': (120, 60 * 60),
     '/api/ai/image/generate': (20, 60 * 60),
+    '/api/music/search': (120, 60 * 60),
     '/api/translate': (120, 60 * 60),
     '/api/upload': (60, 60 * 60),
     '/api/payments/orders': (20, 15 * 60),
@@ -133,7 +134,7 @@ _sensitive_limits = {
 }
 _token_scoped_rate_paths = {
     '/api/ai/chat', '/api/ai/chat/stream', '/api/ai/image', '/api/ai/tts',
-    '/api/translate', '/api/upload', '/api/payments/orders',
+    '/api/translate', '/api/upload', '/api/music/search', '/api/payments/orders',
     '/api/chats/:id/scheduled-messages',
     '/api/status/:id/reply', '/api/messages/:id',
     '/api/business/automation/claim',

@@ -5,12 +5,13 @@ import urllib.parse
 from collections import Counter
 from flask import Blueprint, current_app, jsonify, request
 from sqlalchemy import case, func, or_
+from sqlalchemy.orm import joinedload, selectinload
 from werkzeug.utils import secure_filename
 from urllib.parse import urlparse
 
 from models import (
     db, User, Follow, Reel, SocialPost, SocialPostLike, SocialPostShare, SocialPostComment, SocialPostCommentVote, SocialPollVote,
-    Channel, ChannelMembership, CommentReply, Status, UserReport, ProfileFollowRequest, AffiliateProductTag
+    Channel, ChannelMembership, CommentReply, Status, UserReport, ProfileFollowRequest, AffiliateProductTag, Block
 )
 from utils import (
     get_current_user_id, get_json_data, iso_utc, serialize_user,
@@ -19,13 +20,14 @@ from utils import (
     validate_upload,
 )
 from content_moderation import ModerationUnavailable, reject_adult_content
+from features.social.feed import rank_public_posts
 
 social_bp = Blueprint('social_bp', __name__)
 
 ALLOWED_MEDIA = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'webm', 'mov', 'm4v'}
 IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
-FEED_DEFAULT_LIMIT = 30
-FEED_MAX_LIMIT = 50
+FEED_DEFAULT_LIMIT = 50
+FEED_MAX_LIMIT = 100
 COMMENT_DEFAULT_LIMIT = 50
 COMMENT_MAX_LIMIT = 100
 MAX_POST_CAPTION_LENGTH = 1000
@@ -56,10 +58,11 @@ def media_type_for(filename):
         return None
     return 'image' if extension in IMAGE_EXTENSIONS else 'video'
 
-def serialize_post(post, current_user_id):
-    is_liked = SocialPostLike.query.filter_by(post_id=post.id, user_id=current_user_id).first() is not None
-    is_following = Follow.query.filter_by(follower_id=current_user_id, followed_id=post.user_id).first() is not None
-    is_retweeted = SocialPost.query.filter_by(retweet_of_id=post.id, user_id=current_user_id).first() is not None
+def serialize_post(post, current_user_id, feed_context=None):
+    feed_context = feed_context or {}
+    is_liked = post.id in feed_context['liked_ids'] if 'liked_ids' in feed_context else SocialPostLike.query.filter_by(post_id=post.id, user_id=current_user_id).first() is not None
+    is_following = post.user_id in feed_context['followed_ids'] if 'followed_ids' in feed_context else Follow.query.filter_by(follower_id=current_user_id, followed_id=post.user_id).first() is not None
+    is_retweeted = post.id in feed_context['retweeted_ids'] if 'retweeted_ids' in feed_context else SocialPost.query.filter_by(retweet_of_id=post.id, user_id=current_user_id).first() is not None
     user_data = serialize_user(post.user, viewer_id=current_user_id)
     user_data["isFollowing"] = is_following
     channel_data = None
@@ -90,7 +93,7 @@ def serialize_post(post, current_user_id):
             "commentsCount": len(orig.comments),
             "retweetCount": SocialPost.query.filter_by(retweet_of_id=orig.id).count()
         }
-    retweet_count = SocialPost.query.filter_by(retweet_of_id=post.id).count()
+    retweet_count = feed_context['retweet_counts'].get(post.id, 0) if 'retweet_counts' in feed_context else SocialPost.query.filter_by(retweet_of_id=post.id).count()
     poll_options = []
     try:
         poll_options = json.loads(post.poll_options or '[]')
@@ -247,10 +250,17 @@ def get_social_posts():
 
     feed = request.args.get('feed', 'all')
     followed_ids = [f.followed_id for f in Follow.query.filter_by(follower_id=user_id).all()]
-    query = SocialPost.query.join(User, SocialPost.user_id == User.id).filter(
+    blocked_rows = Block.query.filter(or_(Block.blocker_id == user_id, Block.blocked_id == user_id)).all()
+    blocked_ids = {row.blocked_id if row.blocker_id == user_id else row.blocker_id for row in blocked_rows}
+    query = SocialPost.query.options(
+        joinedload(SocialPost.user), selectinload(SocialPost.likes),
+        selectinload(SocialPost.comments), selectinload(SocialPost.poll_votes),
+    ).join(User, SocialPost.user_id == User.id).filter(
         SocialPost.channel_id.is_(None),
         or_(User.is_profile_private.is_(False), User.id == user_id, User.id.in_(followed_ids) if followed_ids else User.id == user_id),
     )
+    if blocked_ids:
+        query = query.filter(~SocialPost.user_id.in_(blocked_ids))
     if feed == 'news':
         query = query.filter(SocialPost.post_kind.in_(['news_post', 'article', 'link', 'poll']))
     elif feed == 'community':
@@ -262,10 +272,38 @@ def get_social_posts():
             return jsonify([])
         query = query.filter(SocialPost.user_id.in_(followed_ids))
 
-    posts = query.order_by(SocialPost.created_at.desc()).limit(
-        bounded_limit(FEED_DEFAULT_LIMIT, FEED_MAX_LIMIT)
-    ).all()
-    return jsonify([serialize_post(post, user_id) for post in posts])
+    limit = bounded_limit(FEED_DEFAULT_LIMIT, FEED_MAX_LIMIT)
+    candidates = query.order_by(SocialPost.created_at.desc()).limit(500).all()
+    candidate_ids = [post.id for post in candidates]
+    engagement = {}
+    if candidate_ids:
+        for model, key in ((SocialPostLike, 'likes'), (SocialPostComment, 'comments'), (SocialPostShare, 'shares')):
+            rows = db.session.query(model.post_id, func.count(model.id)).filter(model.post_id.in_(candidate_ids)).group_by(model.post_id).all()
+            for post_id, count in rows:
+                engagement.setdefault(post_id, {})[key] = count
+        author_counts = db.session.query(SocialPost.user_id, func.count(SocialPost.id)).filter(
+            SocialPost.channel_id.is_(None), SocialPost.user_id.in_({post.user_id for post in candidates})
+        ).group_by(SocialPost.user_id).all()
+        creator_counts = dict(author_counts)
+        for post in candidates:
+            engagement.setdefault(post.id, {})['creator_posts'] = creator_counts.get(post.user_id, 1)
+    posts = rank_public_posts(candidates, engagement, now=utc_now(), limit=limit)
+    post_ids = [post.id for post in posts]
+    feed_context = {
+        'liked_ids': set(), 'followed_ids': set(followed_ids),
+        'retweeted_ids': set(), 'retweet_counts': {},
+    }
+    if post_ids:
+        feed_context['liked_ids'] = {row.post_id for row in SocialPostLike.query.filter(
+            SocialPostLike.user_id == user_id, SocialPostLike.post_id.in_(post_ids)
+        ).all()}
+        feed_context['retweeted_ids'] = {row.retweet_of_id for row in SocialPost.query.filter(
+            SocialPost.user_id == user_id, SocialPost.retweet_of_id.in_(post_ids)
+        ).all()}
+        feed_context['retweet_counts'] = dict(db.session.query(
+            SocialPost.retweet_of_id, func.count(SocialPost.id)
+        ).filter(SocialPost.retweet_of_id.in_(post_ids)).group_by(SocialPost.retweet_of_id).all())
+    return jsonify([serialize_post(post, user_id, feed_context) for post in posts])
 
 
 @social_bp.route('/api/social/trends', methods=['GET'])
@@ -740,7 +778,71 @@ def edit_social_comment(comment_id):
 
 
 
-# ─── DELETE POST ──────────────────────────────────────────────────────────────
+# ─── EDIT AND DELETE POST ────────────────────────────────────────────────────
+
+@social_bp.route('/api/social/posts/<int:post_id>', methods=['PUT'])
+def edit_social_post(post_id):
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    post = db.get_or_404(SocialPost, post_id)
+    if post.user_id != user_id or post.retweet_of_id is not None:
+        return jsonify({"error": "You can only edit your own original post"}), 403
+
+    caption = request.form.get('caption', post.caption or '').strip()
+    if len(caption) > (50000 if post.post_kind == 'article' else MAX_POST_CAPTION_LENGTH):
+        return jsonify({"error": "Post text is too long"}), 400
+
+    replace_media = request.form.get('replaceMedia', '').lower() == 'true'
+    files = [file for file in request.files.getlist('media') if file and file.filename]
+    if len(files) > MAX_POST_IMAGES:
+        return jsonify({"error": "Select up to 4 photos"}), 400
+    new_items = []
+    if replace_media and files:
+        try:
+            for file in files:
+                detected_type = media_type_for(secure_filename(file.filename))
+                if detected_type != 'image' or not validate_upload(file, {'image'}, 10 * 1024 * 1024):
+                    return jsonify({"error": "Choose valid image files up to 10 MB each"}), 400
+                file.stream.seek(0)
+                blocked, adult_score = reject_adult_content(file, 'image')
+                if blocked:
+                    return jsonify({"error": "Upload blocked: adult content is not allowed", "adultScore": round(adult_score, 3)}), 422
+                file.stream.seek(0)
+            for file in files:
+                file.stream.seek(0)
+                new_items.append({'url': upload_to_cloudinary(file, folder='chietchat/social', resource_type='image'), 'type': 'image'})
+        except ModerationUnavailable as error:
+            return jsonify({'error': str(error), 'code': 'MODERATION_UNAVAILABLE'}), 503
+        except MediaStorageUnavailable as error:
+            return jsonify({'error': str(error), 'code': 'MEDIA_STORAGE_UNAVAILABLE'}), 503
+        except ValueError as error:
+            return jsonify({'error': str(error)}), 400
+
+    if replace_media and not new_items:
+        if not caption and not post.title and not post.link_url:
+            return jsonify({"error": "A post must contain text, a title, or an image"}), 400
+        old_items = post_media_items(post)
+        post.media_url = None
+        post.media_type = None
+        post.media_items = None
+    elif new_items:
+        old_items = post_media_items(post)
+        post.media_url = new_items[0]['url']
+        post.media_type = 'image'
+        post.media_items = json.dumps(new_items)
+    else:
+        old_items = []
+
+    if not caption and not post.media_url and not post.title and not post.link_url:
+        return jsonify({"error": "A post must contain text, a title, or an image"}), 400
+    post.caption = caption
+    db.session.commit()
+    tasks = [queue_media_deletion(item['url'], item['type']) for item in old_items if item.get('url')]
+    for task in tasks:
+        if task:
+            process_media_deletion_task(task.id)
+    return jsonify(serialize_post(post, user_id))
 
 @social_bp.route('/api/social/posts/<int:post_id>', methods=['DELETE'])
 def delete_social_post(post_id):

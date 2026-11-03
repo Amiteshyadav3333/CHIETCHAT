@@ -1349,7 +1349,7 @@ export const Home = () => {
             openUserProfile(user?.id);
             return;
         }
-        if (action === 'drafts' || action === 'earn') {
+        if (action === 'drafts') {
             nav.setShowSettings(false);
             nav.setShowReels(false); nav.setShowPodlive(false); nav.setShowAiChat(false); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false);
             nav.setShowSocial(true);
@@ -1361,7 +1361,7 @@ export const Home = () => {
             window.setTimeout(() => window.dispatchEvent(new CustomEvent('ducor-open-social-draft', { detail: { text: draftText } })), 120);
             return;
         }
-        const targetScreen = action === 'avatar' ? 'profile' : action === 'premium' ? 'premium' : action === 'display' ? 'chats' : 'settings';
+        const targetScreen = action === 'avatar' ? 'profile' : action === 'premium' || action === 'earn' ? 'premium' : action === 'display' ? 'chats' : 'settings';
         setSettingsInitialScreen(targetScreen);
         nav.setShowSettings(true);
     };

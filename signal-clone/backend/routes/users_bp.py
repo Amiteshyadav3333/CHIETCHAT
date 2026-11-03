@@ -1087,6 +1087,7 @@ def update_ui_preferences():
         'reelsDefaultFeed', 'reelsAutoplay', 'reelsMuted', 'reelsDataSaver',
         'reelsInterests',
         'socialDefaultFeed', 'socialAutoplayVideos', 'socialMutedVideos',
+        'socialMonetizePosts',
     }
     try:
         current = json.loads(user.ui_preferences or '{}')

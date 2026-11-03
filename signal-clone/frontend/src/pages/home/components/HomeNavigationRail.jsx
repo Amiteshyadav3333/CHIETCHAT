@@ -1,12 +1,11 @@
 import React from 'react';
 import AvatarZoom from '../../../components/AvatarZoom';
-import { ChatBubbleLeftRightIcon, ClockIcon, PhoneIcon, UserGroupIcon, PlusIcon, BellIcon, ChevronDownIcon, UserCircleIcon, PencilSquareIcon, DocumentTextIcon, CurrencyRupeeIcon, SparklesIcon, ComputerDesktopIcon, Cog6ToothIcon, XMarkIcon, PlayIcon, MicrophoneIcon, ShoppingBagIcon } from '@heroicons/react/24/outline';
+import { ChatBubbleLeftRightIcon, ClockIcon, PhoneIcon, UserGroupIcon, PlusIcon, BellIcon, ChevronDownIcon, UserCircleIcon, PencilSquareIcon, DocumentTextIcon, ComputerDesktopIcon, Cog6ToothIcon, XMarkIcon, PlayIcon, MicrophoneIcon, ShoppingBagIcon } from '@heroicons/react/24/outline';
 import { GlobalSearchBar } from './GlobalSearchBar';
 
 const accountActions = [
     ['profile', 'View profile', UserCircleIcon], ['avatar', 'Edit avatar', PencilSquareIcon],
-    ['drafts', 'Drafts', DocumentTextIcon], ['earn', 'Earn', CurrencyRupeeIcon],
-    ['premium', 'Premium', SparklesIcon], ['display', 'Display mode', ComputerDesktopIcon],
+    ['drafts', 'Drafts', DocumentTextIcon], ['display', 'Display mode', ComputerDesktopIcon],
     ['settings', 'App settings', Cog6ToothIcon],
 ];
 

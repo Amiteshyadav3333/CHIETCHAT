@@ -211,6 +211,28 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(self.client.get('/api/business/me').status_code, 401)
         self.assertEqual(self.client.get('/api/calls/ice-config').status_code, 401)
 
+    @patch.dict(os.environ, {
+        'MUSIC_SERVICE_URL': 'https://music.example.test',
+        'MUSIC_SERVICE_HMAC_KEY': 'music-gateway-test-secret-' * 2,
+    })
+    @patch('routes.music_bp.call_music_service', return_value=[{'id': 'song-1', 'title': 'Song'}])
+    def test_music_api_keeps_legacy_route_and_forwards_authenticated_identity(self, call_service):
+        response = self.client.get('/api/music/search?q=song&limit=7', headers=self.auth_headers())
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['tracks'][0]['id'], 'song-1')
+        call_service.assert_called_once_with(self.user_id, 'song', 7)
+
+    @patch.dict(os.environ, {
+        'MUSIC_SERVICE_URL': 'https://music.example.test',
+        'MUSIC_SERVICE_HMAC_KEY': 'music-gateway-test-secret-' * 2,
+    })
+    @patch('routes.music_bp.call_music_service', side_effect=RuntimeError('service unavailable'))
+    def test_music_service_failure_is_contained_in_existing_search_warning(self, _call_service):
+        response = self.client.get('/api/music/search?q=song', headers=self.auth_headers())
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['tracks'], [])
+        self.assertIn('warning', response.json)
+
     def test_chat_query_failure_does_not_invalidate_authenticated_session(self):
         with app.app_context():
             with patch('routes.chats_bp.ChatParticipant.query') as participant_query:
@@ -236,6 +258,19 @@ class SecurityTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 400)
         urlopen.assert_not_called()
+
+    @patch.dict(os.environ, {
+        'TRANSLATION_SERVICE_URL': 'https://translation.example.test',
+        'TRANSLATION_SERVICE_HMAC_KEY': 'translation-gateway-test-secret-' * 2,
+    })
+    @patch('routes.main_bp.call_translation_service', return_value='नमस्ते')
+    def test_translation_api_keeps_legacy_contract_through_domain_service(self, call_service):
+        response = self.client.post('/api/translate', headers=self.auth_headers(), json={
+            'text': 'hello', 'source_lang': 'auto', 'target_lang': 'hi',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['translatedText'], 'नमस्ते')
+        call_service.assert_called_once_with(self.user_id, 'hello', 'auto', 'hi')
 
     def test_ai_grammar_returns_only_corrected_text(self):
         with patch('routes.ai_bp._get_ai_reply', return_value='Corrected text: I am your friend, Amit.'):
@@ -1877,6 +1912,17 @@ class SecurityTests(unittest.TestCase):
             self.assertEqual(shared_status.media_type, 'image')
         feed = self.client.get('/api/social/posts', headers=self.auth_headers())
         self.assertTrue(any(post['id'] == post_id for post in feed.json))
+        edited = self.client.put(
+            f'/api/social/posts/{post_id}', data={'caption': 'Edited launch post'},
+            headers=self.auth_headers(), content_type='multipart/form-data',
+        )
+        self.assertEqual(edited.status_code, 200)
+        self.assertEqual(edited.json['caption'], 'Edited launch post')
+        forbidden_edit = self.client.put(
+            f'/api/social/posts/{post_id}', data={'caption': 'Other user edit'},
+            headers={'Authorization': f'Bearer {self.payee_token}'}, content_type='multipart/form-data',
+        )
+        self.assertEqual(forbidden_edit.status_code, 403)
         deleted = self.client.delete(f'/api/social/posts/{post_id}', headers=self.auth_headers())
         self.assertEqual(deleted.status_code, 200)
 
@@ -1915,12 +1961,12 @@ class SecurityTests(unittest.TestCase):
         with app.app_context():
             db.session.add_all([
                 SocialPost(user_id=self.user_id, caption=f'post-{index}')
-                for index in range(55)
+                for index in range(120)
             ])
             db.session.commit()
         feed = self.client.get('/api/social/posts?limit=500', headers=self.auth_headers())
         self.assertEqual(feed.status_code, 200)
-        self.assertEqual(len(feed.json), 50)
+        self.assertEqual(len(feed.json), 100)
         oversized_post = self.client.post(
             '/api/social/posts', data={'caption': 'x' * 1001}, headers=self.auth_headers(),
         )

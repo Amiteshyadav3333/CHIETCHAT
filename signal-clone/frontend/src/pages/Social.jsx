@@ -169,12 +169,11 @@ const TweetAction = ({ icon, count, onClick, active, activeColor, hoverColor, ho
     </button>
 );
 
-const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, preview, fileRef, posting, onSubmit, isPremium, onUpgrade, defaultArticleMode = false }) => {
+const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, preview, fileRef, posting, onSubmit, isPremium, onUpgrade, earnByDefault = false, defaultArticleMode = false }) => {
     const [format, setFormat] = useState(defaultArticleMode ? 'article' : 'post');
     const [title, setTitle] = useState('');
     const [linkUrl, setLinkUrl] = useState('');
     const [pollOptions, setPollOptions] = useState(['', '']);
-    const [monetized, setMonetized] = useState(false);
     const [mediaDuration, setMediaDuration] = useState(0);
     const [showProCamera, setShowProCamera] = useState(false);
     const articleMode = format === 'article';
@@ -241,8 +240,6 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
                         <div className="flex flex-wrap gap-1 rounded-xl bg-black/30 p-1" role="group" aria-label="Post format">
                             {['post', 'link', 'poll', 'article'].map(item => <button key={item} type="button" onClick={() => { setFormat(item); if (['link', 'poll'].includes(item)) { setMedia([]); setMediaDuration(0); if (fileRef.current) fileRef.current.value = ''; } }} className={`rounded-lg px-2 py-1.5 text-[11px] font-bold capitalize ${format === item ? 'bg-[#ff6a3d] text-white' : 'text-gray-400 hover:bg-white/10'}`}>{item === 'post' ? 'Post' : item === 'article' ? 'Article' : item}</button>)}
                         </div>
-                        <button type="button" onClick={() => isPremium ? setMonetized(v => !v) : onUpgrade('monetization')} className={`rounded-full px-3 py-2 text-xs font-bold ${monetized ? 'bg-amber-500/20 text-amber-300' : 'text-[#ff6a3d]'}`}>₹ Earn</button>
-                        {!isPremium && <button type="button" onClick={onUpgrade} className="rounded-full bg-violet-500/15 px-3 py-2 text-xs font-black text-violet-300">Premium</button>}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         {caption.length > 0 && !articleMode && (
@@ -256,7 +253,7 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
                             </svg>
                         )}
                         <div style={{ width: 1, height: 24, background: '#27333b' }} />
-                        <button onClick={async () => { const normalizedLink = linkUrl.trim() && !/^[a-z][a-z\d+.-]*:/i.test(linkUrl.trim()) ? `https://${linkUrl.trim()}` : linkUrl.trim(); const posted = await onSubmit({ postKind: articleMode ? 'article' : format === 'link' || format === 'poll' ? format : defaultArticleMode ? 'news_post' : 'standard', postTitle: title, articleTitle: articleMode ? title : '', linkUrl: normalizedLink, pollOptions: pollOptions.filter(option => option.trim()), isMonetized: monetized, mediaDuration }); if (posted) { setTitle(''); setLinkUrl(''); setPollOptions(['', '']); setMonetized(false); } }} disabled={posting || !canPost}
+                        <button onClick={async () => { const normalizedLink = linkUrl.trim() && !/^[a-z][a-z\d+.-]*:/i.test(linkUrl.trim()) ? `https://${linkUrl.trim()}` : linkUrl.trim(); const posted = await onSubmit({ postKind: articleMode ? 'article' : format === 'link' || format === 'poll' ? format : defaultArticleMode ? 'news_post' : 'standard', postTitle: title, articleTitle: articleMode ? title : '', linkUrl: normalizedLink, pollOptions: pollOptions.filter(option => option.trim()), isMonetized: Boolean(isPremium && earnByDefault), mediaDuration }); if (posted) { setTitle(''); setLinkUrl(''); setPollOptions(['', '']); } }} disabled={posting || !canPost}
                             style={{ padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, border: 'none', cursor: canPost ? 'pointer' : 'not-allowed', background: canPost ? '#ff6a3d' : '#0f4f6e', color: canPost ? '#fff' : '#71767b', transition: 'background 0.15s' }}>
                             {posting ? 'Posting…' : 'Post'}
                         </button>
@@ -286,7 +283,35 @@ const CommunityComposer = ({ avatar, caption, setCaption, pollOptions, setPollOp
     </div>;
 };
 
-const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onShareToChat, onDelete, onFollow, onOpenProfile, onPollVote }) => {
+const PostEditDialog = ({ post, onClose, onSave, busy }) => {
+    const [caption, setCaption] = useState(post.caption || '');
+    const [files, setFiles] = useState([]);
+    const [removeMedia, setRemoveMedia] = useState(false);
+    const inputRef = useRef(null);
+    const existingMedia = post.mediaItems?.length ? post.mediaItems : (post.mediaUrl ? [{ url: post.mediaUrl, type: post.mediaType || 'image' }] : []);
+    const selectPhotos = event => {
+        const selected = Array.from(event.target.files || []);
+        event.target.value = '';
+        if (selected.length > 4 || selected.some(file => !file.type.startsWith('image/'))) {
+            alert('Choose up to four photos.');
+            return;
+        }
+        setFiles(selected);
+        setRemoveMedia(false);
+    };
+    return <div className="fixed inset-0 z-[190] flex items-center justify-center bg-black/80 p-4" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+        <form onSubmit={event => { event.preventDefault(); onSave(post, caption, files, removeMedia); }} className="w-full max-w-xl rounded-3xl border border-white/10 bg-[#101820] p-5 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-black text-white">Edit your post</h2><button type="button" onClick={onClose} className="rounded-full p-2 text-gray-400 hover:bg-white/10" aria-label="Close">✕</button></div>
+            <textarea autoFocus value={caption} onChange={event => setCaption(event.target.value)} maxLength={post.postKind === 'article' ? 50000 : 1000} rows={5} placeholder="Write your post…" className="w-full resize-y rounded-2xl border border-white/10 bg-black/30 p-3 text-sm leading-6 text-white outline-none focus:border-[#ff6a3d]" />
+            {existingMedia.length > 0 && <div className="mt-3 grid grid-cols-2 gap-2">{existingMedia.map((item, index) => <img key={`${item.url}-${index}`} src={item.url} alt={`Current post photo ${index + 1}`} className="max-h-40 w-full rounded-xl object-cover" />)}</div>}
+            <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden onChange={selectPhotos} />
+            <div className="mt-3 flex flex-wrap items-center gap-3"><button type="button" onClick={() => inputRef.current?.click()} className="rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white">{files.length ? `${files.length} replacement photo(s) selected` : 'Replace photos'}</button>{files.length > 0 && <button type="button" onClick={() => setFiles([])} className="text-xs font-semibold text-gray-400">Cancel replacement</button>}{existingMedia.length > 0 && <label className="flex items-center gap-2 text-xs text-gray-300"><input type="checkbox" checked={removeMedia} onChange={event => setRemoveMedia(event.target.checked)} />Remove current photos</label>}</div>
+            <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} className="rounded-full px-4 py-2 text-sm font-bold text-gray-300 hover:bg-white/5">Cancel</button><button type="submit" disabled={busy} className="rounded-full bg-[#ff6a3d] px-5 py-2 text-sm font-black text-white disabled:opacity-50">{busy ? 'Saving…' : 'Save changes'}</button></div>
+        </form>
+    </div>;
+};
+
+const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onShareToChat, onDelete, onEdited, onFollow, onOpenProfile, onPollVote }) => {
     const autoplayVideos = currentUser?.uiPreferences?.socialAutoplayVideos ?? localStorage.getItem('social_autoplay_videos') === '1';
     const mutedVideos = currentUser?.uiPreferences?.socialMutedVideos ?? localStorage.getItem('social_muted_videos') !== '0';
     const [commentsOpen, setCommentsOpen] = useState(false);
@@ -309,6 +334,8 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
     const [bookmarked, setBookmarked] = useState(false);
     const [hovered, setHovered] = useState(false);
     const [showShare, setShowShare] = useState(false);
+    const [editOpen, setEditOpen] = useState(false);
+    const [editBusy, setEditBusy] = useState(false);
     const menuRef = useRef(null);
     const rtMenuRef = useRef(null);
     const displayPost = post.isRetweet && post.originalPost ? post.originalPost : post;
@@ -370,6 +397,21 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
             : { ...item, replies: updateVotes(item.replies || []) });
         setComments(current => updateVotes(current));
         return data;
+    };
+    const savePostEdit = async (editedPost, captionValue, files, removeMedia) => {
+        setEditBusy(true);
+        const form = new FormData();
+        form.append('caption', captionValue);
+        if (files.length || removeMedia) form.append('replaceMedia', 'true');
+        files.forEach(file => form.append('media', file));
+        try {
+            const { data } = await axios.put(`/api/social/posts/${editedPost.id}`, form, {
+                headers: { ...authHeaders(token), 'Content-Type': 'multipart/form-data' },
+            });
+            onEdited?.(data);
+            setEditOpen(false);
+        } catch (error) { alert(error.response?.data?.error || 'Could not update post'); }
+        finally { setEditBusy(false); }
     };
     const handleDeleteComment = async (commentId) => {
         if (!window.confirm('Delete this comment?')) return;
@@ -449,6 +491,13 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
                                         {post.user.isFollowing ? 'Unfollow' : 'Follow'} @{authorHandle.slice(1)}
                                     </button>
                                 )}
+                                {post.canDelete && String(authorId) === String(currentUser?.id) && !post.isRetweet && (
+                                    <button onClick={() => { setEditOpen(true); setShowMenu(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#e7e9ea', fontSize: 14, fontWeight: 700, textAlign: 'left' }}
+                                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                        <PencilIcon style={{ width: 20, height: 20 }} />Edit post and photos
+                                    </button>
+                                )}
                                 {post.canDelete && (
                                     <button onClick={() => { onDelete(); setShowMenu(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#f4212e', fontSize: 14, fontWeight: 700, textAlign: 'left' }}
                                         onMouseEnter={e => e.currentTarget.style.background = 'rgba(244,33,46,0.1)'}
@@ -473,9 +522,7 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
 
                 {(displayPost.title || displayPost.articleTitle) && <div className="mt-3 rounded-2xl border border-blue-500/20 bg-blue-500/10 p-4"><span className="text-[10px] font-black uppercase tracking-widest text-blue-400">{displayPost.postKind === 'link' ? 'Link' : displayPost.postKind === 'poll' ? 'Poll' : displayPost.postKind === 'article' ? 'News & Article' : 'Post'}</span><h2 className="mt-1 text-xl font-black text-white">{displayPost.title || displayPost.articleTitle}</h2></div>}
                 {displayPost.linkUrl && getSafeWebsiteUrl(displayPost.linkUrl) && <a href={getSafeWebsiteUrl(displayPost.linkUrl)} target="_blank" rel="noopener noreferrer" className="mt-3 block rounded-2xl border border-[#27333b] bg-[#101820] p-4 transition hover:border-[#ff6a3d]/60"><span className="text-xs font-semibold text-[#8b98a5]">{new URL(getSafeWebsiteUrl(displayPost.linkUrl)).hostname}</span><p className="mt-1 break-all text-sm font-semibold text-[#ff9875]">{displayPost.linkUrl}</p></a>}
-                {displayPost.isMonetized && <span className="mt-2 inline-flex rounded-full bg-amber-400/15 px-2 py-1 text-[10px] font-bold text-amber-300">Creator earnings enabled</span>}
                 {postCaption && <p data-user-content style={{ marginTop: 4, fontSize: 15, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#e7e9ea' }}><LinkifiedText>{postCaption}</LinkifiedText></p>}
-                {authorId === currentUser?.id && currentUser?.isPremium && <button onClick={async e => { e.stopPropagation(); try { const { data } = await axios.get(`/api/social/posts/${post.id}/analytics`, { headers: authHeaders(token) }); alert(`Views: ${data.views}\nEngagement: ${data.engagement}\nEarnings: ₹${(data.earningsPaise / 100).toFixed(2)}`); } catch (err) { alert(err.response?.data?.error || 'Analytics unavailable'); } }} className="mt-3 inline-flex items-center gap-1 rounded-full bg-white/5 px-3 py-1.5 text-xs font-bold text-blue-400"><ChartBarIcon className="h-4 w-4" />Advanced analytics</button>}
 
                 {displayPost.poll && <div className="mt-3 space-y-2 rounded-2xl border border-[#27333b] bg-[#0b1117] p-3">
                     {displayPost.poll.options.map((option, index) => { const count = displayPost.poll.counts[index] || 0; const pct = displayPost.poll.totalVotes ? Math.round(count * 100 / displayPost.poll.totalVotes) : 0; const selected = displayPost.poll.selectedOption === index; return <button key={index} onClick={() => onPollVote?.(index)} className={`relative w-full overflow-hidden rounded-xl border px-3 py-2.5 text-left text-sm font-semibold ${selected ? 'border-[#ff6a3d] text-white' : 'border-[#333639] text-[#e7e9ea]'}`}><span className="absolute inset-y-0 left-0 bg-[#ff6a3d]/20 transition-all" style={{ width: `${pct}%` }} /><span className="relative flex justify-between gap-3"><span>{option}</span><span className="text-[#8b98a5]">{pct}%</span></span></button>; })}
@@ -571,6 +618,7 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
             </div>
             {zoomedMedia && <FullscreenMediaModal src={zoomedMedia.src} type={zoomedMedia.type} onClose={() => setZoomedMedia(null)} />}
             {showShare && <SocialShareSheet post={post} token={token} onClose={() => setShowShare(false)} onShareToChat={onShareToChat} onShared={onShare} />}
+            {editOpen && <PostEditDialog post={post} busy={editBusy} onClose={() => setEditOpen(false)} onSave={savePostEdit} />}
         </article>
     );
 };
@@ -684,7 +732,7 @@ const ChannelsList = ({ channels, loading, onOpen, onSubscribe, onCreateNew }) =
     </div>
 );
 
-const ChannelView = ({ channel, posts, user, token, preview, media, caption, posting, fileRef, setCaption, setMedia, submitPost, likePost, retweetPost, sharePost, onShareToChat, deletePost, toggleFollow, requestSubscribe, reviewRequest, openProfile, currentUser, onUpgrade }) => (
+const ChannelView = ({ channel, posts, user, token, preview, media, caption, posting, fileRef, setCaption, setMedia, submitPost, likePost, retweetPost, sharePost, onShareToChat, deletePost, onPostEdited, toggleFollow, requestSubscribe, reviewRequest, openProfile, currentUser, onUpgrade }) => (
     <div style={{ maxWidth: 600, margin: '0 auto', width: '100%' }}>
         <div style={{ borderBottom: '1px solid #27333b' }}>
             <div style={{ height: 112, background: 'linear-gradient(135deg, #ff6a3d 0%, #764ba2 100%)', position: 'relative' }}>
@@ -719,13 +767,13 @@ const ChannelView = ({ channel, posts, user, token, preview, media, caption, pos
         )}
         {channel.canPost && (
             <div style={{ padding: '12px 16px', borderBottom: '1px solid #27333b' }}>
-                <CheetChatComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} media={media} setMedia={setMedia} preview={preview} fileRef={fileRef} posting={posting} onSubmit={submitPost} isPremium={user?.isPremium} onUpgrade={onUpgrade} />
+                <CheetChatComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} media={media} setMedia={setMedia} preview={preview} fileRef={fileRef} posting={posting} onSubmit={submitPost} isPremium={user?.isPremium} onUpgrade={onUpgrade} earnByDefault={user?.uiPreferences?.socialMonetizePosts} />
             </div>
         )}
         {posts.length ? posts.map(post => (
             <TweetCard key={post.id} post={post} currentUser={currentUser || user} token={token}
                 onLike={() => likePost(post.id)} onRetweet={() => retweetPost(post.id)}
-                onShare={count => sharePost(post.id, count)} onShareToChat={onShareToChat} onDelete={() => deletePost(post.id)}
+                onShare={count => sharePost(post.id, count)} onShareToChat={onShareToChat} onDelete={() => deletePost(post.id)} onEdited={onPostEdited}
                 onFollow={() => toggleFollow(post.user.id)} onOpenProfile={openProfile} />
         )) : <CheetChatEmptyState text={channel.canPost ? 'No posts yet.' : 'Join this space to see content.'} />}
     </div>
@@ -981,6 +1029,7 @@ const UserProfileView = ({ userId, currentUser, token, updateUser, onBack, onOpe
                     <TweetCard key={post.id} post={post} currentUser={currentUser} token={token}
                         onLike={() => handleLike(post.id)} onRetweet={() => handleRetweet(post.id)}
                         onShare={count => handleShare(post.id, count)} onShareToChat={onShareToChat} onDelete={() => handleDelete(post.id)}
+                        onEdited={updated => setProfileData(previous => ({ ...previous, posts: previous.posts.map(item => item.id === updated.id ? updated : item) }))}
                         onFollow={() => {}} onOpenProfile={onOpenProfile} />
                 )) : <CheetChatEmptyState text={isOwnProfile ? "You haven't posted yet." : "No posts yet."} />}
             </div>
@@ -1395,19 +1444,21 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                         {selectedChannel ? (
                             <ChannelView channel={selectedChannel} posts={currentPosts} user={user} token={token} preview={preview} media={media} caption={caption} posting={posting} fileRef={fileRef} setCaption={setCaption} setMedia={setMedia}
                                 submitPost={options => submitPost(selectedChannel.id, options)} likePost={id => likePost(id, true)} retweetPost={id => retweetPost(id, true)} sharePost={(id, count) => sharePost(id, true, count)} onShareToChat={onShareToChat} deletePost={id => deletePost(id, true)}
+                                onPostEdited={updated => setChannelPosts(items => items.map(item => item.id === updated.id ? updated : item))}
                                 toggleFollow={toggleFollow} requestSubscribe={() => requestSubscribe(selectedChannel.id)} reviewRequest={reviewRequest} openProfile={openProfile} currentUser={user} onUpgrade={showPremiumUpgrade} />
                         ) : activeTab === 'channels' ? (
                             <ChannelsList channels={displayedChannels} loading={loading} onOpen={fetchChannel} onSubscribe={requestSubscribe} onCreateNew={() => setShowChannelForm(true)} />
                         ) : (
                             <div>
                                 {activeTab === 'community' ? <CommunityComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} pollOptions={pollOptions} setPollOptions={setPollOptions} posting={posting} onSubmit={() => submitPost(null, 'community')} /> : <div className="padding-4 px-4 py-3 border-b border-[#27333b]">
-                            <div data-ducor-composer><CheetChatComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} media={media} setMedia={setMedia} preview={preview} fileRef={fileRef} posting={posting} isPremium={user?.isPremium} onUpgrade={showPremiumUpgrade} defaultArticleMode={activeTab === 'news'} onSubmit={options => submitPost(null, options)} /></div>
+                            <div data-ducor-composer><CheetChatComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} media={media} setMedia={setMedia} preview={preview} fileRef={fileRef} posting={posting} isPremium={user?.isPremium} onUpgrade={showPremiumUpgrade} earnByDefault={user?.uiPreferences?.socialMonetizePosts} defaultArticleMode={activeTab === 'news'} onSubmit={options => submitPost(null, options)} /></div>
                                 </div>}
                                 {loading ? <CheetChatLoading /> : displayedPosts.length ? displayedPosts.map(post => (
                                     <div key={post.id} ref={post.id === highlightedPostId ? highlightedRef : null} style={post.id === highlightedPostId ? { outline: '2px solid #ff6a3d' } : {}}>
                                         <TweetCard post={post} currentUser={user} token={token}
                                             onLike={() => likePost(post.id)} onRetweet={() => retweetPost(post.id)}
                                             onShare={count => sharePost(post.id, false, count)} onShareToChat={onShareToChat} onDelete={() => deletePost(post.id)}
+                                            onEdited={updated => updateCachedFeed(activeTab, items => items.map(item => item.id === updated.id ? updated : item))}
                                             onFollow={() => toggleFollow(post.user.id)} onOpenProfile={openProfile} onPollVote={index => votePoll(post.id, index)} />
                                     </div>
                                 )) : <CheetChatEmptyState text={activeTab === 'following' ? 'Follow people to build your feed.' : activeTab === 'news' ? 'No articles yet. Publish a source-backed story.' : 'No posts match your search.'} />}

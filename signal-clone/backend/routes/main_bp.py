@@ -14,6 +14,7 @@ from utils import (
 from observability import report_safe_exception
 from content_moderation import ModerationUnavailable, reject_adult_content
 from googletrans import LANGUAGES, Translator
+from service_gateway import call_translation_service
 
 main_bp = Blueprint('main_bp', __name__)
 SUPPORTED_UI_LANGUAGES = {'as','bn','brx','doi','gu','hi','kn','ks','kok','mai','ml','mni','mr','ne','or','pa','sa','sat','sd','ta','te','ur'}
@@ -144,22 +145,27 @@ def translate_text():
         return jsonify({"error": "Invalid 'source_lang' parameter"}), 400
 
     try:
-        query = urllib.parse.urlencode({
-            'client': 'gtx', 'sl': source_lang, 'tl': target_lang,
-            'dt': 't', 'q': text,
-        })
-        upstream_request = urllib.request.Request(
-            f'https://translate.googleapis.com/translate_a/single?{query}',
-            headers={'User-Agent': 'CHEETCHAT/1.0'},
-        )
-        with urllib.request.urlopen(upstream_request, timeout=10) as response:
-            payload = json.loads(response.read(256 * 1024))
-        translated = ''.join(
-            segment[0] for segment in payload[0]
-            if isinstance(segment, list) and segment and isinstance(segment[0], str)
-        )
-        if not translated:
-            raise ValueError('Translation provider returned an empty response')
+        if os.environ.get('TRANSLATION_SERVICE_URL'):
+            translated = call_translation_service(user_id, text, source_lang, target_lang)
+        else:
+            # Preserve local development and rollback behavior until the
+            # Translation service has been configured in the deployment.
+            query = urllib.parse.urlencode({
+                'client': 'gtx', 'sl': source_lang, 'tl': target_lang,
+                'dt': 't', 'q': text,
+            })
+            upstream_request = urllib.request.Request(
+                f'https://translate.googleapis.com/translate_a/single?{query}',
+                headers={'User-Agent': 'CHEETCHAT/1.0'},
+            )
+            with urllib.request.urlopen(upstream_request, timeout=10) as response:
+                payload = json.loads(response.read(256 * 1024))
+            translated = ''.join(
+                segment[0] for segment in payload[0]
+                if isinstance(segment, list) and segment and isinstance(segment[0], str)
+            )
+            if not translated:
+                raise ValueError('Translation provider returned an empty response')
         return jsonify({"translatedText": translated})
     except Exception as e:
         report_safe_exception('translation_failed', e)

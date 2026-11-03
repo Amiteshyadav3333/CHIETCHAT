@@ -31,6 +31,32 @@ services:
       - key: AI_MEMORY_MAX_ROWS
         value: "100"
   - type: web
+    name: chietchat-translation
+    env: python
+    region: oregon
+    rootDir: signal-clone
+    buildCommand: pip install -r services/translation/requirements.txt
+    startCommand: gunicorn --workers 2 --threads 8 --timeout 20 --chdir services/translation app:app --bind 0.0.0.0:$PORT
+    healthCheckPath: /health/ready
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: TRANSLATION_SERVICE_HMAC_KEY
+        generateValue: true
+  - type: web
+    name: chietchat-music
+    env: python
+    region: oregon
+    rootDir: signal-clone
+    buildCommand: pip install -r services/music/requirements.txt
+    startCommand: gunicorn --workers 2 --threads 8 --timeout 20 --chdir services/music app:app --bind 0.0.0.0:$PORT
+    healthCheckPath: /health/ready
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: MUSIC_SERVICE_HMAC_KEY
+        generateValue: true
+  - type: web
     name: chietchat
     env: python
     region: oregon
@@ -62,6 +88,20 @@ services:
         value: https://chat.indiasearch.site
       - key: BACKEND_URL
         value: https://chietchat.onrender.com
+      - key: TRANSLATION_SERVICE_URL
+        value: https://chietchat-translation.onrender.com
+      - key: TRANSLATION_SERVICE_HMAC_KEY
+        fromService:
+          name: chietchat-translation
+          type: web
+          envVarKey: TRANSLATION_SERVICE_HMAC_KEY
+      - key: MUSIC_SERVICE_URL
+        value: https://chietchat-music.onrender.com
+      - key: MUSIC_SERVICE_HMAC_KEY
+        fromService:
+          name: chietchat-music
+          type: web
+          envVarKey: MUSIC_SERVICE_HMAC_KEY
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET

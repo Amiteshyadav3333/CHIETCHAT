@@ -1627,21 +1627,31 @@ export const Home = () => {
     };
 
     const openSocialDirectMessage = async (socialUser) => {
-        if (!socialUser?.id || socialUser.id === user?.id) return;
+        if (!socialUser?.id || String(socialUser.id) === String(user?.id)) return;
         try {
-            const existing = chats.find(chat => !chat.isGroup && chat.participants?.some(participant => participant.id === socialUser.id));
+            const existing = chats.find(chat => !chat.isGroup && chat.participants?.some(participant => String(participant.id) === String(socialUser.id)));
             let chatId = existing?.id;
             if (!chatId) {
-                if (!socialUser.platformId) throw new Error('This user has not created a unique ID yet.');
-                await axios.post('/api/user/search', { query: `@${socialUser.platformId}` }, { headers: { Authorization: `Bearer ${token}` } });
-                const created = await axios.post('/api/chats/create', { participants: [user.id, socialUser.id], isGroup: false }, { headers: { Authorization: `Bearer ${token}` } });
-                chatId = created.data.id;
+                // Profile messaging must work for social discovery users too;
+                // requiring a phone/contact search first made this action fail.
+                const connected = await axios.post(`/api/users/${encodeURIComponent(socialUser.id)}/connect`, {}, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                chatId = connected.data.chatId;
             }
             const updatedChats = await fetchChats();
-            const target = updatedChats.find(chat => chat.id === chatId) || existing;
-            if (!target) throw new Error('Could not open direct message.');
+            const target = updatedChats.find(chat => String(chat.id) === String(chatId)) || existing || {
+                id: chatId,
+                isGroup: false,
+                name: socialUser.username || 'Chat',
+                avatar: socialUser.avatar || '',
+                participants: [user, socialUser],
+                unreadCount: 0,
+                lastMessage: { content: 'No messages', timestamp: null, type: 'text' },
+            };
             setActiveChat(target);
             nav.setShowSocial(false);
+            navigate(`/chats/${encodeURIComponent(chatId)}`);
         } catch (error) { alert(error.response?.data?.error || error.message || 'Could not start direct message'); }
     };
 
@@ -1910,7 +1920,7 @@ export const Home = () => {
     const getOtherParticipant = (chat) => {
         if (!chat || chat.isGroup) return null;
         if (!Array.isArray(chat.participants)) return null;
-        return chat.participants.find(participant => participant?.id && participant.id !== user?.id) || null;
+        return chat.participants.find(participant => participant?.id && String(participant.id) !== String(user?.id)) || null;
     };
 
     const formatLastSeen = (lastSeen) => {

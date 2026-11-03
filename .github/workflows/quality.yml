@@ -44,3 +44,19 @@ jobs:
       - run: python -m pip_audit -r requirements.txt
       - run: python -m compileall -q .
       - run: python -m pytest tests -q
+
+  podlive-backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: podlive/podlive-backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: podlive/podlive-backend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build

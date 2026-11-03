@@ -12,6 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from datetime import timedelta
 from unittest.mock import patch
+from sqlalchemy import text
 
 os.environ.setdefault('DATABASE_URL', 'sqlite:///:memory:')
 os.environ.setdefault('SECRET_KEY', 'test-secret-key-at-least-32-characters')
@@ -46,7 +47,7 @@ from sockets import _call_invites, _call_signal_windows
 from scripts import cleanup_retention
 from utils import (
     utc_now, validate_upload, send_push_notification, delete_managed_media,
-    get_managed_media_reference, process_media_deletion_task,
+    get_managed_media_reference, process_media_deletion_task, ensure_runtime_compat_schema,
 )
 
 
@@ -1775,6 +1776,21 @@ class SecurityTests(unittest.TestCase):
         analytics = self.client.get('/api/business/analytics', headers=self.auth_headers())
         self.assertEqual(analytics.status_code, 200)
         self.assertEqual(analytics.json['products'], 1)
+
+    def test_business_profile_runtime_migration_repairs_legacy_columns(self):
+        with app.app_context():
+            for column in ('website_url', 'opening_hours', 'catalog_visible'):
+                db.session.execute(text(f'ALTER TABLE business_profile DROP COLUMN {column}'))
+            db.session.commit()
+            ensure_runtime_compat_schema()
+
+        response = self.client.put('/api/business/profile', json={
+            'businessName': 'Legacy Store', 'websiteUrl': 'https://shop.example',
+            'openingHours': '09:00–18:00', 'catalogVisible': True,
+        }, headers=self.auth_headers())
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['websiteUrl'], 'https://shop.example')
+        self.assertEqual(response.json['openingHours'], '09:00–18:00')
 
     def test_business_dashboard_recovers_from_invalid_automation_rules(self):
         with app.app_context():

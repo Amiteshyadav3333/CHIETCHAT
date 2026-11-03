@@ -296,7 +296,7 @@ def add_missing_columns(inspector, table_name, columns):
 # Bump this marker whenever models gain columns or tables. Production runs
 # ensure_database_schema() in the pre-deploy step and skips versions it has
 # already applied.
-SCHEMA_VERSION = '20261104_39_business_dashboard_schema_repair'
+SCHEMA_VERSION = '20261104_40_business_profile_compat_schema'
 
 def ensure_runtime_compat_schema():
     """Repair columns required by the currently deployed models.
@@ -372,8 +372,26 @@ def ensure_runtime_compat_schema():
     })
     inspector = inspect(db.engine)
     add_missing_columns(inspector, 'business_profile', {
+        'category': db.String(80),
+        'description': db.String(500),
+        'address': db.String(300),
+        'support_email': db.String(120),
+        'support_phone': db.String(20),
+        'website_url': db.String(200),
+        'opening_hours': db.String(160),
+        'catalog_visible': db.Boolean(),
         'marketplace_enabled': db.Boolean(),
     })
+    if 'business_profile' in inspector.get_table_names():
+        db.session.execute(text(
+            "UPDATE business_profile SET category = COALESCE(category, 'Other'), "
+            "description = COALESCE(description, ''), address = COALESCE(address, ''), "
+            "support_email = COALESCE(support_email, ''), support_phone = COALESCE(support_phone, ''), "
+            "website_url = COALESCE(website_url, ''), opening_hours = COALESCE(opening_hours, ''), "
+            "catalog_visible = COALESCE(catalog_visible, TRUE), "
+            "marketplace_enabled = COALESCE(marketplace_enabled, FALSE)"
+        ))
+        db.session.commit()
     inspector = inspect(db.engine)
     add_missing_columns(inspector, 'business_automation', {
         'ai_enabled': db.Boolean(),

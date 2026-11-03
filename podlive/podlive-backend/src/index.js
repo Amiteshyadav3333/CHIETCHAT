@@ -141,6 +141,16 @@ app.get('/', (req, res) => {
   res.send({ message: 'PodLive Server is running' });
 });
 
+app.get('/health/live', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    status: 'ok',
+    service: 'podlive-api',
+    capabilities: { stageInvites: true },
+    release: process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || null,
+  });
+});
+
 // Routes
 const authRoutes = require('./routes/auth.routes');
 const liveRoutes = require('./routes/live.routes');

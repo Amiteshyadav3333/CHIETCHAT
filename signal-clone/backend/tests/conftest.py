@@ -4,3 +4,5 @@ import os
 os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
 os.environ['TESTING'] = '1'
 os.environ['APP_ENV'] = 'testing'
+os.environ['UNIT_TESTING'] = '1'
+os.environ['REDIS_URL'] = ''

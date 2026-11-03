@@ -7,7 +7,7 @@
     "start": "node src/index.js",
     "build": "npx prisma generate",
     "migrate:deploy": "npx prisma migrate resolve --applied 20260411000000_init_postgresql && npx prisma migrate deploy",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test"
   },
   "keywords": [],
   "author": "",

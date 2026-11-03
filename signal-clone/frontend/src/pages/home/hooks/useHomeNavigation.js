@@ -152,6 +152,7 @@ export const useHomeNavigation = () => {
         showSaskatAI, setShowSaskatAI,
         socialDeepLink, setSocialDeepLink,
         showSettings, setShowSettings,
+        navigateToView: activateView,
         navPeekOpen, setNavPeekOpen,
         navCollapsed, setNavCollapsed,
         isMobile, setIsMobile,

@@ -1306,10 +1306,7 @@ export const Home = () => {
     const openContentPublisher = () => {
         setShowNotifications(false);
         setShowSearchModal(false);
-        nav.setShowSettings(false);
-        nav.setShowReels(false); nav.setShowPodlive(false);
-        nav.setShowAiChat(false); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false);
-        nav.setShowSocial(true);
+        nav.navigateToView('social');
         setOpenComposerRequest(value => value + 1);
     };
 
@@ -1317,9 +1314,7 @@ export const Home = () => {
         setShowShoppingMarketplace(false);
         setShowNotifications(false);
         setShowSearchModal(false);
-        nav.setShowSettings(false);
-        nav.setShowSocial(false); nav.setShowReels(false); nav.setShowPodlive(false);
-        nav.setShowAiChat(false); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false);
+        nav.navigateToView('chats');
         nav.setMobileHomeTab('chats');
         setActiveChat(null);
         localStorage.removeItem('activeChatId');
@@ -1328,14 +1323,8 @@ export const Home = () => {
     const openTopBarFeature = (feature) => {
         setShowNotifications(false);
         setShowSearchModal(false);
-        nav.setShowSettings(false);
         nav.hideAppNavForFeature();
-        nav.setShowReels(feature === 'reels');
-        nav.setShowPodlive(feature === 'podlive');
-        nav.setShowAiChat(false);
-        nav.setShowSocial(false);
-        nav.setShowSmartSpace(false);
-        nav.setShowSaskatAI(false);
+        nav.navigateToView(feature);
         setActiveChat(null);
         localStorage.removeItem('activeChatId');
     };
@@ -1939,14 +1928,14 @@ export const Home = () => {
 
     // Navigation items
     const navItems = [
-        { label: 'Reels', icon: PlayIcon, active: nav.showReels, action: () => { nav.hideAppNavForFeature(); nav.setShowSocial(false); nav.setShowPodlive(false); nav.setShowReels(true); nav.setShowAiChat(false); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false); } },
-        { label: 'Social', icon: PhotoIcon, active: nav.showSocial, action: () => { nav.hideAppNavForFeature(); nav.setShowReels(false); nav.setShowPodlive(false); nav.setShowSocial(true); nav.setShowAiChat(false); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false); } },
-        { label: 'PodLive', icon: MicrophoneIcon, active: nav.showPodlive, action: () => { nav.hideAppNavForFeature(); nav.setShowReels(false); nav.setShowSocial(false); nav.setShowPodlive(true); nav.setShowAiChat(false); nav.setShowSmartSpace(false); nav.setShowSaskatAI(false); }, badge: nav.podliveLiveCount || 0 },
+        { label: 'Reels', icon: PlayIcon, active: nav.showReels, action: () => { nav.hideAppNavForFeature(); nav.navigateToView('reels'); } },
+        { label: 'Social', icon: PhotoIcon, active: nav.showSocial, action: () => { nav.hideAppNavForFeature(); nav.navigateToView('social'); } },
+        { label: 'PodLive', icon: MicrophoneIcon, active: nav.showPodlive, action: () => { nav.hideAppNavForFeature(); nav.navigateToView('podlive'); }, badge: nav.podliveLiveCount || 0 },
         { label: 'Notify', icon: BellIcon, active: showNotifications, action: openNotifications, badge: unreadCount },
         { label: 'Publish', icon: PlusIcon, active: nav.showSocial, action: openContentPublisher },
         { label: 'Chats', icon: ChatBubbleLeftRightIcon, active: !showShoppingMarketplace && !nav.showSocial && !nav.showReels && !nav.showPodlive && !nav.showAiChat && !nav.showSmartSpace && !nav.showSaskatAI, action: openChats },
         { label: 'Shopping', icon: ShoppingBagIcon, active: showShoppingMarketplace, action: openShoppingMarketplace },
-        { label: 'Settings', icon: Cog6ToothIcon, active: nav.showSettings, action: () => { setShowNotifications(false); setShowSearchModal(false); nav.setShowSettings(true); } }
+        { label: 'Settings', icon: Cog6ToothIcon, active: nav.showSettings, action: () => { setShowNotifications(false); setShowSearchModal(false); nav.navigateToView('settings'); } }
     ];
 
     const featureOverlayOpen = showSearchModal || showLinkPhoneModal || showNotifications || nav.showSettings || nav.showSaskatAI || calls.showCallModal || calls.incomingCall || showShoppingMarketplace;

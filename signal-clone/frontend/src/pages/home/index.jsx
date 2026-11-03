@@ -639,7 +639,7 @@ export const Home = () => {
             }
             if (activeChatRef.current?.id === chatId) setSnapMode(enabled);
             if (enabled && Number(initiatedBy) !== Number(user.id)) {
-                const affectedChat = chats.find(chat => chat.id === chatId);
+                const affectedChat = chatsRef.current.find(chat => String(chat.id) === String(chatId));
                 setSnapNotice({
                     chatId,
                     title: 'Snap Mode started',
@@ -751,20 +751,20 @@ export const Home = () => {
                 }
             }
 
-            if (activeChatRef.current && readableMsg.chatId === activeChatRef.current.id) {
+            if (activeChatRef.current && String(readableMsg.chatId) === String(activeChatRef.current.id)) {
                 const shouldFollowMessage = readableMsg.senderId === user.id || !userScrolledUpRef.current;
                 if (readableMsg.senderId === user.id) userScrolledUpRef.current = false;
                 setMessages(prev => {
                     if (readableMsg.senderId === user.id) {
                         const hasOptimistic = prev.some(m => (
-                            m._isOptimistic && m.senderId === user.id && m.chatId === readableMsg.chatId &&
+                            m._isOptimistic && String(m.senderId) === String(user.id) && String(m.chatId) === String(readableMsg.chatId) &&
                             (!readableMsg.clientMessageId || m.clientMessageId === readableMsg.clientMessageId)
                         ));
                         if (hasOptimistic) {
                             let replaced = false;
                             return prev.map(m => {
                                 const matchingClientId = !readableMsg.clientMessageId || m.clientMessageId === readableMsg.clientMessageId;
-                                if (!replaced && matchingClientId && m._isOptimistic && m.senderId === user.id && m.chatId === readableMsg.chatId) {
+                                if (!replaced && matchingClientId && m._isOptimistic && String(m.senderId) === String(user.id) && String(m.chatId) === String(readableMsg.chatId)) {
                                     replaced = true;
                                     return readableMsg;
                                 }
@@ -781,13 +781,13 @@ export const Home = () => {
                 }
             }
 
-            if (!chatsRef.current.some(chat => chat.id === readableMsg.chatId)) {
+            if (!chatsRef.current.some(chat => String(chat.id) === String(readableMsg.chatId))) {
                 fetchChats();
                 return;
             }
 
             setChats(prev => {
-                const chatIdx = prev.findIndex(c => c.id === readableMsg.chatId);
+                const chatIdx = prev.findIndex(c => String(c.id) === String(readableMsg.chatId));
                 if (chatIdx === -1) {
                     fetchChats();
                     return prev;
@@ -799,9 +799,9 @@ export const Home = () => {
                     timestamp: readableMsg.timestamp,
                     type: readableMsg.type
                 };
-                if (readableMsg.senderId !== user.id && activeChatRef.current?.id !== readableMsg.chatId) {
+                if (String(readableMsg.senderId) !== String(user.id) && String(activeChatRef.current?.id) !== String(readableMsg.chatId)) {
                     targetChat.unreadCount = Number(targetChat.unreadCount || 0) + 1;
-                } else if (activeChatRef.current?.id === readableMsg.chatId) {
+                } else if (String(activeChatRef.current?.id) === String(readableMsg.chatId)) {
                     targetChat.unreadCount = 0;
                 }
                 return [targetChat, ...updatedChats];
@@ -809,7 +809,7 @@ export const Home = () => {
         });
 
         socket.on('message_status_update', ({ messageId, chatId, status, readAt, deliveredAt }) => {
-            if (activeChatRef.current && chatId === activeChatRef.current.id) {
+            if (activeChatRef.current && String(chatId) === String(activeChatRef.current.id)) {
                 setMessages(prev => prev.map(m => m.id === messageId ? { ...m, status, readAt: readAt || m.readAt, deliveredAt: deliveredAt || m.deliveredAt } : m));
             }
         });
@@ -945,7 +945,7 @@ export const Home = () => {
             socket.off('typing_update');
             socket.off('live_location_update');
         };
-    }, [socket, user, publicKey, privateKey, fetchChats, decryptMessageForCurrentUser, processQueue, chats]);
+    }, [socket, user, publicKey, privateKey, fetchChats, decryptMessageForCurrentUser, processQueue]);
 
     // Active chat messages loader
     useEffect(() => {
@@ -975,7 +975,9 @@ export const Home = () => {
                 const res = await axios.get(`/api/chats/${activeChat.id}/messages`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
+                if (cancelled) return;
                 const decrypted = await decryptMessagesForCurrentUser(res.data);
+                if (cancelled) return;
                 setMessages(decrypted);
                 saveEncryptedMessages(user?.id, activeChat.id, res.data);
                 window.requestAnimationFrame(() => scrollToBottom('auto'));
@@ -1722,7 +1724,7 @@ export const Home = () => {
             return null;
         }
         const existingChat = chats.find(chat =>
-            !chat.isGroup && chat.participants?.some(participant => participant.id === targetUser.id)
+            !chat.isGroup && chat.participants?.some(participant => String(participant.id) === String(targetUser.id))
         );
         if (existingChat) {
             setActiveChat(existingChat);
@@ -1736,7 +1738,7 @@ export const Home = () => {
                 headers: { Authorization: `Bearer ${token}` }
             });
             const updatedChats = await fetchChats();
-            const newChat = updatedChats.find(chat => chat.id === res.data.id);
+            const newChat = updatedChats.find(chat => String(chat.id) === String(res.data.id));
             if (newChat) setActiveChat(newChat);
             setShowSearchModal(false);
             setSearchQuery('');

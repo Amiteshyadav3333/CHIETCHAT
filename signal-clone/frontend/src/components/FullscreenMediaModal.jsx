@@ -11,10 +11,20 @@ import { useBackHandler } from '../utils/backNavigation';
    ═══════════════════════════════════════════════════════════════ */
 const Portal = ({ children }) => ReactDOM.createPortal(children, document.body);
 
+export const getFullscreenMediaKind = (type, src = '') => {
+    const normalizedType = String(type || '').toLowerCase();
+    if (normalizedType === 'audio') return 'audio';
+    if (normalizedType === 'video') return 'video';
+    const path = String(src).split(/[?#]/, 1)[0];
+    if (/\.(mp3|wav|m4a|aac|oga|ogg|opus|webm)$/i.test(path)) return 'audio';
+    if (/\.(mp4|webm|ogv|mov|m4v)$/i.test(path)) return 'video';
+    return 'image';
+};
+
 /* ═══════════════════════════════════════════════════════════════
    MAIN EXPORT — dispatch to right viewer
    ═══════════════════════════════════════════════════════════════ */
-const FullscreenMediaModal = ({ src, type, onClose, referenceSrc = null }) => {
+const FullscreenMediaModal = ({ src, type, onClose, referenceSrc = null, initialTime = 0 }) => {
     useBackHandler(Boolean(src), () => onClose?.(), 'fullscreen-media');
 
     useEffect(() => {
@@ -47,9 +57,7 @@ const FullscreenMediaModal = ({ src, type, onClose, referenceSrc = null }) => {
         );
     }
 
-    const isVideo = type === 'video' || /\.(mp4|webm|ogg|mov)$/i.test(safeSrc);
-    const isAudio = type === 'audio' || /\.(mp3|wav|m4a|aac|oga)$/i.test(safeSrc) ||
-        (type === 'audio' && /\.webm$/i.test(safeSrc));
+    const mediaKind = getFullscreenMediaKind(type, safeSrc);
 
     const handleDownload = async (e) => {
         e?.stopPropagation();
@@ -64,10 +72,10 @@ const FullscreenMediaModal = ({ src, type, onClose, referenceSrc = null }) => {
     return (
         <Portal>
             <div style={{ position: 'fixed', inset: 0, zIndex: 99999 }}>
-                {isVideo
+                {mediaKind === 'video'
                     ? <VideoViewer src={safeSrc} onClose={onClose} onDownload={handleDownload} />
-                    : isAudio
-                        ? <AudioViewer src={safeSrc} onClose={onClose} onDownload={handleDownload} />
+                    : mediaKind === 'audio'
+                        ? <AudioViewer src={safeSrc} initialTime={initialTime} onClose={onClose} onDownload={handleDownload} />
                         : <ImageViewer src={safeSrc} referenceSrc={safeReferenceSrc} onClose={onClose} onDownload={handleDownload} />
                 }
             </div>
@@ -450,7 +458,7 @@ const VideoViewer = ({ src, onClose, onDownload }) => {
 /* ═══════════════════════════════════════════════════════════════
    AUDIO VIEWER — Premium music player style
    ═══════════════════════════════════════════════════════════════ */
-const AudioViewer = ({ src, onClose, onDownload }) => {
+const AudioViewer = ({ src, initialTime = 0, onClose, onDownload }) => {
     const audioRef = useRef(null);
     const progressRef = useRef(null);
     const animRef = useRef(null);
@@ -458,21 +466,28 @@ const AudioViewer = ({ src, onClose, onDownload }) => {
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const [speed, setSpeed] = useState(1);
+    const [playbackError, setPlaybackError] = useState('');
     const [barHeights, setBarHeights] = useState(() => Array.from({ length: 50 }, (_, i) => Math.abs(Math.sin(i * 0.4)) * 0.75 + 0.15));
 
     useEffect(() => {
         const a = audioRef.current;
         if (!a) return;
         const hs = {
-            loadedmetadata: () => setDuration(a.duration || 0),
+            loadedmetadata: () => {
+                setDuration(Number.isFinite(a.duration) ? a.duration : 0);
+                if (Number.isFinite(initialTime) && initialTime > 0 && Number.isFinite(a.duration)) {
+                    a.currentTime = Math.min(initialTime, Math.max(0, a.duration - 0.1));
+                }
+            },
             timeupdate: () => setCurrentTime(a.currentTime),
             play: () => setPlaying(true),
             pause: () => setPlaying(false),
             ended: () => { setPlaying(false); setCurrentTime(0); },
+            error: () => setPlaybackError('This audio could not be loaded. Check the connection and try again.'),
         };
         Object.entries(hs).forEach(([e, h]) => a.addEventListener(e, h));
         return () => Object.entries(hs).forEach(([e, h]) => a.removeEventListener(e, h));
-    }, []);
+    }, [initialTime]);
 
     // Animate waveform bars when playing
     useEffect(() => {
@@ -492,7 +507,14 @@ const AudioViewer = ({ src, onClose, onDownload }) => {
         return () => cancelAnimationFrame(animRef.current);
     }, [playing]);
 
-    const togglePlay = () => audioRef.current?.paused ? audioRef.current.play() : audioRef.current.pause();
+    const togglePlay = () => {
+        const audio = audioRef.current;
+        if (!audio) return;
+        if (audio.paused) {
+            setPlaybackError('');
+            audio.play().catch(() => setPlaybackError('Audio playback was blocked. Tap play to try again.'));
+        } else audio.pause();
+    };
 
     const seek = (e) => {
         const rect = progressRef.current.getBoundingClientRect();
@@ -521,6 +543,7 @@ const AudioViewer = ({ src, onClose, onDownload }) => {
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         }}>
             <audio ref={audioRef} src={src} preload="metadata" />
+            {playbackError && <p role="status" style={{ position: 'absolute', bottom: 100, color: '#fecaca', textAlign: 'center', padding: 16 }}>{playbackError}</p>}
 
             {/* TOP BAR */}
             <div style={{

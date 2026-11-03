@@ -299,6 +299,7 @@ const InlineAudioPlayer = ({ src, isOwn, onOpen }) => {
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const [speed, setSpeed] = useState(1);
+    const [playbackError, setPlaybackError] = useState(false);
     const bars = [0.3,0.6,0.9,0.7,0.4,0.8,0.5,0.95,0.6,0.3,0.7,0.8,0.4,0.6,0.9,0.5,0.7,0.4,0.8,0.6,0.3,0.9,0.7,0.5,0.6,0.4,0.8,0.7,0.3,0.6];
 
     const displayTime = (sec) => {
@@ -362,7 +363,7 @@ const InlineAudioPlayer = ({ src, isOwn, onOpen }) => {
 
     const togglePlay = (e) => {
         e.stopPropagation();
-        if (audioRef.current?.paused) audioRef.current.play();
+        if (audioRef.current?.paused) audioRef.current.play().catch(() => setPlaybackError(true));
         else audioRef.current?.pause();
     };
 
@@ -388,6 +389,7 @@ const InlineAudioPlayer = ({ src, isOwn, onOpen }) => {
     return (
         <div className="flex items-center gap-2.5 min-w-[220px] max-w-[270px] py-0.5 font-sans">
             <audio ref={audioRef} src={src} preload="metadata" />
+            {playbackError && <span role="status" className="sr-only">Audio playback failed. Try again.</span>}
 
             {/* Play/Pause button */}
             <button
@@ -443,7 +445,13 @@ const InlineAudioPlayer = ({ src, isOwn, onOpen }) => {
                             {speed}x
                         </button>
                         <button
-                            onClick={(e) => { e.stopPropagation(); onOpen?.(); }}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                const audio = audioRef.current;
+                                const position = audio?.currentTime || 0;
+                                audio?.pause();
+                                onOpen?.(position);
+                            }}
                             className="text-[9px] opacity-50 hover:opacity-100 transition-opacity"
                             style={{ color: accentColor }}
                             title="Open fullscreen player"
@@ -991,7 +999,7 @@ const ChatBubble = ({
                     <InlineAudioPlayer
                         src={cnt}
                         isOwn={isOwn}
-                        onOpen={() => setZoomedMedia({ src: cnt, type: 'audio' })}
+                        onOpen={(initialTime) => setZoomedMedia({ src: cnt, type: 'audio', initialTime })}
                     />
                     {!protectedSnapMode && <button type="button" onClick={handleTranscribeAudioMessage} disabled={isTranscribingAudio} className="rounded-lg bg-black/15 px-2.5 py-1.5 text-xs font-semibold text-white/85 transition hover:bg-black/25 disabled:opacity-60">{isTranscribingAudio ? 'Listening and writing…' : audioTranscript ? 'Convert audio to text again' : 'Convert audio to text'}</button>}
                     {!protectedSnapMode && !audioTranscript && <p className="text-[10px] text-white/55">Audio is sent for transcription only when you tap.</p>}
@@ -1656,6 +1664,7 @@ const ChatBubble = ({
                     <FullscreenMediaModal
                         src={zoomedMedia.src}
                         type={zoomedMedia.type}
+                        initialTime={zoomedMedia.initialTime}
                         referenceSrc={zoomedMedia.referenceSrc}
                         onClose={() => setZoomedMedia(null)}
                     />

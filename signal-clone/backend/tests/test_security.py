@@ -1962,12 +1962,42 @@ class SecurityTests(unittest.TestCase):
         with app.app_context():
             db.session.add_all([
                 SocialPost(user_id=self.user_id, caption=f'post-{index}')
-                for index in range(120)
+                for index in range(620)
             ])
             db.session.commit()
         feed = self.client.get('/api/social/posts?limit=500', headers=self.auth_headers())
         self.assertEqual(feed.status_code, 200)
         self.assertEqual(len(feed.json), 100)
+        self.assertTrue(feed.headers.get('X-Next-Cursor'))
+        all_posts = list(feed.json)
+        next_cursor = feed.headers.get('X-Next-Cursor')
+        page_count = 1
+        while next_cursor:
+            next_page = self.client.get(
+                '/api/social/posts?limit=100&cursor=' + next_cursor,
+                headers=self.auth_headers(),
+            )
+            self.assertEqual(next_page.status_code, 200)
+            all_posts.extend(next_page.json)
+            next_cursor = next_page.headers.get('X-Next-Cursor')
+            page_count += 1
+            self.assertLessEqual(page_count, 10)
+        self.assertEqual(len({post['id'] for post in all_posts}), 620)
+        tampered_cursor = feed.headers['X-Next-Cursor'][:-1] + ('a' if feed.headers['X-Next-Cursor'][-1] != 'a' else 'b')
+        rejected_cursor = self.client.get(
+            '/api/social/posts?cursor=' + tampered_cursor, headers=self.auth_headers(),
+        )
+        self.assertEqual(rejected_cursor.status_code, 400)
+        other_user_cursor = self.client.get(
+            '/api/social/posts?cursor=' + feed.headers['X-Next-Cursor'],
+            headers={'Authorization': f'Bearer {self.payee_token}'},
+        )
+        self.assertEqual(other_user_cursor.status_code, 400)
+        self.assertIn('X-Next-Cursor', self.client.get(
+            '/api/social/posts?limit=5', headers={
+                **self.auth_headers(), 'Origin': 'https://chat.indiasearch.site',
+            },
+        ).headers.get('Access-Control-Expose-Headers', ''))
         oversized_post = self.client.post(
             '/api/social/posts', data={'caption': 'x' * 1001}, headers=self.auth_headers(),
         )

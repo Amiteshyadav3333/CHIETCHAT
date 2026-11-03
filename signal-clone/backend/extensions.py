@@ -17,7 +17,11 @@ ALLOWED_ORIGINS = list(dict.fromkeys([
 # Keeping this explicit prevents an optional green-thread package from silently
 # changing concurrency behavior between local, test and production installs.
 socketio = SocketIO(cors_allowed_origins=ALLOWED_ORIGINS, async_mode='threading')
-cors = CORS(resources={r"/*": {"origins": ALLOWED_ORIGINS}}, supports_credentials=True)
+cors = CORS(
+    resources={r"/*": {"origins": ALLOWED_ORIGINS}},
+    supports_credentials=True,
+    expose_headers=['X-Next-Cursor'],
+)
 
 # Global states
 socket_users = {}

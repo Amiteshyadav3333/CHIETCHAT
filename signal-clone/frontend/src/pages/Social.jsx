@@ -1046,6 +1046,9 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
     const [activeTab, setActiveTab] = useState(() => user?.uiPreferences?.socialDefaultFeed || localStorage.getItem('social_default_feed') || 'for-you');
     const feedCacheRef = useRef(new Map());
     const feedRequestsRef = useRef(new Map());
+    const nextFeedCursorRef = useRef(new Map());
+    const moreFeedRequestsRef = useRef(new Set());
+    const feedScrollRef = useRef(null);
     const activeTabRef = useRef(activeTab);
     const activeUserRef = useRef(user?.id);
     activeTabRef.current = activeTab;
@@ -1055,6 +1058,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
     const [selectedChannel, setSelectedChannel] = useState(null);
     const [channelPosts, setChannelPosts] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
     const [caption, setCaption] = useState('');
     const [affiliateCode, setAffiliateCode] = useState('');
     const [media, setMedia] = useState([]);
@@ -1096,6 +1100,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                 if (stored) {
                     cached = stored;
                     feedCacheRef.current.set(key, stored);
+                    if (stored.paginationLoaded) nextFeedCursorRef.current.set(key, stored.nextCursor || null);
                 }
             }
             if (activeTabRef.current === t && activeUserRef.current === user?.id) {
@@ -1103,18 +1108,21 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                 else setPosts([]);
                 setLoading(!cached?.posts?.length);
             }
-            if (!force && cached?.posts && isSocialFeedCacheFresh(cached.updatedAt)) {
+            if (!force && cached?.posts && cached.paginationLoaded && isSocialFeedCacheFresh(cached.updatedAt)) {
                 if (activeTabRef.current === t && activeUserRef.current === user?.id) setLoading(false);
                 return cached.posts;
             }
 
             try {
+                if (force) nextFeedCursorRef.current.delete(key);
                 const feed = t === 'following' ? 'following' : t === 'community' ? 'community' : t === 'news' ? 'news' : 'all';
                 const res = await axios.get('/api/social/posts?feed=' + feed, { headers: authHeaders(token) });
                 const nextPosts = Array.isArray(res.data) ? res.data : [];
-                const nextCache = { posts: nextPosts, updatedAt: Date.now() };
+                const nextCursor = res.headers?.['x-next-cursor'] || null;
+                nextFeedCursorRef.current.set(key, nextCursor);
+                const nextCache = { posts: nextPosts, nextCursor, paginationLoaded: true, updatedAt: Date.now() };
                 feedCacheRef.current.set(key, nextCache);
-                saveSocialFeedCache(user?.id, t, nextPosts);
+                saveSocialFeedCache(user?.id, t, nextPosts, nextCursor);
                 if (activeTabRef.current === t && activeUserRef.current === user?.id) setPosts(nextPosts);
                 return nextPosts;
             } catch {
@@ -1128,12 +1136,53 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
         finally { if (feedRequestsRef.current.get(key) === task) feedRequestsRef.current.delete(key); }
     }, [token, activeTab, user?.id]);
 
+    const loadMorePosts = useCallback(async () => {
+        const tab = activeTabRef.current;
+        const userId = activeUserRef.current;
+        if (!token || !userId || selectedChannel || tab === 'channels') return;
+        const key = feedCacheKey(userId, tab);
+        const cursor = nextFeedCursorRef.current.get(key);
+        if (!cursor || moreFeedRequestsRef.current.has(key)) return;
+        moreFeedRequestsRef.current.add(key);
+        if (activeTabRef.current === tab && activeUserRef.current === userId) setLoadingMore(true);
+        const feed = tab === 'following' ? 'following' : tab === 'community' ? 'community' : tab === 'news' ? 'news' : 'all';
+        try {
+            const res = await axios.get(`/api/social/posts?feed=${feed}&cursor=${encodeURIComponent(cursor)}`, { headers: authHeaders(token) });
+            const page = Array.isArray(res.data) ? res.data : [];
+            const nextCursor = res.headers?.['x-next-cursor'] || null;
+            nextFeedCursorRef.current.set(key, nextCursor);
+            const entry = feedCacheRef.current.get(key) || { posts: [], updatedAt: 0 };
+            const existingIds = new Set((entry.posts || []).map(post => String(post.id)));
+            const uniquePage = page.filter(post => !existingIds.has(String(post.id)));
+            const nextPosts = [...(entry.posts || []), ...uniquePage];
+            const nextCache = { posts: nextPosts, nextCursor, paginationLoaded: true, updatedAt: Date.now() };
+            feedCacheRef.current.set(key, nextCache);
+            saveSocialFeedCache(userId, tab, nextPosts, nextCursor);
+            if (activeTabRef.current === tab && activeUserRef.current === userId) {
+                setPosts(current => {
+                    const currentIds = new Set(current.map(post => String(post.id)));
+                    return [...current, ...page.filter(post => !currentIds.has(String(post.id)))];
+                });
+            }
+        } catch (error) {
+            if (error.response?.status === 400) {
+                nextFeedCursorRef.current.delete(key);
+                await fetchPosts(tab, { force: true });
+            }
+        } finally {
+            moreFeedRequestsRef.current.delete(key);
+            if (activeTabRef.current === tab && activeUserRef.current === userId) setLoadingMore(false);
+        }
+    }, [token, selectedChannel, fetchPosts]);
+
     const updateCachedFeed = (feed, update) => {
         setPosts(current => {
             const next = update(current);
-            const entry = { posts: next, updatedAt: Date.now() };
-            feedCacheRef.current.set(feedCacheKey(user?.id, feed), entry);
-            saveSocialFeedCache(user?.id, feed, next);
+            const key = feedCacheKey(user?.id, feed);
+            const nextCursor = nextFeedCursorRef.current.get(key) || null;
+            const entry = { posts: next, nextCursor, paginationLoaded: true, updatedAt: Date.now() };
+            feedCacheRef.current.set(key, entry);
+            saveSocialFeedCache(user?.id, feed, next, nextCursor);
             return next;
         });
     };
@@ -1440,7 +1489,14 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                     </div>
 
                     {/* Scrollable feed */}
-                    <div className="flex-1 overflow-y-auto scrollbar-hide">
+                    <div
+                        ref={feedScrollRef}
+                        onScroll={event => {
+                            const element = event.currentTarget;
+                            if (element.scrollHeight - element.scrollTop - element.clientHeight < 650) loadMorePosts();
+                        }}
+                        className="flex-1 overflow-y-auto scrollbar-hide"
+                    >
                         {selectedChannel ? (
                             <ChannelView channel={selectedChannel} posts={currentPosts} user={user} token={token} preview={preview} media={media} caption={caption} posting={posting} fileRef={fileRef} setCaption={setCaption} setMedia={setMedia}
                                 submitPost={options => submitPost(selectedChannel.id, options)} likePost={id => likePost(id, true)} retweetPost={id => retweetPost(id, true)} sharePost={(id, count) => sharePost(id, true, count)} onShareToChat={onShareToChat} deletePost={id => deletePost(id, true)}
@@ -1462,6 +1518,18 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                                             onFollow={() => toggleFollow(post.user.id)} onOpenProfile={openProfile} onPollVote={index => votePoll(post.id, index)} />
                                     </div>
                                 )) : <CheetChatEmptyState text={activeTab === 'following' ? 'Follow people to build your feed.' : activeTab === 'news' ? 'No articles yet. Publish a source-backed story.' : 'No posts match your search.'} />}
+                                {nextFeedCursorRef.current.get(feedCacheKey(user?.id, activeTab)) && (
+                                    <div className="flex justify-center border-t border-[#27333b] px-4 py-5">
+                                        <button
+                                            type="button"
+                                            onClick={loadMorePosts}
+                                            disabled={loadingMore}
+                                            className="rounded-full border border-white/15 bg-white/5 px-5 py-2 text-sm font-semibold text-[#e7e9ea] transition hover:bg-white/10 disabled:opacity-60"
+                                        >
+                                            {loadingMore ? 'Loading more posts…' : 'Load older posts'}
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

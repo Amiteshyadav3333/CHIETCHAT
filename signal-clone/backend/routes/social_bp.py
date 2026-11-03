@@ -5,8 +5,9 @@ import re
 import urllib.parse
 from collections import Counter
 from flask import Blueprint, current_app, jsonify, request
-from sqlalchemy import case, func, or_
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import joinedload
+from itsdangerous import BadSignature, URLSafeTimedSerializer
 from werkzeug.utils import secure_filename
 from urllib.parse import urlparse
 
@@ -39,6 +40,53 @@ MAX_COMMENT_DEPTH = 8
 MAX_CHANNEL_QUERY_LENGTH = 100
 FREE_DAILY_POST_LIMIT = 3
 MAX_POST_IMAGES = 4
+FEED_CANDIDATE_BATCH_SIZE = 500
+FEED_CURSOR_MAX_AGE_SECONDS = 24 * 60 * 60
+
+
+def feed_cursor_serializer():
+    return URLSafeTimedSerializer(current_app.config['SECRET_KEY'], salt='social-feed-cursor-v1')
+
+
+def decode_feed_cursor(value, user_id, feed):
+    if not value:
+        return None
+    if not isinstance(value, str) or len(value) > 16_000:
+        raise ValueError('Invalid or expired feed cursor')
+    try:
+        payload = feed_cursor_serializer().loads(value, max_age=FEED_CURSOR_MAX_AGE_SECONDS)
+        pending = payload.get('pending')
+        before = payload.get('before')
+        if (not isinstance(payload, dict) or payload.get('userId') != int(user_id)
+                or payload.get('feed') != feed or not isinstance(pending, list)
+                or len(pending) > FEED_CANDIDATE_BATCH_SIZE
+                or any(type(post_id) is not int or post_id < 1 for post_id in pending)
+                or type(payload.get('hasMore')) is not bool):
+            raise ValueError('Invalid feed cursor')
+        if before is not None:
+            if (not isinstance(before, dict) or type(before.get('id')) is not int or before['id'] < 1
+                    or not isinstance(before.get('createdAt'), str)):
+                raise ValueError('Invalid feed cursor')
+            created_at = datetime.datetime.fromisoformat(before['createdAt'].replace('Z', '+00:00'))
+            if created_at.tzinfo:
+                created_at = created_at.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+            before = {'id': before['id'], 'createdAt': created_at}
+        elif payload.get('hasMore'):
+            raise ValueError('Invalid feed cursor')
+        return {'pending': pending, 'before': before, 'hasMore': payload['hasMore']}
+    except (BadSignature, ValueError, TypeError, KeyError, AttributeError):
+        raise ValueError('Invalid or expired feed cursor')
+
+
+def encode_feed_cursor(user_id, feed, pending_ids, before, has_more):
+    before_value = None
+    if before:
+        before_value = {'id': int(before['id']), 'createdAt': iso_utc(before['createdAt'])}
+    return feed_cursor_serializer().dumps({
+        'userId': int(user_id), 'feed': feed,
+        'pending': [int(post_id) for post_id in pending_ids],
+        'before': before_value, 'hasMore': bool(has_more),
+    })
 
 
 def post_media_items(post):
@@ -284,7 +332,34 @@ def get_social_posts():
         query = query.filter(SocialPost.user_id.in_(followed_ids))
 
     limit = bounded_limit(FEED_DEFAULT_LIMIT, FEED_MAX_LIMIT)
-    candidates = query.order_by(SocialPost.created_at.desc()).limit(500).all()
+    try:
+        cursor_state = decode_feed_cursor(request.args.get('cursor'), user_id, feed)
+    except ValueError as error:
+        return jsonify({'error': str(error)}), 400
+
+    is_pending_page = bool(cursor_state and cursor_state['pending'])
+    source_before = cursor_state['before'] if cursor_state else None
+    if is_pending_page:
+        pending_ids = cursor_state['pending']
+        eligible_rows = query.filter(SocialPost.id.in_(pending_ids)).all()
+        eligible_by_id = {post.id: post for post in eligible_rows}
+        eligible_order = [post_id for post_id in pending_ids if post_id in eligible_by_id]
+        selected_ids = eligible_order[:limit]
+        candidates = [eligible_by_id[post_id] for post_id in selected_ids]
+        remaining_ids = eligible_order[len(selected_ids):]
+        more_source = cursor_state['hasMore']
+    elif cursor_state and not cursor_state['hasMore']:
+        return jsonify([])
+    else:
+        if source_before:
+            query = query.filter(or_(
+                SocialPost.created_at < source_before['createdAt'],
+                and_(SocialPost.created_at == source_before['createdAt'], SocialPost.id < source_before['id']),
+            ))
+        candidates = query.order_by(SocialPost.created_at.desc(), SocialPost.id.desc()).limit(FEED_CANDIDATE_BATCH_SIZE).all()
+        source_before = ({'createdAt': candidates[-1].created_at, 'id': candidates[-1].id} if candidates else None)
+        more_source = len(candidates) == FEED_CANDIDATE_BATCH_SIZE
+        remaining_ids = []
     candidate_ids = [post.id for post in candidates]
     aggregate_ids = set(candidate_ids)
     aggregate_ids.update(post.retweet_of_id for post in candidates if post.retweet_of_id is not None)
@@ -328,16 +403,24 @@ def get_social_posts():
         for post in candidates:
             engagement.setdefault(post.id, {})['creator_posts'] = creator_counts.get(post.user_id, 1)
     feed_now = utc_now()
-    if current_app.config.get('SOCIAL_FEED_SERVICE_URL') or os.environ.get('SOCIAL_FEED_SERVICE_URL'):
+    if is_pending_page:
+        posts = candidates
+    elif current_app.config.get('SOCIAL_FEED_SERVICE_URL') or os.environ.get('SOCIAL_FEED_SERVICE_URL'):
         try:
-            ordered_ids = call_social_feed_ranker(user_id, candidates, engagement, limit, now=feed_now)
+            ordered_ids = call_social_feed_ranker(user_id, candidates, engagement, len(candidates), now=feed_now)
             candidate_by_id = {post.id: post for post in candidates}
-            posts = [candidate_by_id[post_id] for post_id in ordered_ids]
+            ranked_candidates = [candidate_by_id[post_id] for post_id in ordered_ids]
+            posts = ranked_candidates[:limit]
+            remaining_ids = [post.id for post in ranked_candidates[limit:]]
         except Exception as error:
             report_safe_exception('social_feed_rank_service_failed', error)
-            posts = rank_public_posts(candidates, engagement, now=feed_now, limit=limit)
+            ranked_candidates = rank_public_posts(candidates, engagement, now=feed_now, limit=len(candidates))
+            posts = ranked_candidates[:limit]
+            remaining_ids = [post.id for post in ranked_candidates[limit:]]
     else:
-        posts = rank_public_posts(candidates, engagement, now=feed_now, limit=limit)
+        ranked_candidates = rank_public_posts(candidates, engagement, now=feed_now, limit=len(candidates))
+        posts = ranked_candidates[:limit]
+        remaining_ids = [post.id for post in ranked_candidates[limit:]]
     post_ids = [post.id for post in posts]
     feed_context = {
         'liked_ids': set(), 'followed_ids': set(followed_ids),
@@ -355,7 +438,13 @@ def get_social_posts():
         feed_context['retweet_counts'] = dict(db.session.query(
             SocialPost.retweet_of_id, func.count(SocialPost.id)
         ).filter(SocialPost.retweet_of_id.in_(aggregate_ids)).group_by(SocialPost.retweet_of_id).all())
-    return jsonify([serialize_post(post, user_id, feed_context) for post in posts])
+    response = jsonify([serialize_post(post, user_id, feed_context) for post in posts])
+    has_next_page = bool(remaining_ids or more_source)
+    if has_next_page:
+        response.headers['X-Next-Cursor'] = encode_feed_cursor(
+            user_id, feed, remaining_ids, source_before, more_source,
+        )
+    return response
 
 
 @social_bp.route('/api/social/trends', methods=['GET'])

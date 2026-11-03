@@ -2,7 +2,7 @@ const DB_NAME = 'ducor-social-cache';
 const DB_VERSION = 1;
 const STORE_NAME = 'feeds';
 const MAX_CACHE_AGE = 7 * 24 * 60 * 60 * 1000;
-const MAX_CACHED_POSTS = 60;
+const MAX_CACHED_POSTS = 500;
 
 const memoryCache = new Map();
 let databasePromise;
@@ -67,10 +67,17 @@ export const loadSocialFeedCache = async (userId, feed) => {
     return record;
 };
 
-export const saveSocialFeedCache = async (userId, feed, posts) => {
+export const saveSocialFeedCache = async (userId, feed, posts, nextCursor = null) => {
     if (!userId || !feed || !Array.isArray(posts)) return;
     const key = makeKey(userId, feed);
-    const record = { key, posts: posts.slice(0, MAX_CACHED_POSTS), updatedAt: Date.now() };
+    const canResumeFromCachedPosts = posts.length <= MAX_CACHED_POSTS;
+    const record = {
+        key,
+        posts: posts.slice(0, MAX_CACHED_POSTS),
+        nextCursor: canResumeFromCachedPosts ? nextCursor : null,
+        paginationLoaded: canResumeFromCachedPosts,
+        updatedAt: Date.now(),
+    };
     memoryCache.set(key, record);
     const database = await openDatabase();
     if (database) await writeRecord(database, record);

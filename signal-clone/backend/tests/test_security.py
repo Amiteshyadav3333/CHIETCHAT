@@ -1007,6 +1007,16 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(len(received), 1)
         self.assertEqual(received[0]['args'][0]['chatId'], self.chat_id)
 
+        merchant.emit('send_message', {
+            'chatId': self.chat_id, 'content': self.encrypted_envelope('reply-ciphertext'),
+            'clientMessageId': 'socket-scope-2', 'type': 'text',
+        })
+        payer_reply = [event for event in payer.get_received()
+                       if event['name'] == 'receive_message'
+                       and event['args'][0].get('clientMessageId') == 'socket-scope-2']
+        self.assertEqual(len(payer_reply), 1)
+        self.assertEqual(payer_reply[0]['args'][0]['chatId'], self.chat_id)
+
         payer.emit('join_call', {'chatId': self.chat_id})
         merchant.emit('join_call', {'chatId': self.chat_id})
         joined = [event for event in payer.get_received() if event['name'] == 'user_joined_call']

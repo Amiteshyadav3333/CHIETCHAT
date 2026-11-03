@@ -60,6 +60,14 @@ export const useHomeNavigation = () => {
         if (syncUrl && target && target !== pathname) navigate(target);
     }, [navigate, pathname]);
 
+    const openChat = useCallback((chat, setActiveChat) => {
+        if (!chat?.id || typeof setActiveChat !== 'function') return false;
+        activateView('chats', false);
+        setActiveChat(chat);
+        navigate(directChatPath(chat.id));
+        return true;
+    }, [activateView, navigate]);
+
     const setShowReels = useCallback(value => {
         if (value) activateView('reels'); else setShowReelsState(false);
     }, [activateView]);
@@ -129,6 +137,10 @@ export const useHomeNavigation = () => {
             routeSyncPending.current = false;
             return;
         }
+        if (/^\/(?:chats\/[^/]+|direct\/t\/[^/]+)\/?$/.test(pathname)) {
+            localStorage.setItem('activeView', 'chats');
+            return;
+        }
         const view = showReels ? 'reels' : showSocial ? 'social' : showPodlive ? 'podlive' : showSmartSpace ? 'smart-space' : showSettings ? 'settings' : showAiChat ? 'ai-chat' : showSaskatAI ? 'saskat-ai' : 'chats';
         const target = viewToPath[view];
         if (target && target !== pathname) navigate(target);
@@ -179,6 +191,7 @@ export const useHomeNavigation = () => {
         socialDeepLink, setSocialDeepLink,
         showSettings, setShowSettings,
         navigateToView: activateView,
+        openChat,
         navigateToProfile,
         navPeekOpen, setNavPeekOpen,
         navCollapsed, setNavCollapsed,

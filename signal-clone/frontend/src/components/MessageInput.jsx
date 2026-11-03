@@ -394,7 +394,8 @@ const MessageInput = ({
                 setIsTranslating(false);
             }
         }
-        onSend(finalWord, 'text', disappearingTtl);
+        const sent = await onSend(finalWord, 'text', disappearingTtl);
+        if (sent === false) return;
         setText('');
         onLiveNoteDraft?.('');
         setShowEmoji(false);

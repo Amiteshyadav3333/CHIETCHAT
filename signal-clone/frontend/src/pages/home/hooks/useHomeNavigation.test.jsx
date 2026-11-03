@@ -10,6 +10,7 @@ let root;
 
 const NavigationProbe = () => {
     const navigation = useHomeNavigation();
+    const [selectedChat, setSelectedChat] = React.useState(null);
     const { pathname, search } = useLocation();
     return <>
         <output data-testid="pathname">{pathname}</output>
@@ -17,6 +18,8 @@ const NavigationProbe = () => {
         <output data-testid="mobile-tab">{navigation.mobileHomeTab}</output>
         <output data-testid="show-social">{String(navigation.showSocial)}</output>
         <output data-testid="social-deep-link">{navigation.socialDeepLink ? `${navigation.socialDeepLink.type}:${navigation.socialDeepLink.id}` : ""}</output>
+        <output data-testid="selected-chat">{selectedChat?.id || ''}</output>
+        <button onClick={() => navigation.openChat({ id: 'chat-42' }, setSelectedChat)}>open-direct-chat</button>
         <button onClick={() => navigation.navigateToProfile('profile-42')}>view-profile</button>
         {['chats', 'stories', 'groups', 'calls'].map(tab => (
             <button key={`tab-${tab}`} onClick={() => navigation.setMobileHomeTab(tab)}>tab-{tab}</button>
@@ -64,6 +67,14 @@ describe('main section navigation', () => {
 });
 
 describe('Instagram-style direct chat links', () => {
+    it('updates the selected conversation and its shareable URL together', () => {
+        act(() => root.render(<BrowserRouter><NavigationProbe /></BrowserRouter>));
+        act(() => [...container.querySelectorAll('button')].find(button => button.textContent === 'open-direct-chat').click());
+        expect(window.location.pathname).toBe('/direct/t/chat-42/');
+        expect(container.querySelector('[data-testid="selected-chat"]').textContent).toBe('chat-42');
+        expect(container.querySelector('[data-testid="show-social"]').textContent).toBe('false');
+    });
+
     it('resolves a shared conversation URL to Chats instead of Social', () => {
         window.history.replaceState({}, '', '/direct/t/chat-3/');
         act(() => root.render(<BrowserRouter><NavigationProbe /></BrowserRouter>));

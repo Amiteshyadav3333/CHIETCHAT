@@ -1,28 +1,47 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { CheckBadgeIcon, LockClosedIcon, XMarkIcon } from '@heroicons/react/24/outline';
-import { createSafetyNumber } from '../utils/encryption';
+import {
+    createSafetyNumber, getPublicKeyFingerprint, getPinnedPublicKeyFingerprint,
+    trustPinnedPublicKey,
+} from '../utils/encryption';
 
 const EncryptionInfoModal = ({ chat, user, publicKey, onClose }) => {
-    const other = useMemo(() => chat?.participants?.find(item => item.id !== user?.id), [chat, user]);
+    const other = useMemo(() => chat?.participants?.find(item => String(item.id) !== String(user?.id)), [chat, user]);
     const [safety, setSafety] = useState(null);
     const [verified, setVerified] = useState(false);
+    const [keyChanged, setKeyChanged] = useState(false);
+    const [trustingKey, setTrustingKey] = useState(false);
     const isDirect = !chat?.isGroup && Boolean(other);
 
     useEffect(() => {
         let active = true;
         if (!isDirect || !publicKey || !other?.publicKey) return undefined;
-        createSafetyNumber(publicKey, other.publicKey).then(value => {
+        Promise.all([
+            createSafetyNumber(publicKey, other.publicKey),
+            getPublicKeyFingerprint(other.publicKey),
+        ]).then(([value, currentFingerprint]) => {
             if (!active) return;
             setSafety(value);
             setVerified(localStorage.getItem(`e2ee_verified_${chat.id}_${value.fingerprint}`) === '1');
+            const pinned = getPinnedPublicKeyFingerprint(other.id);
+            setKeyChanged(Boolean(pinned && pinned !== currentFingerprint));
         }).catch(() => setSafety(null));
         return () => { active = false; };
-    }, [chat?.id, isDirect, other?.publicKey, publicKey]);
+    }, [chat?.id, isDirect, other?.id, other?.publicKey, publicKey]);
 
-    const markVerified = () => {
+    const markVerified = async () => {
         if (!safety) return;
-        localStorage.setItem(`e2ee_verified_${chat.id}_${safety.fingerprint}`, '1');
-        setVerified(true);
+        setTrustingKey(true);
+        try {
+            await trustPinnedPublicKey(other.id, other.publicKey);
+            localStorage.setItem(`e2ee_verified_${chat.id}_${safety.fingerprint}`, '1');
+            setKeyChanged(false);
+            setVerified(true);
+        } catch (error) {
+            console.error('Could not trust the verified contact key:', error);
+        } finally {
+            setTrustingKey(false);
+        }
     };
 
     return <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={onClose}>
@@ -38,9 +57,10 @@ const EncryptionInfoModal = ({ chat, user, publicKey, onClose }) => {
                 </div>}
                 {isDirect && other.publicKey && publicKey && <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-4 text-left">
                     <div className="flex items-center justify-between gap-3"><p className="text-sm font-bold text-white">Encryption key with {other.username}</p>{verified && <span className="flex items-center gap-1 text-xs font-bold text-emerald-400"><CheckBadgeIcon className="h-5 w-5" /> Verified</span>}</div>
+                    {keyChanged && <p role="alert" className="mt-3 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-xs leading-5 text-amber-100">This contact's encryption key changed. Compare the safety number with {other.username} using a trusted channel before accepting the new key. Messages remain paused until you verify it.</p>}
                     <p className="mt-2 select-all break-words font-mono text-sm leading-7 tracking-wider text-emerald-300">{safety?.display || 'Generating security code…'}</p>
                     <p className="mt-3 text-xs leading-5 text-gray-400">Open this screen on both phones and match every number. If both devices show the same code, your end-to-end encryption key is verified.</p>
-                    {!verified && <button type="button" disabled={!safety} onClick={markVerified} className="mt-4 w-full rounded-xl bg-emerald-500 px-4 py-3 text-sm font-black text-white disabled:opacity-40">Mark this contact as verified</button>}
+                    {!verified && <button type="button" disabled={!safety || trustingKey} onClick={markVerified} className="mt-4 w-full rounded-xl bg-emerald-500 px-4 py-3 text-sm font-black text-white disabled:opacity-40">{trustingKey ? 'Saving verified key…' : keyChanged ? 'Trust this verified key' : 'Mark this contact as verified'}</button>}
                 </div>}
                 {!isDirect && <p className="mt-5 rounded-xl bg-white/5 p-4 text-xs leading-5 text-gray-400">Group messages are encrypted separately for every current participant. A changed participant key will stop sending until it is reviewed.</p>}
                 <p className="mt-5 text-[11px] leading-5 text-gray-500">The service can still see limited metadata such as account identifiers, delivery time and encrypted file size.</p>

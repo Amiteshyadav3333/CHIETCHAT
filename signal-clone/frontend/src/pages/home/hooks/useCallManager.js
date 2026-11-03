@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 
-export const useCallManager = ({ socket, user, chats, activeChat, setActiveChat, fetchChats }) => {
+export const useCallManager = ({ socket, user, chats, activeChat, setActiveChat, openChat = setActiveChat, fetchChats }) => {
     const [showCallModal, setShowCallModal] = useState(false);
     const [callType, setCallType] = useState('video');
     const [incomingCall, setIncomingCall] = useState(null);
@@ -61,7 +61,7 @@ export const useCallManager = ({ socket, user, chats, activeChat, setActiveChat,
             if (!preparedStream) return;
             preparedCallStreamRef.current?.getTracks().forEach(track => track.stop());
             preparedCallStreamRef.current = preparedStream;
-            setActiveChat(chat);
+            openChat(chat);
             setCallType(type);
             socket.emit('notify_ring', {
                 chatId: chat.id,
@@ -74,7 +74,7 @@ export const useCallManager = ({ socket, user, chats, activeChat, setActiveChat,
         } finally {
             callStartInFlightRef.current = false;
         }
-    }, [socket, user, setActiveChat]);
+    }, [socket, user, openChat]);
 
     const startCall = useCallback(async (type = 'video') => {
         await startCallForChat(activeChat, type);
@@ -93,7 +93,7 @@ export const useCallManager = ({ socket, user, chats, activeChat, setActiveChat,
                 chat = updatedChats.find(c => c.id === incomingCall.chatId);
             }
             if (chat) {
-                setActiveChat(chat);
+                openChat(chat);
                 setCallType(incomingType);
                 setShowCallModal(true);
             } else {
@@ -101,7 +101,7 @@ export const useCallManager = ({ socket, user, chats, activeChat, setActiveChat,
             }
             setIncomingCall(null);
         }
-    }, [incomingCall, chats, fetchChats, setActiveChat]);
+    }, [incomingCall, chats, fetchChats, openChat]);
 
     const rejectCall = useCallback(() => {
         setIncomingCall(null);

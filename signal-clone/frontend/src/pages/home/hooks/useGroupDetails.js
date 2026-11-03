@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import axios from 'axios';
 
-export const useGroupDetails = ({ token, visibleActiveChat, fetchChats, setActiveChat, setChats, setShowSearchModal }) => {
+export const useGroupDetails = ({ token, visibleActiveChat, fetchChats, setActiveChat, openChat = setActiveChat, setChats, setShowSearchModal }) => {
     const [searchModalTab, setSearchModalTab] = useState('search_user'); // 'search_user' | 'create_group' | 'discover_groups'
     const [newGroupName, setNewGroupName] = useState('');
     const [newGroupIsPublic, setNewGroupIsPublic] = useState(false);
@@ -94,7 +94,7 @@ export const useGroupDetails = ({ token, visibleActiveChat, fetchChats, setActiv
             if (res.data.joined) {
                 const updatedChats = await fetchChats();
                 const newChat = updatedChats.find(chat => chat.id === group.id);
-                if (newChat && setActiveChat) setActiveChat(newChat);
+                if (newChat && openChat) openChat(newChat);
                 if (setShowSearchModal) setShowSearchModal(false);
             } else if (res.data.pending) {
                 alert("Request to join private group sent to the admin.");
@@ -104,7 +104,7 @@ export const useGroupDetails = ({ token, visibleActiveChat, fetchChats, setActiv
             console.error("Error joining group", err);
             alert(err.response?.data?.error || "Failed to join group");
         }
-    }, [token, fetchChats, setActiveChat, setShowSearchModal]);
+    }, [token, fetchChats, openChat, setShowSearchModal]);
 
     const handleCreateGroup = useCallback(async (e) => {
         if (e) e.preventDefault();
@@ -121,7 +121,7 @@ export const useGroupDetails = ({ token, visibleActiveChat, fetchChats, setActiv
             });
             const updatedChats = await fetchChats();
             const newChat = updatedChats.find(chat => chat.id === res.data.id);
-            if (newChat && setActiveChat) setActiveChat(newChat);
+            if (newChat && openChat) openChat(newChat);
             setNewGroupName('');
             setNewGroupIsPublic(false);
             if (setShowSearchModal) setShowSearchModal(false);
@@ -129,7 +129,7 @@ export const useGroupDetails = ({ token, visibleActiveChat, fetchChats, setActiv
             console.error("Error creating group", err);
             alert(err.response?.data?.error || "Failed to create group");
         }
-    }, [newGroupName, newGroupIsPublic, token, fetchChats, setActiveChat, setShowSearchModal]);
+    }, [newGroupName, newGroupIsPublic, token, fetchChats, openChat, setShowSearchModal]);
 
     return {
         searchModalTab, setSearchModalTab,

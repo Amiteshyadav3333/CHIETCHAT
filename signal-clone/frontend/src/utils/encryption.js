@@ -231,15 +231,32 @@ export const isEncryptedPayload = (payload) => {
 // Trust-on-first-use pinning prevents the service from silently replacing a
 // contact's public key later to intercept future messages. A legitimate key
 // reset must be explicitly resolved by the user/device recovery flow.
-export const assertPinnedPublicKey = async (userId, publicKeyString) => {
+export const getPublicKeyFingerprint = async (publicKeyString) => {
     const digest = await window.crypto.subtle.digest("SHA-256", base64ToArrayBuffer(publicKeyString));
-    const fingerprint = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
-    const storageKey = `e2ee_key_pin_${userId}`;
-    const pinned = localStorage.getItem(storageKey);
+    return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+};
+
+const publicKeyPinStorageKey = userId => `e2ee_key_pin_${String(userId)}`;
+
+export const getPinnedPublicKeyFingerprint = userId => localStorage.getItem(publicKeyPinStorageKey(userId));
+
+export const trustPinnedPublicKey = async (userId, publicKeyString) => {
+    if (userId === null || userId === undefined || !publicKeyString) throw new Error('A contact key is required');
+    const fingerprint = await getPublicKeyFingerprint(publicKeyString);
+    localStorage.setItem(publicKeyPinStorageKey(userId), fingerprint);
+    return fingerprint;
+};
+
+export const assertPinnedPublicKey = async (userId, publicKeyString) => {
+    const fingerprint = await getPublicKeyFingerprint(publicKeyString);
+    const pinned = getPinnedPublicKeyFingerprint(userId);
     if (pinned && pinned !== fingerprint) {
-        throw new Error("This contact's security key changed. Verify the contact before sending.");
+        const error = new Error("This contact's security key changed. Verify the contact before sending.");
+        error.code = 'CONTACT_KEY_CHANGED';
+        error.retryable = false;
+        throw error;
     }
-    if (!pinned) localStorage.setItem(storageKey, fingerprint);
+    if (!pinned) localStorage.setItem(publicKeyPinStorageKey(userId), fingerprint);
     return fingerprint;
 };
 

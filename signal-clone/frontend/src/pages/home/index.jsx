@@ -62,6 +62,9 @@ const readVideoDuration = (file) => new Promise(resolve => {
     video.src = url;
 });
 
+const sameUserId = (first, second) => first !== null && first !== undefined
+    && second !== null && second !== undefined && String(first) === String(second);
+
 export const Home = () => {
     const { chatId: routeChatId } = useParams();
     const pathname = usePathname();
@@ -88,6 +91,13 @@ export const Home = () => {
     // Custom Hooks
     const nav = useHomeNavigation();
     const prefs = useChatPreferences(user);
+    const navigateToChat = useCallback((chat) => {
+        if (!chat?.id) return false;
+        setChats(current => current.some(item => String(item.id) === String(chat.id))
+            ? current
+            : [chat, ...current]);
+        return nav.openChat(chat, setActiveChat);
+    }, [nav.openChat]);
 
     const saveChatWallpaperPref = useCallback((chatId, preference) => {
         setChatWallpaperPrefs(current => {
@@ -295,6 +305,7 @@ export const Home = () => {
         visibleActiveChat,
         fetchChats,
         setActiveChat,
+        openChat: navigateToChat,
         setChats,
         setShowSearchModal
     });
@@ -306,10 +317,14 @@ export const Home = () => {
         chats,
         activeChat,
         setActiveChat,
+        openChat: navigateToChat,
         fetchChats
     });
 
-    const scheduleMessage = useScheduledMessageSender({ chat: visibleActiveChat, userId: user?.id, publicKey, token });
+    const scheduleMessage = useScheduledMessageSender({
+        chat: visibleActiveChat, userId: user?.id, publicKey, token,
+        onContactKeyChanged: () => setShowEncryptionInfo(true),
+    });
 
     const receiveNotification = useCallback(notification => {
         setNotifications(previous => [notification, ...previous]);
@@ -328,14 +343,15 @@ export const Home = () => {
     const processQueue = useCallback(async () => {
         if (!navigator.onLine || !socket || !socket.connected || !publicKey) return;
         await processOfflineQueue(user.id, async (msg) => {
-            const chat = chatsRef.current.find(c => c.id === msg.chatId);
+            const chat = chatsRef.current.find(c => String(c.id) === String(msg.chatId));
             if (!chat) throw new Error('Queued chat is no longer available');
 
             const recipientPublicKeys = {};
             for (const participant of chat.participants) {
-                const participantPublicKey = participant.id === user.id ? publicKey : participant.publicKey;
+                const isCurrentUser = sameUserId(participant.id, user.id);
+                const participantPublicKey = isCurrentUser ? publicKey : participant.publicKey;
                 if (!participantPublicKey) throw new Error('A participant encryption key is unavailable');
-                if (participant.id !== user.id) await assertPinnedPublicKey(participant.id, participantPublicKey);
+                if (!isCurrentUser) await assertPinnedPublicKey(participant.id, participantPublicKey);
                 recipientPublicKeys[participant.id] = participantPublicKey;
             }
 
@@ -543,9 +559,10 @@ export const Home = () => {
             try {
                 const recipients = {};
                 for (const participant of chat.participants || []) {
-                    const participantPublicKey = Number(participant.id) === Number(user.id) ? publicKey : participant.publicKey;
+                    const isCurrentUser = sameUserId(participant.id, user.id);
+                    const participantPublicKey = isCurrentUser ? publicKey : participant.publicKey;
                     if (!participantPublicKey) throw new Error('A chat participant encryption key is unavailable');
-                    if (Number(participant.id) !== Number(user.id)) await assertPinnedPublicKey(participant.id, participantPublicKey);
+                    if (!isCurrentUser) await assertPinnedPublicKey(participant.id, participantPublicKey);
                     recipients[participant.id] = participantPublicKey;
                 }
                 const content = await encryptForRecipients(recipients, draft);
@@ -720,9 +737,10 @@ export const Home = () => {
                         try {
                             const recipientPublicKeys = {};
                             for (const participant of chat.participants) {
-                                const key = participant.id === user.id ? publicKey : participant.publicKey;
+                                const isCurrentUser = sameUserId(participant.id, user.id);
+                                const key = isCurrentUser ? publicKey : participant.publicKey;
                                 if (key) {
-                                    if (participant.id !== user.id) await assertPinnedPublicKey(participant.id, key);
+                                    if (!isCurrentUser) await assertPinnedPublicKey(participant.id, key);
                                     recipientPublicKeys[participant.id] = key;
                                 }
                             }
@@ -1015,13 +1033,13 @@ export const Home = () => {
     // Send message
     const handleSendMessage = async (text, type = 'text', replyMsg = null, ttl = 0, assetId = null) => {
         ttl = Number(ttl || 0);
-        if (!activeChat?.id || !user?.id) return;
+        if (!activeChat?.id || !user?.id) return false;
         const participants = Array.isArray(activeChat.participants)
             ? activeChat.participants.filter(participant => participant?.id)
             : [];
         if (participants.length === 0) {
             alert('Chat information is still loading. Please try again in a moment.');
-            return;
+            return false;
         }
 
         const tempId = `temp_${Date.now()}_${Math.random()}`;
@@ -1066,16 +1084,17 @@ export const Home = () => {
         if (!privateKey || !publicKey) {
             setMessages(prev => prev.map(message => message.id === tempId ? { ...message, status: 'failed' } : message));
             alert("Encryption keys are still loading. Please try again in a moment.");
-            return;
+            return false;
         }
 
         let encryptedContent = null;
         try {
             const recipientPublicKeys = {};
             for (const participant of participants) {
-                const participantPublicKey = participant.id === user.id ? publicKey : participant.publicKey;
+                const isCurrentUser = sameUserId(participant.id, user.id);
+                const participantPublicKey = isCurrentUser ? publicKey : participant.publicKey;
                 if (!participantPublicKey) throw new Error('A participant encryption key is unavailable');
-                if (participant.id !== user.id) await assertPinnedPublicKey(participant.id, participantPublicKey);
+                if (!isCurrentUser) await assertPinnedPublicKey(participant.id, participantPublicKey);
                 recipientPublicKeys[participant.id] = participantPublicKey;
             }
 
@@ -1084,7 +1103,7 @@ export const Home = () => {
             if (!navigator.onLine || !socket || !socket.connected) {
                 enqueueOfflineMessage(user.id, activeChat.id, encryptedContent, type, replyMsg, ttl, tempId, assetId, null, snapMode);
                 setMessages(prev => prev.map(message => message.id === tempId ? { ...message, status: 'queued' } : message));
-                return;
+                return true;
             }
 
             const acknowledgement = await emitWithAcknowledgement(socket, 'send_message', {
@@ -1102,14 +1121,21 @@ export const Home = () => {
             setMessages(prev => prev.map(message => message.id === tempId
                 ? { ...message, id: acknowledgement.messageId, status: 'sent', _isOptimistic: false }
                 : message));
+            return true;
         } catch (err) {
+            if (err.code === 'CONTACT_KEY_CHANGED') {
+                setMessages(prev => prev.filter(message => message.id !== tempId));
+                setShowEncryptionInfo(true);
+                return false;
+            }
             if (err.retryable !== false && encryptedContent) {
                 enqueueOfflineMessage(user.id, activeChat.id, encryptedContent, type, replyMsg, ttl, tempId, assetId, null, snapMode);
             }
             setMessages(prev => prev.map(m => m.id === tempId ? {
-                ...m, status: err.retryable === false ? 'failed' : 'queued'
+                ...m, status: err.retryable === false || !encryptedContent ? 'failed' : 'queued'
             } : m));
             console.error('Send failed:', err);
+            return Boolean(encryptedContent && err.retryable !== false);
         }
     };
 
@@ -1183,13 +1209,18 @@ export const Home = () => {
         const recipientPublicKeys = {};
         try {
             for (const participant of participants) {
-                const participantKey = participant.id === user.id ? publicKey : participant.publicKey;
+                const isCurrentUser = sameUserId(participant.id, user.id);
+                const participantKey = isCurrentUser ? publicKey : participant.publicKey;
                 if (!participantKey) throw new Error('A participant encryption key is unavailable');
-                if (participant.id !== user.id) await assertPinnedPublicKey(participant.id, participantKey);
+                if (!isCurrentUser) await assertPinnedPublicKey(participant.id, participantKey);
                 recipientPublicKeys[participant.id] = participantKey;
             }
         } catch (error) {
             setUploadProgress(null);
+            if (error.code === 'CONTACT_KEY_CHANGED') {
+                setShowEncryptionInfo(true);
+                return;
+            }
             alert(error.message);
             return;
         }
@@ -1544,7 +1575,7 @@ export const Home = () => {
         if (!editingMessage || !editText.trim()) return;
         try {
             const encryptedContent = await encryptForRecipients(
-                Object.fromEntries(activeChat.participants.map(p => [p.id, p.id === user.id ? publicKey : p.publicKey])),
+                Object.fromEntries(activeChat.participants.map(p => [p.id, sameUserId(p.id, user.id) ? publicKey : p.publicKey])),
                 editText.trim()
             );
             const res = await axios.put(`/api/messages/${editingMessage.id}`, { content: encryptedContent }, {
@@ -1577,9 +1608,10 @@ export const Home = () => {
         try {
             const recipientPublicKeys = {};
             for (const participant of targetChat.participants) {
-                const participantPublicKey = participant.id === user.id ? publicKey : participant.publicKey;
+                const isCurrentUser = sameUserId(participant.id, user.id);
+                const participantPublicKey = isCurrentUser ? publicKey : participant.publicKey;
                 if (!participantPublicKey) return alert(`${participant.username} does not have an encryption key yet.`);
-                if (participant.id !== user.id) await assertPinnedPublicKey(participant.id, participantPublicKey);
+                if (!isCurrentUser) await assertPinnedPublicKey(participant.id, participantPublicKey);
                 recipientPublicKeys[participant.id] = participantPublicKey;
             }
             encryptedContent = await encryptForRecipients(recipientPublicKeys, forwardMessage.content);
@@ -1597,6 +1629,10 @@ export const Home = () => {
             setForwardMessage(null);
         } catch (err) {
             console.error(err);
+            if (err.code === 'CONTACT_KEY_CHANGED') {
+                setShowEncryptionInfo(true);
+                return;
+            }
             if (err.retryable !== false && encryptedContent) {
                 enqueueOfflineMessage(user.id, targetChat.id, encryptedContent, forwardMessage.type || 'text', null, 0, clientMessageId);
                 setForwardMessage(null);
@@ -1633,7 +1669,9 @@ export const Home = () => {
     const openSocialDirectMessage = async (socialUser) => {
         if (!socialUser?.id || String(socialUser.id) === String(user?.id)) return;
         try {
-            const existing = chats.find(chat => !chat.isGroup && chat.participants?.some(participant => String(participant.id) === String(socialUser.id)));
+            const existing = chats.find(chat => !chat.isGroup && chat.participants?.length === 2
+                && chat.participants.some(participant => sameUserId(participant.id, user.id))
+                && chat.participants.some(participant => sameUserId(participant.id, socialUser.id)));
             let chatId = existing?.id;
             if (!chatId) {
                 // Profile messaging must work for social discovery users too;
@@ -1653,9 +1691,8 @@ export const Home = () => {
                 unreadCount: 0,
                 lastMessage: { content: 'No messages', timestamp: null, type: 'text' },
             };
-            setActiveChat(target);
+            navigateToChat(target);
             nav.setShowSocial(false);
-            navigate(`/chats/${encodeURIComponent(chatId)}`);
         } catch (error) { alert(error.response?.data?.error || error.message || 'Could not start direct message'); }
     };
 
@@ -1724,10 +1761,12 @@ export const Home = () => {
             return null;
         }
         const existingChat = chats.find(chat =>
-            !chat.isGroup && chat.participants?.some(participant => String(participant.id) === String(targetUser.id))
+            !chat.isGroup && chat.participants?.length === 2
+            && chat.participants.some(participant => sameUserId(participant.id, user.id))
+            && chat.participants.some(participant => sameUserId(participant.id, targetUser.id))
         );
         if (existingChat) {
-            setActiveChat(existingChat);
+            navigateToChat(existingChat);
             setShowSearchModal(false);
             setSearchQuery('');
             setSearchedUser(null);
@@ -1738,12 +1777,20 @@ export const Home = () => {
                 headers: { Authorization: `Bearer ${token}` }
             });
             const updatedChats = await fetchChats();
-            const newChat = updatedChats.find(chat => String(chat.id) === String(res.data.id));
-            if (newChat) setActiveChat(newChat);
+            const newChat = updatedChats.find(chat => String(chat.id) === String(res.data.id)) || {
+                id: res.data.id,
+                isGroup: false,
+                name: targetUser.username || targetUser.name || 'Chat',
+                avatar: targetUser.avatar || '',
+                participants: [user, targetUser],
+                unreadCount: 0,
+                lastMessage: { content: 'No messages', timestamp: null, type: 'text' },
+            };
+            navigateToChat(newChat);
             setShowSearchModal(false);
             setSearchQuery('');
             setSearchedUser(null);
-            return newChat || null;
+            return newChat;
         } catch (err) {
             console.error(err);
             setSearchError(err.response?.data?.error || "Could not start chat");
@@ -1759,7 +1806,7 @@ export const Home = () => {
             });
             const updatedChats = await fetchChats();
             const shopChat = updatedChats.find(chat => String(chat.id) === String(response.data.id));
-            if (shopChat) setActiveChat(shopChat);
+            if (shopChat) navigateToChat(shopChat);
             return shopChat || null;
         } catch (err) {
             setSearchError(err.response?.data?.error || 'Could not open a chat with this seller.');
@@ -1816,7 +1863,7 @@ export const Home = () => {
             nav.setShowPodlive(false);
             nav.setShowAiChat(false);
             nav.setShowSmartSpace(false);
-            setActiveChat(item);
+            navigateToChat(item);
             return;
         }
         if (type === 'profile') {
@@ -2026,7 +2073,7 @@ export const Home = () => {
                 snapNotice={snapNotice}
                 setSnapNotice={setSnapNotice}
                 chats={chats}
-                setActiveChat={setActiveChat}
+                setActiveChat={navigateToChat}
                 appLocked={appLocked}
                 unlockError={unlockError}
                 setUnlockPin={setUnlockPin}
@@ -2106,7 +2153,7 @@ export const Home = () => {
             {/* Sidebar with Contacts and Status */}
             <ChatSidebar
                 activeChat={activeChat}
-                setActiveChat={setActiveChat}
+                setActiveChat={navigateToChat}
                 user={user}
                 token={token}
                 openNewChat={openNewChat}
@@ -2274,7 +2321,7 @@ export const Home = () => {
                 acceptCall={calls.acceptCall}
                 rejectCall={calls.rejectCall}
                 activeChat={activeChat}
-                setActiveChat={setActiveChat}
+                setActiveChat={navigateToChat}
                 fetchChats={fetchChats}
                 token={token}
             />
@@ -2324,7 +2371,7 @@ export const Home = () => {
                 startCallForChat={calls.startCallForChat}
                 fetchChats={fetchChats}
                 showSmartSpace={nav.showSmartSpace}
-                setActiveChat={setActiveChat}
+                setActiveChat={navigateToChat}
                 showNotifications={showNotifications}
                 setShowNotifications={setShowNotifications}
                 notifications={notifications}

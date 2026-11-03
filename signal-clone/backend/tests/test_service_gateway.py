@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from service_gateway import call_music_service, call_social_feed_ranker, call_translation_service, canonical_service_signature
+from service_gateway import call_ai_generation_service, call_music_service, call_social_feed_ranker, call_translation_service, canonical_service_signature
 
 
 class ServiceGatewayTests(unittest.TestCase):
@@ -83,6 +83,30 @@ class ServiceGatewayTests(unittest.TestCase):
             headers['X-Internal-Request-Id'],
             'POST', '/internal/v1/translate', body,
         ))
+
+    @patch('service_gateway.requests.post')
+    @patch.dict(os.environ, {
+        'AI_GENERATION_SERVICE_URL': 'https://ai.example.test',
+        'AI_GENERATION_SERVICE_HMAC_KEY': 'gateway-ai-test-secret-' * 2,
+    })
+    def test_ai_generation_gateway_signs_identity_and_validates_output(self, post):
+        response = post.return_value
+        response.json.return_value = {'generatedText': '  corrected  ', 'provider': 'gemini'}
+        result = call_ai_generation_service(27, [{'role': 'user', 'content': 'helo'}], 100)
+        self.assertEqual(result, 'corrected')
+        args, kwargs = post.call_args
+        self.assertEqual(args[0], 'https://ai.example.test/internal/v1/ai/generate')
+        body = kwargs['data']
+        headers = kwargs['headers']
+        self.assertEqual(headers['X-Internal-Signature'], canonical_service_signature(
+            'gateway-ai-test-secret-' * 2, headers['X-Internal-Timestamp'],
+            headers['X-Internal-Request-Id'], 'POST', '/internal/v1/ai/generate', body,
+        ))
+        self.assertEqual(kwargs['timeout'], (2, 18))
+
+    def test_ai_generation_gateway_rejects_untrusted_message_roles(self):
+        with self.assertRaisesRegex(ValueError, 'Invalid AI generation request'):
+            call_ai_generation_service(27, [{'role': 'tool', 'content': 'bad'}])
 
 
 if __name__ == '__main__':

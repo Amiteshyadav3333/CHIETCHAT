@@ -13,6 +13,7 @@ import requests
 MUSIC_SEARCH_PATH = '/internal/v1/music/search'
 TRANSLATE_PATH = '/internal/v1/translate'
 SOCIAL_FEED_RANK_PATH = '/internal/v1/social-feed/rank'
+AI_GENERATE_PATH = '/internal/v1/ai/generate'
 
 
 def canonical_service_signature(secret, timestamp, request_id, method, path, body):
@@ -106,3 +107,26 @@ def call_social_feed_ranker(user_id, posts, engagement, limit, now=None, timeout
             or len(set(ordered_ids)) != len(ordered_ids)):
         raise ValueError('Social feed service returned an invalid ranking')
     return ordered_ids
+
+
+def call_ai_generation_service(user_id, messages, max_tokens=400, timeout=(2, 18)):
+    """Generate bounded text with the isolated AI provider service."""
+    if (not isinstance(messages, list) or not messages or len(messages) > 32
+            or type(max_tokens) is not int or not 1 <= max_tokens <= 2048):
+        raise ValueError('Invalid AI generation request')
+    safe_messages = []
+    for message in messages:
+        if (not isinstance(message, dict) or message.get('role') not in ('system', 'user', 'assistant')
+                or not isinstance(message.get('content'), str)
+                or len(message['content']) > 8000):
+            raise ValueError('Invalid AI generation request')
+        safe_messages.append({'role': message['role'], 'content': message['content']})
+    result = call_signed_domain_service(
+        'AI_GENERATION_SERVICE_URL', 'AI_GENERATION_SERVICE_HMAC_KEY', AI_GENERATE_PATH,
+        {'userId': int(user_id), 'messages': safe_messages, 'maxTokens': max_tokens},
+        timeout=timeout, response_field='generatedText',
+    )
+    generated = result['generatedText']
+    if not isinstance(generated, str) or not generated.strip() or len(generated) > 50000:
+        raise ValueError('AI generation service returned invalid text')
+    return generated.strip()

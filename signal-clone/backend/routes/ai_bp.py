@@ -10,6 +10,7 @@ from flask import Blueprint, request, jsonify, Response, stream_with_context, cu
 from models import db, AiConversation, User
 from utils import get_current_user_id, utc_now
 from observability import report_safe_exception
+from service_gateway import call_ai_generation_service
 
 ai_bp = Blueprint('ai_bp', __name__)
 
@@ -603,7 +604,14 @@ def ai_grammar():
         },
         {"role": "user", "content": source},
     ]
-    corrected = str(_get_ai_reply(messages) or '').strip()
+    corrected = ''
+    if current_app.config.get('AI_GENERATION_SERVICE_URL') or os.environ.get('AI_GENERATION_SERVICE_URL'):
+        try:
+            corrected = call_ai_generation_service(user_id, messages, max_tokens=400, timeout=(1, 10))
+        except Exception as error:
+            report_safe_exception('ai_generation_service_failed', error)
+    if not corrected:
+        corrected = str(_get_ai_reply(messages) or '').strip()
     if corrected.startswith('Arre yaar, abhi thodi problem') or not corrected or len(corrected) > 4000:
         return jsonify({"error": "AI grammar service is temporarily unavailable"}), 503
     corrected = re.sub(r'^(?:corrected(?: sentence| text)?\s*:\s*)', '', corrected, flags=re.I).strip().strip('"')

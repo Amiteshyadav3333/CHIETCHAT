@@ -16,6 +16,7 @@ than reaching into another feature's internal files.
 - `polls`: vote API and realtime vote reducer
 - `media`: recording constraints, media policies, and video-note recorder hook
 - `notifications`: payload normalization and realtime subscription hook
+- `social`: public feed ranking and cursor pagination; creator monetization defaults stay in Settings
 
 Reusable visual components remain in `components`; route-level composition
 remains in `pages`; generic infrastructure remains in `utils` and `context`.
@@ -31,6 +32,11 @@ Feature-specific socket registration belongs beside the feature (for example,
 `features/location/socket_handlers.py`). The root `sockets.py` remains the
 composition root for cross-feature chat and call signaling and can be reduced
 incrementally without changing registered event names.
+
+`services/ai-generation` is a separate provider-execution process behind the
+signed service gateway. The grammar endpoint can opt into it while preserving
+its public response and local provider fallback. AI conversation and memory
+records remain owned by the monolith pending a separate data migration.
 
 ## Adding a feature
 

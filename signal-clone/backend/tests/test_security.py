@@ -282,6 +282,37 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json['corrected'], 'I am your friend, Amit.')
 
+    @patch.dict(os.environ, {
+        'AI_GENERATION_SERVICE_URL': 'https://ai.example.test',
+        'AI_GENERATION_SERVICE_HMAC_KEY': 'grammar-service-test-key-' * 2,
+    })
+    @patch('routes.ai_bp.call_ai_generation_service', return_value='I am your friend, Amit.')
+    def test_ai_grammar_uses_generation_service_with_legacy_contract(self, generate):
+        with patch('routes.ai_bp._get_ai_reply') as legacy:
+            response = self.client.post(
+                '/api/ai/grammar', headers=self.auth_headers(),
+                json={'text': 'i are my friend Amit .'},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json, {'corrected': 'I am your friend, Amit.'})
+        generate.assert_called_once()
+        legacy.assert_not_called()
+
+    @patch.dict(os.environ, {
+        'AI_GENERATION_SERVICE_URL': 'https://ai.example.test',
+        'AI_GENERATION_SERVICE_HMAC_KEY': 'grammar-service-test-key-' * 2,
+    })
+    @patch('routes.ai_bp.call_ai_generation_service', side_effect=RuntimeError('service unavailable'))
+    @patch('routes.ai_bp._get_ai_reply', return_value='Fixed text')
+    def test_ai_grammar_falls_back_when_generation_service_is_unavailable(self, legacy, generate):
+        response = self.client.post(
+            '/api/ai/grammar', headers=self.auth_headers(), json={'text': 'fix this'},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['corrected'], 'Fixed text')
+        generate.assert_called_once()
+        legacy.assert_called_once()
+
     def test_ai_grammar_requires_auth_and_rejects_oversized_text(self):
         self.assertEqual(self.client.post('/api/ai/grammar', json={'text': 'hello'}).status_code, 401)
         response = self.client.post(

@@ -68,6 +68,27 @@ services:
       - key: SOCIAL_FEED_SERVICE_HMAC_KEY
         generateValue: true
   - type: web
+    name: chietchat-ai-generation
+    runtime: python
+    region: singapore
+    rootDir: .
+    buildCommand: pip install -r services/ai-generation/requirements.txt
+    startCommand: gunicorn --workers 2 --threads 8 --timeout 20 --chdir services/ai-generation app:app --bind 0.0.0.0:$PORT
+    healthCheckPath: /health/ready
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: AI_GENERATION_SERVICE_HMAC_KEY
+        generateValue: true
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROK_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+  - type: web
     name: chietchat-backend
     runtime: python
     region: singapore
@@ -129,6 +150,11 @@ services:
           name: chietchat-social-feed
           type: web
           envVarKey: SOCIAL_FEED_SERVICE_HMAC_KEY
+      - key: AI_GENERATION_SERVICE_HMAC_KEY
+        fromService:
+          name: chietchat-ai-generation
+          type: web
+          envVarKey: AI_GENERATION_SERVICE_HMAC_KEY
       - key: PODLIVE_URL
         value: https://podlive-sigma.vercel.app
       - key: PODLIVE_API_URL

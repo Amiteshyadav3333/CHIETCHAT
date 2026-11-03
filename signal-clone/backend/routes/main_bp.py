@@ -8,7 +8,7 @@ import asyncio
 from flask import Blueprint, jsonify, request, send_from_directory, current_app
 from models import db, UploadAsset
 from utils import (
-    get_current_user_id, upload_to_cloudinary, validate_upload, utc_now,
+    get_current_user_id, upload_to_cloudinary, validate_upload, utc_now, MediaStorageUnavailable,
     queue_media_deletion, process_media_deletion_task,
 )
 from observability import report_safe_exception
@@ -108,6 +108,8 @@ def upload_file():
         return jsonify({"error": str(e)}), 400
     except ModerationUnavailable:
         return jsonify({"error": "Media safety check is temporarily unavailable. Please try again.", "code": "MODERATION_UNAVAILABLE"}), 503
+    except MediaStorageUnavailable as e:
+        return jsonify({"error": str(e), "code": "MEDIA_STORAGE_UNAVAILABLE"}), 503
     except Exception as e:
         db.session.rollback()
         if url and resource_type:

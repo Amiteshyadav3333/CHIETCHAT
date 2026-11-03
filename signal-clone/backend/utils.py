@@ -27,6 +27,10 @@ UPLOAD_EXTENSIONS = {
 }
 
 
+class MediaStorageUnavailable(RuntimeError):
+    """Raised rather than writing uploads to an ephemeral production disk."""
+
+
 def _detected_upload_kind(header, extension, mimetype=''):
     if header.startswith(b'\xff\xd8\xff') or header.startswith(b'\x89PNG\r\n\x1a\n') or header[:6] in (b'GIF87a', b'GIF89a'):
         return 'image'
@@ -113,6 +117,8 @@ def upload_to_cloudinary(file, folder='chietchat', resource_type='auto'):
 
 
 def _save_locally(file, filename=None):
+    if current_app.config.get('IS_PRODUCTION'):
+        raise MediaStorageUnavailable('Cloud media storage is unavailable; please retry after storage is restored')
     upload_folder = current_app.config['UPLOAD_FOLDER']
     os.makedirs(upload_folder, exist_ok=True)
     if filename is None:

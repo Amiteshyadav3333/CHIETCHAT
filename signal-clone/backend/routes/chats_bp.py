@@ -13,7 +13,7 @@ from utils import (
     get_current_user_id, user_can_access_chat, serialize_user, 
     iso_utc, get_json_data, has_contact, is_blocked, utc_now,
     queue_claimed_upload_assets, process_media_deletion_task, upload_to_cloudinary,
-    queue_media_deletion
+    queue_media_deletion, MediaStorageUnavailable,
 )
 from scheduled_messages import valid_encrypted_envelope
 from observability import report_safe_exception
@@ -694,6 +694,8 @@ def update_group_avatar(chat_id):
             group.avatar = upload_to_cloudinary(file, folder='chietchat/group-avatars', resource_type='image')
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
+        except MediaStorageUnavailable as exc:
+            return jsonify({"error": str(exc), "code": "MEDIA_STORAGE_UNAVAILABLE"}), 503
         except Exception:
             return jsonify({"error": "Group photo upload failed"}), 500
     deletion_task = queue_media_deletion(previous, 'image')

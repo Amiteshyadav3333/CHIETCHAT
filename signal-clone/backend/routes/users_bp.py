@@ -9,7 +9,8 @@ from utils import (
     get_current_user_id, get_contact_user_ids, serialize_user, get_json_data,
     normalize_phone, is_valid_phone, add_contact, upload_to_cloudinary,
     emit_to_user_chat_contacts, has_contact, create_notification, iso_utc, utc_now,
-    queue_media_deletion, process_media_deletion_task, find_direct_chat
+    queue_media_deletion, process_media_deletion_task, find_direct_chat,
+    MediaStorageUnavailable,
 )
 from content_moderation import ModerationUnavailable, reject_adult_content
 
@@ -135,6 +136,8 @@ def set_contact_specific_avatar(viewer_id):
         return jsonify({"error": "Please upload a JPG, PNG, GIF, or WebP image"}), 400
     try:
         url = upload_to_cloudinary(file, folder='chietchat/contact-avatars', resource_type='image')
+    except MediaStorageUnavailable as exc:
+        return jsonify({"error": str(exc), "code": "MEDIA_STORAGE_UNAVAILABLE"}), 503
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:
@@ -397,6 +400,8 @@ def setup_profile():
                 url = upload_to_cloudinary(file, folder='chietchat/avatars', resource_type='image')
                 deletion_task = queue_media_deletion(user.avatar, 'image')
                 user.avatar = url
+            except MediaStorageUnavailable as e:
+                return jsonify({"error": str(e), "code": "MEDIA_STORAGE_UNAVAILABLE"}), 503
             except ValueError as e:
                 return jsonify({"error": str(e)}), 400
             except Exception as e:

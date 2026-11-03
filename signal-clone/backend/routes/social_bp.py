@@ -13,7 +13,8 @@ from models import (
 )
 from utils import (
     get_current_user_id, get_json_data, iso_utc, serialize_user,
-    upload_to_cloudinary, create_notification, queue_media_deletion, process_media_deletion_task, utc_now
+    upload_to_cloudinary, create_notification, queue_media_deletion, process_media_deletion_task, utc_now,
+    MediaStorageUnavailable,
 )
 from content_moderation import ModerationUnavailable, reject_adult_content
 
@@ -396,6 +397,8 @@ def create_social_post():
             uploaded_items.append({'url': url, 'type': detected_type})
     except ModerationUnavailable as error:
         return jsonify({'error': str(error), 'code': 'MODERATION_UNAVAILABLE'}), 503
+    except MediaStorageUnavailable as error:
+        return jsonify({'error': str(error), 'code': 'MEDIA_STORAGE_UNAVAILABLE'}), 503
     except ValueError as error:
         return jsonify({'error': str(error)}), 400
     if uploaded_items:

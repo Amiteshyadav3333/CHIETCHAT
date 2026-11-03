@@ -1776,6 +1776,43 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(analytics.status_code, 200)
         self.assertEqual(analytics.json['products'], 1)
 
+    def test_business_dashboard_stays_available_without_exposing_unreadable_kyc(self):
+        from seller_kyc import encrypt_private_profile
+        with app.app_context(), patch.dict(os.environ, {'SELLER_KYC_ENCRYPTION_KEY': 'original-stable-test-key-' * 2}):
+            seller = SellerAccount(
+                user_id=self.user_id, legal_name='[encrypted]', business_address='[encrypted]',
+                status='draft', private_data_encrypted=encrypt_private_profile(self.user_id, {
+                    'legalName': 'Private Owner', 'businessAddress': 'Private address',
+                    'returnAddress': '', 'taxIdentifier': 'ABCDE1234F', 'registrationNumber': '',
+                }),
+            )
+            db.session.add(seller)
+            db.session.commit()
+
+        with patch.dict(os.environ, {'SELLER_KYC_ENCRYPTION_KEY': 'different-stable-test-key-' * 2}):
+            dashboard = self.client.get('/api/business/me', headers=self.auth_headers())
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertTrue(dashboard.json['seller']['encryptionUnavailable'])
+        self.assertNotIn('legalName', dashboard.json['seller'])
+        self.assertNotIn('taxIdentifier', dashboard.json['seller'])
+
+    def test_production_upload_never_falls_back_to_ephemeral_local_storage(self):
+        from utils import MediaStorageUnavailable, upload_to_cloudinary
+        previous = app.config.get('IS_PRODUCTION')
+        app.config['IS_PRODUCTION'] = True
+        try:
+            with app.app_context(), patch.dict(os.environ, {
+                'CLOUDINARY_CLOUD_NAME': 'test-cloud', 'CLOUDINARY_API_KEY': 'test-key',
+                'CLOUDINARY_API_SECRET': 'test-secret',
+            }), patch('utils.cloudinary.uploader.upload', side_effect=RuntimeError('quota exceeded')):
+                with self.assertRaises(MediaStorageUnavailable):
+                    upload_to_cloudinary(b'opaque-image-bytes', resource_type='image')
+        finally:
+            if previous is None:
+                app.config.pop('IS_PRODUCTION', None)
+            else:
+                app.config['IS_PRODUCTION'] = previous
+
     def test_social_post_create_like_and_delete_flow(self):
         created = self.client.post('/api/social/posts', data={'caption': 'Launch test post'}, headers=self.auth_headers())
         self.assertEqual(created.status_code, 201)

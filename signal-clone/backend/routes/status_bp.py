@@ -7,7 +7,7 @@ from utils import (
     get_current_user_id, get_contact_user_ids, utc_now, serialize_user, 
     iso_utc, upload_to_cloudinary, get_json_data, has_contact, get_or_create_direct_chat,
     is_blocked, is_user_online, queue_media_deletion, process_media_deletion_task,
-    claim_upload_asset, queue_claimed_upload_assets
+    claim_upload_asset, queue_claimed_upload_assets, MediaStorageUnavailable,
 )
 from extensions import socketio
 from scheduled_messages import valid_encrypted_envelope
@@ -141,6 +141,8 @@ def create_status():
         media_url = upload_to_cloudinary(file, folder='chietchat/status', resource_type=resource_type)
     except ModerationUnavailable:
         return jsonify({"error": "Media safety check is temporarily unavailable", "code": "MODERATION_UNAVAILABLE"}), 503
+    except MediaStorageUnavailable as e:
+        return jsonify({"error": str(e), "code": "MEDIA_STORAGE_UNAVAILABLE"}), 503
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:

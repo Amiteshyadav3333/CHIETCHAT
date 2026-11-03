@@ -203,7 +203,7 @@ export const HomeModalsContainer = ({
                                             </div>
                                         </div>
                                         <button
-                                            onClick={startChat}
+                                            onClick={() => startChat(searchedUser)}
                                             className="bg-signal-accent hover:bg-signal-accentHover text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg"
                                         >
                                             Chat

@@ -5,7 +5,8 @@ from flask import Blueprint, Response, jsonify, request
 from models import db, Reel, ReelLike, ReelView, ReelShare, ReelRepost, ReelComment, Follow, User, Status, UserReport, AffiliateProductTag
 from utils import (
     get_current_user_id, iso_utc, serialize_user, upload_to_cloudinary,
-    get_json_data, create_notification, queue_media_deletion, process_media_deletion_task, utc_now
+    get_json_data, create_notification, queue_media_deletion, process_media_deletion_task, utc_now,
+    MediaStorageUnavailable,
 )
 from content_moderation import ModerationUnavailable, reject_adult_content
 
@@ -272,6 +273,8 @@ def create_reel():
         return jsonify({"error": str(e)}), 400
     except ModerationUnavailable as e:
         return jsonify({"error": str(e), "code": "MODERATION_UNAVAILABLE"}), 503
+    except MediaStorageUnavailable as e:
+        return jsonify({"error": str(e), "code": "MEDIA_STORAGE_UNAVAILABLE"}), 503
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

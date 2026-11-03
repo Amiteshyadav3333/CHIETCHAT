@@ -19,6 +19,7 @@ from models import (
 from features.business_ai import generate_business_reply
 from utils import get_current_user_id, get_json_data, has_contact, is_blocked, iso_utc
 from utils import validate_upload
+from observability import report_safe_exception
 from seller_kyc import (
     SellerKycUnavailable, decrypt_private_profile, encrypt_private_profile,
     encrypt_private_bytes, mask_identifier, required_document_types,
@@ -121,6 +122,24 @@ def get_my_business():
     schedule = ShopSchedule.query.filter_by(user_id=user_id).order_by(ShopSchedule.weekday.asc()).all()
     delivery_options = ShopDeliveryOption.query.filter_by(user_id=user_id).order_by(ShopDeliveryOption.id.asc()).all()
     products = CatalogProduct.query.filter_by(owner_id=user_id).order_by(CatalogProduct.created_at.desc()).all()
+    seller_data = {'status': 'not_started', 'documents': []}
+    if seller:
+        documents = [seller_document_payload(row) for row in SellerVerificationDocument.query.filter_by(seller_id=seller.id).order_by(SellerVerificationDocument.document_type.asc()).all()]
+        try:
+            seller_data = {**seller_payload(seller), 'documents': documents}
+        except SellerKycUnavailable as error:
+            # Keep the account dashboard usable if a deployment has a missing or
+            # mismatched KYC key. Never substitute plaintext columns or expose
+            # partial private data; the original stable key must be restored.
+            report_safe_exception('business_me_seller_encryption_unavailable', error)
+            seller_data = {
+                'status': seller.status,
+                'sellerType': seller.seller_type,
+                'reviewNote': seller.review_note or '',
+                'submittedAt': iso_utc(seller.submitted_at),
+                'documents': documents,
+                'encryptionUnavailable': True,
+            }
     return jsonify({
         'profile': profile_payload(profile) if profile else {
             'businessName': user.username, 'category': 'Other', 'description': user.bio or '',
@@ -129,8 +148,7 @@ def get_my_business():
             'marketplaceEnabled': False,
         },
         'products': [product_payload(product) for product in products],
-        'seller': ({**seller_payload(seller), 'documents': [seller_document_payload(row) for row in SellerVerificationDocument.query.filter_by(seller_id=seller.id).order_by(SellerVerificationDocument.document_type.asc()).all()]}
-                   if seller else {'status': 'not_started', 'documents': []}),
+        'seller': seller_data,
         'schedule': [{'weekday': row.weekday, 'opensAt': row.opens_at or '', 'closesAt': row.closes_at or '',
                       'isClosed': bool(row.is_closed), 'timezone': row.timezone} for row in schedule],
         'deliveryOptions': [{'id': row.id, 'mode': row.mode, 'label': row.label, 'area': row.area or '',

@@ -16,6 +16,9 @@ from models import (
     ProfileAudienceAvatar, MediaDeletionTask, UploadAsset,
     CollaborationTask, CollaborationNote, CollaborationMilestone,
     BusinessProfile, SellerAccount, SellerVerificationDocument, SellerVerificationAudit,
+    BusinessAutomation, BusinessProfileView, BusinessAutoReplyLog, CatalogProduct,
+    ShopSchedule, ShopDeliveryOption, MarketplaceOrder, MarketplaceOrderLine,
+    AffiliateProductTag, AffiliateCommission, PaymentOrder, ChatParticipant, MessageDeletion,
 )
 import cloudinary.uploader
 from observability import report_safe_exception
@@ -297,7 +300,7 @@ def add_missing_columns(inspector, table_name, columns):
 # Bump this marker whenever models gain columns or tables. Production runs
 # ensure_database_schema() in the pre-deploy step and skips versions it has
 # already applied.
-SCHEMA_VERSION = '20261104_41_social_comment_media_and_seller_tables'
+SCHEMA_VERSION = '20261104_42_dashboard_and_chat_runtime_schema'
 
 def ensure_runtime_compat_schema():
     """Repair columns required by the currently deployed models.
@@ -311,13 +314,42 @@ def ensure_runtime_compat_schema():
     # These seller tables are queried by /api/business/me. Some existing
     # production databases predate seller onboarding, and the historical
     # migration hook is not guaranteed to run on every Render deploy.
-    if 'user' in inspect(db.engine).get_table_names():
+    initial_tables = set(inspect(db.engine).get_table_names())
+    if 'user' in initial_tables:
         db.metadata.create_all(
             bind=db.engine,
             tables=[BusinessProfile.__table__, SellerAccount.__table__,
-                    SellerVerificationDocument.__table__, SellerVerificationAudit.__table__],
+                    SellerVerificationDocument.__table__, SellerVerificationAudit.__table__,
+                    BusinessAutomation.__table__, BusinessProfileView.__table__,
+                    BusinessAutoReplyLog.__table__, CatalogProduct.__table__,
+                    ShopSchedule.__table__, ShopDeliveryOption.__table__,
+                    AffiliateProductTag.__table__, MarketplaceOrder.__table__,
+                    MarketplaceOrderLine.__table__, AffiliateCommission.__table__,
+                    PaymentOrder.__table__, ChatParticipant.__table__, MessageDeletion.__table__],
             checkfirst=True,
         )
+    inspector = inspect(db.engine)
+    add_missing_columns(inspector, 'chat', {
+        'is_group': db.Boolean(), 'is_shop_chat': db.Boolean(), 'name': db.String(100),
+        'avatar': db.String(500), 'group_admin_id': db.Integer(), 'is_public': db.Boolean(),
+        'is_chat_disabled': db.Boolean(), 'snap_mode': db.Boolean(), 'description': db.String(500),
+        'group_username': db.String(64), 'slow_mode_seconds': db.Integer(),
+        'members_can_send_media': db.Boolean(), 'members_can_add_members': db.Boolean(),
+        'reactions_enabled': db.Boolean(), 'join_approval_required': db.Boolean(),
+        'created_at': db.DateTime(),
+    })
+    inspector = inspect(db.engine)
+    add_missing_columns(inspector, 'chat_participant', {
+        'is_archived': db.Boolean(), 'deleted_at': db.DateTime(),
+    })
+    inspector = inspect(db.engine)
+    add_missing_columns(inspector, 'message', {
+        'status': db.String(20), 'ttl': db.Integer(), 'reply_to_id': db.Integer(),
+        'reply_content': db.Text(), 'reply_sender_name': db.String(80), 'edited_at': db.DateTime(),
+        'deleted_at': db.DateTime(), 'read_at': db.DateTime(), 'delivered_at': db.DateTime(),
+        'reactions': db.Text(), 'is_pinned': db.Boolean(), 'client_message_id': db.String(100),
+        'snap_mode': db.Boolean(), 'snap_expires_at': db.DateTime(),
+    })
     # Do not call db.create_all() here. On large PostgreSQL schemas SQLAlchemy
     # reflects every index and can hit the provider's statement timeout before
     # Gunicorn binds its port. Create only the new runtime-critical table.

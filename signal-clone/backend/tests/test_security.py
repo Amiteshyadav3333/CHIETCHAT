@@ -1792,14 +1792,25 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(response.json['websiteUrl'], 'https://shop.example')
         self.assertEqual(response.json['openingHours'], '09:00–18:00')
 
-    def test_business_dashboard_runtime_migration_recreates_missing_seller_tables(self):
+    def test_runtime_migration_repairs_business_dashboard_and_chat_list_schema(self):
         with app.app_context():
-            db.session.execute(text('DROP TABLE seller_account'))
+            for table in ('seller_account', 'business_automation', 'message_deletion'):
+                db.session.execute(text(f'DROP TABLE {table}'))
+            db.session.execute(text('DROP INDEX IF EXISTS ix_chat_is_shop_chat'))
+            db.session.execute(text('ALTER TABLE chat DROP COLUMN is_shop_chat'))
+            db.session.execute(text('ALTER TABLE chat_participant DROP COLUMN deleted_at'))
+            db.session.execute(text('ALTER TABLE message DROP COLUMN status'))
             db.session.commit()
             ensure_runtime_compat_schema()
-            self.assertIn('seller_account', inspect(db.engine).get_table_names())
+            tables = set(inspect(db.engine).get_table_names())
+            self.assertTrue({'seller_account', 'business_automation', 'message_deletion'}.issubset(tables))
+            self.assertIn('is_shop_chat', {column['name'] for column in inspect(db.engine).get_columns('chat')})
+            self.assertIn('deleted_at', {column['name'] for column in inspect(db.engine).get_columns('chat_participant')})
+            self.assertIn('status', {column['name'] for column in inspect(db.engine).get_columns('message')})
         dashboard = self.client.get('/api/business/me', headers=self.auth_headers())
         self.assertEqual(dashboard.status_code, 200)
+        chat_list = self.client.get('/api/chats', headers=self.auth_headers())
+        self.assertEqual(chat_list.status_code, 200)
 
     def test_business_dashboard_recovers_from_invalid_automation_rules(self):
         with app.app_context():

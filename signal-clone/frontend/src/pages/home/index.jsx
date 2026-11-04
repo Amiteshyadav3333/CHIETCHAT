@@ -710,9 +710,13 @@ export const Home = () => {
         }, kind === 'drawing' ? 0 : 250);
     };
 
-    const ringChatBell = async message => {
+    const ringChatBell = async (message, voiceData = '') => {
         if (!socket?.connected || !visibleActiveChat?.id) throw new Error('Connect to chat to ring the bell.');
-        const result = await emitWithAcknowledgement(socket, 'ring_chat_bell', { chatId: visibleActiveChat.id, message: String(message || '').slice(0, 120) });
+        const result = await emitWithAcknowledgement(socket, 'ring_chat_bell', {
+            chatId: visibleActiveChat.id,
+            message: String(message || '').slice(0, 120),
+            voiceData: String(voiceData || ''),
+        });
         if (!result?.ok) throw new Error(result?.error || 'Could not ring the bell.');
     };
 

@@ -2,6 +2,38 @@ import React from 'react';
 import axios from 'axios';
 import ChatSoundPreferences from './ChatSoundPreferences';
 
+const convertVoiceClipToWav = async sourceBlob => {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) throw new Error('Audio conversion is not supported in this browser.');
+    const context = new AudioContextClass();
+    let decoded;
+    try { decoded = await context.decodeAudioData(await sourceBlob.arrayBuffer()); }
+    finally { await context.close().catch(() => {}); }
+    const rate = 12000;
+    const count = Math.min(rate * 12, Math.ceil(decoded.duration * rate));
+    if (!count) throw new Error('The recording is empty. Record it again.');
+    const buffer = new ArrayBuffer(44 + count * 2);
+    const view = new DataView(buffer);
+    const write = (offset, value) => [...value].forEach((character, index) => view.setUint8(offset + index, character.charCodeAt(0)));
+    write(0, 'RIFF'); view.setUint32(4, 36 + count * 2, true); write(8, 'WAVE');
+    write(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true); view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true);
+    view.setUint16(32, 2, true); view.setUint16(34, 16, true); write(36, 'data'); view.setUint32(40, count * 2, true);
+    const channels = Array.from({ length: decoded.numberOfChannels }, (_, index) => decoded.getChannelData(index));
+    for (let index = 0; index < count; index += 1) {
+        const position = index * decoded.sampleRate / rate;
+        const left = Math.floor(position), fraction = position - left;
+        let mono = 0;
+        channels.forEach(channel => {
+            const first = channel[left] || 0, second = channel[Math.min(left + 1, channel.length - 1)] || 0;
+            mono += first + (second - first) * fraction;
+        });
+        const sample = Math.max(-1, Math.min(1, mono / Math.max(1, channels.length)));
+        view.setInt16(44 + index * 2, sample < 0 ? sample * 32768 : sample * 32767, true);
+    }
+    return new Blob([buffer], { type: 'audio/wav' });
+};
+
 const WALLPAPERS = [
     ['white', 'White', 'bg-white'],
     ['gradient', 'Dark', 'bg-[#0b141a]'],
@@ -38,6 +70,15 @@ const ChatPreferences = ({ wallpaper, onWallpaperChange, customWallpaper, onCust
     const [ringingBell, setRingingBell] = React.useState(false);
     const [customBellMessage, setCustomBellMessage] = React.useState(user?.uiPreferences?.customBellMessage || '');
     const [savingBellMessage, setSavingBellMessage] = React.useState(false);
+    const [voiceClip, setVoiceClip] = React.useState(null);
+    const [voiceRecording, setVoiceRecording] = React.useState(false);
+    const [voiceConverting, setVoiceConverting] = React.useState(false);
+    const [voiceSeconds, setVoiceSeconds] = React.useState(0);
+    const voiceSecondsRef = React.useRef(0);
+    const voiceRecorderRef = React.useRef(null);
+    const voiceStreamRef = React.useRef(null);
+    const voiceTimerRef = React.useRef(null);
+    const voicePreviewRef = React.useRef(null);
     const wallpaperInputRef = React.useRef(null);
     const unitSeconds = { seconds: 1, minutes: 60, hours: 3600, days: 86400, years: 31536000 };
 
@@ -82,6 +123,112 @@ const ChatPreferences = ({ wallpaper, onWallpaperChange, customWallpaper, onCust
             setSavingBellMessage(false);
         }
     };
+
+    React.useEffect(() => {
+        if (!voiceClip?.url) return undefined;
+        return () => URL.revokeObjectURL(voiceClip.url);
+    }, [voiceClip?.url]);
+
+    React.useEffect(() => () => {
+        if (voiceTimerRef.current) window.clearInterval(voiceTimerRef.current);
+        if (voiceRecorderRef.current?.state === 'recording') {
+            voiceRecorderRef.current.onstop = null;
+            voiceRecorderRef.current.onerror = null;
+            voiceRecorderRef.current.stop();
+        }
+        voiceStreamRef.current?.getTracks().forEach(track => track.stop());
+    }, []);
+
+    const stopVoiceRecording = () => {
+        if (voiceTimerRef.current) window.clearInterval(voiceTimerRef.current);
+        voiceTimerRef.current = null;
+        if (voiceRecorderRef.current?.state === 'recording') voiceRecorderRef.current.stop();
+        setVoiceRecording(false);
+    };
+
+    const startVoiceRecording = async () => {
+        setBellFeedback('');
+        if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+            setBellFeedback('Voice recording is not supported in this browser.');
+            return;
+        }
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            voiceStreamRef.current = stream;
+            const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+                .find(type => window.MediaRecorder.isTypeSupported?.(type));
+            const recorder = mimeType ? new window.MediaRecorder(stream, { mimeType }) : new window.MediaRecorder(stream);
+            const chunks = [];
+            recorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data); };
+            recorder.onerror = () => {
+                stream.getTracks().forEach(track => track.stop());
+                voiceStreamRef.current = null;
+                setVoiceRecording(false);
+                setBellFeedback('Could not record your voice. Please try again.');
+            };
+            recorder.onstop = () => {
+                stream.getTracks().forEach(track => track.stop());
+                voiceStreamRef.current = null;
+                voiceRecorderRef.current = null;
+                const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+                if (!blob.size) { setBellFeedback('No audio was recorded. Check your microphone and try again.'); return; }
+                setVoiceConverting(true);
+                convertVoiceClipToWav(blob).then(converted => {
+                    if (converted.size > 300 * 1024) throw new Error('Voice clip is too large. Record a shorter clip.');
+                    setVoiceClip({ blob: converted, url: URL.createObjectURL(converted), converted: true });
+                    setBellFeedback('Converted to compatible WAV. Replay it before sending.');
+                }).catch(error => {
+                    setVoiceClip({ blob, url: URL.createObjectURL(blob), converted: false });
+                    setBellFeedback(`${error.message || 'Could not convert the recording.'} You can still preview or retry conversion.`);
+                }).finally(() => setVoiceConverting(false));
+            };
+            recorder.start();
+            voiceRecorderRef.current = recorder;
+            setVoiceClip(null);
+            voiceSecondsRef.current = 0;
+            setVoiceSeconds(0);
+            setVoiceRecording(true);
+            voiceTimerRef.current = window.setInterval(() => {
+                voiceSecondsRef.current += 1;
+                setVoiceSeconds(voiceSecondsRef.current);
+                if (voiceSecondsRef.current >= 12) stopVoiceRecording();
+            }, 1000);
+        } catch (error) {
+            voiceStreamRef.current?.getTracks().forEach(track => track.stop());
+            voiceStreamRef.current = null;
+            setBellFeedback(error.name === 'NotAllowedError' ? 'Allow microphone access to record your voice.' : 'Could not start voice recording.');
+        }
+    };
+
+    const convertSavedVoiceClip = async () => {
+        if (!voiceClip || voiceConverting) return;
+        setVoiceConverting(true);
+        setBellFeedback('Converting voice to compatible WAV…');
+        try {
+            const converted = await convertVoiceClipToWav(voiceClip.blob);
+            if (converted.size > 300 * 1024) throw new Error('Voice clip is too large. Record a shorter clip.');
+            setVoiceClip({ blob: converted, url: URL.createObjectURL(converted), converted: true });
+            setBellFeedback('Converted to compatible WAV. Replay it before sending.');
+        } catch (error) { setBellFeedback(error.message || 'Could not convert this recording.'); }
+        finally { setVoiceConverting(false); }
+    };
+
+    const replayVoiceClip = () => {
+        const player = voicePreviewRef.current;
+        if (!player) return;
+        player.currentTime = 0;
+        player.play().catch(() => setBellFeedback('Tap play on the audio player to listen to your recording.'));
+    };
+
+    const blobAsDataUrl = blob => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const mime = blob.type.includes('webm') ? 'webm' : blob.type.includes('ogg') ? 'ogg' : blob.type.includes('wav') ? 'wav' : 'mp4';
+            resolve(String(reader.result).replace(/^data:audio\/[^;,]+(?:;[^,]*)?;base64,/, `data:audio/${mime};base64,`));
+        };
+        reader.onerror = () => reject(new Error('Could not prepare your voice clip.'));
+        reader.readAsDataURL(blob);
+    });
 
     const handleWallpaperFile = async event => {
         const file = event.target.files?.[0];
@@ -172,8 +319,16 @@ const ChatPreferences = ({ wallpaper, onWallpaperChange, customWallpaper, onCust
                 <textarea value={customBellMessage} onChange={event => setCustomBellMessage(event.target.value.slice(0, 120))} rows={2} maxLength={120} placeholder="Type the message to play when they get your bell…" className="mt-1.5 w-full resize-none rounded-lg border border-amber-100/15 bg-black/20 px-3 py-2 text-sm text-white outline-none placeholder:text-gray-500 focus:border-amber-300/50" />
             </label>
             <div className="flex items-center justify-between gap-3"><span className="text-[10px] text-gray-500">{customBellMessage.length}/120 · saved to your account</span><button type="button" disabled={savingBellMessage} onClick={saveCustomBellMessage} className="rounded-lg border border-amber-200/20 px-3 py-1.5 text-xs font-bold text-amber-100 disabled:opacity-50">{savingBellMessage ? 'Saving…' : 'Save message'}</button></div>
-            <button type="button" disabled={ringingBell} onClick={async () => { setRingingBell(true); setBellFeedback(''); try { await onRingBell(customBellMessage.trim()); setBellFeedback('Bell sent with your custom message. They can silence it on their device.'); } catch (error) { setBellFeedback(error.message || 'Could not ring the bell.'); } finally { setRingingBell(false); } }} className="flex w-full items-center justify-center gap-2 rounded-lg bg-amber-300 px-4 py-3 text-sm font-black text-[#231803] disabled:opacity-50">🔔 {ringingBell ? 'Ringing…' : 'Ring their bell'}</button>
-            <p className="text-[11px] leading-4 text-gray-400">Your message is spoken once, then the bell keeps ringing until they silence it.</p>{bellFeedback && <p role="status" className="text-xs text-amber-100">{bellFeedback}</p>}
+            <div className="rounded-lg border border-amber-100/10 bg-black/15 p-3">
+                <div className="flex items-center justify-between gap-3">
+                    <div><p className="text-xs font-bold text-amber-100">Send it in your own voice</p><p className="mt-1 text-[10px] text-gray-400">Record up to 12 seconds · sent directly, not saved</p></div>
+                    {voiceRecording ? <button type="button" onClick={stopVoiceRecording} className="rounded-lg bg-red-500 px-3 py-2 text-xs font-black text-white">Stop · {voiceSeconds}s</button> : <button type="button" disabled={voiceConverting} onClick={startVoiceRecording} className="rounded-lg border border-amber-200/30 px-3 py-2 text-xs font-bold text-amber-100 disabled:opacity-50">🎙 {voiceClip ? 'Record again' : 'Record voice'}</button>}
+                </div>
+                {voiceConverting && <p className="mt-2 text-xs text-amber-100" role="status">Converting your recording for reliable playback…</p>}
+                {voiceClip && <div className="mt-3 space-y-2"><audio ref={voicePreviewRef} src={voiceClip.url} controls preload="auto" className="h-10 w-full" aria-label="Preview your recorded voice" /><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-[10px] text-emerald-200">{voiceClip.converted ? 'Compatible WAV · ready to send' : 'Original recording · conversion available'}</span><div className="flex gap-2"><button type="button" onClick={replayVoiceClip} className="rounded-lg border border-white/15 px-2.5 py-1.5 text-[11px] font-bold text-white">↻ Replay</button>{!voiceClip.converted && <button type="button" disabled={voiceConverting} onClick={convertSavedVoiceClip} className="rounded-lg border border-amber-200/30 px-2.5 py-1.5 text-[11px] font-bold text-amber-100 disabled:opacity-50">Convert to WAV</button>}<button type="button" onClick={() => setVoiceClip(null)} className="rounded-lg px-2 py-1.5 text-[11px] font-bold text-gray-300">Remove</button></div></div></div>}
+            </div>
+            <button type="button" disabled={ringingBell || voiceRecording || voiceConverting || (voiceClip && voiceClip.blob.size > 300 * 1024) || (!customBellMessage.trim() && !voiceClip)} onClick={async () => { setRingingBell(true); setBellFeedback(''); try { if (voiceClip && voiceClip.blob.size > 300 * 1024) throw new Error('Voice clip is too large. Convert it to WAV or record a shorter clip.'); const voiceData = voiceClip ? await blobAsDataUrl(voiceClip.blob) : ''; await onRingBell(customBellMessage.trim(), voiceData); setBellFeedback(voiceClip ? 'Bell and your voice were sent. They can silence it on their device.' : 'Bell sent with your custom message. They can silence it on their device.'); setVoiceClip(null); } catch (error) { setBellFeedback(error.message || 'Could not ring the bell.'); } finally { setRingingBell(false); } }} className="flex w-full items-center justify-center gap-2 rounded-lg bg-amber-300 px-4 py-3 text-sm font-black text-[#231803] disabled:opacity-50">🔔 {ringingBell ? 'Sending…' : 'Ring their bell'}</button>
+            <p className="text-[11px] leading-4 text-gray-400">Your text is spoken once, or your voice clip plays once. The bell keeps ringing until they silence it. Voice clips are converted for wider device support, can be replayed here, and are limited to 300 KB.</p>{bellFeedback && <p role="status" className="text-xs text-amber-100">{bellFeedback}</p>}
         </div>}
         {showSnapConfirm && <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={() => setShowSnapConfirm(false)}><div className="w-full max-w-sm rounded-3xl border border-yellow-400/25 bg-[#111b21] p-6 shadow-2xl" onClick={event => event.stopPropagation()}><div className="mb-4 text-5xl">👻</div><h3 className="text-xl font-bold text-white">{snapMode ? 'End Snap Chat?' : 'Start Snap Mode?'}</h3><p className="mt-2 text-sm leading-6 text-gray-300">{snapMode ? 'Messages, photos, audio and video from this session will disappear from every participant’s chat ten minutes after Snap Chat ends.' : 'Messages and media remain visible while Snap Chat is active, then disappear for every participant ten minutes after it ends. Downloads, forwarding and common screen-capture shortcuts are restricted.'}</p><div className="mt-4 rounded-xl bg-yellow-400/10 p-3 text-xs leading-5 text-yellow-200">One-to-one Snap videos use a direct encrypted connection and are not uploaded to cloud storage. Both people must be online on a network that allows a direct connection. Other uploaded media remains end-to-end encrypted and is deleted under the existing retention policy.</div><div className="mt-5 flex gap-2"><button type="button" onClick={() => setShowSnapConfirm(false)} className="flex-1 rounded-xl border border-gray-700 py-3 text-sm font-semibold text-gray-300">Cancel</button><button type="button" onClick={() => { onSnapModeChange(!snapMode); setShowSnapConfirm(false); }} className="flex-1 rounded-xl bg-yellow-400 py-3 text-sm font-black text-black">{snapMode ? 'End Snap Chat' : 'Start Snap Mode'}</button></div></div></div>}
         {chatId && <PreferenceSection title="Custom Tone & Ringtones" open={expandedSection === 'sounds'} onClick={() => toggleSection('sounds')}><ChatSoundPreferences chatId={chatId} /></PreferenceSection>}

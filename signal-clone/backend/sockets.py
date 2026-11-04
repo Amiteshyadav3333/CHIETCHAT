@@ -676,9 +676,21 @@ def register_socket_events(socketio):
         caller = db.session.get(User, user_id)
         raw_message = data.get('message', '') if isinstance(data, dict) else ''
         custom_message = ''.join(char for char in raw_message if char.isprintable()).strip()[:120] if isinstance(raw_message, str) else ''
+        raw_voice = data.get('voiceData', '') if isinstance(data, dict) else ''
+        voice_data = ''
+        if raw_voice:
+            allowed_voice = isinstance(raw_voice, str) and len(raw_voice) <= 410000 and raw_voice.startswith((
+                'data:audio/webm;base64,', 'data:audio/ogg;base64,',
+                'data:audio/mp4;base64,', 'data:audio/wav;base64,',
+            )) and all(char.isalnum() or char in '+/=-:;,.' for char in raw_voice)
+            if not allowed_voice:
+                return {'ok': False, 'error': 'Voice clip must be a supported audio file under 300 KB'}
+            voice_data = raw_voice
+        if not custom_message and not voice_data:
+            return {'ok': False, 'error': 'Add a message or record a voice clip'}
         payload = {'bellId': uuid.uuid4().hex, 'chatId': chat_id,
             'callerId': user_id, 'callerName': caller.username if caller else 'Your contact',
-            'message': custom_message}
+            'message': custom_message, 'voiceData': voice_data}
         socketio.emit('chat_bell_ringing', payload, room=f'user_{target_id}')
         return {'ok': True, 'message': 'Bell rang'}
 

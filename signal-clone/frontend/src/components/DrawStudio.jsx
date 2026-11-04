@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowUturnLeftIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { compactLiveDrawing } from '../utils/liveDrawing';
 
 const COLORS = ['#ffffff', '#22c55e', '#38bdf8', '#facc15', '#fb7185', '#a78bfa', '#111827'];
 
@@ -11,6 +12,9 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, onLiveDrawingChange, initi
     const snapshotRef = useRef(null);
     const activePointsRef = useRef([]);
     const actionsRef = useRef([]);
+    const liveDrawingTimerRef = useRef(null);
+    const pendingLiveDrawingRef = useRef(null);
+    const lastLiveDrawingAtRef = useRef(0);
     const [tool, setTool] = useState('pen');
     const [color, setColor] = useState('#22c55e');
     const [size, setSize] = useState(5);
@@ -56,6 +60,42 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, onLiveDrawingChange, initi
         if (!canvas) return;
         historyRef.current = [...historyRef.current.slice(-19), canvas.toDataURL()];
     };
+
+    const scheduleLiveDrawing = (actions = actionsRef.current, background = backgroundSource, activeStroke = null) => {
+        if (!onLiveDrawingChange) return;
+        pendingLiveDrawingRef.current = background || actions.length || activeStroke
+            ? { background, actions, activeStroke }
+            : null;
+        if (liveDrawingTimerRef.current !== null) return;
+        const delay = Math.max(0, 250 - (Date.now() - lastLiveDrawingAtRef.current));
+        liveDrawingTimerRef.current = window.setTimeout(() => {
+            liveDrawingTimerRef.current = null;
+            lastLiveDrawingAtRef.current = Date.now();
+            const pending = pendingLiveDrawingRef.current;
+            if (!pending) {
+                onLiveDrawingChange(null);
+            } else {
+                const { background: liveBackground, actions: liveActions, activeStroke: stroke } = pending;
+                const normalizedStroke = stroke ? {
+                    tool: stroke.tool, color: stroke.color, size: stroke.size,
+                    points: stroke.points.map(point => ({
+                        x: Math.round((point.x / stroke.width) * 1000),
+                        y: Math.round((point.y / stroke.height) * 1000),
+                    })),
+                } : null;
+                const snapshot = compactLiveDrawing({
+                    version: 2, width: 1000, height: 1000,
+                    background: liveBackground,
+                    actions: normalizedStroke ? [...liveActions, normalizedStroke] : liveActions,
+                    caption: '',
+                });
+                onLiveDrawingChange(snapshot);
+            }
+            pendingLiveDrawingRef.current = null;
+        }, delay);
+    };
+
+    useEffect(() => () => window.clearTimeout(liveDrawingTimerRef.current), []);
 
     const restore = (url) => {
         const canvas = canvasRef.current;
@@ -131,6 +171,10 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, onLiveDrawingChange, initi
         } else { ctx.lineTo(p.x, p.y); ctx.stroke(); }
         ctx.globalAlpha = 1;
         ctx.globalCompositeOperation = 'source-over';
+        scheduleLiveDrawing(actionsRef.current, backgroundSource, {
+            tool, color, size, points: activePointsRef.current,
+            width: canvas.width, height: canvas.height,
+        });
     };
 
     const end = () => {
@@ -141,7 +185,7 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, onLiveDrawingChange, initi
         const points = activePointsRef.current.map(normalize);
         if (points.length > 1) actionsRef.current.push({ tool, color, size, points: tool === 'arrow' ? [points[0], points[points.length - 1]] : points });
         saveHistory();
-        onLiveDrawingChange?.({ version: 2, width: 1000, height: 1000, background: backgroundSource ? { ...backgroundSource } : null, actions: actionsRef.current.slice(-100), caption: '' });
+        scheduleLiveDrawing(actionsRef.current);
     };
     const addText = () => {
         const value = window.prompt('Canvas par kya likhna hai?');
@@ -151,7 +195,7 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, onLiveDrawingChange, initi
         ctx.fillText(value, canvasRef.current.width / 2, canvasRef.current.height / 2);
         actionsRef.current.push({ tool: 'text', color, size, text: value.slice(0, 240), x: 500, y: 500 });
         saveHistory();
-        onLiveDrawingChange?.({ version: 2, width: 1000, height: 1000, background: backgroundSource ? { ...backgroundSource } : null, actions: actionsRef.current.slice(-100), caption: '' });
+        scheduleLiveDrawing(actionsRef.current);
     };
     const send = () => {
         if (onSendDrawing) {
@@ -169,13 +213,13 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, onLiveDrawingChange, initi
             <header className="flex h-16 items-center gap-3 border-b border-white/10 bg-[#111b21]/95 px-4">
                 <button onClick={onClose} className="rounded-full p-2 hover:bg-white/10"><XMarkIcon className="h-6 w-6" /></button>
                 <div className="flex-1"><h2 className="font-bold">Draw on chat</h2><p className="text-xs text-gray-400">Chat par draw, highlight, point ya text likhein</p></div>
-                <button onClick={() => { const h = historyRef.current; if (h.length > 1) { h.pop(); actionsRef.current.pop(); restore(h[h.length - 1]); } }} className="rounded-full p-2 hover:bg-white/10" title="Undo"><ArrowUturnLeftIcon className="h-5 w-5" /></button>
-                <button onClick={() => { actionsRef.current = []; const ctx = canvasRef.current.getContext('2d'); if (inline) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); else { ctx.fillStyle = '#111827'; ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height); } saveHistory(); }} className="rounded-full p-2 hover:bg-white/10" title="Clear"><TrashIcon className="h-5 w-5" /></button>
+                <button onClick={() => { const h = historyRef.current; if (h.length > 1) { h.pop(); actionsRef.current.pop(); restore(h[h.length - 1]); scheduleLiveDrawing(actionsRef.current); } }} className="rounded-full p-2 hover:bg-white/10" title="Undo"><ArrowUturnLeftIcon className="h-5 w-5" /></button>
+                <button onClick={() => { actionsRef.current = []; const ctx = canvasRef.current.getContext('2d'); if (inline) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); else { ctx.fillStyle = '#111827'; ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height); } saveHistory(); scheduleLiveDrawing([]); }} className="rounded-full p-2 hover:bg-white/10" title="Clear"><TrashIcon className="h-5 w-5" /></button>
             </header>
             <div className="flex flex-wrap items-center justify-center gap-2 border-b border-white/10 bg-[#111b21] p-3">
                 {['pen', 'highlighter', 'arrow', 'eraser'].map(item => <button key={item} onClick={() => setTool(item)} className={`rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${tool === item ? 'bg-[#00a884]' : 'bg-white/10'}`}>{item}</button>)}
                 <button onClick={addText} className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold">Text</button>
-                <button onClick={() => { setBackgroundSource(null); paintBlankSpace(); }} className="rounded-full bg-indigo-500/20 px-3 py-1.5 text-xs font-semibold text-indigo-200">＋ New space</button>
+                <button onClick={() => { setBackgroundSource(null); paintBlankSpace(); scheduleLiveDrawing([], null); }} className="rounded-full bg-indigo-500/20 px-3 py-1.5 text-xs font-semibold text-indigo-200">＋ New space</button>
                 <span className="mx-1 h-6 w-px bg-white/10" />
                 {COLORS.map(c => <button key={c} onClick={() => setColor(c)} className={`h-7 w-7 rounded-full border-2 ${color === c ? 'border-white scale-110' : 'border-white/20'}`} style={{ background: c }} aria-label={`Choose ${c}`} />)}
                 <input type="range" min="2" max="14" value={size} onChange={e => setSize(Number(e.target.value))} className="w-24 accent-[#00a884]" />

@@ -551,28 +551,31 @@ export const Home = () => {
         if (!liveNoteEnabled || !socket?.connected || !chat || !publicKey || !user) return;
         window.clearTimeout(liveNoteTimerRef.current);
         const sequence = ++liveNoteSequenceRef.current;
-        const draft = kind === 'drawing' ? JSON.stringify(text || {}).slice(0, 8000) : String(text || '').slice(0, 2000);
-        if (!draft.trim() || draft === '{}') {
+        const draft = kind === 'drawing' ? JSON.stringify(text || {}) : String(text || '').slice(0, 2000);
+        if ((kind === 'drawing' && (!text || (!text.background && !text.actions?.length))) || !draft.trim() || draft === '{}') {
             socket.emit('live_note_end', { chatId: chat.id });
+            return;
+        }
+        if (kind === 'drawing' && draft.length > 5500) {
+            console.warn('Could not share live drawing: preview is too large.');
             return;
         }
         liveNoteTimerRef.current = window.setTimeout(async () => {
             if (sequence !== liveNoteSequenceRef.current || !liveNoteSessionRef.current.enabled || liveNoteSessionRef.current.chatId !== chat.id) return;
             try {
-                const recipients = {};
-                for (const participant of chat.participants || []) {
+                const recipientEntries = await Promise.all((chat.participants || []).map(async participant => {
                     const isCurrentUser = sameUserId(participant.id, user.id);
                     const participantPublicKey = isCurrentUser ? publicKey : participant.publicKey;
                     if (!participantPublicKey) throw new Error('A chat participant encryption key is unavailable');
                     if (!isCurrentUser) await assertPinnedPublicKey(participant.id, participantPublicKey);
-                    recipients[participant.id] = participantPublicKey;
-                }
-                const content = await encryptForRecipients(recipients, draft);
+                    return [participant.id, participantPublicKey];
+                }));
+                const content = await encryptForRecipients(Object.fromEntries(recipientEntries), draft);
                 if (sequence === liveNoteSequenceRef.current && liveNoteSessionRef.current.enabled && liveNoteSessionRef.current.chatId === chat.id) {
                     socket.emit('live_note_update', { chatId: chat.id, content, kind });
                 }
             } catch (error) { console.warn('Could not share encrypted live note:', error.message); }
-        }, 250);
+        }, kind === 'drawing' ? 0 : 250);
     };
 
     const ringChatBell = async () => {

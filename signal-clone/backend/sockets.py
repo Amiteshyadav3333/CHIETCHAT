@@ -547,6 +547,7 @@ def register_socket_events(socketio):
         except (TypeError, ValueError):
             return {'ok': False, 'error': 'Invalid chat'}
         content = data.get('content')
+        kind = data.get('kind', 'text')
         if not user_id or not user_can_access_chat(user_id, chat_id):
             return {'ok': False, 'error': 'Forbidden'}
         if not isinstance(content, str) or len(content.encode('utf-8')) > 12_000 or not valid_encrypted_envelope(content):

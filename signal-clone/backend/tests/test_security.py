@@ -1044,6 +1044,25 @@ class SecurityTests(unittest.TestCase):
         payer.disconnect()
         merchant.disconnect()
 
+    def test_live_note_drawings_are_encrypted_and_only_delivered_to_chat_members(self):
+        sender = socketio.test_client(app, auth={'token': self.token})
+        recipient = socketio.test_client(app, auth={'token': self.payee_token})
+        envelope = self.encrypted_envelope('{"version":2,"actions":[]}')
+        update = sender.emit('live_note_update', {
+            'chatId': self.chat_id, 'content': envelope, 'kind': 'drawing',
+        }, callback=True)
+        self.assertTrue(update['ok'])
+        previews = [event for event in recipient.get_received() if event['name'] == 'live_note_preview']
+        self.assertEqual(len(previews), 1)
+        self.assertEqual(previews[0]['args'][0]['kind'], 'drawing')
+        self.assertEqual(previews[0]['args'][0]['content'], envelope)
+        plaintext = sender.emit('live_note_update', {
+            'chatId': self.chat_id, 'content': 'not-encrypted', 'kind': 'text',
+        }, callback=True)
+        self.assertFalse(plaintext['ok'])
+        sender.disconnect()
+        recipient.disconnect()
+
     def test_snap_video_signaling_requires_snap_direct_chat_and_relays_only_sdp(self):
         with app.app_context():
             chat = db.session.get(Chat, self.chat_id)

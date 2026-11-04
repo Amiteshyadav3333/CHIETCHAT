@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import axios from 'axios';
 import TelegramGroupInfo from '../../../components/TelegramGroupInfo';
 import AvatarZoom from '../../../components/AvatarZoom';
 import ChatPreferences from '../../../components/ChatPreferences';
@@ -41,6 +42,9 @@ export const ChatInfoDrawer = ({
     resetContactDp,
     formatLastSeen,
 }) => {
+    const [savingLastSeen, setSavingLastSeen] = useState(false);
+    const [lastSeenError, setLastSeenError] = useState('');
+
     if (!showInfoPanel || !visibleActiveChat) return null;
 
     if (visibleActiveChat.isGroup) {
@@ -65,6 +69,29 @@ export const ChatInfoDrawer = ({
 
     const other = getOtherParticipant(visibleActiveChat);
     const isBlocked = other && blockedUsers.includes(other.id);
+    const exceptionTokens = String(user?.lastSeenExceptions || '').split(',').map(token => token.trim().toLowerCase().replace(/^@/, '')).filter(Boolean);
+    const contactTokens = [other?.id, other?.username, other?.platformId]
+        .filter(value => value !== null && value !== undefined && String(value).trim())
+        .map(value => String(value).trim().toLowerCase().replace(/^@/, ''));
+    const sharesLastSeenWithContact = contactTokens.some(value => exceptionTokens.includes(value));
+    const toggleLastSeenForContact = async () => {
+        if (!other || !user?.hideLastSeen || savingLastSeen) return;
+        const next = sharesLastSeenWithContact
+            ? exceptionTokens.filter(value => !contactTokens.includes(value))
+            : [...new Set([...exceptionTokens, String(other.platformId || other.username || other.id).trim().toLowerCase().replace(/^@/, '')])];
+        setSavingLastSeen(true);
+        setLastSeenError('');
+        try {
+            const response = await axios.put('/api/user/privacy', { lastSeenExceptions: next.join(',') }, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            onUserUpdated?.(response.data);
+        } catch (error) {
+            setLastSeenError(error.response?.data?.error || 'Could not update last-seen visibility.');
+        } finally {
+            setSavingLastSeen(false);
+        }
+    };
 
     return (
         <div className="absolute inset-0 z-40 bg-black/70 flex justify-end" onClick={() => setShowInfoPanel(false)}>
@@ -91,6 +118,33 @@ export const ChatInfoDrawer = ({
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3" style={{ scrollbarWidth: 'thin' }}>
                     <div className="flex flex-col gap-1">
+                        {other && (
+                            <section className="mb-2 rounded-xl border border-sky-500/20 bg-sky-500/5 p-3" aria-label="Last seen sharing">
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-semibold text-white">Last seen visibility</p>
+                                        <p className="mt-1 text-[11px] leading-4 text-gray-400">
+                                            {user?.hideLastSeen
+                                                ? `Choose whether ${other.username || 'this contact'} can see your last seen.`
+                                                : 'Your last seen is visible according to your global privacy setting. Hide it in Settings → Privacy to choose exceptions.'}
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        role="switch"
+                                        aria-label={`Show last seen to ${other.username || 'this contact'}`}
+                                        aria-checked={!user?.hideLastSeen || sharesLastSeenWithContact}
+                                        disabled={!user?.hideLastSeen || savingLastSeen}
+                                        onClick={toggleLastSeenForContact}
+                                        className={`h-7 w-12 shrink-0 rounded-full p-1 transition disabled:cursor-not-allowed disabled:opacity-50 ${!user?.hideLastSeen || sharesLastSeenWithContact ? 'bg-sky-500' : 'bg-gray-700'}`}
+                                    >
+                                        <span className={`block h-5 w-5 rounded-full bg-white transition ${!user?.hideLastSeen || sharesLastSeenWithContact ? 'translate-x-5' : ''}`} />
+                                    </button>
+                                </div>
+                                {savingLastSeen && <p className="mt-2 text-[11px] text-sky-200">Saving…</p>}
+                                {lastSeenError && <p role="alert" className="mt-2 text-[11px] text-red-300">{lastSeenError}</p>}
+                            </section>
+                        )}
                         {other && (
                             <div className="mb-2 rounded-xl border border-violet-500/20 bg-violet-500/5 p-3">
                                 <div className="flex items-center gap-3">

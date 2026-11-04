@@ -32,6 +32,8 @@ export const ChatInfoDrawer = ({
     liveNoteEnabled,
     updateLiveNote,
     ringChatBell,
+    chatLocked,
+    onToggleChatLock,
     getOtherParticipant,
     blockedUsers,
     handleBlockUser,
@@ -214,6 +216,8 @@ export const ChatInfoDrawer = ({
                             onLiveNoteChange={updateLiveNote}
                             onRingBell={ringChatBell}
                             canRingBell={!visibleActiveChat.isGroup}
+                            chatLocked={chatLocked}
+                            onToggleChatLock={!visibleActiveChat.isGroup ? onToggleChatLock : null}
                             user={user}
                             token={token}
                             onUserUpdated={onUserUpdated}

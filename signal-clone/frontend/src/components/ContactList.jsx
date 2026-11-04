@@ -40,9 +40,10 @@ const ContactList = ({
                 {selectionMode && <button type="button" disabled={!selectedIds.length} onClick={() => { onDeleteSelected?.(selectedIds); setSelectionMode(false); setSelectedIds([]); }} className="rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-bold text-red-200 disabled:opacity-40">Delete {selectedIds.length || ''}</button>}
             </div>}
             {chats.map(chat => {
-                const displayName = nicknames[chat.id] || chat.name;
-                const isMuted = mutedChats.includes(chat.id);
-                const isPinned = pinnedChats.includes(chat.id);
+                const isLockedPlaceholder = Boolean(chat.isLockedPlaceholder);
+                const displayName = isLockedPlaceholder ? 'Locked chat' : nicknames[chat.id] || chat.name;
+                const isMuted = !isLockedPlaceholder && mutedChats.includes(chat.id);
+                const isPinned = !isLockedPlaceholder && pinnedChats.includes(chat.id);
                 const isOnline = chat.participants?.some(p => p.username === chat.name && p.isOnline);
                 const otherUser = !chat.isGroup
                     ? chat.participants?.find(p => p.id !== currentUserId)
@@ -83,13 +84,15 @@ const ContactList = ({
                                     <h3 className="text-gray-100 font-semibold truncate text-sm">{displayName}</h3>
                                     {isMuted && <span className="text-[10px] text-gray-500 flex-shrink-0">🔇</span>}
                                 </div>
-                                {chat.lastMessage?.timestamp && (
+                                {!isLockedPlaceholder && chat.lastMessage?.timestamp && (
                                     <span className="text-[11px] text-gray-500 flex-shrink-0">
                                         {new Date(chat.lastMessage.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                     </span>
                                 )}
                             </div>
-                            {callsMode ? (
+                            {isLockedPlaceholder ? (
+                                <p className="mt-0.5 truncate text-xs text-emerald-300">🔒 Enter PIN to view this conversation</p>
+                            ) : callsMode ? (
                                 <p className="text-xs text-gray-400 truncate mt-0.5">Tap a button to start a call</p>
                             ) : (
                                 <p className={`text-xs truncate mt-0.5 ${unreadCount ? 'font-semibold text-gray-100' : 'text-gray-400'}`}>
@@ -97,7 +100,7 @@ const ContactList = ({
                                 </p>
                             )}
                         </div>
-                        {callsMode && (
+                        {callsMode && !isLockedPlaceholder && (
                             <div className="ml-2 flex items-center gap-1">
                                 <button onClick={(e) => { e.stopPropagation(); onVoiceCall?.(chat); }} className="rounded-full p-2 text-[#00a884] hover:bg-white/10" title="Voice call">☎</button>
                                 <button onClick={(e) => { e.stopPropagation(); onVideoCall?.(chat); }} className="rounded-full p-2 text-[#00a884] hover:bg-white/10" title="Video call">▣</button>

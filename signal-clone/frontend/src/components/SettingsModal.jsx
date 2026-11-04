@@ -26,6 +26,7 @@ import {
     previewSound,
     getGlobalCustomAudio,
 } from '../utils/customNotificationSounds';
+import { ensureDevicePin, verifyDevicePin } from '../utils/deviceLock';
 
 const TITLES = {
     settings: 'Settings', profile: 'Profile', account: 'Account', privacy: 'Privacy',
@@ -127,6 +128,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
         screenshotAlerts: localStorage.getItem('screenshot_alerts') === '1',
         spamDetection: localStorage.getItem('spam_detection') !== '0',
         appLock: localStorage.getItem('app_lock_enabled') === '1',
+        chatAreaLock: localStorage.getItem(`chat_area_lock_enabled_${user?.id || 'default'}`) === '1',
         animatedTheme: serverUi.animatedTheme ?? localStorage.getItem('animated_theme') === '1',
         autoReply: localStorage.getItem('business_auto_reply') === '1',
         showCatalog: localStorage.getItem('business_catalog') === '1',
@@ -327,9 +329,14 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
             if (!pin) return;
             const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pin)))).map(byte => byte.toString(16).padStart(2, '0')).join('');
             if (hash !== localStorage.getItem('app_lock_pin_hash')) return setMessage({ type: 'error', text: 'Incorrect device PIN.' });
-            localStorage.removeItem('app_lock_pin_hash');
+            const userKey = user?.id || 'default';
+            const chatAreaStillLocked = localStorage.getItem(`chat_area_lock_enabled_${userKey}`) === '1';
+            let hasLockedChats = false;
+            try { hasLockedChats = JSON.parse(localStorage.getItem(`chat_locked_ids_${userKey}`) || '[]').length > 0; } catch { /* Ignore malformed local lock metadata. */ }
+            if (!chatAreaStillLocked && !hasLockedChats) localStorage.removeItem('app_lock_pin_hash');
             localStorage.setItem('app_lock_enabled', '0');
             setPrefs(current => ({ ...current, appLock: false }));
+            if (chatAreaStillLocked || hasLockedChats) setMessage({ type: 'success', text: 'App lock is off. Your chat privacy locks still use this PIN.' });
             return;
         }
         const pin = window.prompt('Create a 4–6 digit PIN for this browser:');
@@ -339,6 +346,25 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
         localStorage.setItem('app_lock_enabled', '1');
         setPrefs(current => ({ ...current, appLock: true }));
         setMessage({ type: 'success', text: 'App lock enabled for this browser.' });
+    };
+
+    const toggleChatAreaLock = async () => {
+        const key = `chat_area_lock_enabled_${user?.id || 'default'}`;
+        if (!prefs.chatAreaLock) {
+            if (!await ensureDevicePin()) return;
+            localStorage.setItem(key, '1');
+            setPrefs(current => ({ ...current, chatAreaLock: true }));
+            window.dispatchEvent(new CustomEvent('chat-area-lock-changed', { detail: { userId: user?.id, enabled: true } }));
+            setMessage({ type: 'success', text: 'Chat area locked. Social and Reels remain open.' });
+            return;
+        }
+        const pin = window.prompt('Enter your privacy PIN to unlock the chat area:');
+        if (!pin) return;
+        if (!await verifyDevicePin(pin)) return setMessage({ type: 'error', text: 'Incorrect privacy PIN.' });
+        localStorage.setItem(key, '0');
+        setPrefs(current => ({ ...current, chatAreaLock: false }));
+        window.dispatchEvent(new CustomEvent('chat-area-lock-changed', { detail: { userId: user?.id, enabled: false } }));
+        setMessage({ type: 'success', text: 'Chat area lock disabled.' });
     };
 
     const handleTogglePrivacy = async (field, value) => {
@@ -933,6 +959,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                             <SectionLabel>Security</SectionLabel>
                             <SettingsGroup>
                                 <SettingsToggle icon={<LockClosedIcon />} title="App lock" subtitle="Require a 4–6 digit PIN when this browser opens" value={prefs.appLock} onClick={toggleAppLock} />
+                                <SettingsToggle icon={<ChatBubbleBottomCenterTextIcon />} title="Lock chat area" subtitle="Keep chats behind your PIN while Social and Reels stay available" value={prefs.chatAreaLock} onClick={toggleChatAreaLock} />
                                 <SettingsToggle icon={<ShieldCheckIcon />} title="Spam detection" subtitle="Warn about suspicious links and repeated unknown messages" value={prefs.spamDetection} onClick={() => togglePref('spamDetection', 'spam_detection')} />
                                 <InfoRow title="End-to-end encryption" text="Messages and calls are secured between participants using RSA-256 and AES-GCM envelopes." />
                                 <InfoRow title="Blocked contacts" text="Block or unblock a user from that contact's chat info." />

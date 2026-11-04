@@ -25,6 +25,7 @@ import { applyLiveLocationUpdate, useLiveLocationSharing } from '../../features/
 import { useRealtimeNotifications } from '../../features/notifications';
 import { applyPollVoteUpdate } from '../../features/polls';
 import { playMessageNotification } from '../../utils/customNotificationSounds';
+import { ensureDevicePin, verifyDevicePin } from '../../utils/deviceLock';
 
 import { directChatPath, useHomeNavigation } from './hooks/useHomeNavigation';
 import { useNavigate, useParams, usePathname } from '../../utils/clientRouter';
@@ -40,6 +41,7 @@ import IncomingChatBell from './components/IncomingChatBell';
 import { CallOverlayContainer } from './components/CallOverlayContainer';
 import { FeatureOverlays } from './components/FeatureOverlays';
 import { HomeModalsContainer } from './components/HomeModalsContainer';
+import { ChatPrivacyLockOverlay } from '../../components/HomeOverlays';
 import ShopMarketplace from '../../components/ShopMarketplace';
 import ImageCropperModal from '../../components/cropper/ImageCropperModal';
 import { useBackHandler } from '../../utils/backNavigation';
@@ -72,7 +74,19 @@ export const Home = () => {
     const pathname = usePathname();
     const navigate = useNavigate();
     const previousPathname = useRef(pathname);
+    const previousChatRouteId = useRef(null);
     const { user, token, logout, updateUser } = useContext(AuthContext);
+    const localLockUserKey = user?.id || 'default';
+    const [lockedChatIds, setLockedChatIds] = useState(() => {
+        try { return JSON.parse(localStorage.getItem(`chat_locked_ids_${localLockUserKey}`) || '[]').map(String); } catch { return []; }
+    });
+    const [unlockedChatIds, setUnlockedChatIds] = useState([]);
+    const [chatAreaLockEnabled, setChatAreaLockEnabled] = useState(() => localStorage.getItem(`chat_area_lock_enabled_${localLockUserKey}`) === '1');
+    const [chatAreaUnlocked, setChatAreaUnlocked] = useState(false);
+    const [privacyUnlockRequest, setPrivacyUnlockRequest] = useState(null);
+    const [pendingProtectedChat, setPendingProtectedChat] = useState(null);
+    const [privacyPin, setPrivacyPin] = useState('');
+    const [privacyPinError, setPrivacyPinError] = useState('');
     const { socket } = useContext(SocketContext);
     const { publicKey, privateKey } = useEncryption(user, token);
 
@@ -93,13 +107,57 @@ export const Home = () => {
     // Custom Hooks
     const nav = useHomeNavigation();
     const prefs = useChatPreferences(user);
-    const navigateToChat = useCallback((chat) => {
+    const openChatUnlocked = useCallback(chat => {
         if (!chat?.id) return false;
         setChats(current => current.some(item => String(item.id) === String(chat.id))
             ? current
             : [chat, ...current]);
         return nav.openChat(chat, setActiveChat);
     }, [nav.openChat]);
+    const navigateToChat = useCallback((chat) => {
+        if (!chat?.id) return false;
+        const actualChat = chats.find(item => String(item.id) === String(chat.id)) || chat;
+        if (chatAreaLockEnabled && !chatAreaUnlocked) {
+            setPendingProtectedChat(actualChat);
+            setPrivacyUnlockRequest({ type: 'area' });
+            setPrivacyPin(''); setPrivacyPinError('');
+            return false;
+        }
+        if (lockedChatIds.includes(String(chat.id)) && !unlockedChatIds.includes(String(chat.id))) {
+            setPendingProtectedChat(actualChat);
+            setPrivacyUnlockRequest({ type: 'chat' });
+            setPrivacyPin(''); setPrivacyPinError('');
+            return false;
+        }
+        return openChatUnlocked(actualChat);
+    }, [chats, chatAreaLockEnabled, chatAreaUnlocked, lockedChatIds, unlockedChatIds, openChatUnlocked]);
+
+    const handleToggleChatLock = useCallback(async chat => {
+        if (!chat?.id) return;
+        const chatId = String(chat.id);
+        if (lockedChatIds.includes(chatId)) {
+            const pin = window.prompt('Enter your privacy PIN to unlock this chat:');
+            if (!pin) return;
+            if (!await verifyDevicePin(pin)) return window.alert('Incorrect privacy PIN.');
+            const next = lockedChatIds.filter(id => id !== chatId);
+            localStorage.setItem(`chat_locked_ids_${localLockUserKey}`, JSON.stringify(next));
+            setLockedChatIds(next);
+            setUnlockedChatIds(ids => ids.filter(id => id !== chatId));
+            window.dispatchEvent(new CustomEvent('chat-locks-changed', { detail: { userId: user?.id, ids: next } }));
+            return;
+        }
+        if (!await ensureDevicePin()) return;
+        const next = [...new Set([...lockedChatIds, chatId])];
+        localStorage.setItem(`chat_locked_ids_${localLockUserKey}`, JSON.stringify(next));
+        setLockedChatIds(next);
+        setUnlockedChatIds(ids => ids.filter(id => id !== chatId));
+        window.dispatchEvent(new CustomEvent('chat-locks-changed', { detail: { userId: user?.id, ids: next } }));
+        if (String(activeChat?.id) === chatId) {
+            setActiveChat(null);
+            localStorage.removeItem('activeChatId');
+            navigate('/chats', { replace: true });
+        }
+    }, [lockedChatIds, localLockUserKey, user?.id, activeChat?.id, navigate]);
 
     const saveChatWallpaperPref = useCallback((chatId, preference) => {
         setChatWallpaperPrefs(current => {
@@ -219,7 +277,19 @@ export const Home = () => {
         });
 
     const archivedChatsList = chats.filter(chat => prefs.archivedChats.includes(chat.id));
-    const totalUnreadMessages = chats.reduce((sum, chat) => sum + Number(chat.unreadCount || 0), 0);
+    const totalUnreadMessages = chatAreaLockEnabled && !chatAreaUnlocked
+        ? 0
+        : chats.filter(chat => !lockedChatIds.includes(String(chat.id)) || unlockedChatIds.includes(String(chat.id)))
+            .reduce((sum, chat) => sum + Number(chat.unreadCount || 0), 0);
+    const hideLockedChat = chat => lockedChatIds.includes(String(chat.id)) && !unlockedChatIds.includes(String(chat.id))
+        ? { id: chat.id, name: 'Locked chat', avatar: null, participants: [], lastMessage: null, unreadCount: 0, isGroup: false, isLockedPlaceholder: true }
+        : chat;
+    const chatAreaVisible = !chatAreaLockEnabled || chatAreaUnlocked;
+    const visibleFilteredChats = chatAreaVisible ? filteredChats.map(hideLockedChat) : [];
+    const visibleArchivedChats = chatAreaVisible ? archivedChatsList.map(hideLockedChat) : [];
+    const chatsVisibleToOtherFeatures = chatAreaVisible
+        ? chats.filter(chat => !lockedChatIds.includes(String(chat.id)) || unlockedChatIds.includes(String(chat.id)))
+        : [];
 
     // Refs
     const messagesEndRef = useRef(null);
@@ -452,8 +522,69 @@ export const Home = () => {
         }
     }, [activeChat]);
 
+    useEffect(() => {
+        const handleAreaLockChange = event => {
+            if (event.detail?.userId && String(event.detail.userId) !== String(user?.id)) return;
+            const enabled = Boolean(event.detail?.enabled);
+            setChatAreaLockEnabled(enabled);
+            setChatAreaUnlocked(false);
+            if (enabled) {
+                setActiveChat(null);
+                localStorage.removeItem('activeChatId');
+                nav.navigateToView('social');
+            }
+        };
+        const handleChatLocksChange = event => {
+            if (event.detail?.userId && String(event.detail.userId) !== String(user?.id)) return;
+            setLockedChatIds(Array.isArray(event.detail?.ids) ? event.detail.ids.map(String) : []);
+        };
+        window.addEventListener('chat-area-lock-changed', handleAreaLockChange);
+        window.addEventListener('chat-locks-changed', handleChatLocksChange);
+        return () => {
+            window.removeEventListener('chat-area-lock-changed', handleAreaLockChange);
+            window.removeEventListener('chat-locks-changed', handleChatLocksChange);
+        };
+    }, [user?.id, nav.navigateToView]);
+
+    useEffect(() => {
+        setLockedChatIds(() => {
+            try { return JSON.parse(localStorage.getItem(`chat_locked_ids_${localLockUserKey}`) || '[]').map(String); } catch { return []; }
+        });
+        setChatAreaLockEnabled(localStorage.getItem(`chat_area_lock_enabled_${localLockUserKey}`) === '1');
+        setUnlockedChatIds([]);
+        setChatAreaUnlocked(false);
+    }, [localLockUserKey]);
+
     // Keep selected conversations addressable and restore them from a shared URL.
     useEffect(() => {
+        const chatRouteId = pathname.match(/^\/(?:chats|direct\/t)\/([^/]+)/)?.[1] || null;
+        const previousId = previousChatRouteId.current;
+        if (previousId && previousId !== chatRouteId && lockedChatIds.includes(String(previousId))) {
+            setUnlockedChatIds(ids => ids.filter(id => id !== String(previousId)));
+        }
+        previousChatRouteId.current = chatRouteId;
+        const onChatRoute = pathname === '/chats' || Boolean(routeChatId);
+        const routeChat = routeChatId ? chats.find(chat => String(chat.id) === String(routeChatId)) : activeChat;
+        if (onChatRoute && chatAreaLockEnabled && !chatAreaUnlocked) {
+            setPendingProtectedChat(routeChat || null);
+            setPrivacyUnlockRequest({ type: 'area' });
+            setPrivacyPin(''); setPrivacyPinError('');
+            setActiveChat(null);
+            localStorage.removeItem('activeChatId');
+            nav.navigateToView('social');
+            previousPathname.current = pathname;
+            return;
+        }
+        if (onChatRoute && routeChat && lockedChatIds.includes(String(routeChat.id)) && !unlockedChatIds.includes(String(routeChat.id))) {
+            setPendingProtectedChat(routeChat);
+            setPrivacyUnlockRequest({ type: 'chat' });
+            setPrivacyPin(''); setPrivacyPinError('');
+            setActiveChat(null);
+            localStorage.removeItem('activeChatId');
+            nav.navigateToView('social');
+            previousPathname.current = pathname;
+            return;
+        }
         if (routeChatId) {
             const selected = chats.find(chat => String(chat.id) === routeChatId);
             if (selected && String(activeChat?.id) !== routeChatId) setActiveChat(selected);
@@ -465,16 +596,17 @@ export const Home = () => {
             previousPathname.current = pathname;
             return;
         }
-        const wasChatRoute = previousPathname.current.startsWith('/chats/') || previousPathname.current.startsWith('/direct/t/');
-        const isChatRoute = pathname.startsWith('/chats/') || pathname.startsWith('/direct/t/');
+        const wasChatRoute = previousPathname.current === '/chats' || previousPathname.current.startsWith('/chats/') || previousPathname.current.startsWith('/direct/t/');
+        const isChatRoute = pathname === '/chats' || pathname.startsWith('/chats/') || pathname.startsWith('/direct/t/');
         if (wasChatRoute && !isChatRoute) {
             setActiveChat(null);
             localStorage.removeItem('activeChatId');
+            if (chatAreaLockEnabled) setChatAreaUnlocked(false);
         } else if (activeChat && pathname !== directChatPath(activeChat.id)) {
             navigate(directChatPath(activeChat.id));
         }
         previousPathname.current = pathname;
-    }, [routeChatId, chats, activeChat, chatsResolved, pathname, navigate]);
+    }, [routeChatId, chats, activeChat, chatsResolved, pathname, navigate, chatAreaLockEnabled, chatAreaUnlocked, lockedChatIds, unlockedChatIds, nav.navigateToView]);
 
     useEffect(() => {
         if (user?.id && chats && chats.length > 0) {
@@ -1404,6 +1536,12 @@ export const Home = () => {
     };
 
     const openChats = () => {
+        if (chatAreaLockEnabled && !chatAreaUnlocked) {
+            setPendingProtectedChat(null);
+            setPrivacyUnlockRequest({ type: 'area' });
+            setPrivacyPin(''); setPrivacyPinError('');
+            return;
+        }
         setShowShoppingMarketplace(false);
         setShowNotifications(false);
         setShowSearchModal(false);
@@ -1411,6 +1549,49 @@ export const Home = () => {
         nav.setMobileHomeTab('chats');
         setActiveChat(null);
         localStorage.removeItem('activeChatId');
+    };
+
+    const submitPrivacyUnlock = async event => {
+        event.preventDefault();
+        if (!await verifyDevicePin(privacyPin)) {
+            setPrivacyPinError('Incorrect PIN. Try again.');
+            setPrivacyPin('');
+            return;
+        }
+        const request = privacyUnlockRequest;
+        const targetChat = pendingProtectedChat;
+        setPrivacyPin('');
+        setPrivacyPinError('');
+        setPrivacyUnlockRequest(null);
+        setPendingProtectedChat(null);
+        if (request?.type === 'chat' && targetChat) {
+            setUnlockedChatIds(ids => [...new Set([...ids, String(targetChat.id)])]);
+            openChatUnlocked(targetChat);
+            return;
+        }
+        if (request?.type === 'area') setChatAreaUnlocked(true);
+        if (targetChat && lockedChatIds.includes(String(targetChat.id)) && !unlockedChatIds.includes(String(targetChat.id))) {
+            setPrivacyUnlockRequest({ type: 'chat' });
+            setPendingProtectedChat(targetChat);
+            return;
+        }
+        if (targetChat) {
+            setUnlockedChatIds(ids => [...new Set([...ids, String(targetChat.id)])]);
+            openChatUnlocked(targetChat);
+            return;
+        }
+        nav.navigateToView('chats');
+        setActiveChat(null);
+    };
+
+    const cancelPrivacyUnlock = () => {
+        setPrivacyUnlockRequest(null);
+        setPendingProtectedChat(null);
+        setPrivacyPin('');
+        setPrivacyPinError('');
+        setActiveChat(null);
+        localStorage.removeItem('activeChatId');
+        nav.navigateToView('social');
     };
 
     const openTopBarFeature = (feature) => {
@@ -2052,7 +2233,7 @@ export const Home = () => {
         { label: 'PodLive', icon: MicrophoneIcon, active: nav.showPodlive, action: () => { nav.hideAppNavForFeature(); nav.navigateToView('podlive'); }, badge: nav.podliveLiveCount || 0 },
         { label: 'Notify', icon: BellIcon, active: showNotifications, action: openNotifications, badge: unreadCount },
         { label: 'Publish', icon: PlusIcon, active: nav.showSocial, action: openContentPublisher },
-        { label: 'Chats', icon: ChatBubbleLeftRightIcon, active: !showShoppingMarketplace && !nav.showSocial && !nav.showReels && !nav.showPodlive && !nav.showAiChat && !nav.showSmartSpace && !nav.showSaskatAI, action: openChats },
+        { label: chatAreaLockEnabled ? 'Chats 🔒' : 'Chats', icon: ChatBubbleLeftRightIcon, active: !showShoppingMarketplace && !nav.showSocial && !nav.showReels && !nav.showPodlive && !nav.showAiChat && !nav.showSmartSpace && !nav.showSaskatAI, action: openChats },
         { label: 'Shopping', icon: ShoppingBagIcon, active: showShoppingMarketplace, action: openShoppingMarketplace },
         { label: 'Settings', icon: Cog6ToothIcon, active: nav.showSettings, action: () => { setShowNotifications(false); setShowSearchModal(false); nav.navigateToView('settings'); } }
     ];
@@ -2089,8 +2270,7 @@ export const Home = () => {
 
     const unlockApp = async (event) => {
         event.preventDefault();
-        const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(unlockPin)))).map(byte => byte.toString(16).padStart(2, '0')).join('');
-        if (hash === localStorage.getItem('app_lock_pin_hash')) {
+        if (await verifyDevicePin(unlockPin)) {
             setAppLocked(false); setUnlockPin(''); setUnlockError('');
         } else {
             setUnlockError('Incorrect PIN');
@@ -2109,7 +2289,7 @@ export const Home = () => {
             <AppTopBar
                 user={user}
                 token={token}
-                chats={chats}
+                chats={chatsVisibleToOtherFeatures}
                 onMenu={() => nav.isMobile ? nav.setNavPeekOpen(value => !value) : nav.setNavCollapsed(value => !value)}
                 onCreate={openContentPublisher}
                 onNotifications={openNotifications}
@@ -2126,7 +2306,7 @@ export const Home = () => {
             <HomeModalsContainer
                 snapNotice={snapNotice}
                 setSnapNotice={setSnapNotice}
-                chats={chats}
+                chats={chatsVisibleToOtherFeatures}
                 setActiveChat={navigateToChat}
                 appLocked={appLocked}
                 unlockError={unlockError}
@@ -2222,8 +2402,8 @@ export const Home = () => {
                 isMobile={nav.isMobile}
                 mobileHomeTab={nav.mobileHomeTab}
                 setMobileHomeTab={nav.setMobileHomeTab}
-                archivedChatsList={archivedChatsList}
-                filteredChats={filteredChats}
+                archivedChatsList={visibleArchivedChats}
+                filteredChats={visibleFilteredChats}
                 loadingChats={loadingChats}
                 showArchive={prefs.showArchive}
                 setShowArchive={prefs.setShowArchive}
@@ -2346,6 +2526,8 @@ export const Home = () => {
                 onCustomWallpaperChange={value => saveChatWallpaperPref(visibleActiveChat?.id, { type: 'image', value })}
                 onResetWallpaper={() => saveChatWallpaperPref(visibleActiveChat?.id, null)}
                 onUserUpdated={updateUser}
+                chatLocked={visibleActiveChat ? lockedChatIds.includes(String(visibleActiveChat.id)) : false}
+                onToggleChatLock={() => handleToggleChatLock(visibleActiveChat)}
                 disappearingTtl={disappearingTtl}
                 updateDisappearingTtl={updateDisappearingTtl}
                 setShowChatDraw={setShowChatDraw}
@@ -2421,7 +2603,7 @@ export const Home = () => {
                 setSmartSpaceButtonEnabled={nav.setSmartSpaceButtonEnabled}
                 showAiChat={nav.showAiChat}
                 setShowAiChat={nav.setShowAiChat}
-                chats={chats}
+                chats={chatsVisibleToOtherFeatures}
                 getOtherParticipant={getOtherParticipant}
                 startCallForChat={calls.startCallForChat}
                 fetchChats={fetchChats}
@@ -2460,6 +2642,7 @@ export const Home = () => {
                 user={user}
             />
             {incomingBells.map(bell => <IncomingChatBell key={bell.bellId} bell={bell} onSilence={bellId => setIncomingBells(current => current.filter(item => item.bellId !== bellId))} />)}
+            <ChatPrivacyLockOverlay request={privacyUnlockRequest} pin={privacyPin} error={privacyPinError} onPinChange={setPrivacyPin} onSubmit={submitPrivacyUnlock} onCancel={cancelPrivacyUnlock} />
         </div>
     );
 };

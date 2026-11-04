@@ -13,6 +13,20 @@ export const AppLockOverlay = ({ error, onPinChange, onSubmit, pin }) => (
     </div>
 );
 
+export const ChatPrivacyLockOverlay = ({ request, error, pin, onPinChange, onSubmit, onCancel }) => request && (
+    <div className="fixed inset-0 z-[10010] flex items-center justify-center bg-[#050914] p-4" role="dialog" aria-modal="true" aria-labelledby="chat-privacy-lock-title">
+        <form onSubmit={onSubmit} className="w-full max-w-sm rounded-3xl border border-emerald-500/20 bg-[#0c1526] p-6 text-center shadow-2xl">
+            <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-emerald-400/10 text-3xl">🔒</div>
+            <h2 id="chat-privacy-lock-title" className="mt-4 text-xl font-black text-white">{request.type === 'area' ? 'Chat area locked' : 'This chat is locked'}</h2>
+            <p className="mt-1 text-xs text-gray-400">Enter this browser’s privacy PIN to continue.</p>
+            <input autoFocus type="password" inputMode="numeric" maxLength={6} value={pin} onChange={event => onPinChange(event.target.value.replace(/\D/g, ''))} className="mt-5 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-center text-2xl tracking-[0.5em] text-white outline-none focus:border-emerald-500" />
+            {error && <p role="alert" className="mt-2 text-xs text-red-400">{error}</p>}
+            <button className="mt-4 w-full rounded-xl bg-emerald-500 py-3 text-sm font-bold text-black">Unlock</button>
+            <button type="button" onClick={onCancel} className="mt-2 w-full rounded-xl border border-white/10 py-3 text-sm font-semibold text-gray-300">Back to Social</button>
+        </form>
+    </div>
+);
+
 export const OfflineBanner = () => (
     <div className="absolute left-0 right-0 top-0 z-[100] flex items-center justify-center gap-2 bg-amber-600/90 px-4 py-1.5 text-center text-xs font-bold text-white shadow-md animate-fade-in">
         <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-white" />

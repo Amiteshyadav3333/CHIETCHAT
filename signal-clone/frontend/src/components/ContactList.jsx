@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import AvatarZoom from './AvatarZoom';
 
 const ContactList = ({
     chats, activeChat, onSelectChat, loading, nicknames = {}, mutedChats = [],
     pinnedChats = [], storyUserIds = [], currentUserId, callsMode = false,
-    onVoiceCall, onVideoCall
+    onVoiceCall, onVideoCall, onDeleteSelected
 }) => {
+    const [selectionMode, setSelectionMode] = useState(false);
+    const [selectedIds, setSelectedIds] = useState([]);
     if (loading) {
         return (
             <div className="flex-1 flex items-center justify-center text-sm text-gray-500">
@@ -33,6 +35,10 @@ const ContactList = ({
 
     return (
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            {!callsMode && <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/5 bg-[#111b21] px-4 py-2">
+                <button type="button" onClick={() => { setSelectionMode(value => !value); setSelectedIds([]); }} className="text-xs font-semibold text-gray-300 hover:text-white">{selectionMode ? 'Cancel selection' : 'Select chats'}</button>
+                {selectionMode && <button type="button" disabled={!selectedIds.length} onClick={() => { onDeleteSelected?.(selectedIds); setSelectionMode(false); setSelectedIds([]); }} className="rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-bold text-red-200 disabled:opacity-40">Delete {selectedIds.length || ''}</button>}
+            </div>}
             {chats.map(chat => {
                 const displayName = nicknames[chat.id] || chat.name;
                 const isMuted = mutedChats.includes(chat.id);
@@ -47,11 +53,15 @@ const ContactList = ({
                 return (
                     <div
                         key={chat.id}
-                        onClick={() => !callsMode && onSelectChat(chat)}
+                        onClick={() => {
+                            if (selectionMode) setSelectedIds(current => current.includes(chat.id) ? current.filter(id => id !== chat.id) : [...current, chat.id]);
+                            else if (!callsMode) onSelectChat(chat);
+                        }}
                         className={`flex items-center px-3 py-3 cursor-pointer transition-colors mx-1 rounded-xl ${
                             activeChat?.id === chat.id ? 'bg-[#2a3942]' : 'hover:bg-[#202c33]'
                         }`}
                     >
+                        {selectionMode && <input type="checkbox" aria-label={`Select ${displayName}`} checked={selectedIds.includes(chat.id)} onChange={() => setSelectedIds(current => current.includes(chat.id) ? current.filter(id => id !== chat.id) : [...current, chat.id])} onClick={event => event.stopPropagation()} className="mr-3 h-4 w-4 accent-[#00a884]" />}
                         <div className="relative flex-shrink-0">
                             <div className={`rounded-full ${hasStory ? 'p-[2px] bg-gradient-to-tr from-[#00a884] via-emerald-300 to-[#00a884]' : ''}`}>
                                 <div className={hasStory ? 'rounded-full border-2 border-[#111b21]' : ''}>

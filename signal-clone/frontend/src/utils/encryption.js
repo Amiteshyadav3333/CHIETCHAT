@@ -1,5 +1,6 @@
 // Hybrid message encryption: a fresh AES-GCM key protects each message envelope;
 // RSA-OAEP wraps that key independently for every authorized recipient.
+import { getEncryptedSnapMedia } from './snapMediaStore';
 
 export const generateKeys = async () => {
     if (!window.crypto || !window.crypto.subtle) {
@@ -325,9 +326,15 @@ export const decryptMediaDescriptor = async (privateKey, userId, value) => {
         { name: "RSA-OAEP" }, privateKey, base64ToArrayBuffer(wrappedKey)
     );
     const key = await window.crypto.subtle.importKey("raw", rawKey, { name: "AES-GCM" }, false, ["decrypt"]);
-    const response = await fetch(descriptor.url, { credentials: "omit", referrerPolicy: "no-referrer" });
-    if (!response.ok) throw new Error("Encrypted media download failed");
-    const ciphertext = await response.arrayBuffer();
+    let ciphertext;
+    if (descriptor.url.startsWith('p2p://')) {
+        const transferId = descriptor.url.slice('p2p://'.length);
+        ciphertext = await (await getEncryptedSnapMedia(transferId)).arrayBuffer();
+    } else {
+        const response = await fetch(descriptor.url, { credentials: "omit", referrerPolicy: "no-referrer" });
+        if (!response.ok) throw new Error("Encrypted media download failed");
+        ciphertext = await response.arrayBuffer();
+    }
     const plaintext = await window.crypto.subtle.decrypt(
         { name: "AES-GCM", iv: new Uint8Array(base64ToArrayBuffer(descriptor.iv)) }, key, ciphertext
     );

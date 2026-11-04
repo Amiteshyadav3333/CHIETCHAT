@@ -31,6 +31,7 @@ class User(db.Model):
     platform_id = db.Column(db.String(30), unique=True, nullable=True)  # unique @handle, e.g. 'amitesh_123'
     profile_setup_done = db.Column(db.Boolean, default=False)  # True once user completes profile setup
     hide_last_seen = db.Column(db.Boolean, default=False)
+    last_seen_exceptions = db.Column(db.Text, nullable=True)
     hide_online_status = db.Column(db.Boolean, default=False)
     read_receipts = db.Column(db.Boolean, default=True)
     profile_photo_privacy = db.Column(db.String(20), default='everyone')

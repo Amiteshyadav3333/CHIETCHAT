@@ -13,6 +13,9 @@ import requests
 MUSIC_SEARCH_PATH = '/internal/v1/music/search'
 TRANSLATE_PATH = '/internal/v1/translate'
 SOCIAL_FEED_RANK_PATH = '/internal/v1/social-feed/rank'
+SOCIAL_POLLS_VOTE_PATH = '/internal/v1/social-polls/vote'
+SOCIAL_POLLS_RESULTS_PATH = '/internal/v1/social-polls/results'
+SOCIAL_POLLS_IMPORT_PATH = '/internal/v1/social-polls/import'
 AI_GENERATE_PATH = '/internal/v1/ai/generate'
 
 
@@ -108,6 +111,52 @@ def call_social_feed_ranker(user_id, posts, engagement, limit, now=None, timeout
         raise ValueError('Social feed service returned an invalid ranking')
     return ordered_ids
 
+
+
+def call_social_poll_vote(user_id, post_id, option_index, options, timeout=(1, 5)):
+    if (type(user_id) is not int or user_id < 1 or type(post_id) is not int or post_id < 1
+            or type(option_index) is not int or not isinstance(options, list)
+            or not 2 <= len(options) <= 4 or any(not isinstance(value, str) or not value.strip() or len(value) > 100 for value in options)
+            or not 0 <= option_index < len(options)):
+        raise ValueError('Invalid poll vote')
+    result = call_signed_domain_service('SOCIAL_POLLS_SERVICE_URL', 'SOCIAL_POLLS_SERVICE_HMAC_KEY',
+        SOCIAL_POLLS_VOTE_PATH, {'userId': user_id, 'postId': post_id, 'optionIndex': option_index, 'options': options},
+        timeout=timeout, response_field='counts')
+    counts = result['counts']
+    if (not isinstance(counts, list) or len(counts) != len(options) or any(type(value) is not int or value < 0 for value in counts)
+            or result.get('options') != options or result.get('selectedOption') != option_index or result.get('totalVotes') != sum(counts)):
+        raise ValueError('Social Polls service returned invalid vote results')
+    return result
+
+
+def call_social_poll_results(user_id, polls, timeout=(1, 5)):
+    if type(user_id) is not int or user_id < 1 or not isinstance(polls, list) or len(polls) > 500:
+        raise ValueError('Invalid poll query')
+    result = call_signed_domain_service('SOCIAL_POLLS_SERVICE_URL', 'SOCIAL_POLLS_SERVICE_HMAC_KEY',
+        SOCIAL_POLLS_RESULTS_PATH, {'userId': user_id, 'polls': polls}, timeout=timeout, response_field='polls')
+    rows = result['polls']
+    if not isinstance(rows, dict):
+        raise ValueError('Social Polls service returned invalid results')
+    expected = {str(poll['postId']): len(poll['options']) for poll in polls}
+    if set(rows) != set(expected):
+        raise ValueError('Social Polls service returned invalid results')
+    for post_id, count in expected.items():
+        row = rows[post_id]
+        if (not isinstance(row, dict) or not isinstance(row.get('counts'), list) or len(row['counts']) != count
+                or any(type(value) is not int or value < 0 for value in row['counts'])
+                or (row.get('selectedOption') is not None and (type(row['selectedOption']) is not int or not 0 <= row['selectedOption'] < count))):
+            raise ValueError('Social Polls service returned invalid results')
+    return rows
+
+
+def call_social_poll_import(votes, timeout=(2, 15)):
+    if not isinstance(votes, list) or len(votes) > 5000:
+        raise ValueError('Invalid poll import batch')
+    result = call_signed_domain_service('SOCIAL_POLLS_SERVICE_URL', 'SOCIAL_POLLS_SERVICE_HMAC_KEY',
+        SOCIAL_POLLS_IMPORT_PATH, {'votes': votes}, timeout=timeout, response_field='totalRows')
+    if (type(result.get('imported')) is not int or result['imported'] < 0 or type(result['totalRows']) is not int or result['totalRows'] < 0):
+        raise ValueError('Social Polls service returned invalid import results')
+    return result
 
 def call_ai_generation_service(user_id, messages, max_tokens=400, timeout=(2, 18)):
     """Generate bounded text with the isolated AI provider service."""

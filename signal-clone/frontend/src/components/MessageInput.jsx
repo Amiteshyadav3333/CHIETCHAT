@@ -71,7 +71,7 @@ const cleanBaseUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
 const MessageInput = ({ 
     onSend, onUpload, onStartLiveLocation, replyTo, onCancelReply, 
     onTranslate, chatId, chatTranslationLang, onChangeTranslationLang,
-    onTyping, onLiveNoteDraft,
+    onTyping, onLiveNoteDraft, onLiveDrawingChange,
     disappearingTtl = 0,
     disabled = false, placeholderOverride = "",
     lastMessageText = "",
@@ -591,7 +591,7 @@ const MessageInput = ({
             {showScheduleModal && <ScheduleMessageModal chatId={chatId} message={text} onClose={() => setShowScheduleModal(false)} onSchedule={onSchedule} onScheduled={() => { setText(''); setShowScheduleModal(false); }} token={token} />}
 
 
-            {showDrawStudio && <DrawStudio initialSource={drawSource} onClose={() => { setShowDrawStudio(false); onDrawSourceConsumed?.(); }} onSendDrawing={drawing => { onSend(JSON.stringify(drawing), 'drawing', disappearingTtl); setShowDrawStudio(false); onDrawSourceConsumed?.(); }} onSend={(file, caption) => { onUpload(file); if (caption) onSend(caption, 'text', disappearingTtl); setShowDrawStudio(false); onDrawSourceConsumed?.(); }} />}
+            {showDrawStudio && <DrawStudio initialSource={drawSource} onLiveDrawingChange={onLiveDrawingChange} onClose={() => { setShowDrawStudio(false); onDrawSourceConsumed?.(); }} onSendDrawing={drawing => { onSend(JSON.stringify(drawing), 'drawing', disappearingTtl); setShowDrawStudio(false); onDrawSourceConsumed?.(); }} onSend={(file, caption) => { onUpload(file); if (caption) onSend(caption, 'text', disappearingTtl); setShowDrawStudio(false); onDrawSourceConsumed?.(); }} />}
 
             {/* Reply Preview Bar */}
             {replyTo && (

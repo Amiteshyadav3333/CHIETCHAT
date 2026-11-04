@@ -2,7 +2,9 @@ import os
 import unittest
 from unittest.mock import patch
 
-from service_gateway import call_ai_generation_service, call_music_service, call_social_feed_ranker, call_translation_service, canonical_service_signature
+from service_gateway import (call_ai_generation_service, call_music_service, call_social_feed_ranker,
+                              call_social_poll_results, call_social_poll_vote, call_translation_service,
+                              canonical_service_signature)
 
 
 class ServiceGatewayTests(unittest.TestCase):
@@ -107,6 +109,36 @@ class ServiceGatewayTests(unittest.TestCase):
     def test_ai_generation_gateway_rejects_untrusted_message_roles(self):
         with self.assertRaisesRegex(ValueError, 'Invalid AI generation request'):
             call_ai_generation_service(27, [{'role': 'tool', 'content': 'bad'}])
+
+    @patch('service_gateway.requests.post')
+    @patch.dict(os.environ, {
+        'SOCIAL_POLLS_SERVICE_URL': 'https://polls.example.test',
+        'SOCIAL_POLLS_SERVICE_HMAC_KEY': 'social-polls-test-secret-' * 2,
+    })
+    def test_social_poll_vote_gateway_preserves_contract_and_signs_request(self, post):
+        response = post.return_value
+        response.json.return_value = {'options': ['A', 'B'], 'counts': [2, 3], 'totalVotes': 5, 'selectedOption': 1}
+        result = call_social_poll_vote(12, 8, 1, ['A', 'B'])
+        self.assertEqual(result['counts'], [2, 3])
+        args, kwargs = post.call_args
+        self.assertEqual(args[0], 'https://polls.example.test/internal/v1/social-polls/vote')
+        headers = kwargs['headers']
+        self.assertEqual(headers['X-Internal-Signature'], canonical_service_signature(
+            'social-polls-test-secret-' * 2, headers['X-Internal-Timestamp'],
+            headers['X-Internal-Request-Id'], 'POST', '/internal/v1/social-polls/vote', kwargs['data']))
+
+    @patch('service_gateway.requests.post')
+    @patch.dict(os.environ, {
+        'SOCIAL_POLLS_SERVICE_URL': 'https://polls.example.test',
+        'SOCIAL_POLLS_SERVICE_HMAC_KEY': 'social-polls-test-secret-' * 2,
+    })
+    def test_social_poll_results_gateway_validates_selected_option(self, post):
+        post.return_value.json.return_value = {'polls': {'8': {'counts': [2, 1], 'selectedOption': 0}}}
+        rows = call_social_poll_results(12, [{'postId': 8, 'options': ['A', 'B']}])
+        self.assertEqual(rows['8']['selectedOption'], 0)
+        post.return_value.json.return_value = {'polls': {'8': {'counts': [2], 'selectedOption': 0}}}
+        with self.assertRaisesRegex(ValueError, 'invalid results'):
+            call_social_poll_results(12, [{'postId': 8, 'options': ['A', 'B']}])
 
 
 if __name__ == '__main__':

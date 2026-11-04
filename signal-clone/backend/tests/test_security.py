@@ -49,6 +49,7 @@ from scripts import cleanup_retention
 from utils import (
     utc_now, validate_upload, send_push_notification, delete_managed_media,
     get_managed_media_reference, process_media_deletion_task, ensure_runtime_compat_schema,
+    serialize_user,
 )
 
 
@@ -1043,6 +1044,57 @@ class SecurityTests(unittest.TestCase):
         payer.disconnect()
         merchant.disconnect()
 
+    def test_snap_video_signaling_requires_snap_direct_chat_and_relays_only_sdp(self):
+        with app.app_context():
+            chat = db.session.get(Chat, self.chat_id)
+            chat.snap_mode = True
+            db.session.commit()
+        sender = socketio.test_client(app, auth={'token': self.token})
+        recipient = socketio.test_client(app, auth={'token': self.payee_token})
+        transfer_id = 'a34bfad5-b2f8-4a70-b596-24645e05330c'
+        offer = {
+            'chatId': self.chat_id, 'toUserId': self.payee_id, 'transferId': transfer_id,
+            'offer': {'type': 'offer', 'sdp': 'offer-sdp'},
+            'file': {'size': 4096, 'mime': 'video/webm', 'name': 'snap.webm'},
+            'descriptor': {
+                'url': f'p2p://{transfer_id}', 'v': 1, 'type': 'cheetchat/e2ee-media',
+                'algorithm': 'RSA-OAEP-256/AES-GCM', 'iv': 'iv',
+                'recipients': {str(self.user_id): 'wrapped-a', str(self.payee_id): 'wrapped-b'},
+            },
+        }
+        result = sender.emit('snap_transfer_offer', offer, callback=True)
+        self.assertTrue(result['ok'])
+        incoming = [event for event in recipient.get_received() if event['name'] == 'snap_transfer_incoming']
+        self.assertEqual(len(incoming), 1)
+        self.assertEqual(incoming[0]['args'][0]['offer']['sdp'], 'offer-sdp')
+        self.assertNotIn('bytes', incoming[0]['args'][0])
+
+        answer = recipient.emit('snap_transfer_answer', {
+            'chatId': self.chat_id, 'toUserId': self.user_id, 'transferId': transfer_id,
+            'answer': {'type': 'answer', 'sdp': 'answer-sdp'},
+        }, callback=True)
+        self.assertTrue(answer['ok'])
+        relayed = [event for event in sender.get_received() if event['name'] == 'snap_transfer_answer']
+        self.assertEqual(len(relayed), 1)
+        self.assertEqual(relayed[0]['args'][0]['answer']['sdp'], 'answer-sdp')
+
+        oversized = dict(offer, transferId='b34bfad5-b2f8-4a70-b596-24645e05330c', descriptor={'url': 'p2p://b34bfad5-b2f8-4a70-b596-24645e05330c'}, file={'size': 100 * 1024 * 1024 + 1, 'mime': 'video/webm'})
+        rejected = sender.emit('snap_transfer_offer', oversized, callback=True)
+        self.assertFalse(rejected['ok'])
+        with app.app_context():
+            db.session.get(Chat, self.chat_id).snap_mode = False
+            db.session.commit()
+        late_message = sender.emit('send_message', {
+            'chatId': self.chat_id, 'clientMessageId': 'late-direct-snap-video',
+            'content': self.encrypted_envelope('p2p://expired-transfer'), 'type': 'video',
+            'snapMode': True, 'directSnapVideo': True,
+        }, callback=True)
+        self.assertFalse(late_message['ok'])
+        with app.app_context():
+            self.assertEqual(Message.query.filter_by(client_message_id='late-direct-snap-video').count(), 0)
+        sender.disconnect()
+        recipient.disconnect()
+
     def test_socket_message_ack_is_idempotent_for_offline_retry(self):
         payer = socketio.test_client(app, auth={'token': self.token})
         payload = {
@@ -1204,6 +1256,35 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(valid.status_code, 200)
         with app.app_context():
             self.assertEqual(db.session.get(Message, message_id).content, encrypted)
+
+    def test_message_edit_expires_after_seven_minutes(self):
+        with app.app_context():
+            message = Message(
+                chat_id=self.chat_id, sender_id=self.user_id,
+                client_message_id='editable-expired', content=self.encrypted_envelope('before'), type='text',
+                timestamp=utc_now() - timedelta(minutes=8),
+            )
+            db.session.add(message)
+            db.session.commit()
+            message_id = message.id
+        response = self.client.put(
+            f'/api/messages/{message_id}', json={'content': self.encrypted_envelope('after')},
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(response.status_code, 409)
+
+    def test_last_seen_can_be_hidden_globally_with_selected_profiles_allowed(self):
+        with app.app_context():
+            target = db.session.get(User, self.payee_id)
+            target.hide_last_seen = True
+            target.last_seen_exceptions = str(self.user_id)
+            db.session.commit()
+            allowed = serialize_user(target, viewer_id=self.user_id)
+            denied = serialize_user(target, viewer_id=999999)
+            owner = serialize_user(target, viewer_id=self.payee_id)
+        self.assertIsNotNone(allowed['lastSeen'])
+        self.assertIsNone(denied['lastSeen'])
+        self.assertEqual(owner['lastSeenExceptions'], str(self.user_id))
 
     def test_encrypted_attachment_claim_is_owner_bound_and_idempotent(self):
         with app.app_context():
@@ -2072,6 +2153,49 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(result['poll']['counts'], [0, 1])
         self.assertEqual(result['poll']['selectedOption'], 1)
 
+    def test_social_poll_cutover_routes_votes_to_service_without_legacy_write(self):
+        with app.app_context():
+            post = SocialPost(user_id=self.user_id, caption='Service poll', post_kind='poll',
+                              title='Pick one', poll_options=json.dumps(['A', 'B']))
+            db.session.add(post)
+            db.session.commit()
+            post_id = post.id
+        app.config['SOCIAL_POLLS_SERVICE_URL'] = 'https://polls.example.test'
+        try:
+            with patch('routes.social_bp.call_social_poll_vote', return_value={
+                'options': ['A', 'B'], 'counts': [0, 1], 'totalVotes': 1, 'selectedOption': 1,
+            }) as service_vote:
+                response = self.client.post(
+                    f'/api/social/posts/{post_id}/poll-vote', json={'optionIndex': 1},
+                    headers=self.auth_headers(),
+                )
+            self.assertEqual(response.status_code, 200)
+            service_vote.assert_called_once_with(self.user_id, post_id, 1, ['A', 'B'])
+            with app.app_context():
+                self.assertEqual(SocialPollVote.query.filter_by(post_id=post_id).count(), 0)
+        finally:
+            app.config.pop('SOCIAL_POLLS_SERVICE_URL', None)
+
+    def test_social_poll_service_failure_does_not_fall_back_to_legacy_owner(self):
+        with app.app_context():
+            post = SocialPost(user_id=self.user_id, caption='Service poll', post_kind='poll',
+                              title='Pick one', poll_options=json.dumps(['A', 'B']))
+            db.session.add(post)
+            db.session.commit()
+            post_id = post.id
+        app.config['SOCIAL_POLLS_SERVICE_URL'] = 'https://polls.example.test'
+        try:
+            with patch('routes.social_bp.call_social_poll_vote', side_effect=RuntimeError('service unavailable')):
+                response = self.client.post(
+                    f'/api/social/posts/{post_id}/poll-vote', json={'optionIndex': 1},
+                    headers=self.auth_headers(),
+                )
+            self.assertEqual(response.status_code, 503)
+            with app.app_context():
+                self.assertEqual(SocialPollVote.query.filter_by(post_id=post_id).count(), 0)
+        finally:
+            app.config.pop('SOCIAL_POLLS_SERVICE_URL', None)
+
     def test_direct_chat_share_url_serves_app_shell_and_unknown_paths_stay_404(self):
         with tempfile.TemporaryDirectory() as directory:
             Path(directory, 'index.html').write_text('<main>chat app</main>', encoding='utf-8')
@@ -2224,6 +2348,9 @@ class SecurityTests(unittest.TestCase):
         }, headers=self.auth_headers(), content_type='multipart/form-data')
         self.assertEqual(created.status_code, 201)
         reel_id = created.json['id']
+        self.assertEqual(created.json['reel']['id'], reel_id)
+        self.assertEqual(created.json['reel']['caption'], 'Audit reel')
+        self.assertEqual(created.json['reel']['videoUrl'], 'https://media.example/reel.mp4')
         public = self.client.get(f'/api/reels/{reel_id}/public')
         self.assertEqual(public.status_code, 200)
         liked = self.client.post(f'/api/reels/{reel_id}/like', headers=self.auth_headers())

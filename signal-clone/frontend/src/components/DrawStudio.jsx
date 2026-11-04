@@ -3,7 +3,7 @@ import { ArrowUturnLeftIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/ou
 
 const COLORS = ['#ffffff', '#22c55e', '#38bdf8', '#facc15', '#fb7185', '#a78bfa', '#111827'];
 
-const DrawStudio = ({ onClose, onSend, onSendDrawing, initialSource = null, inline = false }) => {
+const DrawStudio = ({ onClose, onSend, onSendDrawing, onLiveDrawingChange, initialSource = null, inline = false }) => {
     const canvasRef = useRef(null);
     const historyRef = useRef([]);
     const drawingRef = useRef(false);
@@ -141,6 +141,7 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, initialSource = null, inli
         const points = activePointsRef.current.map(normalize);
         if (points.length > 1) actionsRef.current.push({ tool, color, size, points: tool === 'arrow' ? [points[0], points[points.length - 1]] : points });
         saveHistory();
+        onLiveDrawingChange?.({ version: 2, width: 1000, height: 1000, background: backgroundSource ? { ...backgroundSource } : null, actions: actionsRef.current.slice(-100), caption: '' });
     };
     const addText = () => {
         const value = window.prompt('Canvas par kya likhna hai?');
@@ -150,6 +151,7 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, initialSource = null, inli
         ctx.fillText(value, canvasRef.current.width / 2, canvasRef.current.height / 2);
         actionsRef.current.push({ tool: 'text', color, size, text: value.slice(0, 240), x: 500, y: 500 });
         saveHistory();
+        onLiveDrawingChange?.({ version: 2, width: 1000, height: 1000, background: backgroundSource ? { ...backgroundSource } : null, actions: actionsRef.current.slice(-100), caption: '' });
     };
     const send = () => {
         if (onSendDrawing) {

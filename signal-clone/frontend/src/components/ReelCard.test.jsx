@@ -20,5 +20,6 @@ describe('ReelCard defensive rendering', () => {
         );
         expect(markup).toContain('@unknown');
         expect(markup).toContain('Cached reel');
+        expect(markup).toContain('Share this Reel');
     });
 });

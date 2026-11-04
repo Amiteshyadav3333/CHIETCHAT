@@ -23,7 +23,7 @@ from utils import (
 )
 from content_moderation import ModerationUnavailable, reject_adult_content
 from features.social.feed import rank_public_posts
-from service_gateway import call_social_feed_ranker
+from service_gateway import call_social_feed_ranker, call_social_poll_results, call_social_poll_vote
 from observability import report_safe_exception
 
 social_bp = Blueprint('social_bp', __name__)
@@ -383,19 +383,32 @@ def get_social_posts():
             for post_id, option_count in poll_option_counts.items()
         }
         if poll_option_counts:
-            poll_rows = db.session.query(
-                SocialPollVote.post_id,
-                SocialPollVote.option_index,
-                func.count(SocialPollVote.id),
-                func.max(case((SocialPollVote.user_id == user_id, 1), else_=0)),
-            ).filter(SocialPollVote.post_id.in_(poll_option_counts)).group_by(
-                SocialPollVote.post_id, SocialPollVote.option_index
-            ).all()
-            for post_id, option_index, count, selected in poll_rows:
-                if 0 <= option_index < len(poll_stats[post_id]['counts']):
-                    poll_stats[post_id]['counts'][option_index] = count
-                    if selected:
-                        poll_stats[post_id]['selected_option'] = option_index
+            polls_service_url = current_app.config.get('SOCIAL_POLLS_SERVICE_URL') or os.environ.get('SOCIAL_POLLS_SERVICE_URL')
+            if polls_service_url:
+                try:
+                    poll_stats = call_social_poll_results(user_id, [
+                        {'postId': post.id, 'options': json.loads(post.poll_options or '[]')}
+                        for post in candidates if post.id in poll_option_counts
+                    ])
+                    poll_stats = {int(post_id): {'counts': result['counts'], 'selected_option': result['selectedOption']}
+                                  for post_id, result in poll_stats.items()}
+                except Exception as error:
+                    report_safe_exception('social_polls_service_read_failed', error)
+                    return jsonify({'error': 'Poll service temporarily unavailable'}), 503
+            else:
+                poll_rows = db.session.query(
+                    SocialPollVote.post_id,
+                    SocialPollVote.option_index,
+                    func.count(SocialPollVote.id),
+                    func.max(case((SocialPollVote.user_id == user_id, 1), else_=0)),
+                ).filter(SocialPollVote.post_id.in_(poll_option_counts)).group_by(
+                    SocialPollVote.post_id, SocialPollVote.option_index
+                ).all()
+                for post_id, option_index, count, selected in poll_rows:
+                    if 0 <= option_index < len(poll_stats[post_id]['counts']):
+                        poll_stats[post_id]['counts'][option_index] = count
+                        if selected:
+                            poll_stats[post_id]['selected_option'] = option_index
         author_counts = db.session.query(SocialPost.user_id, func.count(SocialPost.id)).filter(
             SocialPost.channel_id.is_(None), SocialPost.user_id.in_({post.user_id for post in candidates})
         ).group_by(SocialPost.user_id).all()
@@ -646,6 +659,13 @@ def vote_social_poll(post_id):
         return jsonify({"error": "Invalid poll vote"}), 400
     if option_index < 0 or option_index >= len(options):
         return jsonify({"error": "Invalid poll option"}), 400
+    polls_service_url = current_app.config.get('SOCIAL_POLLS_SERVICE_URL') or os.environ.get('SOCIAL_POLLS_SERVICE_URL')
+    if polls_service_url:
+        try:
+            return jsonify(call_social_poll_vote(user_id, post.id, option_index, options))
+        except Exception as error:
+            report_safe_exception('social_polls_service_vote_failed', error)
+            return jsonify({'error': 'Poll service temporarily unavailable'}), 503
     vote = SocialPollVote.query.filter_by(post_id=post.id, user_id=user_id).first()
     if vote:
         vote.option_index = option_index

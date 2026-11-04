@@ -346,7 +346,14 @@ const Reels = ({ active, onBack, onShareToChat, initialReel = null, onInitialRee
                     initialCaption={productDraft.caption}
                     affiliateCode={productDraft.affiliateCode}
                     onClose={() => setShowUploader(false)} 
-                    onSuccess={() => { setShowUploader(false); fetchReels(); }}
+                    onSuccess={postedReel => {
+                        setShowUploader(false);
+                        fetchReels('foryou', true);
+                        if (postedReel?.id) {
+                            setSelectedProfileReel(postedReel);
+                            setSelectedProfileUserId(user?.id || null);
+                        }
+                    }}
                 />
             )}
 

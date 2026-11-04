@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import ChatBubble, { ChatDrawingOverlay, DateSeparator, isChatOverlayDrawing } from '../../../components/ChatBubble';
+import ChatBubble, { ChatDrawingOverlay, DateSeparator, DrawingMessage, isChatOverlayDrawing } from '../../../components/ChatBubble';
 import MessageInput from '../../../components/MessageInput';
 import DrawStudio from '../../../components/DrawStudio';
 import AvatarZoom from '../../../components/AvatarZoom';
@@ -153,6 +153,7 @@ export const ChatWindowView = ({
                     key={drawSource ? `${drawSource.type}-${drawSource.timestamp || drawSource.src}` : 'blank-draw'}
                     initialSource={drawSource}
                     inline
+                    onLiveDrawingChange={drawing => handleLiveNoteDraft?.(drawing, 'drawing')}
                     onClose={() => { setShowChatDraw(false); setDrawSource(null); }}
                     onSendDrawing={drawing => {
                         handleSendMessage(JSON.stringify({ ...drawing, presentation: drawSource ? 'card' : 'chat-overlay' }), 'drawing', null, disappearingTtl);
@@ -443,6 +444,8 @@ export const ChatWindowView = ({
                 </div>
             )}
 
+            {Object.values(liveNotePreviews[visibleActiveChat.id] || {}).map(preview => <div key={`live-note-${preview.userId}`} className="mx-3 mb-1 max-h-48 overflow-y-auto rounded-xl border border-sky-400/25 bg-[#0d2530]/95 px-3 py-2 shadow-lg" aria-live="polite"><p className="text-[10px] font-bold uppercase tracking-wide text-sky-200">📝 {preview.username} · NoteIt Live {preview.kind === 'drawing' ? '· drawing' : '· typing'}</p>{preview.kind === 'drawing' ? <div className="mt-2 max-h-36 overflow-hidden rounded-lg bg-[#111827]"><DrawingMessage content={preview.drawing} /></div> : <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-100">{preview.text || 'Typing…'}</p>}</div>)}
+
             {/* Messages Area */}
             <div
                 ref={messagesContainerRef}
@@ -570,7 +573,6 @@ export const ChatWindowView = ({
                         </span>
                     </div>
                 )}
-                {Object.values(liveNotePreviews[visibleActiveChat.id] || {}).map(preview => <div key={`live-note-${preview.userId}`} className="mx-3 mb-2 rounded-xl border border-sky-400/25 bg-sky-400/[.08] px-3 py-2" aria-live="polite"><p className="text-[10px] font-bold uppercase tracking-wide text-sky-200">📝 {preview.username} · NoteIt Live</p><p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-100">{preview.text}</p></div>)}
                 <div ref={messagesEndRef} />
             </div>
 
@@ -587,6 +589,7 @@ export const ChatWindowView = ({
                 onChangeTranslationLang={setChatTranslationLang}
                 onTyping={handleTyping}
                 onLiveNoteDraft={handleLiveNoteDraft}
+                onLiveDrawingChange={drawing => handleLiveNoteDraft(drawing, 'drawing')}
                 disappearingTtl={disappearingTtl}
                 disabled={visibleActiveChat.isChatDisabled && visibleActiveChat.groupAdminId !== user?.id}
                 placeholderOverride={visibleActiveChat.isChatDisabled && visibleActiveChat.groupAdminId !== user?.id ? "Only admins can send messages in this group" : ""}

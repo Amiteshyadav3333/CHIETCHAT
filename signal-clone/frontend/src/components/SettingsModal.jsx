@@ -145,6 +145,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     const [profilePrivacy, setProfilePrivacy] = useState(() => user?.profilePhotoPrivacy || localStorage.getItem('profile_photo_privacy_mode') || 'everyone');
     const [storyExceptions, setStoryExceptions] = useState(() => user?.storyPrivacyExceptions || localStorage.getItem('story_privacy_exceptions') || '');
     const [profileExceptions, setProfileExceptions] = useState(() => user?.profilePhotoExceptions || localStorage.getItem('profile_privacy_exceptions') || '');
+    const [lastSeenExceptions, setLastSeenExceptions] = useState(() => user?.lastSeenExceptions || '');
     const [phonePrivacy, setPhonePrivacy] = useState(() => user?.phoneNumberPrivacy || 'nobody');
     const [customFont, setCustomFont] = useState(() => serverUi.customFont || localStorage.getItem('chat_custom_font') || 'system');
     const [globalMsgSound, setGlobalMsgSound] = useState(() => getGlobalSoundSetting('msg'));
@@ -889,10 +890,11 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 <SettingsToggle 
                                     icon={<EyeSlashIcon />} 
                                     title="Hide last seen" 
-                                    subtitle="Your last seen time will not be shared" 
+                                    subtitle="Hide your last seen from everyone, with selected profile exceptions"
                                     value={prefs.hideLastSeen}
                                     onClick={() => handleTogglePrivacy('hideLastSeen', !prefs.hideLastSeen)}
                                 />
+                                {prefs.hideLastSeen && <AudienceInput value={lastSeenExceptions} mode="only" onChange={value => { setLastSeenExceptions(value); persistPrivacy({ lastSeenExceptions: value }); }} />}
                                 <SettingsToggle 
                                     icon={<EyeSlashIcon />} 
                                     title="Hide online status" 

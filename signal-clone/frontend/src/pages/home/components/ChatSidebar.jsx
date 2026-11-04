@@ -33,6 +33,7 @@ export const ChatSidebar = ({
     totalUnreadMessages,
     startCallForChat,
     onOpenShopping,
+    onDeleteSelectedChats,
 }) => {
     return (
         <div className={`reddit-chat-sidebar h-full min-h-0 w-full overflow-hidden md:w-[360px] lg:w-[390px] border-r border-gray-800 flex flex-col ${activeChat ? 'hidden md:flex' : 'flex'}`}>
@@ -146,6 +147,7 @@ export const ChatSidebar = ({
                     callsMode
                     onVoiceCall={(chat) => startCallForChat(chat, 'voice')}
                     onVideoCall={(chat) => startCallForChat(chat, 'video')}
+                    onDeleteSelected={onDeleteSelectedChats}
                 />
             ) : showArchive ? (
                 <ContactList
@@ -158,6 +160,7 @@ export const ChatSidebar = ({
                     pinnedChats={pinnedChats}
                     currentUserId={user?.id}
                     storyUserIds={storyUserIds}
+                    onDeleteSelected={onDeleteSelectedChats}
                 />
             ) : (
                 <ContactList
@@ -170,6 +173,7 @@ export const ChatSidebar = ({
                     pinnedChats={pinnedChats}
                     currentUserId={user?.id}
                     storyUserIds={storyUserIds}
+                    onDeleteSelected={onDeleteSelectedChats}
                 />
             )}
 

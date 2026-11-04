@@ -304,6 +304,7 @@ def register_socket_events(socketio):
             return {"ok": False, "error": "Invalid message data", "retryable": False}
         chat_id = data.get('chatId')
         content = data.get('content')
+        kind = data.get('kind', 'text')
 
         if not chat_id or content is None:
             emit('message_error', {"error": "Invalid message data"})
@@ -350,6 +351,11 @@ def register_socket_events(socketio):
         message_type = str(data.get('type') or 'text')
         if message_type not in ALLOWED_MESSAGE_TYPES:
             return {"ok": False, "error": "Unsupported message type", "retryable": False}
+        direct_snap_video = data.get('directSnapVideo') is True
+        if direct_snap_video and (
+                message_type not in ('video', 'video_note') or not chat or not chat.snap_mode
+                or chat.is_group or asset_id):
+            return {"ok": False, "error": "Direct Snap video messages require an active one-to-one Snap session", "retryable": False}
         if chat and chat.is_group and chat.group_admin_id != socket_user_id:
             media_types = {'image', 'video', 'video_note', 'audio', 'file', 'gif', 'sticker', 'drawing'}
             if message_type in media_types and getattr(chat, 'members_can_send_media', True) is False:
@@ -555,11 +561,13 @@ def register_socket_events(socketio):
             return {'ok': False, 'error': 'Invalid encrypted live note'}
         if not {str(participant_id) for participant_id in participants}.issubset(recipient_ids):
             return {'ok': False, 'error': 'Encrypted live note is missing a participant'}
+        if kind not in ('text', 'drawing'):
+            return {'ok': False, 'error': 'Invalid live preview type'}
         if not allow_ephemeral_socket_event(user_id, chat_id, 'live-note', 40, 10):
             return {'ok': False, 'error': 'Live note is updating too quickly'}
         user = db.session.get(User, user_id)
         payload = {'chatId': chat_id, 'userId': user_id,
-            'username': user.username if user else 'Someone', 'content': content}
+            'username': user.username if user else 'Someone', 'content': content, 'kind': kind}
         for participant_id in participants:
             if participant_id != user_id:
                 socketio.emit('live_note_preview', payload, room=f'user_{participant_id}')
@@ -577,6 +585,71 @@ def register_socket_events(socketio):
         for participant_id in get_chat_participant_ids(chat_id):
             if participant_id != user_id:
                 socketio.emit('live_note_end', {'chatId': chat_id, 'userId': user_id}, room=f'user_{participant_id}')
+        return {'ok': True}
+
+    def valid_snap_transfer(data, signal_type):
+        if not isinstance(data, dict):
+            return None
+        user_id = get_socket_user_id()
+        try:
+            chat_id = int(data.get('chatId'))
+            target_id = int(data.get('toUserId'))
+            transfer_id = str(uuid.UUID(str(data.get('transferId'))))
+        except (TypeError, ValueError, AttributeError):
+            return None
+        chat = db.session.get(Chat, chat_id)
+        participants = get_chat_participant_ids(chat_id) if chat else []
+        if (not user_id or not chat or not chat.snap_mode or chat.is_group
+                or user_id not in participants or target_id not in participants or target_id == user_id
+                or len(participants) != 2):
+            return None
+        if is_blocked(user_id, target_id) or is_blocked(target_id, user_id):
+            return None
+        if signal_type == 'offer':
+            if not valid_session_description(data, 'offer', 'offer'):
+                return None
+            details = data.get('file')
+            descriptor = data.get('descriptor')
+            descriptor_recipients = descriptor.get('recipients') if isinstance(descriptor, dict) else None
+            if (not isinstance(details, dict) or type(details.get('size')) is not int
+                    or details['size'] < 1 or details['size'] > 100 * 1024 * 1024
+                    or not isinstance(details.get('mime'), str) or not details['mime'].startswith('video/')
+                    or not isinstance(descriptor, dict) or descriptor.get('url') != f'p2p://{transfer_id}'
+                    or descriptor.get('type') != 'cheetchat/e2ee-media' or descriptor.get('v') != 1
+                    or descriptor.get('algorithm') != 'RSA-OAEP-256/AES-GCM'
+                    or not isinstance(descriptor.get('iv'), str) or len(descriptor['iv']) > 128
+                    or not isinstance(descriptor_recipients, dict)
+                    or not {str(participant_id) for participant_id in participants}.issubset(descriptor_recipients)
+                    or any(not isinstance(key, str) or len(key) > 4096 for key in descriptor_recipients.values())):
+                return None
+        elif not valid_session_description(data, 'answer', 'answer'):
+            return None
+        return user_id, chat_id, target_id, transfer_id
+
+    @socketio.on('snap_transfer_offer')
+    def on_snap_transfer_offer(data):
+        parsed = valid_snap_transfer(data, 'offer')
+        if not parsed:
+            return {'ok': False, 'error': 'Direct Snap transfer is not available for this chat'}
+        user_id, chat_id, target_id, transfer_id = parsed
+        if not allow_ephemeral_socket_event(user_id, chat_id, 'snap-transfer', 6, 60):
+            return {'ok': False, 'error': 'Too many direct Snap transfer attempts. Try again shortly.'}
+        socketio.emit('snap_transfer_incoming', {
+            'chatId': chat_id, 'transferId': transfer_id, 'fromUserId': user_id,
+            'offer': data['offer'], 'file': data['file'], 'descriptor': data['descriptor'],
+        }, room=f'user_{target_id}')
+        return {'ok': True}
+
+    @socketio.on('snap_transfer_answer')
+    def on_snap_transfer_answer(data):
+        parsed = valid_snap_transfer(data, 'answer')
+        if not parsed:
+            return {'ok': False, 'error': 'Invalid direct Snap transfer response'}
+        user_id, chat_id, target_id, transfer_id = parsed
+        socketio.emit('snap_transfer_answer', {
+            'chatId': chat_id, 'transferId': transfer_id, 'fromUserId': user_id,
+            'answer': data['answer'],
+        }, room=f'user_{target_id}')
         return {'ok': True}
 
     @socketio.on('ring_chat_bell')

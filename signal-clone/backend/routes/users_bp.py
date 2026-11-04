@@ -1042,6 +1042,8 @@ def update_privacy_settings():
     
     if 'hideLastSeen' in data:
         user.hide_last_seen = bool(data.get('hideLastSeen'))
+    if 'lastSeenExceptions' in data:
+        user.last_seen_exceptions = str(data.get('lastSeenExceptions') or '')[:1000]
     if 'hideOnlineStatus' in data:
         user.hide_online_status = bool(data.get('hideOnlineStatus'))
     if 'readReceipts' in data:

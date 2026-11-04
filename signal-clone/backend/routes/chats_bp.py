@@ -494,6 +494,12 @@ def edit_message(message_id):
         return jsonify({"error": "Message not found"}), 404
     if message.sender_id != user_id or message.deleted_at:
         return jsonify({"error": "Forbidden"}), 403
+    sent_at = message.timestamp
+    if sent_at and sent_at.tzinfo is not None:
+        sent_at = sent_at.replace(tzinfo=None)
+    message_age = (utc_now() - sent_at).total_seconds() if sent_at else None
+    if message_age is None or message_age < 0 or message_age > 7 * 60:
+        return jsonify({"error": "Messages can only be edited within 7 minutes of sending"}), 409
     if message.type not in ('text', 'business_auto_reply') or not valid_encrypted_envelope(message.content):
         return jsonify({"error": "This message type cannot be edited"}), 409
 

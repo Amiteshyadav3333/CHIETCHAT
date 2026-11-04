@@ -8,6 +8,8 @@ import {
     encryptForRecipients, encryptMediaForRecipients,
     isEncryptedMediaDescriptor, isEncryptedPayload
 } from '../../utils/encryption';
+import { sendSnapVideoDirect, receiveSnapVideoDirect } from '../../utils/p2pSnapTransfer';
+import { setChatSnapMediaExpiry } from '../../utils/snapMediaStore';
 import { compressImage, compressVideo, getFileCategory } from '../../utils/mediaCompressor';
 import { enqueueOfflineMessage, processOfflineQueue } from '../../utils/offlineQueue';
 import {
@@ -544,13 +546,13 @@ export const Home = () => {
         }
     };
 
-    const handleLiveNoteDraft = text => {
+    const handleLiveNoteDraft = (text, kind = 'text') => {
         const chat = activeChatRef.current;
         if (!liveNoteEnabled || !socket?.connected || !chat || !publicKey || !user) return;
         window.clearTimeout(liveNoteTimerRef.current);
         const sequence = ++liveNoteSequenceRef.current;
-        const draft = String(text || '').slice(0, 2000);
-        if (!draft.trim()) {
+        const draft = kind === 'drawing' ? JSON.stringify(text || {}).slice(0, 8000) : String(text || '').slice(0, 2000);
+        if (!draft.trim() || draft === '{}') {
             socket.emit('live_note_end', { chatId: chat.id });
             return;
         }
@@ -567,7 +569,7 @@ export const Home = () => {
                 }
                 const content = await encryptForRecipients(recipients, draft);
                 if (sequence === liveNoteSequenceRef.current && liveNoteSessionRef.current.enabled && liveNoteSessionRef.current.chatId === chat.id) {
-                    socket.emit('live_note_update', { chatId: chat.id, content });
+                    socket.emit('live_note_update', { chatId: chat.id, content, kind });
                 }
             } catch (error) { console.warn('Could not share encrypted live note:', error.message); }
         }, 250);
@@ -646,6 +648,7 @@ export const Home = () => {
         });
 
         socket.on('snap_mode_update', ({ chatId, enabled, snapExpiresAt, initiatedBy, initiatorName }) => {
+            setChatSnapMediaExpiry(chatId, enabled ? null : snapExpiresAt).catch(() => {});
             localStorage.setItem(`chat_snap_mode_${chatId}`, enabled ? '1' : '0');
             setChats(current => current.map(chat => chat.id === chatId ? { ...chat, snapMode: enabled } : chat));
             setActiveChat(current => current?.id === chatId ? { ...current, snapMode: enabled } : current);
@@ -665,18 +668,30 @@ export const Home = () => {
             }
         });
 
+        socket.on('snap_transfer_incoming', payload => {
+            receiveSnapVideoDirect({ socket, payload }).catch(error => {
+                console.warn('Direct Snap video receive failed:', error.message);
+            });
+        });
+
         socket.on('live_note_preview', async payload => {
             if (!payload?.chatId || !payload?.userId || !payload?.content || !privateKey || !user) return;
             try {
                 const text = await decryptEnvelope(privateKey, user.id, payload.content);
                 if (typeof text !== 'string') return;
+                const kind = payload.kind === 'drawing' ? 'drawing' : 'text';
+                let drawing = null;
+                if (kind === 'drawing') {
+                    try { drawing = JSON.parse(text); } catch { return; }
+                    if (!drawing || !Array.isArray(drawing.actions)) return;
+                }
                 const chatId = payload.chatId;
                 const senderId = payload.userId;
                 const updatedAt = Date.now();
                 const key = `${chatId}:${senderId}`;
                 window.clearTimeout(liveNoteExpiryRef.current[key]);
                 setLiveNotePreviews(current => ({ ...current, [chatId]: {
-                    ...(current[chatId] || {}), [senderId]: { userId: senderId, username: payload.username || 'Someone', text, updatedAt },
+                    ...(current[chatId] || {}), [senderId]: { userId: senderId, username: payload.username || 'Someone', text: kind === 'text' ? text : '', kind, drawing, updatedAt },
                 } }));
                 liveNoteExpiryRef.current[key] = window.setTimeout(() => {
                     setLiveNotePreviews(current => {
@@ -958,6 +973,7 @@ export const Home = () => {
             socket.off('message_pin_update');
             socket.off('snap_mode_update');
             socket.off('live_note_preview');
+            socket.off('snap_transfer_incoming');
             socket.off('live_note_end');
             socket.off('chat_bell_ringing');
             socket.off('typing_update');
@@ -1031,9 +1047,13 @@ export const Home = () => {
     }, [messages.length]);
 
     // Send message
-    const handleSendMessage = async (text, type = 'text', replyMsg = null, ttl = 0, assetId = null) => {
+    const handleSendMessage = async (text, type = 'text', replyMsg = null, ttl = 0, assetId = null, directSnapVideo = false) => {
         ttl = Number(ttl || 0);
         if (!activeChat?.id || !user?.id) return false;
+        if (directSnapVideo && (!navigator.onLine || !socket?.connected)) {
+            alert('The direct video arrived, but the chat connection ended. Reconnect to finish sending the message.');
+            return false;
+        }
         const participants = Array.isArray(activeChat.participants)
             ? activeChat.participants.filter(participant => participant?.id)
             : [];
@@ -1101,6 +1121,10 @@ export const Home = () => {
             encryptedContent = await encryptForRecipients(recipientPublicKeys, text);
 
             if (!navigator.onLine || !socket || !socket.connected) {
+                if (directSnapVideo) {
+                    setMessages(prev => prev.map(message => message.id === tempId ? { ...message, status: 'failed' } : message));
+                    return false;
+                }
                 enqueueOfflineMessage(user.id, activeChat.id, encryptedContent, type, replyMsg, ttl, tempId, assetId, null, snapMode);
                 setMessages(prev => prev.map(message => message.id === tempId ? { ...message, status: 'queued' } : message));
                 return true;
@@ -1114,6 +1138,7 @@ export const Home = () => {
                 type,
                 ttl,
                 snapMode,
+                directSnapVideo,
                 replyToId: replyMsg?.id || null,
                 replyContent: null,
                 replySenderName: null
@@ -1229,6 +1254,23 @@ export const Home = () => {
         try {
             setUploadProgress(prev => ({ ...prev, stage: 'End-to-end encrypting…', percent: Math.max(prev?.percent || 5, 60) }));
             const encryptedMedia = await encryptMediaForRecipients(recipientPublicKeys, fileToUpload);
+            if (category === 'video' && !activeChat?.isGroup && activeChat?.snapMode === true) {
+                const recipient = participants.find(participant => !sameUserId(participant.id, user.id));
+                if (!recipient) throw new Error('Direct Snap video requires a one-to-one chat.');
+                const transferId = crypto.randomUUID();
+                setUploadProgress({ fileName: fileToUpload.name, stage: 'Connecting directly to the other person…', percent: 10, originalSize, compressedSize: fileToUpload.size });
+                await sendSnapVideoDirect({
+                    socket, chatId: activeChat.id, toUserId: recipient.id, transferId,
+                    ciphertext: encryptedMedia.ciphertext, descriptor: encryptedMedia.descriptor,
+                    file: fileToUpload,
+                    onProgress: percent => setUploadProgress({ fileName: fileToUpload.name, stage: 'Sending directly to the other person…', percent, originalSize, compressedSize: fileToUpload.size }),
+                });
+                const descriptor = JSON.stringify({ ...encryptedMedia.descriptor, url: `p2p://${transferId}` });
+                setUploadProgress(null);
+                const messageSent = await handleSendMessage(descriptor, preferredType || 'video', replyTo, disappearingTtl, null, true);
+                if (!messageSent) throw new Error('The video was transferred directly, but the chat message could not be saved. Please retry sending it.');
+                return { url: `p2p://${transferId}`, type: preferredType || 'video' };
+            }
             formData.append('file', encryptedMedia.ciphertext, 'attachment.e2ee');
             formData.append('encrypted', '1');
             formData.append('mediaKind', category === 'file' ? 'document' : category);
@@ -1525,6 +1567,15 @@ export const Home = () => {
             setChats(prev => prev.filter(c => c.id !== chatId));
             if (activeChat?.id === chatId) { setActiveChat(null); localStorage.removeItem('activeChatId'); }
         } catch (err) { console.error(err); } finally { setChatToDelete(null); }
+    };
+
+    const handleDeleteSelectedChats = async (chatIds) => {
+        if (!chatIds?.length || !window.confirm(`Delete ${chatIds.length} selected chat${chatIds.length === 1 ? '' : 's'} for you?`)) return;
+        const results = await Promise.allSettled(chatIds.map(chatId => axios.delete(`/api/chats/${chatId}?option=me`, { headers: { Authorization: `Bearer ${token}` } })));
+        const deleted = new Set(chatIds.filter((_, index) => results[index].status === 'fulfilled'));
+        setChats(previous => previous.filter(chat => !deleted.has(chat.id)));
+        if (activeChat && deleted.has(activeChat.id)) { setActiveChat(null); localStorage.removeItem('activeChatId'); }
+        if (deleted.size !== chatIds.length) window.alert(`${deleted.size} chats deleted. Some chats could not be deleted; try those again.`);
     };
 
     const handleDeleteMessage = (message) => { setMsgToDelete(message); };
@@ -2179,6 +2230,7 @@ export const Home = () => {
                 totalUnreadMessages={totalUnreadMessages}
                 startCallForChat={calls.startCallForChat}
                 onOpenShopping={openShoppingMarketplace}
+                onDeleteSelectedChats={handleDeleteSelectedChats}
             />
 
             {/* Main Chat View */}

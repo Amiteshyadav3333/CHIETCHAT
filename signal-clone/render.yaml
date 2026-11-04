@@ -55,6 +55,23 @@ services:
       - key: MUSIC_SERVICE_HMAC_KEY
         generateValue: true
   - type: web
+    name: chietchat-social-polls
+    runtime: python
+    region: singapore
+    plan: free
+    rootDir: .
+    buildCommand: pip install -r services/social-polls/requirements.txt
+    preDeployCommand: python services/social-polls/migrate.py
+    startCommand: gunicorn --workers 2 --threads 8 --timeout 15 --chdir services/social-polls app:app --bind 0.0.0.0:$PORT
+    healthCheckPath: /health/live
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: SOCIAL_POLLS_DATABASE_URL
+        sync: false
+      - key: SOCIAL_POLLS_SERVICE_HMAC_KEY
+        generateValue: true
+  - type: web
     name: chietchat-social-feed
     runtime: python
     region: singapore
@@ -155,6 +172,8 @@ services:
           name: chietchat-ai-generation
           type: web
           envVarKey: AI_GENERATION_SERVICE_HMAC_KEY
+      - key: AI_GENERATION_SERVICE_URL
+        value: https://chietchat-ai-generation.onrender.com
       - key: PODLIVE_URL
         value: https://podlive-sigma.vercel.app
       - key: PODLIVE_API_URL

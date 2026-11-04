@@ -268,7 +268,11 @@ def create_reel():
             if tag:
                 tag.content_type, tag.content_id = 'reel', new_reel.id
         db.session.commit()
-        return jsonify({"message": "Reel posted", "id": new_reel.id}), 201
+        return jsonify({
+            "message": "Reel posted",
+            "id": new_reel.id,
+            "reel": serialize_reel(new_reel, user_id),
+        }), 201
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except ModerationUnavailable as e:

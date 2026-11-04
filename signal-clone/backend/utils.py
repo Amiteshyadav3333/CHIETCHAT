@@ -401,6 +401,7 @@ def ensure_runtime_compat_schema():
         'is_profile_private': db.Boolean(),
         'phone_number_privacy': db.String(20),
         'profile_photo_exceptions': db.Text(),
+        'last_seen_exceptions': db.Text(),
         'story_privacy': db.String(20),
         'story_privacy_exceptions': db.Text(),
         'ui_preferences': db.Text(),
@@ -661,6 +662,7 @@ def ensure_database_schema(force=False):
             'cover_url': db.String(500),
             'profile_setup_done': db.Boolean(),
             'hide_last_seen': db.Boolean(),
+            'last_seen_exceptions': db.Text(),
             'hide_online_status': db.Boolean(),
             'read_receipts': db.Boolean(),
             'profile_photo_privacy': db.String(20),
@@ -1064,9 +1066,12 @@ def serialize_user(user, viewer_id=None):
     # Last seen privacy rules
     show_last_seen = True
     if user.hide_last_seen:
-        show_last_seen = False
-        if viewer_id == user.id:
-            show_last_seen = True
+        show_last_seen = viewer_id == user.id
+        if viewer_id and viewer_id != user.id:
+            last_seen_allowlist = {part.strip().lower().lstrip('@') for part in (user.last_seen_exceptions or '').split(',') if part.strip()}
+            if viewer:
+                viewer_tokens = {str(viewer.id), (viewer.username or '').strip().lower(), (viewer.platform_id or '').strip().lower()}
+                show_last_seen = bool(last_seen_allowlist & viewer_tokens)
 
     # Online status privacy rules
     show_online_status = True
@@ -1101,6 +1106,7 @@ def serialize_user(user, viewer_id=None):
         "lastSeen": iso_utc(user.last_seen) if show_last_seen else None,
         "isOnline": is_user_online(user.id) if show_online_status else False,
         "hideLastSeen": bool(user.hide_last_seen),
+        "lastSeenExceptions": user.last_seen_exceptions or "" if viewer_id == user.id else "",
         "hideOnlineStatus": bool(user.hide_online_status),
         "readReceipts": bool(user.read_receipts),
         "isPremium": premium_active,
@@ -1132,8 +1138,28 @@ def emit_to_user_chat_contacts(user_id, event, payload):
         for participant in participants:
             notified_user_ids.add(participant.user_id)
     notified_user_ids.add(user_id)
+    presence_user = db.session.get(User, user_id) if event == 'presence_update' else None
+    profile_user = db.session.get(User, user_id) if event == 'user_profile_updated' else None
     for participant_id in notified_user_ids:
-        socketio.emit(event, payload, room=f"user_{participant_id}")
+        recipient_payload = payload
+        if profile_user and isinstance(payload, dict) and payload.get('user'):
+            recipient_payload = {'user': serialize_user(profile_user, viewer_id=participant_id)}
+        if presence_user:
+            recipient_payload = dict(payload)
+            if presence_user.hide_online_status:
+                recipient_payload['isOnline'] = False
+            if presence_user.hide_last_seen:
+                allowed = False
+                if participant_id == user_id:
+                    allowed = True
+                else:
+                    tokens = {part.strip().lower().lstrip('@') for part in (presence_user.last_seen_exceptions or '').split(',') if part.strip()}
+                    viewer = db.session.get(User, participant_id)
+                    viewer_tokens = {str(viewer.id), (viewer.username or '').strip().lower(), (viewer.platform_id or '').strip().lower()} if viewer else set()
+                    allowed = bool(tokens & viewer_tokens)
+                if not allowed:
+                    recipient_payload['lastSeen'] = None
+        socketio.emit(event, recipient_payload, room=f"user_{participant_id}")
 
 def create_notification(recipient_id, sender_id, n_type, content=None, target_id=None):
     if recipient_id == sender_id:

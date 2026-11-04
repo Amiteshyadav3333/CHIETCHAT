@@ -487,7 +487,7 @@ const getDocIcon = (filename) => {
 };
 
 // WhatsApp-style action menu overlay
-const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, onReply, onEdit, onCopy, onForward, onReact, onPin, onDelete, onInfo, onTranslate, onDownload, onPhotoReply, onMakeSticker, onPlaceSticker, onAnnotateMessage, isLastMessage, showTranslateBtn = true, protectedMode = false }) => {
+const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, onReply, onEdit, onCopy, onForward, onReact, onPin, onDelete, onInfo, onTranslate, onDownload, onPhotoReply, onMakeSticker, onPlaceSticker, onAnnotateMessage, showTranslateBtn = true, protectedMode = false }) => {
     const menuRef = useRef(null);
     const [showFullPicker, setShowFullPicker] = useState(false);
 
@@ -499,7 +499,7 @@ const MessageActionMenu = ({ message, isOwn, isTextMessage, isDeleted, onClose, 
 
     const actions = [
         { icon: '↩️', label: 'Reply', onClick: () => { onReply?.(); onClose(); } },
-        ...(isOwn && isTextMessage && !isDeleted && isLastMessage ? [{ icon: '✏️', label: 'Edit', onClick: () => { onEdit?.(); onClose(); } }] : []),
+        ...(isOwn && isTextMessage && !isDeleted && message.timestamp && Date.now() - new Date(message.timestamp).getTime() >= 0 && Date.now() - new Date(message.timestamp).getTime() <= 7 * 60 * 1000 ? [{ icon: '✏️', label: 'Edit', onClick: () => { onEdit?.(); onClose(); } }] : []),
         ...(!isDeleted ? [{ icon: '📌', label: message.isPinned ? 'Unpin' : 'Pin', onClick: () => { onPin?.(); onClose(); } }] : []),
         ...(!isDeleted && !protectedMode ? [{ icon: '📋', label: 'Copy', onClick: () => { onCopy?.(); onClose(); } }] : []),
         ...(!isDeleted && !protectedMode ? [{ icon: '➡️', label: 'Forward', onClick: () => { onForward?.(); onClose(); } }] : []),

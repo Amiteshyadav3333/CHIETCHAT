@@ -281,10 +281,10 @@ const ReelUploader = ({ onClose, onSuccess, initialCaption = '', affiliateCode =
         if (monetized) formData.append('isMonetized', 'true');
 
         try {
-            await axios.post('/api/reels', formData, {
+            const response = await axios.post('/api/reels', formData, {
                 headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` }
             });
-            onSuccess();
+            onSuccess(response.data?.reel || { id: response.data?.id });
         } catch (err) {
             alert('Upload failed: ' + (err.response?.data?.error || err.message));
         } finally {

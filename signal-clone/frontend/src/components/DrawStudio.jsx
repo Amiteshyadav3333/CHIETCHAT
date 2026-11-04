@@ -19,6 +19,7 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, onLiveDrawingChange, initi
     const [color, setColor] = useState('#22c55e');
     const [size, setSize] = useState(5);
     const [spaceScale, setSpaceScale] = useState(100);
+    const [sendAsNewMessage, setSendAsNewMessage] = useState(false);
     const [caption, setCaption] = useState('');
     const [backgroundSource, setBackgroundSource] = useState(initialSource);
 
@@ -210,7 +211,7 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, onLiveDrawingChange, initi
     };
     const send = () => {
         if (onSendDrawing) {
-            onSendDrawing({ version: 2, width: 1000, height: 1000, spaceScale, background: backgroundSource ? { ...backgroundSource } : null, actions: actionsRef.current, caption: caption.trim() });
+            onSendDrawing({ version: 2, width: 1000, height: 1000, spaceScale, presentation: sendAsNewMessage ? 'card' : undefined, background: backgroundSource ? { ...backgroundSource } : null, actions: actionsRef.current, caption: caption.trim() });
             return;
         }
         canvasRef.current.toBlob(blob => {
@@ -230,7 +231,7 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, onLiveDrawingChange, initi
             <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-2 border-b border-white/10 bg-[#111b21] p-3">
                 {['pen', 'highlighter', 'arrow', 'eraser'].map(item => <button key={item} onClick={() => setTool(item)} className={`rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${tool === item ? 'bg-[#00a884]' : 'bg-white/10'}`}>{item}</button>)}
                 <button onClick={addText} className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold">Text</button>
-                <button onClick={() => { setBackgroundSource(null); paintBlankSpace(); scheduleLiveDrawing([], null); }} className="rounded-full bg-indigo-500/20 px-3 py-1.5 text-xs font-semibold text-indigo-200">＋ New space</button>
+                <button onClick={() => { setSendAsNewMessage(true); setBackgroundSource(null); paintBlankSpace(); scheduleLiveDrawing([], null); }} className="rounded-full bg-indigo-500/20 px-3 py-1.5 text-xs font-semibold text-indigo-200">＋ New space</button>
                 {inline && <label className="flex min-w-[150px] items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-gray-200">Space {spaceScale}%<input aria-label="Drawing space size" type="range" min="35" max="100" step="5" value={spaceScale} onChange={event => setSpaceScale(Number(event.target.value))} className="w-20 accent-[#00a884]" /></label>}
                 <span className="mx-1 h-6 w-px bg-white/10" />
                 {COLORS.map(c => <button key={c} onClick={() => setColor(c)} className={`h-7 w-7 rounded-full border-2 ${color === c ? 'border-white scale-110' : 'border-white/20'}`} style={{ background: c }} aria-label={`Choose ${c}`} />)}

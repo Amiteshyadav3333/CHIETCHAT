@@ -151,12 +151,11 @@ export const ChatDrawingOverlay = ({ content, messageId, isOwn = false, onDelete
     </div>;
 };
 
-export const DrawingMessage = ({ content }) => {
+export const DrawingMessage = ({ content, width, fill = false }) => {
     const drawing = parseDrawing(content);
     if (!drawing) return <p className="text-sm italic text-white/60">Drawing unavailable</p>;
-    const spaceScale = Math.max(35, Math.min(100, Number(drawing.spaceScale) || 100));
-    return <div style={{ width: `${260 * spaceScale / 100}px` }} className="max-w-[68vw] overflow-hidden rounded-xl border border-white/10 bg-[#111827]">
-        <DrawingArtwork drawing={drawing} />
+    return <div style={{ width: width ?? '260px' }} className={`${fill ? 'h-full' : ''} max-w-full overflow-hidden rounded-xl border border-white/10 bg-[#111827]`}>
+        <DrawingArtwork drawing={drawing} className={fill ? 'h-full w-full' : 'aspect-square w-full'} />
         {drawing.caption && <p className="border-t border-white/10 px-3 py-2 text-sm text-white">{drawing.caption}</p>}
     </div>;
 };

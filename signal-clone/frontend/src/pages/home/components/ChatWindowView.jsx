@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import ChatBubble, { ChatDrawingOverlay, DateSeparator, DrawingMessage, isChatOverlayDrawing } from '../../../components/ChatBubble';
 import MessageInput from '../../../components/MessageInput';
 import DrawStudio from '../../../components/DrawStudio';
@@ -10,6 +10,36 @@ import {
     LockClosedIcon, ClipboardDocumentCheckIcon
 } from '@heroicons/react/24/outline';
 import GroupCollaborationHub from '../../../components/collaboration/GroupCollaborationHub';
+
+export const LiveDrawingPreview = ({ preview }) => {
+    const [fullScreen, setFullScreen] = useState(false);
+    const drawingContent = JSON.stringify({ ...preview.drawing, presentation: 'card' });
+    return (
+        <section
+            className={`${fullScreen ? 'fixed inset-2 z-[120] flex flex-col sm:inset-6' : 'mx-3 mb-1 flex flex-col'} rounded-xl border border-sky-400/25 bg-[#0d2530]/95 p-2 shadow-lg`}
+            style={fullScreen ? undefined : {
+                width: 260,
+                height: 190,
+                minWidth: 170,
+                minHeight: 130,
+                maxWidth: 'calc(100% - 1.5rem)',
+                maxHeight: '80vh',
+                resize: 'both',
+                overflow: 'hidden',
+            }}
+            aria-label={`${preview.username}'s live drawing`}
+        >
+            <div className="mb-2 flex shrink-0 items-center gap-2">
+                <p className="min-w-0 flex-1 truncate text-[10px] font-bold uppercase tracking-wide text-sky-200">📝 {preview.username} · NoteIt Live · drawing</p>
+                <button type="button" onClick={() => setFullScreen(value => !value)} className="shrink-0 rounded-lg bg-white/10 px-2 py-1 text-[10px] font-bold text-white hover:bg-white/20">{fullScreen ? 'Exit full screen' : 'Full screen'}</button>
+            </div>
+            <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg">
+                <DrawingMessage content={drawingContent} width="100%" fill />
+            </div>
+            {!fullScreen && <p className="mt-1 shrink-0 text-[9px] text-white/45">Drag the lower corner to resize</p>}
+        </section>
+    );
+};
 
 export const ChatWindowView = ({
     visibleActiveChat,
@@ -131,7 +161,7 @@ export const ChatWindowView = ({
                     onLiveDrawingChange={drawing => handleLiveNoteDraft?.(drawing, 'drawing')}
                     onClose={() => { setShowChatDraw(false); setDrawSource(null); }}
                     onSendDrawing={drawing => {
-                        handleSendMessage(JSON.stringify({ ...drawing, presentation: drawSource ? 'card' : 'chat-overlay' }), 'drawing', null, disappearingTtl);
+                        handleSendMessage(JSON.stringify({ ...drawing, presentation: drawSource ? 'card' : (drawing.presentation || 'chat-overlay') }), 'drawing', null, disappearingTtl);
                         setShowChatDraw(false);
                         setDrawSource(null);
                     }}
@@ -411,7 +441,9 @@ export const ChatWindowView = ({
                 </div>
             )}
 
-            {Object.values(liveNotePreviews[visibleActiveChat.id] || {}).map(preview => <div key={`live-note-${preview.userId}`} className="mx-3 mb-1 max-h-48 overflow-y-auto rounded-xl border border-sky-400/25 bg-[#0d2530]/95 px-3 py-2 shadow-lg" aria-live="polite"><p className="text-[10px] font-bold uppercase tracking-wide text-sky-200">📝 {preview.username} · NoteIt Live {preview.kind === 'drawing' ? '· drawing' : '· typing'}</p>{preview.kind === 'drawing' ? <div className="mt-2 max-h-36 overflow-hidden rounded-lg bg-[#111827]"><DrawingMessage content={preview.drawing} /></div> : <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-100">{preview.text || 'Typing…'}</p>}</div>)}
+            {Object.values(liveNotePreviews[visibleActiveChat.id] || {}).map(preview => preview.kind === 'drawing'
+                ? <LiveDrawingPreview key={`live-note-${preview.userId}`} preview={preview} />
+                : <div key={`live-note-${preview.userId}`} className="mx-3 mb-1 rounded-xl border border-sky-400/25 bg-[#0d2530]/95 px-3 py-2 shadow-lg" aria-live="polite"><p className="text-[10px] font-bold uppercase tracking-wide text-sky-200">📝 {preview.username} · NoteIt Live · typing</p><p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-100">{preview.text || 'Typing…'}</p></div>)}
 
             {/* Messages Area */}
             <div

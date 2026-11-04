@@ -140,7 +140,9 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
         socialMutedVideos: serverUi.socialMutedVideos ?? localStorage.getItem('social_muted_videos') !== '0',
     }));
     const [reelsDefaultFeed, setReelsDefaultFeed] = useState(() => serverUi.reelsDefaultFeed || localStorage.getItem('reels_default_feed') || 'foryou');
-    const [socialDefaultFeed, setSocialDefaultFeed] = useState(() => serverUi.socialDefaultFeed || localStorage.getItem('social_default_feed') || 'for-you');
+    const [socialDefaultFeed, setSocialDefaultFeed] = useState(() => serverUi.socialDefaultFeed
+        || localStorage.getItem(`social_default_feed_${user?.id || 'default'}`)
+        || 'for-you');
     const [fontSize, setFontSize] = useState(() => serverUi.fontSize || localStorage.getItem('chat_font_size') || 'medium');
     const [bubbleColor, setBubbleColor] = useState(() => serverUi.bubbleColor || localStorage.getItem('chat_bubble_color') || '#00a884');
     const [storyPrivacy, setStoryPrivacy] = useState(() => user?.storyPrivacy || localStorage.getItem('story_privacy') || 'contacts');
@@ -1096,7 +1098,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                         <>
                             <SectionLabel>Feed</SectionLabel>
                             <SettingsGroup>
-                                <ChoiceRow title="Open Social on" value={socialDefaultFeed} onChange={val => choosePreference(setSocialDefaultFeed, 'social_default_feed', 'socialDefaultFeed', val)} options={[["for-you", "For You"], ["following", "Following"], ["community", "Community"]]} />
+                                <ChoiceRow title="Open Social on" value={socialDefaultFeed} onChange={val => { setSocialDefaultFeed(val); localStorage.setItem(`social_default_feed_${user?.id || 'default'}`, val); persistUi({ socialDefaultFeed: val }); }} options={[["for-you", "For You"], ["following", "Following"], ["community", "Community"]]} />
                             </SettingsGroup>
                             <SectionLabel>Videos</SectionLabel>
                             <SettingsGroup>

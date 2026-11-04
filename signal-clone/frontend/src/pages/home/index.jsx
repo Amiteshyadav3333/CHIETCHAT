@@ -2232,8 +2232,8 @@ export const Home = () => {
         { label: 'Social', icon: PhotoIcon, active: nav.showSocial, action: () => { nav.hideAppNavForFeature(); nav.navigateToView('social'); } },
         { label: 'PodLive', icon: MicrophoneIcon, active: nav.showPodlive, action: () => { nav.hideAppNavForFeature(); nav.navigateToView('podlive'); }, badge: nav.podliveLiveCount || 0 },
         { label: 'Notify', icon: BellIcon, active: showNotifications, action: openNotifications, badge: unreadCount },
-        { label: 'Publish', icon: PlusIcon, active: nav.showSocial, action: openContentPublisher },
-        { label: chatAreaLockEnabled ? 'Chats 🔒' : 'Chats', icon: ChatBubbleLeftRightIcon, active: !showShoppingMarketplace && !nav.showSocial && !nav.showReels && !nav.showPodlive && !nav.showAiChat && !nav.showSmartSpace && !nav.showSaskatAI, action: openChats },
+        { label: 'Publish', icon: PlusIcon, active: false, action: openContentPublisher },
+        { label: chatAreaLockEnabled ? 'Chats 🔒' : 'Chats', icon: ChatBubbleLeftRightIcon, active: !showShoppingMarketplace && !nav.showSocial && !nav.showReels && !nav.showPodlive && !nav.showAiChat && !nav.showSmartSpace && !nav.showSaskatAI && !nav.showSettings, action: openChats },
         { label: 'Shopping', icon: ShoppingBagIcon, active: showShoppingMarketplace, action: openShoppingMarketplace },
         { label: 'Settings', icon: Cog6ToothIcon, active: nav.showSettings, action: () => { setShowNotifications(false); setShowSearchModal(false); nav.navigateToView('settings'); } }
     ];

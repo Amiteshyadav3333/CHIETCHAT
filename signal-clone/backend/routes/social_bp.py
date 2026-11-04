@@ -324,8 +324,9 @@ def get_social_posts():
         query = query.filter(SocialPost.post_kind.in_(['news_post', 'article', 'link', 'poll']))
     elif feed == 'community':
         query = query.filter(SocialPost.post_kind == 'community')
-    else:
-        query = query.filter(or_(SocialPost.post_kind == 'standard', SocialPost.post_kind.is_(None)))
+    # The For You timeline is the public Social timeline: include every
+    # non-channel post format. Dedicated News and Community tabs remain
+    # available as focused views, while private profiles stay protected above.
     if feed == 'following':
         if not followed_ids:
             return jsonify([])

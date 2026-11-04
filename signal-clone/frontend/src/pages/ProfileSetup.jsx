@@ -85,7 +85,7 @@ const ProfileSetup = () => {
 
     useEffect(() => {
         if (user?.profileSetupDone && step === 1) {
-            navigate('/');
+            navigate('/social');
         }
     }, [user, step, navigate]);
 
@@ -238,7 +238,7 @@ const ProfileSetup = () => {
 
     const handleFinish = () => {
         localStorage.removeItem('cheetchat_tour_completed');
-        navigate('/');
+        navigate('/social');
     };
 
     return (

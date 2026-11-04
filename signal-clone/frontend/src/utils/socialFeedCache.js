@@ -7,7 +7,9 @@ const MAX_CACHED_POSTS = 500;
 const memoryCache = new Map();
 let databasePromise;
 
-const makeKey = (userId, feed) => `${String(userId)}:${feed}`;
+// Version the key so users do not keep seeing the old standard-post-only feed
+// after the public For You feed starts including every Social post format.
+const makeKey = (userId, feed) => `v2:${String(userId)}:${feed}`;
 
 const openDatabase = () => {
     if (typeof window === 'undefined' || !window.indexedDB) return Promise.resolve(null);
@@ -88,8 +90,11 @@ export const isSocialFeedCacheFresh = updatedAt =>
 
 export const clearSocialFeedCache = async userId => {
     if (!userId) return;
-    const prefix = `${String(userId)}:`;
-    memoryCache.forEach((_, key) => { if (key.startsWith(prefix)) memoryCache.delete(key); });
+    const prefix = `v2:${String(userId)}:`;
+    const legacyPrefix = `${String(userId)}:`;
+    memoryCache.forEach((_, key) => {
+        if (key.startsWith(prefix) || key.startsWith(legacyPrefix)) memoryCache.delete(key);
+    });
     const database = await openDatabase();
     if (!database) return;
     await new Promise(resolve => {
@@ -98,7 +103,7 @@ export const clearSocialFeedCache = async userId => {
             request.onsuccess = () => {
                 const cursor = request.result;
                 if (!cursor) { resolve(); return; }
-                if (cursor.key.startsWith(prefix)) cursor.delete();
+                if (cursor.key.startsWith(prefix) || cursor.key.startsWith(legacyPrefix)) cursor.delete();
                 cursor.continue();
             };
             request.onerror = () => resolve();

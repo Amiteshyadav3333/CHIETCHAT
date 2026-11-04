@@ -49,7 +49,7 @@ const Login = () => {
                 sessionStorage.removeItem('pending_nav');
                 navigate(pendingNav, { replace: true });
             } else {
-                navigate('/', { replace: true });
+                navigate('/social', { replace: true });
             }
         }
     }, [token, navigate]);

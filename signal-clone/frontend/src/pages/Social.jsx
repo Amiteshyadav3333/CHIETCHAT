@@ -1043,7 +1043,11 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
     const navigate = useNavigate();
     const pathname = usePathname();
     const { user, token, updateUser } = useContext(AuthContext);
-    const [activeTab, setActiveTab] = useState(() => user?.uiPreferences?.socialDefaultFeed || localStorage.getItem('social_default_feed') || 'for-you');
+    const [activeTab, setActiveTab] = useState(() => {
+        const saved = user?.uiPreferences?.socialDefaultFeed
+            || localStorage.getItem(`social_default_feed_${user?.id || 'default'}`);
+        return ['for-you', 'following', 'community'].includes(saved) ? saved : 'for-you';
+    });
     const feedCacheRef = useRef(new Map());
     const feedRequestsRef = useRef(new Map());
     const nextFeedCursorRef = useRef(new Map());

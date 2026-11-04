@@ -1,7 +1,7 @@
 import React, { useState, useRef, useContext, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import axios from 'axios';
-import { XMarkIcon, VideoCameraIcon, MusicalNoteIcon, MagnifyingGlassIcon, PlayIcon, PauseIcon, ArrowPathIcon, PlusIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, VideoCameraIcon, MusicalNoteIcon, MagnifyingGlassIcon, PlayIcon, PauseIcon, ArrowPathIcon, ArrowUpTrayIcon, PlusIcon } from '@heroicons/react/24/outline';
 import ProCameraStudio from './ProCameraStudio';
 import { INDIAN_MUSIC_CATEGORIES } from '../utils/indianMusic';
 import { REEL_CATEGORIES } from '../utils/reelCategories';
@@ -304,7 +304,7 @@ const ReelUploader = ({ onClose, onSuccess, initialCaption = '', affiliateCode =
                     disabled={!file || uploading}
                     className={`font-bold px-4 py-1 rounded-full ${(!file || uploading) ? 'bg-gray-700 text-gray-500' : 'bg-white text-black'}`}
                 >
-                    {uploading ? 'Posting...' : 'Post'}
+                    {uploading ? 'Uploading…' : 'Upload'}
                 </button>
             </div>
 
@@ -447,6 +447,14 @@ const ReelUploader = ({ onClose, onSuccess, initialCaption = '', affiliateCode =
                     <span><span className="block text-sm font-bold text-white">Share publicly</span><span className="block text-xs text-gray-400">{isPublic ? 'Anyone can find and watch this Reel' : 'This Reel stays off public feeds and profile listings'}</span></span>
                     <span className={`rounded-full px-3 py-1 text-[10px] font-black ${isPublic ? 'bg-emerald-400 text-black' : 'bg-white/10 text-gray-300'}`}>{isPublic ? 'PUBLIC' : 'UNLISTED'}</span>
                 </button>
+
+                <div className="space-y-2">
+                    <button type="button" onClick={handleUpload} disabled={!file || uploading} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-400 px-4 py-3.5 text-sm font-black text-black transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-gray-500">
+                        <ArrowUpTrayIcon className="h-5 w-5" />
+                        {uploading ? 'Uploading video…' : 'Upload video to Reels'}
+                    </button>
+                    {!file && <p className="text-center text-xs text-gray-500">Choose a video from your gallery or record one to enable upload.</p>}
+                </div>
 
                 <div><p className="mb-2 text-xs font-bold text-gray-300">Choose Reel category</p><div className="flex gap-2 overflow-x-auto pb-1">{REEL_CATEGORIES.map(([id, label]) => <button key={id} type="button" onClick={() => setCategory(id)} className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold ${category === id ? 'border-pink-400 bg-pink-500 text-white' : 'border-white/10 bg-white/5 text-gray-300'}`}>{label}</button>)}</div></div>
 

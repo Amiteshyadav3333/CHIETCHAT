@@ -674,8 +674,11 @@ def register_socket_events(socketio):
         if not allow_ephemeral_socket_event(user_id, chat_id, 'chat-bell', 1, 20):
             return {'ok': False, 'error': 'Wait a little before ringing again'}
         caller = db.session.get(User, user_id)
+        raw_message = data.get('message', '') if isinstance(data, dict) else ''
+        custom_message = ''.join(char for char in raw_message if char.isprintable()).strip()[:120] if isinstance(raw_message, str) else ''
         payload = {'bellId': uuid.uuid4().hex, 'chatId': chat_id,
-            'callerId': user_id, 'callerName': caller.username if caller else 'Your contact'}
+            'callerId': user_id, 'callerName': caller.username if caller else 'Your contact',
+            'message': custom_message}
         socketio.emit('chat_bell_ringing', payload, room=f'user_{target_id}')
         return {'ok': True, 'message': 'Bell rang'}
 

@@ -578,9 +578,9 @@ export const Home = () => {
         }, kind === 'drawing' ? 0 : 250);
     };
 
-    const ringChatBell = async () => {
+    const ringChatBell = async message => {
         if (!socket?.connected || !visibleActiveChat?.id) throw new Error('Connect to chat to ring the bell.');
-        const result = await emitWithAcknowledgement(socket, 'ring_chat_bell', { chatId: visibleActiveChat.id });
+        const result = await emitWithAcknowledgement(socket, 'ring_chat_bell', { chatId: visibleActiveChat.id, message: String(message || '').slice(0, 120) });
         if (!result?.ok) throw new Error(result?.error || 'Could not ring the bell.');
     };
 

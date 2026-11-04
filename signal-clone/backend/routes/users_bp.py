@@ -1088,6 +1088,7 @@ def update_ui_preferences():
         'screenshotAlerts', 'spamDetection', 'incognitoKeyboard',
         'reelsDefaultFeed', 'reelsAutoplay', 'reelsMuted', 'reelsDataSaver',
         'reelsInterests',
+        'customBellMessage',
         'socialDefaultFeed', 'socialAutoplayVideos', 'socialMutedVideos',
         'socialMonetizePosts',
     }
@@ -1097,7 +1098,7 @@ def update_ui_preferences():
         current = {}
     for key, value in data.items():
         if key in allowed and isinstance(value, (str, bool, int, float)):
-            current[key] = value if not isinstance(value, str) else value[:100]
+            current[key] = value if not isinstance(value, str) else value[:120]
     user.ui_preferences = json.dumps(current)
     db.session.commit()
     return jsonify({"uiPreferences": current})

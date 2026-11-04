@@ -36,6 +36,8 @@ const ChatPreferences = ({ wallpaper, onWallpaperChange, customWallpaper, onCust
     const [universalMessageFeedback, setUniversalMessageFeedback] = React.useState('');
     const [bellFeedback, setBellFeedback] = React.useState('');
     const [ringingBell, setRingingBell] = React.useState(false);
+    const [customBellMessage, setCustomBellMessage] = React.useState(user?.uiPreferences?.customBellMessage || '');
+    const [savingBellMessage, setSavingBellMessage] = React.useState(false);
     const wallpaperInputRef = React.useRef(null);
     const unitSeconds = { seconds: 1, minutes: 60, hours: 3600, days: 86400, years: 31536000 };
 
@@ -43,6 +45,7 @@ const ChatPreferences = ({ wallpaper, onWallpaperChange, customWallpaper, onCust
         setSelectedFont(localStorage.getItem(`chat_custom_font_${chatId}`) || '');
         setFontSize(localStorage.getItem(`chat_font_size_${chatId}`) || '');
         setUniversalMessage(user?.bio || '');
+        setCustomBellMessage(user?.uiPreferences?.customBellMessage || '');
         setContactColor(localStorage.getItem(colorKey) || localStorage.getItem('chat_bubble_color') || '#00a884');
         setReceivedColor(localStorage.getItem(receivedColorKey) || '#202c33');
         setStoryVisible(localStorage.getItem(storyKey) !== '0');
@@ -61,6 +64,22 @@ const ChatPreferences = ({ wallpaper, onWallpaperChange, customWallpaper, onCust
             setUniversalMessageFeedback(error.response?.data?.error || 'Could not save your universal message.');
         } finally {
             setSavingUniversalMessage(false);
+        }
+    };
+
+    const saveCustomBellMessage = async () => {
+        setSavingBellMessage(true);
+        setBellFeedback('');
+        try {
+            const headers = token && token !== 'cookie-session' ? { Authorization: `Bearer ${token}` } : {};
+            const response = await axios.put('/api/user/preferences', { customBellMessage: customBellMessage.trim() }, { headers });
+            onUserUpdated?.({ ...user, uiPreferences: response.data.uiPreferences });
+            window.dispatchEvent(new CustomEvent('cheetchat-preferences-updated', { detail: response.data.uiPreferences }));
+            setBellFeedback('Custom bell message saved to your account.');
+        } catch (error) {
+            setBellFeedback(error.response?.data?.error || 'Could not save your custom bell message.');
+        } finally {
+            setSavingBellMessage(false);
         }
     };
 
@@ -147,7 +166,14 @@ const ChatPreferences = ({ wallpaper, onWallpaperChange, customWallpaper, onCust
         {onOpenDraw && <button type="button" onClick={onOpenDraw} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#00a884] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#079474]"><span className="text-xl">✎</span> Draw in this chat</button>}
         {onLiveNoteChange && <button type="button" role="switch" aria-checked={liveNoteEnabled} onClick={() => onLiveNoteChange(!liveNoteEnabled)} className={`mt-3 flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition ${liveNoteEnabled ? 'border-sky-400/60 bg-sky-400/10' : 'border-gray-700 bg-white/5'}`}><span><span className={`block text-sm font-bold ${liveNoteEnabled ? 'text-sky-200' : 'text-white'}`}>📝 NoteIt Live {liveNoteEnabled ? 'ON' : 'OFF'}</span><span className="mt-1 block text-[11px] leading-4 text-gray-400">When enabled, people in this chat can see your draft as you type. It is encrypted and never saved as a message.</span></span><span className={`h-6 w-11 shrink-0 rounded-full p-0.5 ${liveNoteEnabled ? 'bg-sky-400' : 'bg-gray-700'}`}><span className={`block h-5 w-5 rounded-full bg-white transition ${liveNoteEnabled ? 'translate-x-5' : ''}`} /></span></button>}
         {onSnapModeChange && <button type="button" onClick={() => setShowSnapConfirm(true)} className={`mt-3 w-full rounded-xl border px-4 py-3 text-left transition ${snapMode ? 'border-yellow-400 bg-yellow-400/10' : 'border-gray-700 bg-white/5'}`}><span className={`block text-sm font-bold ${snapMode ? 'text-yellow-300' : 'text-white'}`}>👻 Snap Mode {snapMode ? 'ON' : 'OFF'}</span><span className="mt-1 block text-[11px] leading-4 text-gray-400">Snap videos in one-to-one chats transfer directly device-to-device without cloud upload. Both people must be online; local copies expire ten minutes after the Snap session ends.</span></button>}
-        {canRingBell && onRingBell && <div className="mt-3 rounded-xl border border-amber-300/20 bg-amber-300/5 p-3"><button type="button" disabled={ringingBell} onClick={async () => { setRingingBell(true); setBellFeedback(''); try { await onRingBell(); setBellFeedback('Bell sent. They can silence it on their device.'); } catch (error) { setBellFeedback(error.message || 'Could not ring the bell.'); } finally { setRingingBell(false); } }} className="flex w-full items-center justify-center gap-2 rounded-lg bg-amber-300 px-4 py-3 text-sm font-black text-[#231803] disabled:opacity-50">🔔 {ringingBell ? 'Ringing…' : 'Ring their bell'}</button><p className="mt-2 text-[11px] leading-4 text-gray-400">Keeps ringing on their screen until they silence it. You cannot stop it from your side.</p>{bellFeedback && <p role="status" className="mt-2 text-xs text-amber-100">{bellFeedback}</p>}</div>}
+        {canRingBell && onRingBell && <div className="mt-3 space-y-3 rounded-xl border border-amber-300/20 bg-amber-300/5 p-3">
+            <label className="block text-xs font-semibold text-amber-100">Custom message they will hear
+                <textarea value={customBellMessage} onChange={event => setCustomBellMessage(event.target.value.slice(0, 120))} rows={2} maxLength={120} placeholder="Type the message to play when they get your bell…" className="mt-1.5 w-full resize-none rounded-lg border border-amber-100/15 bg-black/20 px-3 py-2 text-sm text-white outline-none placeholder:text-gray-500 focus:border-amber-300/50" />
+            </label>
+            <div className="flex items-center justify-between gap-3"><span className="text-[10px] text-gray-500">{customBellMessage.length}/120 · saved to your account</span><button type="button" disabled={savingBellMessage} onClick={saveCustomBellMessage} className="rounded-lg border border-amber-200/20 px-3 py-1.5 text-xs font-bold text-amber-100 disabled:opacity-50">{savingBellMessage ? 'Saving…' : 'Save message'}</button></div>
+            <button type="button" disabled={ringingBell} onClick={async () => { setRingingBell(true); setBellFeedback(''); try { await onRingBell(customBellMessage.trim()); setBellFeedback('Bell sent with your custom message. They can silence it on their device.'); } catch (error) { setBellFeedback(error.message || 'Could not ring the bell.'); } finally { setRingingBell(false); } }} className="flex w-full items-center justify-center gap-2 rounded-lg bg-amber-300 px-4 py-3 text-sm font-black text-[#231803] disabled:opacity-50">🔔 {ringingBell ? 'Ringing…' : 'Ring their bell'}</button>
+            <p className="text-[11px] leading-4 text-gray-400">Your message is spoken once, then the bell keeps ringing until they silence it.</p>{bellFeedback && <p role="status" className="text-xs text-amber-100">{bellFeedback}</p>}
+        </div>}
         {showSnapConfirm && <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={() => setShowSnapConfirm(false)}><div className="w-full max-w-sm rounded-3xl border border-yellow-400/25 bg-[#111b21] p-6 shadow-2xl" onClick={event => event.stopPropagation()}><div className="mb-4 text-5xl">👻</div><h3 className="text-xl font-bold text-white">{snapMode ? 'End Snap Chat?' : 'Start Snap Mode?'}</h3><p className="mt-2 text-sm leading-6 text-gray-300">{snapMode ? 'Messages, photos, audio and video from this session will disappear from every participant’s chat ten minutes after Snap Chat ends.' : 'Messages and media remain visible while Snap Chat is active, then disappear for every participant ten minutes after it ends. Downloads, forwarding and common screen-capture shortcuts are restricted.'}</p><div className="mt-4 rounded-xl bg-yellow-400/10 p-3 text-xs leading-5 text-yellow-200">One-to-one Snap videos use a direct encrypted connection and are not uploaded to cloud storage. Both people must be online on a network that allows a direct connection. Other uploaded media remains end-to-end encrypted and is deleted under the existing retention policy.</div><div className="mt-5 flex gap-2"><button type="button" onClick={() => setShowSnapConfirm(false)} className="flex-1 rounded-xl border border-gray-700 py-3 text-sm font-semibold text-gray-300">Cancel</button><button type="button" onClick={() => { onSnapModeChange(!snapMode); setShowSnapConfirm(false); }} className="flex-1 rounded-xl bg-yellow-400 py-3 text-sm font-black text-black">{snapMode ? 'End Snap Chat' : 'Start Snap Mode'}</button></div></div></div>}
         {chatId && <PreferenceSection title="Custom Tone & Ringtones" open={expandedSection === 'sounds'} onClick={() => toggleSection('sounds')}><ChatSoundPreferences chatId={chatId} /></PreferenceSection>}
         {chatId && <PreferenceSection title="Story and profile privacy" open={expandedSection === 'privacy'} onClick={() => toggleSection('privacy')}><PrivacyToggle label="Show my profile photo" value={photoVisible} onChange={value => { setPhotoVisible(value); localStorage.setItem(photoKey, value ? '1' : '0'); }} /><PrivacyToggle label="Show my story" value={storyVisible} onChange={value => { setStoryVisible(value); localStorage.setItem(storyKey, value ? '1' : '0'); }} /><p className="mt-2 text-[11px] leading-4 text-gray-500">Choose visibility separately for this contact.</p></PreferenceSection>}

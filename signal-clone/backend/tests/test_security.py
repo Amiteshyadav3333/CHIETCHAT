@@ -1131,6 +1131,30 @@ class SecurityTests(unittest.TestCase):
             self.assertEqual(Message.query.filter_by(client_message_id='offline-message-123').count(), 1)
         payer.disconnect()
 
+    def test_chat_bell_delivers_the_callers_custom_message(self):
+        caller = socketio.test_client(app, auth={'token': self.token})
+        receiver = socketio.test_client(app, auth={'token': self.payee_token})
+        receiver.get_received()
+
+        result = caller.emit('ring_chat_bell', {
+            'chatId': self.chat_id,
+            'message': 'Please call me when you see this.',
+        }, callback=True)
+
+        self.assertTrue(result['ok'])
+        bells = [event['args'][0] for event in receiver.get_received() if event['name'] == 'chat_bell_ringing']
+        self.assertEqual(len(bells), 1)
+        self.assertEqual(bells[0]['message'], 'Please call me when you see this.')
+        caller.disconnect()
+        receiver.disconnect()
+
+    def test_custom_bell_message_preference_is_saved_with_a_length_limit(self):
+        response = self.client.put('/api/user/preferences', json={
+            'customBellMessage': 'x' * 200,
+        }, headers=self.auth_headers())
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json['uiPreferences']['customBellMessage']), 120)
+
     def test_socket_accepts_native_drawing_and_custom_second_ttl(self):
         payer = socketio.test_client(app, auth={'token': self.token})
         result = payer.emit('send_message', {

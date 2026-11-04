@@ -300,7 +300,7 @@ def add_missing_columns(inspector, table_name, columns):
 # Bump this marker whenever models gain columns or tables. Production runs
 # ensure_database_schema() in the pre-deploy step and skips versions it has
 # already applied.
-SCHEMA_VERSION = '20261104_42_dashboard_and_chat_runtime_schema'
+SCHEMA_VERSION = '20261104_43_reel_visibility'
 
 def ensure_runtime_compat_schema():
     """Repair columns required by the currently deployed models.
@@ -521,7 +521,10 @@ def ensure_runtime_compat_schema():
     if 'payment_order' in inspector.get_table_names():
         db.session.execute(text("UPDATE payment_order SET purpose = COALESCE(purpose, 'business')"))
     inspector = inspect(db.engine)
-    add_missing_columns(inspector, 'reel', {'is_monetized': db.Boolean(), 'earnings_paise': db.Integer(), 'category': db.String(40)})
+    add_missing_columns(inspector, 'reel', {'is_monetized': db.Boolean(), 'earnings_paise': db.Integer(), 'category': db.String(40), 'is_public': db.Boolean()})
+    if 'reel' in inspect(db.engine).get_table_names():
+        db.session.execute(text('UPDATE reel SET is_public = COALESCE(is_public, TRUE)'))
+        db.session.commit()
     inspector = inspect(db.engine)
     add_missing_columns(inspector, 'status', {'music_volume': db.Float(), 'music_start': db.Float()})
     inspector = inspect(db.engine)

@@ -2390,6 +2390,20 @@ class SecurityTests(unittest.TestCase):
         deleted = self.client.delete(f'/api/reels/{reel_id}', headers=self.auth_headers())
         self.assertEqual(deleted.status_code, 200)
 
+    @patch('routes.reels_bp.upload_to_cloudinary', return_value='https://media.example/private-reel.mp4')
+    def test_reel_upload_visibility_is_saved_and_private_reels_are_not_discoverable(self, _upload):
+        created = self.client.post('/api/reels', data={
+            'video': (io.BytesIO(b'video-bytes'), 'private-reel.mp4'),
+            'caption': 'Private reel',
+            'isPublic': 'false',
+        }, headers=self.auth_headers(), content_type='multipart/form-data')
+        self.assertEqual(created.status_code, 201)
+        reel_id = created.json['id']
+        self.assertFalse(created.json['reel']['isPublic'])
+        self.assertEqual(self.client.get(f'/api/reels/{reel_id}/public').status_code, 404)
+        own_reels = self.client.get('/api/reels', headers=self.auth_headers()).json
+        self.assertTrue(any(reel['id'] == reel_id for reel in own_reels))
+
     @patch('routes.reels_bp.upload_to_cloudinary', return_value='https://media.example/reel.mp4')
     def test_reel_daily_limits_for_free_and_premium_accounts(self, _upload):
         def create_reel(index):

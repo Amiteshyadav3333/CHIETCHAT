@@ -19,6 +19,7 @@ const ReelUploader = ({ onClose, onSuccess, initialCaption = '', affiliateCode =
     const [mediaStream, setMediaStream] = useState(null);
     const [facingMode, setFacingMode] = useState('user');
     const [monetized, setMonetized] = useState(false);
+    const [isPublic, setIsPublic] = useState(true);
     const [category, setCategory] = useState('entertainment');
     const [showProCamera, setShowProCamera] = useState(false);
     const [showMemeLibrary, setShowMemeLibrary] = useState(false);
@@ -271,6 +272,7 @@ const ReelUploader = ({ onClose, onSuccess, initialCaption = '', affiliateCode =
         formData.append('caption', caption);
         if (affiliateCode) formData.append('affiliateCode', affiliateCode);
         formData.append('category', category);
+        formData.append('isPublic', String(isPublic));
         if (selectedSong) {
             formData.append('musicUrl', selectedSong.previewUrl);
             formData.append('musicName', musicName);
@@ -440,6 +442,11 @@ const ReelUploader = ({ onClose, onSuccess, initialCaption = '', affiliateCode =
                     className="w-full bg-transparent text-white outline-none resize-none border-b border-white/10 pb-2 focus:border-white transition-colors"
                     rows={2}
                 />
+
+                <button type="button" role="switch" aria-checked={isPublic} onClick={() => setIsPublic(value => !value)} className={`flex w-full items-center justify-between rounded-xl border p-3 text-left ${isPublic ? 'border-emerald-400/40 bg-emerald-400/10' : 'border-white/10 bg-white/5'}`}>
+                    <span><span className="block text-sm font-bold text-white">Share publicly</span><span className="block text-xs text-gray-400">{isPublic ? 'Anyone can find and watch this Reel' : 'This Reel stays off public feeds and profile listings'}</span></span>
+                    <span className={`rounded-full px-3 py-1 text-[10px] font-black ${isPublic ? 'bg-emerald-400 text-black' : 'bg-white/10 text-gray-300'}`}>{isPublic ? 'PUBLIC' : 'UNLISTED'}</span>
+                </button>
 
                 <div><p className="mb-2 text-xs font-bold text-gray-300">Choose Reel category</p><div className="flex gap-2 overflow-x-auto pb-1">{REEL_CATEGORIES.map(([id, label]) => <button key={id} type="button" onClick={() => setCategory(id)} className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold ${category === id ? 'border-pink-400 bg-pink-500 text-white' : 'border-white/10 bg-white/5 text-gray-300'}`}>{label}</button>)}</div></div>
 

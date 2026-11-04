@@ -501,6 +501,7 @@ class Reel(db.Model):
     shares_count = db.Column(db.Integer, default=0)
     views_count = db.Column(db.Integer, default=0)
     is_monetized = db.Column(db.Boolean, nullable=False, default=False)
+    is_public = db.Column(db.Boolean, nullable=False, default=True, index=True)
     earnings_paise = db.Column(db.Integer, nullable=False, default=0)
     parent_reel_id = db.Column(db.Integer, db.ForeignKey('reel.id'), nullable=True)
     filter_name = db.Column(db.String(50), nullable=True)

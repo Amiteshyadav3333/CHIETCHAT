@@ -113,6 +113,7 @@ def serialize_reel(reel, current_user_id, is_following=None):
         "sharesCount": reel.shares_count or 0,
         "viewsCount": reel.views_count or 0,
         "isMonetized": bool(reel.is_monetized),
+        "isPublic": bool(reel.is_public),
         "earningsPaise": reel.earnings_paise or 0 if reel.user_id == current_user_id else None,
         "reactionsCount": Reel.query.filter_by(parent_reel_id=reel.id).count(),
         "repostsCount": len(reel.reposts),
@@ -135,7 +136,7 @@ def get_reels():
     
     filter_type = request.args.get('filter', 'foryou')
     
-    query = Reel.query
+    query = Reel.query.filter(db.or_(Reel.is_public.is_(True), Reel.user_id == user_id))
     if filter_type == 'following':
         followed_ids = [f.followed_id for f in Follow.query.filter_by(follower_id=user_id).all()]
         query = query.filter(Reel.user_id.in_(followed_ids))
@@ -157,7 +158,10 @@ def get_user_reels(uid):
         return jsonify({"error": "Unauthorized"}), 401
     
     user = db.get_or_404(User, uid)
-    reels = Reel.query.filter_by(user_id=uid).order_by(Reel.created_at.desc()).limit(
+    reels_query = Reel.query.filter_by(user_id=uid)
+    if uid != user_id:
+        reels_query = reels_query.filter(Reel.is_public.is_(True))
+    reels = reels_query.order_by(Reel.created_at.desc()).limit(
         bounded_limit(FEED_DEFAULT_LIMIT, FEED_MAX_LIMIT)
     ).all()
     
@@ -171,6 +175,8 @@ def get_user_reels(uid):
     ).all()
     reposts = []
     for row in repost_rows:
+        if not row.reel.is_public:
+            continue
         item = serialize_reel(row.reel, user_id)
         item["repostNote"] = row.note or ""
         item["repostedAt"] = iso_utc(row.created_at)
@@ -258,7 +264,8 @@ def create_reel():
             music_volume=music_volume,
             parent_reel_id=parent_reel_id,
             filter_name=filter_name
-            ,is_monetized=is_monetized
+            ,is_monetized=is_monetized,
+            is_public=request.form.get('isPublic', 'true').lower() == 'true'
         )
         db.session.add(new_reel)
         db.session.flush()
@@ -287,6 +294,8 @@ def get_public_reel(reel_id):
     """Public endpoint — no auth required. Returns a single reel for shared links."""
     reel = db.session.get(Reel, reel_id)
     if not reel:
+        return jsonify({"error": "Reel not found"}), 404
+    if not reel.is_public:
         return jsonify({"error": "Reel not found"}), 404
 
     user_data = serialize_user(reel.user, viewer_id=-1)

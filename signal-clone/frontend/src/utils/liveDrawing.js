@@ -27,6 +27,7 @@ const compactAction = action => {
 };
 
 export const compactLiveDrawing = (drawing, maxCharacters = 5200) => {
+    const spaceScale = Math.max(35, Math.min(100, Number(drawing?.spaceScale) || 100));
     let background = drawing?.background || null;
     if (background) {
         try {
@@ -36,7 +37,7 @@ export const compactLiveDrawing = (drawing, maxCharacters = 5200) => {
         }
     }
     const actions = (Array.isArray(drawing?.actions) ? drawing.actions : []).slice(-MAX_ACTIONS).map(compactAction);
-    const snapshot = { version: 2, width: 1000, height: 1000, background, actions, caption: '' };
+    const snapshot = { version: 2, width: 1000, height: 1000, spaceScale, background, actions, caption: '' };
     while (actions.length && JSON.stringify(snapshot).length > maxCharacters) actions.shift();
     if (JSON.stringify(snapshot).length > maxCharacters) snapshot.background = null;
     return snapshot;

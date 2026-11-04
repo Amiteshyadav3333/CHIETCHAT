@@ -12,4 +12,12 @@ describe('DrawStudio tools', () => {
         expect(markup).not.toContain('type="file"');
         expect(markup).not.toContain('>Photo<');
     });
+
+    it('keeps the default live drawing space at full size and lets users resize it', () => {
+        const markup = renderToStaticMarkup(<DrawStudio inline onClose={vi.fn()} onSendDrawing={vi.fn()} />);
+        expect(markup).toContain('Space 100%');
+        expect(markup).toContain('aria-label="Drawing space size"');
+        expect(markup).toContain('min="35" max="100"');
+        expect(markup).toContain('＋ New space');
+    });
 });

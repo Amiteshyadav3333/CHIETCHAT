@@ -5,6 +5,7 @@ describe('live drawing snapshots', () => {
     it('keeps the snapshot valid and bounds large strokes for encrypted live delivery', () => {
         const drawing = compactLiveDrawing({
             version: 2,
+            spaceScale: 55,
             background: { type: 'chat', text: 'Message preview' },
             actions: Array.from({ length: 20 }, (_, actionIndex) => ({
                 tool: 'pen', color: '#22c55e', size: 5,
@@ -16,6 +17,7 @@ describe('live drawing snapshots', () => {
         expect(drawing.actions.length).toBeLessThanOrEqual(12);
         expect(drawing.actions.at(-1).points.length).toBeLessThanOrEqual(24);
         expect(drawing.actions.at(-1).points.at(-1)).toEqual({ x: 418, y: 399 });
+        expect(drawing.spaceScale).toBe(55);
     });
 
     it('drops oversized background payloads without discarding strokes', () => {

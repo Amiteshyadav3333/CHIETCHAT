@@ -115,7 +115,7 @@ const parseDrawing = content => {
 
 export const isChatOverlayDrawing = content => parseDrawing(content)?.presentation === 'chat-overlay';
 
-const DrawingArtwork = ({ drawing, className = 'aspect-square w-full', markerId = 'drawing-arrow' }) => {
+const DrawingArtwork = ({ drawing, className = 'aspect-square w-full', markerId = 'drawing-arrow', style }) => {
     const safeColor = value => /^#[0-9a-f]{3,8}$/i.test(String(value)) ? value : '#ffffff';
     const actions = drawing.actions.slice(0, 500);
     const safeBackground = drawing.background?.src && /^(https?:\/\/|\/uploads\/)/i.test(drawing.background.src) ? drawing.background : null;
@@ -127,7 +127,7 @@ const DrawingArtwork = ({ drawing, className = 'aspect-square w-full', markerId 
     const erasers = actions.filter(action => action.tool === 'eraser');
     const visibleActions = actions.filter(action => action.tool !== 'eraser');
     const drawingMaskId = `${markerId}-mask`;
-    return <svg viewBox="0 0 1000 1000" preserveAspectRatio="none" className={className} role="img" aria-label="Chat drawing">
+    return <svg viewBox="0 0 1000 1000" preserveAspectRatio="none" className={className} style={style} role="img" aria-label="Chat drawing">
             <defs><marker id={markerId} markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="context-stroke" /></marker></defs>
             {safeBackground && (safeBackground.type === 'video' ? <foreignObject x="0" y="0" width="1000" height="1000"><video xmlns="http://www.w3.org/1999/xhtml" src={safeBackground.src} muted className="h-full w-full object-cover" /></foreignObject> : <image href={safeBackground.src} width="1000" height="1000" preserveAspectRatio="xMidYMid slice" />)}
             {chatBackground && <foreignObject x="45" y="160" width="910" height="680"><div xmlns="http://www.w3.org/1999/xhtml" style={{ height: '100%', boxSizing: 'border-box', borderRadius: 42, padding: 55, background: 'linear-gradient(145deg,#202c33,#111b21)', border: '4px solid rgba(255,255,255,.14)', color: 'white', fontFamily: 'system-ui', overflow: 'hidden' }}><div style={{ color: '#53bdeb', fontSize: 34, fontWeight: 800, marginBottom: 28 }}>{chatBackground.senderName}</div><div style={{ fontSize: 48, lineHeight: 1.35, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{chatBackground.text}</div>{chatBackground.timestamp && <div style={{ position: 'absolute', right: 65, bottom: 45, color: '#94a3b8', fontSize: 25 }}>{new Date(chatBackground.timestamp).toLocaleString()}</div>}</div></foreignObject>}
@@ -144,8 +144,9 @@ const DrawingArtwork = ({ drawing, className = 'aspect-square w-full', markerId 
 export const ChatDrawingOverlay = ({ content, messageId, isOwn = false, onDelete }) => {
     const drawing = parseDrawing(content);
     if (!drawing || drawing.presentation !== 'chat-overlay') return null;
+    const spaceScale = Math.max(35, Math.min(100, Number(drawing.spaceScale) || 100));
     return <div className="pointer-events-none relative z-20 h-0 w-full overflow-visible" aria-label="Drawing on chat">
-        <DrawingArtwork drawing={drawing} markerId={`chat-overlay-arrow-${messageId || 'latest'}`} className="absolute bottom-0 left-0 h-[min(68vh,620px)] w-full drop-shadow-[0_1px_1px_rgba(0,0,0,0.55)]" />
+        <DrawingArtwork drawing={drawing} markerId={`chat-overlay-arrow-${messageId || 'latest'}`} className="absolute bottom-0 left-1/2 drop-shadow-[0_1px_1px_rgba(0,0,0,0.55)]" style={{ width: `${spaceScale}%`, height: `min(${68 * spaceScale / 100}vh, ${620 * spaceScale / 100}px)`, transform: 'translateX(-50%)' }} />
         {isOwn && onDelete && <button type="button" onClick={() => onDelete(messageId)} className="pointer-events-auto absolute bottom-2 right-2 rounded-full border border-red-300/30 bg-black/70 px-3 py-1.5 text-[10px] font-bold text-red-200 shadow-lg backdrop-blur" aria-label="Delete drawing">Delete drawing</button>}
     </div>;
 };
@@ -153,7 +154,8 @@ export const ChatDrawingOverlay = ({ content, messageId, isOwn = false, onDelete
 export const DrawingMessage = ({ content }) => {
     const drawing = parseDrawing(content);
     if (!drawing) return <p className="text-sm italic text-white/60">Drawing unavailable</p>;
-    return <div className="w-[260px] max-w-[68vw] overflow-hidden rounded-xl border border-white/10 bg-[#111827]">
+    const spaceScale = Math.max(35, Math.min(100, Number(drawing.spaceScale) || 100));
+    return <div style={{ width: `${260 * spaceScale / 100}px` }} className="max-w-[68vw] overflow-hidden rounded-xl border border-white/10 bg-[#111827]">
         <DrawingArtwork drawing={drawing} />
         {drawing.caption && <p className="border-t border-white/10 px-3 py-2 text-sm text-white">{drawing.caption}</p>}
     </div>;

@@ -18,6 +18,7 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, onLiveDrawingChange, initi
     const [tool, setTool] = useState('pen');
     const [color, setColor] = useState('#22c55e');
     const [size, setSize] = useState(5);
+    const [spaceScale, setSpaceScale] = useState(100);
     const [caption, setCaption] = useState('');
     const [backgroundSource, setBackgroundSource] = useState(initialSource);
 
@@ -26,12 +27,16 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, onLiveDrawingChange, initi
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#111827';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        if (inline) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        } else {
+            ctx.fillStyle = '#111827';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
         actionsRef.current = [];
         historyRef.current = [];
         saveHistory();
-    }, []);
+    }, [inline]);
 
     const paintChat = React.useCallback((source) => {
         const canvas = canvasRef.current;
@@ -85,6 +90,7 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, onLiveDrawingChange, initi
                 } : null;
                 const snapshot = compactLiveDrawing({
                     version: 2, width: 1000, height: 1000,
+                    spaceScale,
                     background: liveBackground,
                     actions: normalizedStroke ? [...liveActions, normalizedStroke] : liveActions,
                     caption: '',
@@ -111,8 +117,8 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, onLiveDrawingChange, initi
         const resize = () => {
             const rect = canvas.getBoundingClientRect();
             const previous = canvas.width ? canvas.toDataURL() : null;
-            canvas.width = Math.max(320, Math.floor(rect.width));
-            canvas.height = Math.max(360, Math.floor(rect.height));
+            canvas.width = Math.max(1, Math.floor(rect.width));
+            canvas.height = Math.max(1, Math.floor(rect.height));
             const ctx = canvas.getContext('2d');
             if (inline) ctx.clearRect(0, 0, canvas.width, canvas.height);
             else { ctx.fillStyle = '#111827'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
@@ -120,9 +126,14 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, onLiveDrawingChange, initi
             else saveHistory();
         };
         resize();
+        const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(resize);
+        observer?.observe(canvas);
         window.addEventListener('resize', resize);
-        return () => window.removeEventListener('resize', resize);
-    }, []);
+        return () => {
+            observer?.disconnect();
+            window.removeEventListener('resize', resize);
+        };
+    }, [inline]);
 
     useEffect(() => {
         if (!backgroundSource) return;
@@ -199,7 +210,7 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, onLiveDrawingChange, initi
     };
     const send = () => {
         if (onSendDrawing) {
-            onSendDrawing({ version: 2, width: 1000, height: 1000, background: backgroundSource ? { ...backgroundSource } : null, actions: actionsRef.current, caption: caption.trim() });
+            onSendDrawing({ version: 2, width: 1000, height: 1000, spaceScale, background: backgroundSource ? { ...backgroundSource } : null, actions: actionsRef.current, caption: caption.trim() });
             return;
         }
         canvasRef.current.toBlob(blob => {
@@ -209,23 +220,24 @@ const DrawStudio = ({ onClose, onSend, onSendDrawing, onLiveDrawingChange, initi
     };
 
     return (
-        <div className={`${inline ? 'absolute inset-0 z-[55] bg-black/10 backdrop-blur-[1px]' : 'fixed inset-0 z-[100] bg-[#090e11]'} flex flex-col text-white`}>
-            <header className="flex h-16 items-center gap-3 border-b border-white/10 bg-[#111b21]/95 px-4">
+        <div className={`${inline ? 'absolute inset-0 z-[55] pointer-events-none' : 'fixed inset-0 z-[100] bg-[#090e11]'} flex flex-col text-white`}>
+            <header className="pointer-events-auto flex h-16 items-center gap-3 border-b border-white/10 bg-[#111b21]/95 px-4">
                 <button onClick={onClose} className="rounded-full p-2 hover:bg-white/10"><XMarkIcon className="h-6 w-6" /></button>
                 <div className="flex-1"><h2 className="font-bold">Draw on chat</h2><p className="text-xs text-gray-400">Chat par draw, highlight, point ya text likhein</p></div>
                 <button onClick={() => { const h = historyRef.current; if (h.length > 1) { h.pop(); actionsRef.current.pop(); restore(h[h.length - 1]); scheduleLiveDrawing(actionsRef.current); } }} className="rounded-full p-2 hover:bg-white/10" title="Undo"><ArrowUturnLeftIcon className="h-5 w-5" /></button>
                 <button onClick={() => { actionsRef.current = []; const ctx = canvasRef.current.getContext('2d'); if (inline) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); else { ctx.fillStyle = '#111827'; ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height); } saveHistory(); scheduleLiveDrawing([]); }} className="rounded-full p-2 hover:bg-white/10" title="Clear"><TrashIcon className="h-5 w-5" /></button>
             </header>
-            <div className="flex flex-wrap items-center justify-center gap-2 border-b border-white/10 bg-[#111b21] p-3">
+            <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-2 border-b border-white/10 bg-[#111b21] p-3">
                 {['pen', 'highlighter', 'arrow', 'eraser'].map(item => <button key={item} onClick={() => setTool(item)} className={`rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${tool === item ? 'bg-[#00a884]' : 'bg-white/10'}`}>{item}</button>)}
                 <button onClick={addText} className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold">Text</button>
                 <button onClick={() => { setBackgroundSource(null); paintBlankSpace(); scheduleLiveDrawing([], null); }} className="rounded-full bg-indigo-500/20 px-3 py-1.5 text-xs font-semibold text-indigo-200">＋ New space</button>
+                {inline && <label className="flex min-w-[150px] items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-gray-200">Space {spaceScale}%<input aria-label="Drawing space size" type="range" min="35" max="100" step="5" value={spaceScale} onChange={event => setSpaceScale(Number(event.target.value))} className="w-20 accent-[#00a884]" /></label>}
                 <span className="mx-1 h-6 w-px bg-white/10" />
                 {COLORS.map(c => <button key={c} onClick={() => setColor(c)} className={`h-7 w-7 rounded-full border-2 ${color === c ? 'border-white scale-110' : 'border-white/20'}`} style={{ background: c }} aria-label={`Choose ${c}`} />)}
                 <input type="range" min="2" max="14" value={size} onChange={e => setSize(Number(e.target.value))} className="w-24 accent-[#00a884]" />
             </div>
-            <main className={`min-h-0 flex-1 ${inline ? '' : 'p-2 sm:p-4'}`}><canvas ref={canvasRef} onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end} onTouchStart={start} onTouchMove={move} onTouchEnd={end} className={`h-full w-full touch-none ${inline ? 'bg-transparent' : 'rounded-2xl bg-[#111827] shadow-2xl'}`} /></main>
-            <footer className="flex items-center gap-2 border-t border-white/10 bg-[#111b21] p-3 sm:px-6">
+            <main className={`flex min-h-0 flex-1 items-center justify-center ${inline ? 'pointer-events-none' : 'p-2 sm:p-4'}`}><canvas ref={canvasRef} onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end} onTouchStart={start} onTouchMove={move} onTouchEnd={end} style={inline ? { width: `${spaceScale}%`, height: `${spaceScale}%` } : undefined} className={`h-full w-full touch-none ${inline ? 'pointer-events-auto bg-transparent' : 'rounded-2xl bg-[#111827] shadow-2xl'}`} /></main>
+            <footer className="pointer-events-auto flex items-center gap-2 border-t border-white/10 bg-[#111b21] p-3 sm:px-6">
                 <input value={caption} onChange={e => setCaption(e.target.value)} placeholder="Caption likhein…" className="min-w-0 flex-1 rounded-full bg-[#202c33] px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-[#00a884]" />
                 <button onClick={send} className="rounded-full bg-[#00a884] px-5 py-3 text-sm font-bold hover:bg-[#079474]">Send drawing</button>
             </footer>

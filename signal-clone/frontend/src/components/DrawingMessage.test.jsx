@@ -26,11 +26,13 @@ describe('DrawingMessage', () => {
     it('renders Instagram-style drawings as a chat overlay instead of a media card', () => {
         const content = JSON.stringify({
             presentation: 'chat-overlay',
+            spaceScale: 60,
             actions: [{ tool: 'pen', color: '#22c55e', size: 5, points: [{ x: 10, y: 10 }, { x: 900, y: 900 }] }],
         });
         expect(isChatOverlayDrawing(content)).toBe(true);
         const html = renderToStaticMarkup(<ChatDrawingOverlay content={content} messageId={44} />);
         expect(html).toContain('Drawing on chat');
+        expect(html).toContain('width:60%');
         expect(html).toContain('chat-overlay-arrow-44');
     });
 

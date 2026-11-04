@@ -394,12 +394,16 @@ const MessageInput = ({
                 setIsTranslating(false);
             }
         }
-        const sent = await onSend(finalWord, 'text', disappearingTtl);
-        if (sent === false) return;
+        // Start sending immediately: the parent inserts an optimistic bubble
+        // synchronously, then performs encryption and waits for the socket ACK.
+        // Keep the composer usable while that network work finishes.
+        const sendPromise = onSend(finalWord, 'text', disappearingTtl);
         setText('');
         onLiveNoteDraft?.('');
         setShowEmoji(false);
         onTyping?.(false);
+        const sent = await sendPromise;
+        if (sent === false && !inputRef.current?.value) setText(trimmed);
     };
 
     const handleKeyDown = (e) => {

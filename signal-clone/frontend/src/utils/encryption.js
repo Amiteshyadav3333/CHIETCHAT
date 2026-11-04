@@ -152,18 +152,16 @@ export const encryptForRecipients = async (recipientPublicKeys, message) => {
     );
 
     const rawAesKey = await window.crypto.subtle.exportKey("raw", aesKey);
-    const recipients = {};
-
-    for (const [userId, publicKeyString] of Object.entries(recipientPublicKeys)) {
+    const wrappedRecipients = await Promise.all(Object.entries(recipientPublicKeys).map(async ([userId, publicKeyString]) => {
         const publicKey = await importPublicKey(publicKeyString);
         const encryptedKey = await window.crypto.subtle.encrypt(
             { name: "RSA-OAEP" },
             publicKey,
             rawAesKey
         );
-
-        recipients[userId] = arrayBufferToBase64(encryptedKey);
-    }
+        return [userId, arrayBufferToBase64(encryptedKey)];
+    }));
+    const recipients = Object.fromEntries(wrappedRecipients);
 
     return JSON.stringify({
         v: 1,

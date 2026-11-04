@@ -473,7 +473,8 @@ def register_socket_events(socketio):
             "isPinned": False
         }
 
-        participants = ChatParticipant.query.filter_by(chat_id=chat_id).all()
+        # Reuse the participant rows fetched during authorization instead of
+        # making another database round trip before broadcasting this message.
         any_recipient_online = False
         for participant in participants:
             if participant.user_id != socket_user_id and is_user_online(participant.user_id):

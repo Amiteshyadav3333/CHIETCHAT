@@ -348,14 +348,14 @@ export const Home = () => {
             const chat = chatsRef.current.find(c => String(c.id) === String(msg.chatId));
             if (!chat) throw new Error('Queued chat is no longer available');
 
-            const recipientPublicKeys = {};
-            for (const participant of chat.participants) {
+            const recipientKeyEntries = await Promise.all(chat.participants.map(async participant => {
                 const isCurrentUser = sameUserId(participant.id, user.id);
                 const participantPublicKey = isCurrentUser ? publicKey : participant.publicKey;
                 if (!participantPublicKey) throw new Error('A participant encryption key is unavailable');
                 if (!isCurrentUser) await assertPinnedPublicKey(participant.id, participantPublicKey);
-                recipientPublicKeys[participant.id] = participantPublicKey;
-            }
+                return [participant.id, participantPublicKey];
+            }));
+            const recipientPublicKeys = Object.fromEntries(recipientKeyEntries);
 
             const encryptedContent = isEncryptedPayload(msg.content)
                 ? msg.content
@@ -1109,14 +1109,14 @@ export const Home = () => {
 
         let encryptedContent = null;
         try {
-            const recipientPublicKeys = {};
-            for (const participant of participants) {
+            const recipientKeyEntries = await Promise.all(participants.map(async participant => {
                 const isCurrentUser = sameUserId(participant.id, user.id);
                 const participantPublicKey = isCurrentUser ? publicKey : participant.publicKey;
                 if (!participantPublicKey) throw new Error('A participant encryption key is unavailable');
                 if (!isCurrentUser) await assertPinnedPublicKey(participant.id, participantPublicKey);
-                recipientPublicKeys[participant.id] = participantPublicKey;
-            }
+                return [participant.id, participantPublicKey];
+            }));
+            const recipientPublicKeys = Object.fromEntries(recipientKeyEntries);
 
             encryptedContent = await encryptForRecipients(recipientPublicKeys, text);
 

@@ -24,9 +24,14 @@ describe('message encryption', () => {
     it('decrypts only for recipients whose key was wrapped', async () => {
         const alice = await generateKeys();
         const bob = await generateKeys();
-        const envelope = await encryptForRecipients({ alice: alice.publicKeyString }, 'launch secret');
+        const eve = await generateKeys();
+        const envelope = await encryptForRecipients({
+            alice: alice.publicKeyString,
+            bob: bob.publicKeyString,
+        }, 'launch secret');
         await expect(decryptEnvelope(alice.privateKey, 'alice', envelope)).resolves.toBe('launch secret');
-        await expect(decryptEnvelope(bob.privateKey, 'bob', envelope)).resolves.toBe('🔒 Encrypted message');
+        await expect(decryptEnvelope(bob.privateKey, 'bob', envelope)).resolves.toBe('launch secret');
+        await expect(decryptEnvelope(eve.privateKey, 'eve', envelope)).resolves.toBe('🔒 Encrypted message');
     });
 
     it('round-trips password backup and rejects manipulated metadata', async () => {

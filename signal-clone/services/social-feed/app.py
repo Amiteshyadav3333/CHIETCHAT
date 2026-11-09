@@ -53,8 +53,8 @@ def rank_candidates(posts, engagement, now, limit):
             raise ValueError('Invalid engagement')
         comments, likes, shares, creator_posts = values
         age_hours = max(0.0, (now - created_at).total_seconds() / 3600)
-        freshness = 5.0 * exp(-age_hours / 72.0)
-        interaction = min(4.0, log1p(likes + comments * 2 + shares * 2))
+        freshness = 8.0 * exp(-age_hours / 36.0)
+        interaction = min(3.5, log1p(likes + comments * 2 + shares * 2))
         exploration = 1.2 / (1.0 + log1p(creator_posts or 1))
         return freshness + interaction + exploration
 

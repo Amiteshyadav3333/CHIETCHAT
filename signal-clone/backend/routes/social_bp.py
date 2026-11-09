@@ -349,9 +349,12 @@ def get_social_posts():
         candidates = [eligible_by_id[post_id] for post_id in selected_ids]
         remaining_ids = eligible_order[len(selected_ids):]
         more_source = cursor_state['hasMore']
-    elif cursor_state and not cursor_state['hasMore']:
-        return jsonify([])
     else:
+        # Once a source reaches its oldest eligible post, start a fresh pass.
+        # This keeps an active feed replenished while preserving all existing
+        # privacy, block, channel, and feed-type filters on every pass.
+        if cursor_state and not cursor_state['hasMore']:
+            source_before = None
         if source_before:
             query = query.filter(or_(
                 SocialPost.created_at < source_before['createdAt'],
@@ -453,7 +456,9 @@ def get_social_posts():
             SocialPost.retweet_of_id, func.count(SocialPost.id)
         ).filter(SocialPost.retweet_of_id.in_(aggregate_ids)).group_by(SocialPost.retweet_of_id).all())
     response = jsonify([serialize_post(post, user_id, feed_context) for post in posts])
-    has_next_page = bool(remaining_ids or more_source)
+    # A non-empty final page gets a cursor to restart from the newest eligible
+    # post on the next request. Empty feeds remain genuinely empty.
+    has_next_page = bool(remaining_ids or more_source or posts)
     if has_next_page:
         response.headers['X-Next-Cursor'] = encode_feed_cursor(
             user_id, feed, remaining_ids, source_before, more_source,

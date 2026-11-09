@@ -27,8 +27,10 @@ def rank_public_posts(posts, engagement_by_post, now=None, limit=50):
         discussion = max(0, int(stats.get('comments', 0)))
         likes = max(0, int(stats.get('likes', 0)))
         shares = max(0, int(stats.get('shares', 0)))
-        freshness = 5.0 * exp(-age_hours / 72.0)
-        engagement = min(4.0, log1p(likes + discussion * 2 + shares * 2))
+        # Give new posts a strong early window, then let useful discussion
+        # influence ranking without burying fresh posts under older viral ones.
+        freshness = 8.0 * exp(-age_hours / 36.0)
+        engagement = min(3.5, log1p(likes + discussion * 2 + shares * 2))
         # Small-account content gets a measured exploration boost, not an
         # unlimited advantage based on premium status or follower count.
         creator_posts = max(0, int(stats.get('creator_posts', 1)))

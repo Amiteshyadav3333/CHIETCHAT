@@ -1156,16 +1156,16 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
             const nextCursor = res.headers?.['x-next-cursor'] || null;
             nextFeedCursorRef.current.set(key, nextCursor);
             const entry = feedCacheRef.current.get(key) || { posts: [], updatedAt: 0 };
-            const existingIds = new Set((entry.posts || []).map(post => String(post.id)));
-            const uniquePage = page.filter(post => !existingIds.has(String(post.id)));
-            const nextPosts = [...(entry.posts || []), ...uniquePage];
+            // The API restarts from the newest eligible post after reaching
+            // the end, so repeated IDs are intentional and keep the feed
+            // continuously populated as the reader scrolls.
+            const nextPosts = [...(entry.posts || []), ...page];
             const nextCache = { posts: nextPosts, nextCursor, paginationLoaded: true, updatedAt: Date.now() };
             feedCacheRef.current.set(key, nextCache);
             saveSocialFeedCache(userId, tab, nextPosts, nextCursor);
             if (activeTabRef.current === tab && activeUserRef.current === userId) {
                 setPosts(current => {
-                    const currentIds = new Set(current.map(post => String(post.id)));
-                    return [...current, ...page.filter(post => !currentIds.has(String(post.id)))];
+                    return [...current, ...page];
                 });
             }
         } catch (error) {
@@ -1231,13 +1231,13 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
 
     useEffect(() => {
         if (!token) return;
-        if (activeTab === 'channels') fetchChannels(); else fetchPosts(activeTab);
+        if (activeTab === 'channels') fetchChannels(); else fetchPosts(activeTab, { force: true });
     }, [activeTab, token, fetchChannels, fetchPosts]);
 
     useEffect(() => {
         if (!token) return;
         const refreshOnReturn = () => {
-            if (!document.hidden && activeTabRef.current !== 'channels') fetchPosts(activeTabRef.current);
+            if (!document.hidden && activeTabRef.current !== 'channels') fetchPosts(activeTabRef.current, { force: true });
         };
         document.addEventListener('visibilitychange', refreshOnReturn);
         window.addEventListener('online', refreshOnReturn);
@@ -1513,8 +1513,8 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                                 {activeTab === 'community' ? <CommunityComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} pollOptions={pollOptions} setPollOptions={setPollOptions} posting={posting} onSubmit={() => submitPost(null, 'community')} /> : <div className="padding-4 px-4 py-3 border-b border-[#27333b]">
                             <div data-ducor-composer><CheetChatComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} media={media} setMedia={setMedia} preview={preview} fileRef={fileRef} posting={posting} isPremium={user?.isPremium} onUpgrade={showPremiumUpgrade} earnByDefault={user?.uiPreferences?.socialMonetizePosts} defaultArticleMode={activeTab === 'news'} onSubmit={options => submitPost(null, options)} /></div>
                                 </div>}
-                                {loading ? <CheetChatLoading /> : displayedPosts.length ? displayedPosts.map(post => (
-                                    <div key={post.id} ref={post.id === highlightedPostId ? highlightedRef : null} style={post.id === highlightedPostId ? { outline: '2px solid #ff6a3d' } : {}}>
+                                {loading ? <CheetChatLoading /> : displayedPosts.length ? displayedPosts.map((post, postIndex) => (
+                                    <div key={`${post.id}-${postIndex}`} ref={post.id === highlightedPostId && postIndex === 0 ? highlightedRef : null} style={post.id === highlightedPostId && postIndex === 0 ? { outline: '2px solid #ff6a3d' } : {}}>
                                         <TweetCard post={post} currentUser={user} token={token}
                                             onLike={() => likePost(post.id)} onRetweet={() => retweetPost(post.id)}
                                             onShare={count => sharePost(post.id, false, count)} onShareToChat={onShareToChat} onDelete={() => deletePost(post.id)}

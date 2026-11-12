@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
+import { getRazorpayUpiPrefill } from '../utils/razorpayCheckout';
 import {
     ArrowLeftIcon, ArrowTopRightOnSquareIcon, BuildingStorefrontIcon, ChatBubbleLeftRightIcon,
     MagnifyingGlassIcon, MapPinIcon, PhoneIcon, ShoppingBagIcon, VideoCameraIcon, XMarkIcon,
@@ -23,7 +24,7 @@ const loadRazorpay = () => new Promise((resolve, reject) => {
     script.onload = resolve; script.onerror = () => reject(new Error('Secure checkout could not be loaded.')); document.head.appendChild(script);
 });
 
-export default function ShopMarketplace({ token, onClose, onManageShop, onStartChat, onStartCall, onShareProduct, initialShopId = null }) {
+export default function ShopMarketplace({ token, user, onClose, onManageShop, onStartChat, onStartCall, onShareProduct, initialShopId = null }) {
     const [query, setQuery] = useState('');
     const [location, setLocation] = useState('');
     const [category, setCategory] = useState('All');
@@ -126,7 +127,7 @@ export default function ShopMarketplace({ token, onClose, onManageShop, onStartC
             }, { headers });
             await loadRazorpay();
             const { payment, checkout } = response.data;
-            const instance = new window.Razorpay({ key: checkout.keyId, amount: Math.round(payment.amount * 100), currency: payment.currency, name: 'Ducor Shopping', description: `Order #${created.data.id}`, order_id: payment.providerOrderId,
+            const instance = new window.Razorpay({ key: checkout.keyId, amount: Math.round(payment.amount * 100), currency: payment.currency, name: 'Ducor Shopping', description: `Order #${created.data.id}`, order_id: payment.providerOrderId, prefill: getRazorpayUpiPrefill(user),
                 handler: async providerResult => {
                     try {
                         const verified = await axios.post(`/api/payments/orders/${payment.id}/verify`, providerResult, { headers });

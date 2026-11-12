@@ -23,6 +23,7 @@ import ProCameraStudio from '../components/ProCameraStudio';
 import { useBackHandler } from '../utils/backNavigation';
 import { isSocialFeedCacheFresh, loadSocialFeedCache, saveSocialFeedCache } from '../utils/socialFeedCache';
 import { useNavigate, usePathname } from '../utils/clientRouter';
+import { getRazorpayUpiPrefill } from '../utils/razorpayCheckout';
 
 const authHeaders = (token) => ({ Authorization: `Bearer ${token}` });
 const feedCacheKey = (userId, feed) => `${userId || 'guest'}:${feed}`;
@@ -1332,6 +1333,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
             const instance = new window.Razorpay({
                 key: checkout.keyId, name: 'Ducor Premium',
                 description: `${selectedPlan.name} · ${autopay ? 'recurring Autopay' : 'one-time access'}`,
+                prefill: getRazorpayUpiPrefill(user),
                 ...(autopay ? { subscription_id: subscription.providerSubscriptionId } : { amount: Math.round(payment.amount * 100), currency: payment.currency, order_id: payment.providerOrderId }),
                 handler: async result => {
                     try {
@@ -1352,7 +1354,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                             updateUser?.({ ...user, isPremium: true, premiumPlanCode: selectedPremiumPlan, premiumExpiresAt: verified.data.premiumExpiresAt });
                         }
                         setPremiumPrompt(false);
-                        alert(autopay ? 'Autopay is active. Premium is enabled for your paid period.' : 'Payment verified. Premium is active for one month.');
+                            alert(autopay ? 'Autopay is active. Premium is enabled for your paid period.' : 'Payment verified. Premium is active for the selected period.');
                     } catch (error) {
                         alert(error.response?.data?.error || 'Payment verification is pending. Check your Premium status before retrying.');
                     } finally {
@@ -1622,7 +1624,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                                 <span className="block text-xs font-bold text-white">{plan.name}</span><span className="mt-1 block text-sm font-black text-white">₹{plan.amount.toLocaleString('en-IN')}</span><span className="text-[10px] text-gray-400">{plan.period === 'yearly' ? 'per year' : 'per month'}</span>
                             </button>)}
                         </div>
-                        <button disabled={premiumBuying || !premiumCheckoutEnabled || !premiumPlans.length} onClick={() => buyPremium(false)} className="mt-3 w-full rounded-xl bg-violet-500 py-3.5 text-sm font-black text-white hover:bg-violet-400 disabled:opacity-60">{!premiumCheckoutEnabled ? 'Checkout unavailable' : premiumBuying ? 'Opening secure checkout…' : `Pay once · ₹${(premiumPlans.find(plan => plan.code === selectedPremiumPlan)?.amount || 0).toLocaleString('en-IN')}`}</button>
+                        <button disabled={premiumBuying || !premiumCheckoutEnabled || !premiumPlans.length} onClick={() => buyPremium(false)} className="mt-3 w-full rounded-xl bg-violet-500 py-3.5 text-sm font-black text-white hover:bg-violet-400 disabled:opacity-60">{!premiumCheckoutEnabled ? 'Checkout unavailable' : premiumBuying ? 'Opening secure checkout…' : `Pay via UPI · ₹${(premiumPlans.find(plan => plan.code === selectedPremiumPlan)?.amount || 0).toLocaleString('en-IN')}`}</button>
                         <button disabled={premiumBuying || !premiumPlans.find(plan => plan.code === selectedPremiumPlan)?.autopayEnabled} onClick={() => buyPremium(true)} className="mt-2 w-full rounded-xl border border-violet-300/30 py-3.5 text-sm font-black text-violet-100 hover:bg-violet-400/10 disabled:opacity-50">{premiumPlans.find(plan => plan.code === selectedPremiumPlan)?.autopayEnabled ? 'Set up Autopay' : 'Autopay unavailable for this plan'}</button>
                         <p className="mt-3 text-[11px] leading-4 text-gray-400">The backend verifies each payment with Razorpay before Premium access is granted.</p>
                         <button onClick={() => setPremiumPrompt(false)} className="mt-3 text-sm font-semibold text-gray-400">Maybe later</button>

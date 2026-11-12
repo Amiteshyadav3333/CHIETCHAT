@@ -2,6 +2,7 @@ import React, { useContext, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { XMarkIcon } from '@heroicons/react/24/solid';
 import { AuthContext } from '../context/AuthContext';
+import { getRazorpayUpiPrefill } from '../utils/razorpayCheckout';
 
 const loadRazorpayCheckout = () => new Promise((resolve, reject) => {
     if (window.Razorpay) return resolve();
@@ -27,7 +28,7 @@ const newPaymentRequestId = () => {
 };
 
 const VerifiedPaymentComposer = ({ open, onClose, chatId, payeeId, payeeName, onVerified }) => {
-    const { token } = useContext(AuthContext);
+    const { token, user } = useContext(AuthContext);
     const [form, setForm] = useState({ amount: '', note: '' });
     const [error, setError] = useState('');
     const [starting, setStarting] = useState(false);
@@ -75,6 +76,7 @@ const VerifiedPaymentComposer = ({ open, onClose, chatId, payeeId, payeeName, on
                 name: 'Ducor Pay',
                 description: payment.description || `Payment to ${payeeName || 'business'}`,
                 order_id: payment.providerOrderId,
+                prefill: getRazorpayUpiPrefill(user),
                 handler: async providerResult => {
                     try {
                         const verified = await axios.post(

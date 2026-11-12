@@ -2569,6 +2569,7 @@ export const Home = () => {
 
             {showShoppingMarketplace && <ShopMarketplace
                 token={token}
+                user={user}
                 initialShopId={new URLSearchParams(window.location.search).get('shop')}
                 onClose={() => setShowShoppingMarketplace(false)}
                 onManageShop={openShopBusinessTools}

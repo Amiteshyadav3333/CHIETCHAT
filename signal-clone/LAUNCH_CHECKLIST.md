@@ -53,7 +53,11 @@ and socket reconnection in Safari, Chrome, Edge, Android and installed iOS PWA.
 2. Put the live Key ID in `RAZORPAY_KEY_ID` and live secret in
    `RAZORPAY_KEY_SECRET` on the backend only.
 3. Generate a separate webhook secret and set `RAZORPAY_WEBHOOK_SECRET`.
-4. Configure all six Razorpay plans in the backend environment. The app checks
+4. Enable UPI for one-time Checkout and UPI AutoPay for subscriptions in the
+   Razorpay Dashboard. Checkout preselects UPI when the signed-in account has
+   valid email and phone details; customers can still choose another enabled
+   payment method. Test UPI Intent on mobile and QR on desktop.
+5. Configure all six Razorpay plans in the backend environment. The app checks
    each configured plan ID against its amount, currency, billing period and
    interval before creating a subscription:
 
@@ -65,13 +69,13 @@ and socket reconnection in Safari, Chrome, Edge, Android and installed iOS PWA.
    | `RAZORPAY_PLAN_BASIC_YEARLY` | Basic yearly | ₹2,388/year |
    | `RAZORPAY_PLAN_MEDIUM_YEARLY` | Medium yearly | ₹5,988/year |
    | `RAZORPAY_PLAN_MAX_YEARLY` | Max yearly | ₹11,988/year |
-5. Add the webhook URL
+6. Add the webhook URL
    `https://<backend>/api/payments/webhooks/razorpay` and subscribe to
    `payment.captured`, `payment.failed`, `order.paid`, `refund.processed`,
    `refund.failed`, `subscription.activated`, `subscription.charged`,
    `subscription.authenticated`, `subscription.halted`, `subscription.cancelled`
    and `subscription.completed`.
-6. Test the one-month purchase and monthly mandate in Test Mode, verify Premium
+7. Test one-time UPI payments and monthly/yearly Autopay mandates in Test Mode, verify Premium
    activates only after provider confirmation, and confirm renewal/cancellation
    events update the paid-through date before enabling Live Mode.
 

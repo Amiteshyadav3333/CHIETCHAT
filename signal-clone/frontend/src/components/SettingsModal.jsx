@@ -27,6 +27,7 @@ import {
     getGlobalCustomAudio,
 } from '../utils/customNotificationSounds';
 import { ensureDevicePin, verifyDevicePin } from '../utils/deviceLock';
+import { getRazorpayUpiPrefill } from '../utils/razorpayCheckout';
 
 const TITLES = {
     settings: 'Settings', profile: 'Profile', account: 'Account', privacy: 'Privacy',
@@ -759,6 +760,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                 key: data.checkout.keyId,
                 name: 'Ducor Premium',
                 description: `${(premiumCheckoutConfig?.premiumPlans || []).find(plan => plan.code === selectedPremiumPlan)?.name || 'Ducor Premium'} · ${autopay ? 'recurring autopay' : 'one-time access'}`,
+                prefill: getRazorpayUpiPrefill(user),
                 ...(autopay ? { subscription_id: data.subscription.providerSubscriptionId } : {
                     order_id: data.payment.providerOrderId, amount: Math.round(data.payment.amount * 100), currency: data.payment.currency,
                 }),
@@ -777,7 +779,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                             const verified = await axios.post(`/api/payments/orders/${data.payment.id}/verify`, result, { headers });
                             if (verified.data.status === 'approved') {
                                 onUserUpdate?.({ ...user, isPremium: true, premiumPlanCode: selectedPremiumPlan, premiumExpiresAt: verified.data.premiumExpiresAt });
-                                setMessage({ type: 'success', text: 'Payment verified. Premium is active for one month.' });
+                                setMessage({ type: 'success', text: 'Payment verified. Premium is active for the selected period.' });
                             } else {
                                 setMessage({ type: 'success', text: 'Payment authorization received. Premium will activate once Razorpay confirms capture.' });
                             }
@@ -966,7 +968,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                                 </button>)}
                             </div>
                             <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                                <button type="button" disabled={premiumBusy || !premiumCheckoutConfig?.enabled || !selectedPremiumPlan} onClick={() => startPremiumCheckout(false)} className="rounded-xl bg-white px-4 py-3 text-sm font-black text-violet-900 disabled:opacity-50">{!premiumCheckoutConfig?.enabled ? 'Checkout unavailable' : premiumBusy ? 'Opening secure checkout…' : `Pay once · ₹${((premiumCheckoutConfig?.premiumPlans || []).find(plan => plan.code === selectedPremiumPlan)?.amount || 0).toLocaleString('en-IN')}`}</button>
+                                <button type="button" disabled={premiumBusy || !premiumCheckoutConfig?.enabled || !selectedPremiumPlan} onClick={() => startPremiumCheckout(false)} className="rounded-xl bg-white px-4 py-3 text-sm font-black text-violet-900 disabled:opacity-50">{!premiumCheckoutConfig?.enabled ? 'Checkout unavailable' : premiumBusy ? 'Opening secure checkout…' : `Pay via UPI · ₹${((premiumCheckoutConfig?.premiumPlans || []).find(plan => plan.code === selectedPremiumPlan)?.amount || 0).toLocaleString('en-IN')}`}</button>
                                 <button type="button" disabled={premiumBusy || !(premiumCheckoutConfig?.premiumPlans || []).find(plan => plan.code === selectedPremiumPlan)?.autopayEnabled} onClick={() => startPremiumCheckout(true)} className="rounded-xl bg-violet-500 px-4 py-3 text-sm font-black text-white disabled:opacity-50">{(premiumCheckoutConfig?.premiumPlans || []).find(plan => plan.code === selectedPremiumPlan)?.autopayEnabled ? 'Set up Autopay' : 'Autopay unavailable for this plan'}</button>
                             </div>
                         </div>

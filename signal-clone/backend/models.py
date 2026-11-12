@@ -55,6 +55,7 @@ class User(db.Model):
     referred_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True, index=True)
     premium_unlocked_at = db.Column(db.DateTime, nullable=True)
     premium_expires_at = db.Column(db.DateTime, nullable=True)
+    premium_plan_code = db.Column(db.String(40), nullable=True)
 
 class PendingRegistration(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -345,6 +346,24 @@ class PaymentOrder(db.Model):
     refunded_at = db.Column(db.DateTime, nullable=True)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
     retention_until = db.Column(db.DateTime, nullable=True, index=True)
+    premium_plan_code = db.Column(db.String(40), nullable=True)
+    premium_duration_months = db.Column(db.Integer, nullable=True)
+
+class PremiumSubscription(db.Model):
+    """Razorpay recurring mandate and the paid-through Premium period."""
+    __table_args__ = (db.UniqueConstraint('user_id', 'client_request_id', name='uq_premium_subscription_request'),)
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    client_request_id = db.Column(db.String(100), nullable=False)
+    provider_subscription_id = db.Column(db.String(100), unique=True, nullable=False)
+    plan_code = db.Column(db.String(40), nullable=False)
+    amount_paise = db.Column(db.Integer, nullable=False)
+    duration_months = db.Column(db.Integer, nullable=False)
+    status = db.Column(db.String(30), nullable=False, default='created')
+    last_payment_id = db.Column(db.String(100), nullable=True, unique=True)
+    current_period_end = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
 class WorkerHeartbeat(db.Model):
     name = db.Column(db.String(80), primary_key=True)

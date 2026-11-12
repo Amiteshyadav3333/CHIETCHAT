@@ -12,13 +12,35 @@ from decimal import Decimal, InvalidOperation
 from flask import Blueprint, jsonify, request
 from sqlalchemy.exc import IntegrityError
 
-from models import db, User, ChatParticipant, BusinessProfile, PaymentOrder, MarketplaceOrder, MarketplaceOrderLine, AffiliateProductTag, AffiliateCommission
+from models import db, User, ChatParticipant, BusinessProfile, PaymentOrder, PremiumSubscription, MarketplaceOrder, MarketplaceOrderLine, AffiliateProductTag, AffiliateCommission
 from utils import get_current_user_id, get_json_data, iso_utc, utc_now
 from observability import report_safe_exception
 
 payments_bp = Blueprint('payments_bp', __name__)
 CAPTURE_TERMINAL_STATUSES = {'refunding', 'refunded', 'approved', 'rejected'}
-PREMIUM_PRICE_PAISE = int(os.environ.get('PREMIUM_PRICE_PAISE', '19900'))
+PREMIUM_PLANS = {
+    'basic_monthly': {'name': 'Basic Monthly', 'tier': 'Basic', 'period': 'monthly', 'interval': 1, 'amount_paise': 19900, 'duration_months': 1, 'env': 'RAZORPAY_PLAN_BASIC_MONTHLY'},
+    'medium_monthly': {'name': 'Medium Monthly', 'tier': 'Medium', 'period': 'monthly', 'interval': 1, 'amount_paise': 49900, 'duration_months': 1, 'env': 'RAZORPAY_PLAN_MEDIUM_MONTHLY'},
+    'max_monthly': {'name': 'Max Monthly', 'tier': 'Max', 'period': 'monthly', 'interval': 1, 'amount_paise': 99900, 'duration_months': 1, 'env': 'RAZORPAY_PLAN_MAX_MONTHLY'},
+    'basic_yearly': {'name': 'Basic Yearly', 'tier': 'Basic', 'period': 'yearly', 'interval': 1, 'amount_paise': 238800, 'duration_months': 12, 'env': 'RAZORPAY_PLAN_BASIC_YEARLY'},
+    'medium_yearly': {'name': 'Medium Yearly', 'tier': 'Medium', 'period': 'yearly', 'interval': 1, 'amount_paise': 598800, 'duration_months': 12, 'env': 'RAZORPAY_PLAN_MEDIUM_YEARLY'},
+    'max_yearly': {'name': 'Max Yearly', 'tier': 'Max', 'period': 'yearly', 'interval': 1, 'amount_paise': 1198800, 'duration_months': 12, 'env': 'RAZORPAY_PLAN_MAX_YEARLY'},
+}
+
+
+def get_premium_plan(plan_code):
+    plan = PREMIUM_PLANS.get(str(plan_code or '').strip().lower())
+    if not plan:
+        return None
+    return {**plan, 'code': str(plan_code).strip().lower(), 'provider_plan_id': os.environ.get(plan['env'], '').strip()}
+
+
+def premium_plan_payload(plan_code, plan):
+    return {
+        'code': plan_code, 'name': plan['name'], 'tier': plan['tier'],
+        'period': plan['period'], 'amount': plan['amount_paise'] / 100,
+        'durationMonths': plan['duration_months'], 'autopayEnabled': bool(plan['provider_plan_id']),
+    }
 
 def mark_marketplace_order_paid(payment):
     order = MarketplaceOrder.query.filter_by(payment_order_id=payment.id).with_for_update().first()
@@ -55,6 +77,7 @@ def payment_payload(payment):
         'currency': payment.currency,
         'description': payment.description or '',
         'purpose': payment.purpose or 'business',
+        'premiumPlanCode': payment.premium_plan_code,
         'provider': payment.provider,
         'providerOrderId': payment.provider_order_id,
         'providerPaymentId': payment.provider_payment_id,
@@ -111,6 +134,40 @@ def fetch_provider_payment(provider_payment_id):
     return provider_request(f'payments/{provider_payment_id}')
 
 
+def fetch_provider_plan(provider_plan_id):
+    return provider_request(f'plans/{provider_plan_id}')
+
+
+def create_provider_subscription(plan, user_id, request_id):
+    plan_id = plan['provider_plan_id']
+    return provider_request('subscriptions', 'POST', {
+        'plan_id': plan_id, 'total_count': 120 if plan['period'] == 'monthly' else 10, 'quantity': 1,
+        'customer_notify': 0,
+        'notes': {'user_id': str(user_id), 'request_id': request_id, 'purpose': 'premium_autopay', 'plan_code': plan['code']},
+    })
+
+
+def fetch_provider_subscription(subscription_id):
+    return provider_request(f'subscriptions/{subscription_id}')
+
+
+def cancel_provider_subscription(subscription_id):
+    return provider_request(f'subscriptions/{subscription_id}/cancel', 'POST', {'cancel_at_cycle_end': 0})
+
+
+def activate_premium_for_month(user, paid_through=None, duration_months=1, plan_code=None):
+    now = utc_now()
+    if not user:
+        return
+    user.is_premium = True
+    user.premium_unlocked_at = user.premium_unlocked_at or now
+    if plan_code:
+        user.premium_plan_code = plan_code
+    base = user.premium_expires_at if user.premium_expires_at and user.premium_expires_at > now else now
+    duration_days = 365 if duration_months >= 12 else 30 * max(1, duration_months)
+    user.premium_expires_at = max(base, paid_through) if paid_through else base + datetime.timedelta(days=duration_days)
+
+
 def create_provider_refund(provider_payment_id, amount_paise, notes):
     return provider_request(f'payments/{provider_payment_id}/refund', 'POST', {
         'amount': amount_paise, 'speed': 'normal', 'notes': notes,
@@ -148,8 +205,12 @@ def reconcile_captured_entity(payment, entity):
     if payment.provider_payment_id and payment.provider_payment_id != provider_payment_id:
         return False
     payment.provider_payment_id = provider_payment_id
-    payment.status = 'approval_pending' if payment.purpose == 'premium' else 'captured'
+    payment.status = 'approved' if payment.purpose == 'premium' else 'captured'
     payment.paid_at = payment.paid_at or utc_now()
+    if payment.purpose == 'premium' and payment.payer_id:
+        activate_premium_for_month(db.session.get(User, payment.payer_id),
+            duration_months=payment.premium_duration_months or 1,
+            plan_code=payment.premium_plan_code)
     if payment.purpose == 'marketplace':
         mark_marketplace_order_paid(payment)
     return True
@@ -160,11 +221,8 @@ def activate_premium_if_approved(payment):
         return
     user = db.session.get(User, payment.payer_id)
     if user:
-        user.is_premium = True
-        now = utc_now()
-        user.premium_unlocked_at = user.premium_unlocked_at or now
-        base = user.premium_expires_at if user.premium_expires_at and user.premium_expires_at > now else now
-        user.premium_expires_at = base + datetime.timedelta(days=90)
+        activate_premium_for_month(user, duration_months=payment.premium_duration_months or 1,
+            plan_code=payment.premium_plan_code)
 
 
 @payments_bp.route('/api/payments/config', methods=['GET'])
@@ -177,8 +235,12 @@ def payment_config():
         os.environ.get('MARKETPLACE_CHECKOUT_ENABLED', '').strip().lower() == 'true'
         and key_id and key_secret and webhook_ready
     )
+    checkout_ready = bool(key_id and key_secret and webhook_ready)
+    plans = [premium_plan_payload(code, get_premium_plan(code)) for code in PREMIUM_PLANS]
+    for plan in plans:
+        plan['autopayEnabled'] = checkout_ready and plan['autopayEnabled']
     return jsonify({
-        'enabled': bool(key_id and key_secret and webhook_ready),
+        'enabled': checkout_ready,
         'provider': 'razorpay',
         'keyId': key_id if key_id and key_secret and webhook_ready else None,
         'webhookReady': webhook_ready,
@@ -186,7 +248,9 @@ def payment_config():
         'currency': 'INR',
         'minAmount': 1,
         'maxAmount': 100000,
-        'premiumPrice': PREMIUM_PRICE_PAISE / 100,
+        'premiumPrice': PREMIUM_PLANS['medium_monthly']['amount_paise'] / 100,
+        'premiumPlans': plans,
+        'premiumAutopayEnabled': any(plan['autopayEnabled'] for plan in plans),
     })
 
 
@@ -201,18 +265,23 @@ def create_premium_order():
     if not os.environ.get('RAZORPAY_WEBHOOK_SECRET'):
         return jsonify({'error': 'Premium checkout is not configured yet'}), 503
     data = get_json_data()
+    plan_code = str(data.get('planCode') or '').strip().lower()
+    plan = get_premium_plan(plan_code)
+    if not plan:
+        return jsonify({'error': 'Choose a valid Premium plan'}), 400
     client_request_id = str(data.get('clientRequestId') or '').strip()
     if not re.fullmatch(r'[A-Za-z0-9_-]{16,100}', client_request_id):
         return jsonify({'error': 'A valid payment request ID is required'}), 400
     existing = PaymentOrder.query.filter_by(payer_id=payer_id, client_request_id=client_request_id).first()
     if existing:
-        if existing.purpose != 'premium' or existing.amount_paise != PREMIUM_PRICE_PAISE:
+        if existing.purpose != 'premium' or existing.amount_paise != plan['amount_paise'] or existing.premium_plan_code != plan_code:
             return jsonify({'error': 'Payment request ID is already in use'}), 409
         key_id, _ = razorpay_credentials()
         return jsonify({'payment': payment_payload(existing), 'checkout': {'keyId': key_id}})
     pending = PaymentOrder(
-        payer_id=payer_id, amount_paise=PREMIUM_PRICE_PAISE, currency='INR',
-        description='Ducor Premium lifetime access', purpose='premium',
+        payer_id=payer_id, amount_paise=plan['amount_paise'], currency='INR',
+        description=f"Ducor Premium {plan['name']} one-time", purpose='premium',
+        premium_plan_code=plan_code, premium_duration_months=plan['duration_months'],
         provider_order_id=f'pending-{os.urandom(12).hex()}', status='creating',
         client_request_id=client_request_id,
     )
@@ -220,10 +289,10 @@ def create_premium_order():
     db.session.commit()
     try:
         provider = create_provider_order(
-            PREMIUM_PRICE_PAISE, 'INR', f'premium-{pending.id}',
-            {'payment_order_id': str(pending.id), 'purpose': 'premium', 'payer_id': str(payer_id)},
+            plan['amount_paise'], 'INR', f'premium-{pending.id}',
+            {'payment_order_id': str(pending.id), 'purpose': 'premium', 'payer_id': str(payer_id), 'plan_code': plan_code},
         )
-        if not provider.get('id') or provider.get('amount') != PREMIUM_PRICE_PAISE:
+        if not provider.get('id') or provider.get('amount') != plan['amount_paise'] or str(provider.get('currency') or '').upper() != 'INR':
             raise RuntimeError('Payment provider returned inconsistent order details')
         pending.provider_order_id = provider['id']
         pending.status = provider.get('status', 'created')
@@ -238,6 +307,137 @@ def create_premium_order():
         return jsonify({'error': 'Premium checkout is temporarily unavailable'}), 503
     key_id, _ = razorpay_credentials()
     return jsonify({'payment': payment_payload(pending), 'checkout': {'keyId': key_id}}), 201
+
+
+@payments_bp.route('/api/premium/subscription', methods=['POST'])
+def create_premium_subscription():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    data = get_json_data()
+    plan_code = str(data.get('planCode') or '').strip().lower()
+    plan = get_premium_plan(plan_code)
+    key_id, key_secret = razorpay_credentials()
+    if not plan:
+        return jsonify({'error': 'Choose a valid Premium plan'}), 400
+    if not plan['provider_plan_id'] or not key_id or not key_secret or not os.environ.get('RAZORPAY_WEBHOOK_SECRET'):
+        return jsonify({'error': 'Premium autopay is not configured yet'}), 503
+    request_id = str(data.get('clientRequestId') or '').strip()
+    if not re.fullmatch(r'[A-Za-z0-9_-]{16,100}', request_id):
+        return jsonify({'error': 'A valid subscription request ID is required'}), 400
+    existing = PremiumSubscription.query.filter_by(user_id=user_id, client_request_id=request_id).first()
+    if existing:
+        return jsonify({'subscription': {'id': existing.id, 'providerSubscriptionId': existing.provider_subscription_id, 'status': existing.status}, 'checkout': {'keyId': key_id}})
+    live_subscription = PremiumSubscription.query.filter_by(user_id=user_id).filter(
+        PremiumSubscription.status.notin_(['cancelled', 'completed', 'halted'])
+    ).order_by(PremiumSubscription.id.desc()).first()
+    if live_subscription:
+        if live_subscription.plan_code != plan_code:
+            return jsonify({'error': 'Cancel your current Autopay subscription before selecting a different plan'}), 409
+        return jsonify({'subscription': {'id': live_subscription.id, 'providerSubscriptionId': live_subscription.provider_subscription_id, 'status': live_subscription.status}, 'checkout': {'keyId': key_id}})
+    try:
+        provider_plan = fetch_provider_plan(plan['provider_plan_id'])
+        provider_item = provider_plan.get('item') or {}
+        if (provider_plan.get('id') != plan['provider_plan_id']
+                or provider_plan.get('period') != plan['period']
+                or provider_plan.get('interval') != plan['interval']
+                or provider_item.get('amount') != plan['amount_paise']
+                or str(provider_item.get('currency') or '').upper() != 'INR'):
+            return jsonify({'error': f"Razorpay plan configuration does not match {plan['name']} (price or billing interval)"}), 409
+        provider = create_provider_subscription(plan, user_id, request_id)
+        if not provider.get('id') or provider.get('plan_id') != plan['provider_plan_id']:
+            raise RuntimeError('Payment provider returned inconsistent subscription details')
+        record = PremiumSubscription(user_id=user_id, client_request_id=request_id,
+            provider_subscription_id=provider['id'], plan_code=plan_code,
+            amount_paise=plan['amount_paise'], duration_months=plan['duration_months'],
+            status=provider.get('status', 'created'))
+        db.session.add(record)
+        db.session.commit()
+        return jsonify({'subscription': {'id': record.id, 'providerSubscriptionId': record.provider_subscription_id, 'status': record.status}, 'checkout': {'keyId': key_id}}), 201
+    except Exception as exc:
+        db.session.rollback()
+        report_safe_exception('premium_subscription_creation_failed', exc)
+        return jsonify({'error': 'Premium autopay is temporarily unavailable'}), 503
+
+
+@payments_bp.route('/api/premium/subscription', methods=['GET'])
+def get_premium_subscription():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    record = PremiumSubscription.query.filter_by(user_id=user_id).order_by(PremiumSubscription.id.desc()).first()
+    if not record:
+        return jsonify({'subscription': None})
+    return jsonify({'subscription': {'status': record.status, 'currentPeriodEnd': iso_utc(record.current_period_end), 'planCode': record.plan_code}})
+
+
+@payments_bp.route('/api/premium/subscription/cancel', methods=['POST'])
+def cancel_premium_subscription():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    record = PremiumSubscription.query.filter_by(user_id=user_id).order_by(PremiumSubscription.id.desc()).first()
+    if not record:
+        return jsonify({'error': 'No Premium autopay subscription was found'}), 404
+    if record.status in ('cancelled', 'completed', 'halted'):
+        return jsonify({'status': record.status})
+    try:
+        provider = cancel_provider_subscription(record.provider_subscription_id)
+        if provider.get('id') != record.provider_subscription_id:
+            raise RuntimeError('Payment provider returned inconsistent subscription details')
+        record.status = provider.get('status', 'cancelled')
+        db.session.commit()
+        return jsonify({'status': record.status, 'premiumExpiresAt': iso_utc(record.current_period_end)})
+    except Exception as exc:
+        db.session.rollback()
+        report_safe_exception('premium_subscription_cancel_failed', exc)
+        return jsonify({'error': 'Could not cancel autopay right now'}), 503
+
+
+@payments_bp.route('/api/premium/subscription/verify', methods=['POST'])
+def verify_premium_subscription():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    data = get_json_data()
+    subscription_id = str(data.get('razorpay_subscription_id') or '')
+    payment_id = str(data.get('razorpay_payment_id') or '')
+    signature = str(data.get('razorpay_signature') or '')
+    record = PremiumSubscription.query.filter_by(user_id=user_id, provider_subscription_id=subscription_id).first()
+    _, secret = razorpay_credentials()
+    expected = hmac.new(secret.encode(), f'{subscription_id}|{payment_id}'.encode(), hashlib.sha256).hexdigest() if secret else ''
+    if not record or not payment_id or not signature or not hmac.compare_digest(expected, signature):
+        return jsonify({'error': 'Subscription verification failed'}), 400
+    try:
+        provider_payment = fetch_provider_payment(payment_id)
+        provider_subscription = fetch_provider_subscription(subscription_id)
+    except RuntimeError as exc:
+        report_safe_exception('premium_subscription_verify_provider_failed', exc)
+        return jsonify({'error': 'Subscription verification is temporarily unavailable'}), 503
+    expected_plan = get_premium_plan(record.plan_code)
+    if (not expected_plan
+            or provider_payment.get('id') != payment_id
+            or provider_payment.get('subscription_id') != subscription_id
+            or str(provider_payment.get('currency') or '').upper() != 'INR'
+            or provider_subscription.get('id') != subscription_id
+            or provider_subscription.get('plan_id') != expected_plan['provider_plan_id']
+            or str(provider_subscription.get('status') or '').lower() not in ('authenticated', 'active')):
+        return jsonify({'error': 'Autopay authorization has not been confirmed yet'}), 409
+    record.status = provider_subscription.get('status', 'authenticated')
+    period_end = provider_subscription.get('current_end')
+    paid_through = datetime.datetime.fromtimestamp(period_end, datetime.timezone.utc).replace(tzinfo=None) if isinstance(period_end, int) and period_end else None
+    record.current_period_end = paid_through
+    first_cycle_paid = (
+        str(provider_payment.get('status') or '').lower() == 'captured'
+        and provider_payment.get('amount') == record.amount_paise
+    )
+    if first_cycle_paid:
+        record.last_payment_id = payment_id
+        activate_premium_for_month(db.session.get(User, user_id), paid_through,
+            duration_months=record.duration_months, plan_code=record.plan_code)
+    db.session.commit()
+    return jsonify({'ok': True, 'status': record.status, 'premiumActive': first_cycle_paid,
+        'premiumExpiresAt': iso_utc(paid_through) if first_cycle_paid else None})
 
 
 @payments_bp.route('/api/payments/orders', methods=['POST'])
@@ -443,16 +643,23 @@ def verify_payment(payment_id):
     provider_status = str(provider_payment.get('status') or '').lower()
     if provider_status not in ('authorized', 'captured'):
         return jsonify({'error': 'Payment has not been authorized by the provider'}), 409
+    was_already_captured = payment.status in ('approved', 'captured') and payment.provider_payment_id == provider_payment_id
     payment.provider_payment_id = provider_payment_id
-    payment.status = 'approval_pending' if payment.purpose == 'premium' and provider_status == 'captured' else provider_status
+    payment.status = 'approved' if payment.purpose == 'premium' and provider_status == 'captured' else provider_status
     if provider_status == 'captured':
         payment.paid_at = payment.paid_at or utc_now()
+        if payment.purpose == 'premium' and not was_already_captured:
+            activate_premium_for_month(db.session.get(User, payment.payer_id),
+                duration_months=payment.premium_duration_months or 1,
+                plan_code=payment.premium_plan_code)
         if payment.purpose == 'marketplace':
             mark_marketplace_order_paid(payment)
     db.session.commit()
     payload = payment_payload(payment)
     if payment.purpose == 'premium' and provider_status == 'captured':
-        payload['message'] = 'Payment verified. Premium will activate after admin approval.'
+        payload['message'] = 'Payment verified. Premium is active for one month.'
+        user = db.session.get(User, payment.payer_id)
+        payload['premiumExpiresAt'] = iso_utc(user.premium_expires_at) if user else None
     return jsonify(payload), 200 if provider_status == 'captured' else 202
 
 
@@ -549,6 +756,33 @@ def razorpay_webhook():
     payment = PaymentOrder.query.filter_by(provider_order_id=provider_order_id).first() if provider_order_id else None
     if payment and event_name in ('payment.captured', 'order.paid'):
         if reconcile_captured_entity(payment, payment_entity):
+            db.session.commit()
+    subscription_entity = ((payload.get('subscription') or {}).get('entity') or {})
+    if event_name in ('subscription.activated', 'subscription.charged', 'subscription.authenticated', 'subscription.halted', 'subscription.cancelled', 'subscription.completed'):
+        record = PremiumSubscription.query.filter_by(provider_subscription_id=subscription_entity.get('id')).with_for_update().first() if subscription_entity.get('id') else None
+        if record:
+            record.status = str(subscription_entity.get('status') or event_name.replace('subscription.', ''))
+            period_end = subscription_entity.get('current_end')
+            paid_through = datetime.datetime.fromtimestamp(period_end, datetime.timezone.utc).replace(tzinfo=None) if isinstance(period_end, int) and period_end else None
+            if paid_through:
+                record.current_period_end = paid_through
+            if event_name == 'subscription.charged':
+                charged_payment = payment_entity
+                payment_id = str(charged_payment.get('id') or '')
+                expected_plan = get_premium_plan(record.plan_code)
+                if (payment_id and charged_payment.get('subscription_id') == record.provider_subscription_id
+                        and str(charged_payment.get('status') or '').lower() == 'captured'
+                        and charged_payment.get('amount') == record.amount_paise
+                        and str(charged_payment.get('currency') or '').upper() == 'INR'
+                        and expected_plan
+                        and subscription_entity.get('plan_id') == expected_plan['provider_plan_id']):
+                    record.last_payment_id = payment_id
+                    activate_premium_for_month(db.session.get(User, record.user_id), paid_through,
+                        duration_months=record.duration_months, plan_code=record.plan_code)
+            elif event_name in ('subscription.halted', 'subscription.cancelled', 'subscription.completed'):
+                user = db.session.get(User, record.user_id)
+                if user and user.premium_expires_at and user.premium_expires_at <= utc_now():
+                    user.is_premium = False
             db.session.commit()
     if event_name == 'order.paid':
         order_entity = ((payload.get('order') or {}).get('entity') or {})

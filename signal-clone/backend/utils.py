@@ -18,7 +18,7 @@ from models import (
     BusinessProfile, SellerAccount, SellerVerificationDocument, SellerVerificationAudit,
     BusinessAutomation, BusinessProfileView, BusinessAutoReplyLog, CatalogProduct,
     ShopSchedule, ShopDeliveryOption, MarketplaceOrder, MarketplaceOrderLine,
-    AffiliateProductTag, AffiliateCommission, PaymentOrder, ChatParticipant, MessageDeletion,
+    AffiliateProductTag, AffiliateCommission, PaymentOrder, PremiumSubscription, ChatParticipant, MessageDeletion,
 )
 import cloudinary.uploader
 from observability import report_safe_exception
@@ -300,7 +300,7 @@ def add_missing_columns(inspector, table_name, columns):
 # Bump this marker whenever models gain columns or tables. Production runs
 # ensure_database_schema() in the pre-deploy step and skips versions it has
 # already applied.
-SCHEMA_VERSION = '20261104_43_reel_visibility'
+SCHEMA_VERSION = '20261112_44_premium_plan_catalog'
 
 def ensure_runtime_compat_schema():
     """Repair columns required by the currently deployed models.
@@ -325,9 +325,20 @@ def ensure_runtime_compat_schema():
                     ShopSchedule.__table__, ShopDeliveryOption.__table__,
                     AffiliateProductTag.__table__, MarketplaceOrder.__table__,
                     MarketplaceOrderLine.__table__, AffiliateCommission.__table__,
-                    PaymentOrder.__table__, ChatParticipant.__table__, MessageDeletion.__table__],
+                    PaymentOrder.__table__, PremiumSubscription.__table__, ChatParticipant.__table__, MessageDeletion.__table__],
             checkfirst=True,
         )
+        subscription_inspector = inspect(db.engine)
+        add_missing_columns(subscription_inspector, 'premium_subscription', {
+            'client_request_id': db.String(100), 'plan_code': db.String(40),
+            'amount_paise': db.Integer(), 'duration_months': db.Integer(),
+        })
+        if db.engine.dialect.name == 'postgresql':
+            db.session.execute(text(
+                'CREATE UNIQUE INDEX IF NOT EXISTS uq_premium_subscription_request '
+                'ON premium_subscription (user_id, client_request_id)'
+            ))
+            db.session.commit()
     inspector = inspect(db.engine)
     add_missing_columns(inspector, 'chat', {
         'is_group': db.Boolean(), 'is_shop_chat': db.Boolean(), 'name': db.String(100),
@@ -410,6 +421,7 @@ def ensure_runtime_compat_schema():
         'referral_code': db.String(16), 'referred_by_id': db.Integer(),
         'premium_unlocked_at': db.DateTime(),
         'premium_expires_at': db.DateTime(),
+        'premium_plan_code': db.String(40),
         'cover_url': db.String(500),
         'college': db.String(150),
         'location': db.String(150),
@@ -456,6 +468,8 @@ def ensure_runtime_compat_schema():
     inspector = inspect(db.engine)
     add_missing_columns(inspector, 'payment_order', {
         'marketplace_order_id': db.Integer(),
+        'premium_plan_code': db.String(40),
+        'premium_duration_months': db.Integer(),
     })
     inspector = inspect(db.engine)
     add_missing_columns(inspector, 'seller_account', {
@@ -779,6 +793,11 @@ def ensure_database_schema(force=False):
             'chat_ref': db.String(64),
             'client_request_id': db.String(100),
             'purpose': db.String(30),
+            'premium_plan_code': db.String(40),
+            'premium_duration_months': db.Integer(),
+        })
+        add_missing_columns(inspector, 'user', {
+            'premium_plan_code': db.String(40),
         })
         if 'payment_order' in inspector.get_table_names():
             db.session.execute(text("UPDATE payment_order SET purpose = COALESCE(purpose, 'business')"))
@@ -1115,6 +1134,7 @@ def serialize_user(user, viewer_id=None):
         "isPremium": premium_active,
         "isVerified": bool(user.is_verified or premium_active),
         "premiumExpiresAt": iso_utc(user.premium_expires_at) if premium_active else None,
+        "premiumPlanCode": user.premium_plan_code if premium_active else None,
         "birthDate": user.birth_date.isoformat() if user.birth_date and viewer_id == user.id else "",
         "referralCode": user.referral_code or "" if viewer_id == user.id else "",
         "premiumReferralCount": User.query.filter_by(referred_by_id=user.id, email_verified=True).count() if viewer_id == user.id else 0,

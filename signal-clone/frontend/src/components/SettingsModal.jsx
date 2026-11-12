@@ -77,9 +77,15 @@ const normalizeBusinessData = (data, user) => {
     };
 };
 
-const PremiumUpiCard = () => {
-    return <div className="rounded-2xl border border-violet-400/25 bg-violet-500/10 p-4 text-center"><p className="font-black text-white">Secure Premium checkout</p><p className="mt-2 text-xs leading-5 text-violet-100">Purchase Premium from the Social section. The payment is verified by the backend and stays pending until an admin approves it.</p></div>;
-};
+const loadPremiumCheckout = () => new Promise((resolve, reject) => {
+    if (window.Razorpay) return resolve();
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error('Secure checkout could not load.'));
+    document.head.appendChild(script);
+});
 
 const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wallpaper, onThemeChange, onWallpaperChange, smartSpaceButtonEnabled, onSmartSpaceButtonChange, initialScreen = 'settings' }) => {
     const serverUi = user?.uiPreferences || {};
@@ -89,6 +95,10 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
     const [businessTitle, setBusinessTitle] = useState('Business tools');
     const [referralStatus, setReferralStatus] = useState(null);
     const [referralInput, setReferralInput] = useState('');
+    const [premiumBusy, setPremiumBusy] = useState(false);
+    const [premiumSubscription, setPremiumSubscription] = useState(null);
+    const [premiumCheckoutConfig, setPremiumCheckoutConfig] = useState(null);
+    const [selectedPremiumPlan, setSelectedPremiumPlan] = useState('medium_monthly');
     const [profile, setProfile] = useState({
         username: user?.username || '',
         bio: user?.bio || '',
@@ -716,7 +726,15 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
 
     const openPremium = async () => {
         go('premium');
-        try { const { data } = await axios.get('/api/premium/referral', { headers: { Authorization: `Bearer ${token}` } }); setReferralStatus(data); }
+        try {
+            const headers = { Authorization: `Bearer ${token}` };
+            const [{ data }, subscriptionResponse, paymentConfig] = await Promise.all([
+                axios.get('/api/premium/referral', { headers }), axios.get('/api/premium/subscription', { headers }),
+                axios.get('/api/payments/config', { headers }),
+            ]);
+            setReferralStatus(data); setPremiumSubscription(subscriptionResponse.data.subscription);
+            setPremiumCheckoutConfig(paymentConfig.data);
+        }
         catch (error) { setMessage({ type: 'error', text: error.response?.data?.error || 'Could not load Premium progress.' }); }
     };
 
@@ -728,6 +746,68 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
             setReferralInput(''); setMessage({ type: 'success', text: data.message });
         } catch (error) { setMessage({ type: 'error', text: error.response?.data?.error || 'Could not apply coupon.' }); }
         finally { setBusy(false); }
+    };
+
+    const startPremiumCheckout = async (autopay) => {
+        setPremiumBusy(true); setMessage(null);
+        try {
+            await loadPremiumCheckout();
+            const headers = { Authorization: `Bearer ${token}` };
+            const requestId = crypto.randomUUID().replaceAll('-', '_');
+            const { data } = await axios.post(autopay ? '/api/premium/subscription' : '/api/premium/order', { clientRequestId: requestId, planCode: selectedPremiumPlan }, { headers });
+            const checkout = new window.Razorpay({
+                key: data.checkout.keyId,
+                name: 'Ducor Premium',
+                description: `${(premiumCheckoutConfig?.premiumPlans || []).find(plan => plan.code === selectedPremiumPlan)?.name || 'Ducor Premium'} · ${autopay ? 'recurring autopay' : 'one-time access'}`,
+                ...(autopay ? { subscription_id: data.subscription.providerSubscriptionId } : {
+                    order_id: data.payment.providerOrderId, amount: Math.round(data.payment.amount * 100), currency: data.payment.currency,
+                }),
+                handler: async (result) => {
+                    try {
+                        if (autopay) {
+                            const verified = await axios.post('/api/premium/subscription/verify', result, { headers });
+                            if (verified.data.premiumActive) {
+                                onUserUpdate?.({ ...user, isPremium: true, premiumPlanCode: selectedPremiumPlan, premiumExpiresAt: verified.data.premiumExpiresAt });
+                                setMessage({ type: 'success', text: 'Subscription payment verified. Premium is active.' });
+                            } else {
+                                setPremiumSubscription({ status: verified.data.status, planCode: selectedPremiumPlan });
+                                setMessage({ type: 'success', text: 'Autopay mandate authorized. Premium will activate after Razorpay confirms the plan charge.' });
+                            }
+                        } else {
+                            const verified = await axios.post(`/api/payments/orders/${data.payment.id}/verify`, result, { headers });
+                            if (verified.data.status === 'approved') {
+                                onUserUpdate?.({ ...user, isPremium: true, premiumPlanCode: selectedPremiumPlan, premiumExpiresAt: verified.data.premiumExpiresAt });
+                                setMessage({ type: 'success', text: 'Payment verified. Premium is active for one month.' });
+                            } else {
+                                setMessage({ type: 'success', text: 'Payment authorization received. Premium will activate once Razorpay confirms capture.' });
+                            }
+                        }
+                        const refreshed = await axios.get('/api/premium/referral', { headers });
+                        setReferralStatus(refreshed.data);
+                    } catch (verifyError) {
+                        setMessage({ type: 'error', text: verifyError.response?.data?.error || 'Payment verification is still pending. Refresh shortly.' });
+                    } finally { setPremiumBusy(false); }
+                },
+                modal: { ondismiss: () => setPremiumBusy(false) },
+                theme: { color: '#8b5cf6' },
+            });
+            checkout.on('payment.failed', () => { setPremiumBusy(false); setMessage({ type: 'error', text: 'Payment did not complete. You can try again.' }); });
+            checkout.open();
+        } catch (error) {
+            setPremiumBusy(false);
+            setMessage({ type: 'error', text: error.response?.data?.error || error.message || 'Could not start Premium checkout.' });
+        }
+    };
+
+    const cancelPremiumAutopay = async () => {
+        if (!window.confirm('Cancel your Premium Autopay mandate? Your current paid access stays active until its expiry date.')) return;
+        setPremiumBusy(true);
+        try {
+            const { data } = await axios.post('/api/premium/subscription/cancel', {}, { headers: { Authorization: `Bearer ${token}` } });
+            setPremiumSubscription(current => ({ ...current, status: data.status }));
+            setMessage({ type: 'success', text: 'Autopay cancelled. Any already-paid Premium time remains available.' });
+        } catch (error) { setMessage({ type: 'error', text: error.response?.data?.error || 'Could not cancel Autopay.' }); }
+        finally { setPremiumBusy(false); }
     };
 
     const handleSubscreenBack = () => {
@@ -866,11 +946,31 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
 
                     {screen === 'premium' && <div className="space-y-4 p-5"><div className="rounded-3xl border border-violet-400/30 bg-gradient-to-br from-violet-500/20 to-blue-500/10 p-6"><div className="flex items-center gap-3"><SparklesIcon className="h-9 w-9 text-violet-300" /><div><h3 className="text-xl font-black text-white">Premium creator tools</h3><p className={`text-sm font-bold ${user?.isPremium || referralStatus?.isPremium ? 'text-emerald-300' : 'text-amber-300'}`}>{user?.isPremium || referralStatus?.isPremium ? 'Active on your account' : `${referralStatus?.verifiedReferrals || 0} of 7 verified referrals`}</p></div></div>{!user?.isPremium && referralStatus && <><div className="mt-5 h-3 overflow-hidden rounded-full bg-black/30"><div className="h-full rounded-full bg-gradient-to-r from-violet-400 to-blue-400" style={{ width: `${Math.min(100, referralStatus.verifiedReferrals / 7 * 100)}%` }} /></div><div className="mt-4 rounded-2xl bg-black/25 p-4"><p className="text-xs font-bold uppercase tracking-wider text-gray-400">Your coupon</p><div className="mt-2 flex gap-2"><code className="flex-1 rounded-xl bg-black/40 px-4 py-3 text-lg font-black tracking-widest text-white">{referralStatus.referralCode}</code><button onClick={() => navigator.clipboard?.writeText(referralStatus.referralCode)} className="rounded-xl bg-white px-4 text-sm font-black text-black">Copy</button></div><p className="mt-2 text-xs text-gray-400">Share this coupon. Premium unlocks automatically after 7 referred accounts verify their email.</p></div></>}<div className="mt-6 grid gap-3 sm:grid-cols-2">{['Verified checkmark','Advanced Social analytics','Advanced Reels analytics','Boosted replies','Write long-form articles','Paid posts and Reels'].map(feature => <div key={feature} className="flex items-center gap-2 rounded-xl bg-black/20 p-3 text-sm font-semibold text-white"><span className="text-emerald-400">✓</span>{feature}</div>)}</div></div>{!user?.isPremium && <div className="rounded-2xl border border-white/10 bg-[#182229] p-4"><p className="text-sm font-bold text-white">Have a friend’s coupon?</p><div className="mt-3 flex gap-2"><input value={referralInput} onChange={e => setReferralInput(e.target.value.replace(/[^a-z0-9]/gi, '').toUpperCase().slice(0, 16))} placeholder="Enter coupon" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/25 px-3 py-2 uppercase text-white outline-none focus:border-violet-400" /><button onClick={applyReferral} disabled={busy || !referralInput} className="rounded-xl bg-violet-500 px-4 text-sm font-black text-white disabled:opacity-50">Apply</button></div><p className="mt-2 text-xs text-gray-500">A coupon can be linked once during your account’s first 7 days.</p></div>}</div>}
 
+                    {screen === 'premium' && premiumSubscription && <section className="mx-5 mb-5 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-gray-200">
+                        <div className="flex flex-wrap items-center justify-between gap-3"><span>Autopay: <strong className="capitalize">{premiumSubscription.status}</strong>{premiumSubscription.currentPeriodEnd ? ` · through ${new Date(premiumSubscription.currentPeriodEnd).toLocaleDateString()}` : ''}</span>
+                            {!['cancelled', 'completed', 'halted'].includes(premiumSubscription.status) && <button type="button" disabled={premiumBusy} onClick={cancelPremiumAutopay} className="rounded-lg border border-red-400/30 px-3 py-2 text-xs font-bold text-red-200 disabled:opacity-50">Cancel Autopay</button>}
+                        </div>
+                    </section>}
                     {screen === 'premium' && <section className="mx-5 mb-5 rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4"><label className="flex items-start gap-3"><input type="checkbox" className="mt-1 accent-amber-400" checked={Boolean(serverUi.socialMonetizePosts)} disabled={!user?.isPremium} onChange={event => persistUi({ socialMonetizePosts: event.target.checked })} /><span><span className="block text-sm font-bold text-white">Enable creator earnings by default</span><span className="mt-1 block text-xs leading-5 text-gray-400">Eligible new posts can use creator earnings automatically. Manage this preference here in Settings. Premium is required.</span></span></label></section>}
 
                     {screen === 'language' && <div className="p-5"><p className="mb-4 text-sm leading-6 text-gray-400">English is the default. Select an Indian language to translate the complete app interface.</p><div className="grid gap-2 sm:grid-cols-2">{INDIAN_LANGUAGES.map(([code, name]) => <button key={code} onClick={() => changeLanguage(code)} className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left text-sm font-semibold ${appLanguage === code ? 'border-[#00a884] bg-[#00a884]/15 text-white' : 'border-white/10 bg-white/5 text-gray-200'}`}><span>{name}</span>{appLanguage === code && <span className="text-[#00a884]">✓</span>}</button>)}</div></div>}
 
-                    {screen === 'premium' && !user?.isPremium && <div className="px-5 pb-5"><PremiumUpiCard /></div>}
+                    {screen === 'premium' && !user?.isPremium && <div className="space-y-3 px-5 pb-5">
+                        <div className="rounded-2xl border border-violet-400/25 bg-violet-500/10 p-4">
+                            <p className="font-black text-white">Choose a Premium plan</p>
+                            <p className="mt-1 text-xs leading-5 text-violet-100">Pay once for a billing period, or authorize Razorpay Autopay for recurring renewal. Autopay starts only after you approve the mandate in checkout.</p>
+                            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                {(premiumCheckoutConfig?.premiumPlans || []).map(plan => <button key={plan.code} type="button" onClick={() => setSelectedPremiumPlan(plan.code)} className={`rounded-xl border p-3 text-left ${selectedPremiumPlan === plan.code ? 'border-violet-300 bg-violet-400/20' : 'border-white/10 bg-black/20'}`}>
+                                    <span className="block text-xs font-bold text-white">{plan.name}</span><span className="mt-1 block text-sm font-black text-violet-100">₹{plan.amount.toLocaleString('en-IN')}</span>
+                                    <span className="text-[10px] text-gray-300">{plan.period === 'yearly' ? 'per year' : 'per month'}</span>
+                                </button>)}
+                            </div>
+                            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                                <button type="button" disabled={premiumBusy || !premiumCheckoutConfig?.enabled || !selectedPremiumPlan} onClick={() => startPremiumCheckout(false)} className="rounded-xl bg-white px-4 py-3 text-sm font-black text-violet-900 disabled:opacity-50">{!premiumCheckoutConfig?.enabled ? 'Checkout unavailable' : premiumBusy ? 'Opening secure checkout…' : `Pay once · ₹${((premiumCheckoutConfig?.premiumPlans || []).find(plan => plan.code === selectedPremiumPlan)?.amount || 0).toLocaleString('en-IN')}`}</button>
+                                <button type="button" disabled={premiumBusy || !(premiumCheckoutConfig?.premiumPlans || []).find(plan => plan.code === selectedPremiumPlan)?.autopayEnabled} onClick={() => startPremiumCheckout(true)} className="rounded-xl bg-violet-500 px-4 py-3 text-sm font-black text-white disabled:opacity-50">{(premiumCheckoutConfig?.premiumPlans || []).find(plan => plan.code === selectedPremiumPlan)?.autopayEnabled ? 'Set up Autopay' : 'Autopay unavailable for this plan'}</button>
+                            </div>
+                        </div>
+                    </div>}
 
                     {screen === 'account' && (
                         <>

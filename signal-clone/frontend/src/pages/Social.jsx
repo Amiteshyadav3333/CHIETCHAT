@@ -1070,7 +1070,9 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
     const [preview, setPreview] = useState([]);
     const [premiumPrompt, setPremiumPrompt] = useState(false);
     const [premiumPromptReason, setPremiumPromptReason] = useState('posts');
-    const [premiumPrice, setPremiumPrice] = useState(199);
+    const [premiumPlans, setPremiumPlans] = useState([]);
+    const [selectedPremiumPlan, setSelectedPremiumPlan] = useState('medium_monthly');
+    const [premiumCheckoutEnabled, setPremiumCheckoutEnabled] = useState(false);
     const [premiumBuying, setPremiumBuying] = useState(false);
     const [posting, setPosting] = useState(false);
     const [showChannelForm, setShowChannelForm] = useState(false);
@@ -1305,7 +1307,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
             return true;
         } catch (err) {
             if (err.response?.data?.code === 'DAILY_POST_LIMIT_REACHED') {
-                axios.get('/api/payments/config', { headers: authHeaders(token) }).then(({ data }) => setPremiumPrice(data.premiumPrice || 199)).catch(() => {});
+                axios.get('/api/payments/config', { headers: authHeaders(token) }).then(({ data }) => { setPremiumPlans(data.premiumPlans || []); setPremiumCheckoutEnabled(Boolean(data.enabled)); }).catch(() => {});
                 setPremiumPromptReason('posts');
                 setPremiumPrompt(true);
             } else if (err.response?.data?.code === 'PREMIUM_VIDEO_LENGTH_REQUIRED') {
@@ -1315,34 +1317,58 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
         } finally { setPosting(false); }
     };
 
-    const buyPremium = async () => {
+    const buyPremium = async (autopay = false) => {
         setPremiumBuying(true);
         try {
             const headers = authHeaders(token);
             const config = await axios.get('/api/payments/config', { headers });
             if (!config.data.enabled) throw new Error('Premium checkout is not configured yet.');
-            const order = await axios.post('/api/premium/order', { clientRequestId: newPaymentRequestId() }, { headers });
+            const selectedPlan = (config.data.premiumPlans || []).find(plan => plan.code === selectedPremiumPlan);
+            if (!selectedPlan) throw new Error('Choose a valid Premium plan.');
+            if (autopay && !selectedPlan.autopayEnabled) throw new Error('Autopay is not configured for this plan yet.');
+            const order = await axios.post(autopay ? '/api/premium/subscription' : '/api/premium/order', { clientRequestId: newPaymentRequestId(), planCode: selectedPremiumPlan }, { headers });
             await loadRazorpayCheckout();
-            const { payment, checkout } = order.data;
+            const { payment, subscription, checkout } = order.data;
             const instance = new window.Razorpay({
-                key: checkout.keyId, amount: Math.round(payment.amount * 100), currency: payment.currency,
-                name: 'Ducor Premium', description: 'Creator tools', order_id: payment.providerOrderId,
+                key: checkout.keyId, name: 'Ducor Premium',
+                description: `${selectedPlan.name} · ${autopay ? 'recurring Autopay' : 'one-time access'}`,
+                ...(autopay ? { subscription_id: subscription.providerSubscriptionId } : { amount: Math.round(payment.amount * 100), currency: payment.currency, order_id: payment.providerOrderId }),
                 handler: async result => {
-                    await axios.post(`/api/payments/orders/${payment.id}/verify`, result, { headers });
-                    setPremiumPrompt(false);
-                    alert('Payment verified. Your Premium request is waiting for admin approval. Premium will activate once approved.');
+                    try {
+                        if (autopay) {
+                            const verified = await axios.post('/api/premium/subscription/verify', result, { headers });
+                            if (!verified.data.premiumActive) {
+                                alert('Autopay mandate authorized. Premium activates after Razorpay confirms the selected plan charge.');
+                                setPremiumPrompt(false);
+                                return;
+                            }
+                            updateUser?.({ ...user, isPremium: true, premiumPlanCode: selectedPremiumPlan, premiumExpiresAt: verified.data.premiumExpiresAt });
+                        } else {
+                            const verified = await axios.post(`/api/payments/orders/${payment.id}/verify`, result, { headers });
+                            if (verified.data.status !== 'approved') {
+                                alert('Payment authorization received. Premium activates after Razorpay confirms capture.');
+                                return;
+                            }
+                            updateUser?.({ ...user, isPremium: true, premiumPlanCode: selectedPremiumPlan, premiumExpiresAt: verified.data.premiumExpiresAt });
+                        }
+                        setPremiumPrompt(false);
+                        alert(autopay ? 'Autopay is active. Premium is enabled for your paid period.' : 'Payment verified. Premium is active for one month.');
+                    } catch (error) {
+                        alert(error.response?.data?.error || 'Payment verification is pending. Check your Premium status before retrying.');
+                    } finally {
+                        setPremiumBuying(false);
+                    }
                 },
                 modal: { ondismiss: () => setPremiumBuying(false) }, theme: { color: '#8b5cf6' },
             });
-            instance.on('payment.failed', response => alert(response.error?.description || 'Payment failed'));
+            instance.on('payment.failed', response => { setPremiumBuying(false); alert(response.error?.description || 'Payment failed'); });
             instance.open();
-        } catch (error) { alert(error.response?.data?.error || error.message || 'Premium checkout could not be opened.'); }
-        finally { setPremiumBuying(false); }
+        } catch (error) { setPremiumBuying(false); alert(error.response?.data?.error || error.message || 'Premium checkout could not be opened.'); }
     };
 
     const showPremiumUpgrade = (reason = 'posts') => {
         setPremiumPromptReason(reason);
-        axios.get('/api/payments/config', { headers: authHeaders(token) }).then(({ data }) => setPremiumPrice(data.premiumPrice || 199)).catch(() => {});
+        axios.get('/api/payments/config', { headers: authHeaders(token) }).then(({ data }) => { setPremiumPlans(data.premiumPlans || []); setPremiumCheckoutEnabled(Boolean(data.enabled)); }).catch(() => {});
         setPremiumPrompt(true);
     };
 
@@ -1591,9 +1617,14 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                         <SparklesIcon className="mx-auto h-12 w-12 text-violet-300" />
                         <h2 className="mt-3 text-2xl font-black text-white">{premiumPromptReason === 'video' ? 'Share longer videos with Premium' : 'Your three free posts are used'}</h2>
                         <p className="mt-2 text-sm leading-6 text-gray-300">{premiumPromptReason === 'video' ? 'Videos over 2 minutes 30 seconds require Premium. News and articles remain free to publish without a length limit.' : 'Upgrade for more social posts and creator tools. News articles can be published without a daily limit.'}</p>
-                        <div className="mt-5 rounded-2xl bg-white/5 p-4"><p className="text-xs font-bold uppercase tracking-wider text-violet-300">One month + two months free</p><p className="mt-1 text-3xl font-black text-white">₹{premiumPrice}</p><p className="mt-1 text-xs text-gray-400">Three months total access</p></div>
-                        <button disabled={premiumBuying} onClick={buyPremium} className="mt-5 w-full rounded-xl bg-violet-500 py-3.5 text-sm font-black text-white hover:bg-violet-400 disabled:opacity-60">{premiumBuying ? 'Opening secure checkout…' : 'Pay securely'}</button>
-                        <p className="mt-3 text-[11px] leading-4 text-gray-400">Your payment is verified by the server first. After that, an admin must approve it before Premium becomes active.</p>
+                        <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                            {premiumPlans.map(plan => <button type="button" key={plan.code} onClick={() => setSelectedPremiumPlan(plan.code)} className={`rounded-xl border p-3 text-left ${selectedPremiumPlan === plan.code ? 'border-violet-300 bg-violet-400/20' : 'border-white/10 bg-white/5'}`}>
+                                <span className="block text-xs font-bold text-white">{plan.name}</span><span className="mt-1 block text-sm font-black text-white">₹{plan.amount.toLocaleString('en-IN')}</span><span className="text-[10px] text-gray-400">{plan.period === 'yearly' ? 'per year' : 'per month'}</span>
+                            </button>)}
+                        </div>
+                        <button disabled={premiumBuying || !premiumCheckoutEnabled || !premiumPlans.length} onClick={() => buyPremium(false)} className="mt-3 w-full rounded-xl bg-violet-500 py-3.5 text-sm font-black text-white hover:bg-violet-400 disabled:opacity-60">{!premiumCheckoutEnabled ? 'Checkout unavailable' : premiumBuying ? 'Opening secure checkout…' : `Pay once · ₹${(premiumPlans.find(plan => plan.code === selectedPremiumPlan)?.amount || 0).toLocaleString('en-IN')}`}</button>
+                        <button disabled={premiumBuying || !premiumPlans.find(plan => plan.code === selectedPremiumPlan)?.autopayEnabled} onClick={() => buyPremium(true)} className="mt-2 w-full rounded-xl border border-violet-300/30 py-3.5 text-sm font-black text-violet-100 hover:bg-violet-400/10 disabled:opacity-50">{premiumPlans.find(plan => plan.code === selectedPremiumPlan)?.autopayEnabled ? 'Set up Autopay' : 'Autopay unavailable for this plan'}</button>
+                        <p className="mt-3 text-[11px] leading-4 text-gray-400">The backend verifies each payment with Razorpay before Premium access is granted.</p>
                         <button onClick={() => setPremiumPrompt(false)} className="mt-3 text-sm font-semibold text-gray-400">Maybe later</button>
                     </div>
                 </div>

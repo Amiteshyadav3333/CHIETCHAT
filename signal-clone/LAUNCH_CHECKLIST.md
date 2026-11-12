@@ -53,19 +53,38 @@ and socket reconnection in Safari, Chrome, Edge, Android and installed iOS PWA.
 2. Put the live Key ID in `RAZORPAY_KEY_ID` and live secret in
    `RAZORPAY_KEY_SECRET` on the backend only.
 3. Generate a separate webhook secret and set `RAZORPAY_WEBHOOK_SECRET`.
-4. Add the webhook URL
+4. Configure all six Razorpay plans in the backend environment. The app checks
+   each configured plan ID against its amount, currency, billing period and
+   interval before creating a subscription:
+
+   | App setting | Razorpay plan | Amount |
+   | --- | --- | ---: |
+   | `RAZORPAY_PLAN_BASIC_MONTHLY` | Basic monthly | ₹199/month |
+   | `RAZORPAY_PLAN_MEDIUM_MONTHLY` | Medium monthly | ₹499/month |
+   | `RAZORPAY_PLAN_MAX_MONTHLY` | Max monthly | ₹999/month |
+   | `RAZORPAY_PLAN_BASIC_YEARLY` | Basic yearly | ₹2,388/year |
+   | `RAZORPAY_PLAN_MEDIUM_YEARLY` | Medium yearly | ₹5,988/year |
+   | `RAZORPAY_PLAN_MAX_YEARLY` | Max yearly | ₹11,988/year |
+5. Add the webhook URL
    `https://<backend>/api/payments/webhooks/razorpay` and subscribe to
-   `payment.captured`, `payment.failed`, `order.paid`, `refund.processed` and
-   `refund.failed`.
-5. Run one minimum-value real payment, confirm the order becomes `verified`,
-   request and approve its refund, then reconcile both records in the Razorpay
-dashboard before enabling the UI publicly.
+   `payment.captured`, `payment.failed`, `order.paid`, `refund.processed`,
+   `refund.failed`, `subscription.activated`, `subscription.charged`,
+   `subscription.authenticated`, `subscription.halted`, `subscription.cancelled`
+   and `subscription.completed`.
+6. Test the one-month purchase and monthly mandate in Test Mode, verify Premium
+   activates only after provider confirmation, and confirm renewal/cancellation
+   events update the paid-through date before enabling Live Mode.
 
 CHEETCHAT enables checkout only when the live Key ID, Key Secret and separate
 webhook secret are all configured. A browser callback alone cannot mark an
 order paid: the backend validates its HMAC signature, fetches the payment from
 Razorpay, and reconciles the provider order ID, payment ID, amount, currency and
 captured status. Refunds receive the same payment-ID and full-amount checks.
+Premium one-time purchases unlock after capture for the selected monthly or
+yearly period. Autopay uses the matching Razorpay subscription plan; the
+provider plan amount and interval are checked before checkout, and each charge
+is matched against the saved plan, payment amount, currency and subscription
+before access is extended. Plan IDs are backend-only configuration.
 Amounts are converted with exact decimal arithmetic and values smaller than one
 paise are rejected instead of rounded. Signed webhook reconciliation is
 monotonic: capture replays cannot regress a refund, payment IDs cannot be claimed

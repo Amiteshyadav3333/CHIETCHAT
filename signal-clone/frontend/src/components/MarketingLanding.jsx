@@ -76,8 +76,12 @@ const projects = [
 
 const plans = [
   ['Free', '₹0', 'Forever', ['Private messaging', 'Social & reels access', 'Standard calls', 'Core translation'], false],
-  ['Basic', '₹199', '/ month', ['More AI tools', 'Enhanced creator controls', 'Longer HD calls', 'Priority experience'], false],
-  ['Unlimited', '₹499', '/ month', ['Unlimited eligible features', 'Advanced AI suite', 'Premium creator & business tools', 'Highest available limits'], true],
+  ['Basic Monthly', '₹199', 'Once a month', ['Basic tier', 'One month of Premium access', 'Razorpay checkout', 'Server verified payment'], false],
+  ['Medium Monthly', '₹499', 'Once a month', ['Medium tier', 'One month of Premium access', 'Razorpay checkout', 'Server verified payment'], false],
+  ['Max Monthly', '₹999', 'Once a month', ['Max tier', 'One month of Premium access', 'Razorpay checkout', 'Server verified payment'], false],
+  ['Basic Yearly', '₹2,388', 'Once a year', ['Basic tier', '12 months of Premium access', 'Razorpay checkout', 'Server verified payment'], false],
+  ['Medium Yearly', '₹5,988', 'Once a year', ['Medium tier', '12 months of Premium access', 'Razorpay checkout', 'Server verified payment'], false],
+  ['Max Yearly', '₹11,988', 'Once a year', ['Max tier', '12 months of Premium access', 'Razorpay checkout', 'Server verified payment'], false],
 ];
 
 const faqs = [
@@ -88,7 +92,7 @@ const faqs = [
   ['What is Snap Mode?', 'Snap Mode is a more private temporary session where supported messages and media disappear after the configured session or timer. No app can stop someone using a second device to record a screen, so sensitive sharing still requires care.'],
   ['Can I build a community or post tweets?', 'Yes. Social supports short text posts, photos, video, articles, replies, reactions, reposts, follows, communities, spaces and feed customization.'],
   ['What can businesses do?', 'Businesses can create a profile, catalogue and storefront, add inventory details, use welcome or away messages and keyword auto-replies, chat with customers and review activity insights.'],
-  ['Is the ₹499 plan truly unlimited?', 'It provides unlimited use of eligible features subject to fair-use, safety, technical and legal limits. The checkout and plan terms should show any media, AI or call limits that apply at launch.'],
+  ['How are Premium payments verified?', 'Razorpay confirms payments with the backend before Premium access is granted. Monthly and yearly AutoPay availability depends on the corresponding Razorpay plan being configured.'],
   ['Is AI always accurate?', 'No. AI Grammar, summaries, Smart Replies and the emotional AI companion can make mistakes. Users should verify important academic, medical, legal and financial information independently.'],
   ['Who created Ducor?', 'Ducor was founded by Amitesh Kumar Yadav and designed especially for Indian college students, creators, communities and small businesses.'],
 ];
@@ -130,7 +134,7 @@ export default function MarketingLanding() {
 
     <section className="projects-section section-shell" id="projects"><div className="section-heading"><span>INDIA-FIRST ECOSYSTEM</span><h2>{t.projectsTitle}</h2></div><div className="project-grid">{projects.map(([name, desc, tag, href, image]) => <a className="project-card" href={href} target="_blank" rel="noreferrer" key={name}><img src={image} alt=""/><div><span>{tag}</span><h3>{name}</h3><p>{desc}</p><strong>Visit project <ArrowTopRightOnSquareIcon/></strong></div></a>)}</div></section>
 
-    <section className="pricing-section section-shell" id="pricing"><div className="section-heading"><span>TRANSPARENT PRICING</span><h2>{t.pricingTitle}</h2><p>{t.pricingIntro}</p></div><div className="pricing-grid">{plans.map(([name, price, cadence, items, popular]) => <article className={`price-card ${popular ? 'popular' : ''}`} key={name}>{popular && <span className="popular-label">BEST VALUE</span>}<h3>{name}</h3><div className="price"><strong>{price}</strong><span>{cadence}</span></div><ul>{items.map(item => <li key={item}><CheckCircleIcon/>{item}</li>)}</ul><a href="#auth-top">Choose {name}</a></article>)}</div><p className="pricing-note">Plan inclusions are product positioning for launch and should be reflected in checkout terms. Fair-use, safety and platform limits may apply.</p></section>
+    <section className="pricing-section section-shell" id="pricing"><div className="section-heading"><span>TRANSPARENT PRICING</span><h2>{t.pricingTitle}</h2><p>{t.pricingIntro}</p></div><div className="pricing-grid">{plans.map(([name, price, cadence, items, popular]) => <article className={`price-card ${popular ? 'popular' : ''}`} key={name}>{popular && <span className="popular-label">BEST VALUE</span>}<h3>{name}</h3><div className="price"><strong>{price}</strong><span>{cadence}</span></div><ul>{items.map(item => <li key={item}><CheckCircleIcon/>{item}</li>)}</ul><a href="#auth-top">Choose {name}</a></article>)}</div><p className="pricing-note">One-time payments are verified by Razorpay before Premium access is enabled. AutoPay is available where the matching Razorpay subscription plan is configured.</p></section>
 
     <section className="legal-section section-shell" id="legal"><div className="section-heading"><span>TRUST & LEGAL</span><h2>{t.legalTitle}</h2><p>{t.legalIntro}</p></div><div className="legal-grid">
       <article className="legal-card terms-card"><div className="legal-icon"><CheckCircleIcon/></div><span>Effective August 2, 2026</span><h3>{t.termsCard}</h3><p>{lang === 'hi' ? 'Ducor का उपयोग कानूनी और जिम्मेदार तरीके से करें। Account security आपकी जिम्मेदारी है। आप अपने content के owner रहते हैं और Ducor को केवल service चलाने के लिए उसे host, process और deliver करने की अनुमति देते हैं। Spam, harassment, fraud, illegal content और service को नुकसान पहुँचाने की कोशिश मना है।' : 'Use Ducor lawfully and responsibly. You remain responsible for account security and retain ownership of your content. You permit Ducor to host, process and deliver that content only as required to operate the service. Spam, harassment, fraud, illegal content and attempts to compromise the platform are prohibited.'}</p><ul><li><CheckCircleIcon/>You keep ownership of your content</li><li><CheckCircleIcon/>Clear community and safety rules</li><li><CheckCircleIcon/>Transparent service and fair-use limits</li><li><CheckCircleIcon/>Permanent account deletion control</li></ul><a href="/terms">{t.fullPolicy} <ArrowTopRightOnSquareIcon/></a></article>

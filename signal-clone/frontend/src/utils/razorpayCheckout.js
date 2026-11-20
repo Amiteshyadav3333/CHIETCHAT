@@ -15,3 +15,19 @@ export const getRazorpayUpiPrefill = user => {
     if (prefill.email && prefill.contact) prefill.method = 'upi';
     return prefill;
 };
+
+// Keep UPI at the top of Razorpay Checkout while leaving other enabled
+// payment methods available as a fallback. This also works for subscription
+// mandate authorisation when UPI Autopay is enabled on the Razorpay account.
+export const getRazorpayUpiCheckoutConfig = () => ({
+    display: {
+        blocks: {
+            upi: {
+                name: 'Pay via UPI',
+                instruments: [{ method: 'upi' }],
+            },
+        },
+        sequence: ['block.upi'],
+        preferences: { show_default_blocks: true },
+    },
+});

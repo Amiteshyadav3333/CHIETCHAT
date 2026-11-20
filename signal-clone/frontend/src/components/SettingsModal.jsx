@@ -27,7 +27,7 @@ import {
     getGlobalCustomAudio,
 } from '../utils/customNotificationSounds';
 import { ensureDevicePin, verifyDevicePin } from '../utils/deviceLock';
-import { getRazorpayUpiPrefill } from '../utils/razorpayCheckout';
+import { getRazorpayUpiCheckoutConfig, getRazorpayUpiPrefill } from '../utils/razorpayCheckout';
 
 const TITLES = {
     settings: 'Settings', profile: 'Profile', account: 'Account', privacy: 'Privacy',
@@ -766,6 +766,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
                 name: 'Ducor Premium',
                 description: `${(premiumCheckoutConfig?.premiumPlans || []).find(plan => plan.code === selectedPremiumPlan)?.name || 'Ducor Premium'} · ${autopay ? 'recurring autopay' : 'one-time access'}`,
                 prefill: getRazorpayUpiPrefill(user),
+                config: getRazorpayUpiCheckoutConfig(),
                 ...(autopay ? { subscription_id: data.subscription.providerSubscriptionId } : {
                     order_id: data.payment.providerOrderId, amount: Math.round(data.payment.amount * 100), currency: data.payment.currency,
                 }),
@@ -811,7 +812,7 @@ const SettingsModal = ({ user, token, onClose, onLogout, onUserUpdate, theme, wa
         setPremiumBusy(true);
         try {
             const { data } = await axios.post('/api/premium/subscription/cancel', {}, { headers: { Authorization: `Bearer ${token}` } });
-            setPremiumSubscription(current => ({ ...current, status: data.status }));
+            setPremiumSubscription(current => current ? ({ ...current, status: data.status, currentPeriodEnd: data.premiumExpiresAt || current.currentPeriodEnd }) : current);
             setMessage({ type: 'success', text: 'Autopay cancelled. Any already-paid Premium time remains available.' });
         } catch (error) { setMessage({ type: 'error', text: error.response?.data?.error || 'Could not cancel Autopay.' }); }
         finally { setPremiumBusy(false); }

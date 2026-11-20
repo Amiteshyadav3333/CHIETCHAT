@@ -23,7 +23,7 @@ import ProCameraStudio from '../components/ProCameraStudio';
 import { useBackHandler } from '../utils/backNavigation';
 import { isSocialFeedCacheFresh, loadSocialFeedCache, saveSocialFeedCache } from '../utils/socialFeedCache';
 import { useNavigate, usePathname } from '../utils/clientRouter';
-import { getRazorpayUpiPrefill } from '../utils/razorpayCheckout';
+import { getRazorpayUpiCheckoutConfig, getRazorpayUpiPrefill } from '../utils/razorpayCheckout';
 
 const authHeaders = (token) => ({ Authorization: `Bearer ${token}` });
 const feedCacheKey = (userId, feed) => `${userId || 'guest'}:${feed}`;
@@ -1334,6 +1334,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                 key: checkout.keyId, name: 'Ducor Premium',
                 description: `${selectedPlan.name} · ${autopay ? 'recurring Autopay' : 'one-time access'}`,
                 prefill: getRazorpayUpiPrefill(user),
+                config: getRazorpayUpiCheckoutConfig(),
                 ...(autopay ? { subscription_id: subscription.providerSubscriptionId } : { amount: Math.round(payment.amount * 100), currency: payment.currency, order_id: payment.providerOrderId }),
                 handler: async result => {
                     try {

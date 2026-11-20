@@ -71,6 +71,17 @@ const Login = () => {
                 const session = authResult.data.session;
                 if (!session?.access_token) throw new Error('Google session was not returned');
                 googleEmail = String(session.user?.email || '').trim().toLowerCase();
+                const hasEmailIdentity = (session.user?.identities || []).some(identity => identity.provider === 'email');
+                const emailOtpEnabled = session.user?.user_metadata?.ducorEmailOtpEnabled === true;
+                if (!hasEmailIdentity && !emailOtpEnabled) {
+                    const passwordBytes = window.crypto.getRandomValues(new Uint8Array(32));
+                    const internalPassword = Array.from(passwordBytes, byte => byte.toString(16).padStart(2, '0')).join('');
+                    const { error: emailOtpSetupError } = await supabase.auth.updateUser({
+                        password: internalPassword,
+                        data: { ...(session.user?.user_metadata || {}), ducorEmailOtpEnabled: true },
+                    });
+                    if (emailOtpSetupError) console.warn('Email-code sign-in could not be enabled for this Google account.', emailOtpSetupError.message);
+                }
                 const response = await axios.post('/api/auth/google/exchange', {
                     accessToken: session.access_token,
                     deviceFingerprint,

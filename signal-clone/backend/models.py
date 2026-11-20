@@ -234,8 +234,13 @@ class ShopDeliveryOption(db.Model):
 
 class MarketplaceOrder(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    buyer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    buyer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True, index=True)
     seller_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    guest_request_id = db.Column(db.String(80), nullable=True, unique=True, index=True)
+    guest_token_hash = db.Column(db.String(64), nullable=True, index=True)
+    guest_name = db.Column(db.String(120), nullable=True)
+    guest_email = db.Column(db.String(120), nullable=True)
+    guest_phone = db.Column(db.String(20), nullable=True)
     delivery_option_id = db.Column(db.Integer, db.ForeignKey('shop_delivery_option.id'), nullable=True)
     affiliate_tag_id = db.Column(db.Integer, db.ForeignKey('affiliate_product_tag.id'), nullable=True)
     delivery_mode = db.Column(db.String(24), nullable=False)

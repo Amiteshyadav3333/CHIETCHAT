@@ -85,7 +85,9 @@ const ProfileSetup = () => {
 
     useEffect(() => {
         if (user?.profileSetupDone && step === 1) {
-            navigate('/social');
+            const sellerSetupRequested = sessionStorage.getItem('pending_seller_setup') === '1';
+            if (sellerSetupRequested) sessionStorage.removeItem('pending_seller_setup');
+            navigate(sellerSetupRequested ? '/settings?seller=1' : '/social');
         }
     }, [user, step, navigate]);
 
@@ -238,7 +240,9 @@ const ProfileSetup = () => {
 
     const handleFinish = () => {
         localStorage.removeItem('cheetchat_tour_completed');
-        navigate('/social');
+        const sellerSetupRequested = sessionStorage.getItem('pending_seller_setup') === '1';
+        if (sellerSetupRequested) sessionStorage.removeItem('pending_seller_setup');
+        navigate(sellerSetupRequested ? '/settings?seller=1' : '/social');
     };
 
     return (

@@ -1,6 +1,7 @@
 import json
 import secrets
 import re
+import os
 import io
 import hashlib
 import mimetypes
@@ -63,8 +64,8 @@ def seller_document_payload(document):
             'filename': document.original_filename, 'status': document.status,
             'uploadedAt': iso_utc(document.uploaded_at), 'reviewerNote': document.reviewer_note or ''}
 
-def order_payload(order):
-    return {'id': order.id, 'sellerId': order.seller_id, 'buyerId': order.buyer_id,
+def order_payload(order, include_guest_contact=False):
+    payload = {'id': order.id, 'sellerId': order.seller_id, 'buyerId': order.buyer_id,
             'status': order.status, 'paymentStatus': order.payment_status, 'deliveryMode': order.delivery_mode,
             'deliveryAddress': order.delivery_address or '', 'subtotal': order.subtotal_paise / 100,
             'deliveryFee': order.delivery_fee_paise / 100, 'total': order.total_paise / 100,
@@ -72,6 +73,10 @@ def order_payload(order):
             'items': [{'name': line.product_name, 'quantity': line.quantity,
                        'unitPrice': line.unit_price_paise / 100}
                       for line in MarketplaceOrderLine.query.filter_by(order_id=order.id).all()]}
+    if include_guest_contact and order.buyer_id is None:
+        payload['guestBuyer'] = {'name': order.guest_name or '', 'email': order.guest_email or '',
+                                 'phone': order.guest_phone or ''}
+    return payload
 
 def current_shop_open(user_id):
     from datetime import datetime as dt
@@ -162,7 +167,7 @@ def get_my_business():
         'deliveryOptions': [{'id': row.id, 'mode': row.mode, 'label': row.label, 'area': row.area or '',
                              'fee': row.fee_paise / 100, 'etaDays': row.eta_days, 'active': row.active}
                             for row in delivery_options],
-        'orders': [order_payload(row) for row in MarketplaceOrder.query.filter_by(seller_id=user_id)
+        'orders': [order_payload(row, include_guest_contact=True) for row in MarketplaceOrder.query.filter_by(seller_id=user_id)
                    .order_by(MarketplaceOrder.created_at.desc()).limit(100).all()],
         'affiliateCommissions': [{'orderId': row.order_id, 'amount': row.amount_paise / 100, 'status': row.status}
             for row in AffiliateCommission.query.filter_by(promoter_id=user_id).order_by(AffiliateCommission.created_at.desc()).limit(100).all()],
@@ -545,13 +550,103 @@ def public_storefront(business_user_id):
     payload['deliveryOptions'] = [{'id': row.id, 'mode': row.mode, 'label': row.label, 'area': row.area or '', 'fee': row.fee_paise / 100, 'etaDays': row.eta_days} for row in ShopDeliveryOption.query.filter_by(user_id=business_user_id, active=True).all()]
     return jsonify(payload)
 
+@business_bp.post('/api/business/guest-orders')
+def create_guest_marketplace_order():
+    data = get_json_data()
+    request_id = str(data.get('requestId') or '').strip()
+    access_token = str(data.get('guestAccessToken') or '').strip()
+    if not re.fullmatch(r'[A-Za-z0-9_-]{16,80}', request_id) or len(access_token) < 32 or len(access_token) > 160:
+        return jsonify({'error': 'Refresh the checkout and try again'}), 400
+    guest_hash = hashlib.sha256(access_token.encode('utf-8')).hexdigest()
+    name = str(data.get('name') or '').strip()[:120]
+    email = str(data.get('email') or '').strip().lower()[:120]
+    phone = ''.join(ch for ch in str(data.get('phone') or '') if ch.isdigit())[-10:]
+    if len(name) < 2 or not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', email) or len(phone) != 10:
+        return jsonify({'error': 'Enter your name, a valid email, and a 10-digit phone number'}), 400
+    try:
+        seller_id = int(data.get('sellerId'))
+        option_id = int(data.get('deliveryOptionId'))
+        items = data.get('items')
+    except (TypeError, ValueError):
+        return jsonify({'error': 'A shop, delivery choice, and product are required'}), 400
+    if not isinstance(items, list) or not items or len(items) > 20:
+        return jsonify({'error': 'Choose one shop and between 1 and 20 products'}), 400
+
+    existing = MarketplaceOrder.query.filter_by(guest_request_id=request_id).first()
+    if existing:
+        if existing.guest_token_hash != guest_hash or existing.guest_email != email:
+            return jsonify({'error': 'This checkout request is already in use'}), 409
+        checkout_enabled = existing.status == 'awaiting_payment'
+        return jsonify({'order': order_payload(existing), 'guestAccessToken': access_token,
+                        'checkoutEnabled': checkout_enabled}), 200
+
+    seller = SellerAccount.query.filter_by(user_id=seller_id, status='approved').first()
+    profile = BusinessProfile.query.filter_by(user_id=seller_id, marketplace_enabled=True, catalog_visible=True).first()
+    option = ShopDeliveryOption.query.filter_by(id=option_id, user_id=seller_id, active=True).first()
+    if not seller or not profile or not option:
+        return jsonify({'error': 'Shop or delivery option is unavailable'}), 409
+    address = str(data.get('deliveryAddress') or '').strip()[:500]
+    if option.mode == 'seller_delivery' and len(address) < 8:
+        return jsonify({'error': 'Enter a delivery address'}), 400
+    quantity_by_id = {}
+    try:
+        for item in items:
+            product_id, quantity = int(item.get('productId')), int(item.get('quantity', 1))
+            if quantity not in range(1, 101): raise ValueError()
+            quantity_by_id[product_id] = quantity_by_id.get(product_id, 0) + quantity
+    except (TypeError, ValueError, AttributeError):
+        return jsonify({'error': 'Product quantities must be between 1 and 100'}), 400
+    if any(quantity > 100 for quantity in quantity_by_id.values()):
+        return jsonify({'error': 'Maximum quantity is 100 per product'}), 400
+    products = CatalogProduct.query.filter(CatalogProduct.owner_id == seller_id,
+        CatalogProduct.id.in_(quantity_by_id), CatalogProduct.in_stock.is_(True)).with_for_update().all()
+    if len(products) != len(quantity_by_id):
+        return jsonify({'error': 'One or more products are unavailable'}), 409
+    try:
+        line_prices = [(product, quantity_by_id[product.id], amount_to_paise(product.price)) for product in products]
+    except (TypeError, ValueError):
+        return jsonify({'error': 'A listed product has an invalid price'}), 409
+    subtotal = sum(quantity * price for _, quantity, price in line_prices)
+    fee = option.fee_paise
+    if subtotal < 100 or subtotal + fee > 10_000_000:
+        return jsonify({'error': 'Order total must be between ₹1 and ₹1,00,000'}), 400
+    affiliate_tag = None
+    if data.get('affiliateCode'):
+        affiliate_tag = AffiliateProductTag.query.filter_by(code=str(data.get('affiliateCode'))[:32]).first()
+        if not affiliate_tag or affiliate_tag.promoter_id == seller_id or affiliate_tag.product_id not in quantity_by_id:
+            return jsonify({'error': 'Affiliate link does not match the selected item'}), 400
+
+    checkout_enabled = (
+        os.environ.get('MARKETPLACE_CHECKOUT_ENABLED', '').strip().lower() == 'true'
+        and bool(os.environ.get('RAZORPAY_KEY_ID')) and bool(os.environ.get('RAZORPAY_KEY_SECRET'))
+        and bool(os.environ.get('RAZORPAY_WEBHOOK_SECRET'))
+    )
+    order = MarketplaceOrder(
+        buyer_id=None, seller_id=seller_id, guest_request_id=request_id,
+        guest_token_hash=guest_hash, guest_name=name, guest_email=email, guest_phone=phone,
+        delivery_option_id=option.id, delivery_mode=option.mode,
+        delivery_address=address if option.mode == 'seller_delivery' else '',
+        delivery_fee_paise=fee, subtotal_paise=subtotal, total_paise=subtotal + fee,
+        status='awaiting_payment' if checkout_enabled else 'requested',
+        payment_status='awaiting_provider' if checkout_enabled else 'seller_arranged',
+        affiliate_tag_id=affiliate_tag.id if affiliate_tag else None,
+    )
+    db.session.add(order)
+    db.session.flush()
+    for product, quantity, price in line_prices:
+        db.session.add(MarketplaceOrderLine(order_id=order.id, product_id=product.id,
+            product_name=product.name, unit_price_paise=price, quantity=quantity))
+    db.session.commit()
+    return jsonify({'order': order_payload(order), 'guestAccessToken': access_token,
+                    'checkoutEnabled': checkout_enabled}), 201
+
 @business_bp.route('/api/business/orders', methods=['GET', 'POST', 'PUT'])
 def marketplace_orders():
     user_id = get_current_user_id()
     if not user_id: return jsonify({'error': 'Unauthorized'}), 401
     if request.method == 'GET':
         rows = MarketplaceOrder.query.filter(or_(MarketplaceOrder.buyer_id == user_id, MarketplaceOrder.seller_id == user_id)).order_by(MarketplaceOrder.created_at.desc()).limit(100).all()
-        return jsonify({'orders': [order_payload(row) for row in rows]})
+        return jsonify({'orders': [order_payload(row, include_guest_contact=(row.seller_id == user_id)) for row in rows]})
     data = get_json_data()
     if request.method == 'PUT':
         try: order_id = int(data.get('orderId'))
@@ -563,13 +658,13 @@ def marketplace_orders():
             order.payment_status = 'seller_confirmed'
             record_affiliate_commission(order)
             db.session.commit()
-            return jsonify(order_payload(order))
+            return jsonify(order_payload(order, include_guest_contact=True))
         target = str(data.get('status') or '')
         transitions = {'requested': {'accepted'}, 'paid': {'accepted'}, 'accepted': {'preparing'}, 'preparing': {'out_for_delivery', 'ready_for_pickup'}, 'out_for_delivery': {'completed'}, 'ready_for_pickup': {'completed'}}
         if order.status == 'requested' and order.payment_status not in {'seller_confirmed', 'provider_verified'}:
             return jsonify({'error': 'Confirm receipt of the agreed payment before accepting this order'}), 409
         if target not in transitions.get(order.status, set()): return jsonify({'error': 'That order status change is not allowed'}), 409
-        order.status = target; db.session.commit(); return jsonify(order_payload(order))
+        order.status = target; db.session.commit(); return jsonify(order_payload(order, include_guest_contact=True))
     try:
         seller_id = int(data.get('sellerId'))
         option_id = int(data.get('deliveryOptionId'))

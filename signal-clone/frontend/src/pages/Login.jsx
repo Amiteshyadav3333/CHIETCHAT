@@ -155,6 +155,9 @@ const Login = () => {
     };
 
     const finishLogin = async (userData, authToken, keysToStore = null, needsProfileSetup = false, recoveryCode = '', csrfToken = null, recoveryKeyBackup = null) => {
+        const sellerSetupRequested = sessionStorage.getItem('pending_seller_setup') === '1'
+            || new URLSearchParams(window.location.search).get('intent') === 'seller';
+        if (sellerSetupRequested) sessionStorage.setItem('pending_seller_setup', '1');
         if (csrfToken) sessionStorage.setItem('cheetchat_csrf_token', csrfToken);
         let recoveryCodeToDisplay = recoveryCode;
         let recoveryCodeOptional = false;
@@ -205,6 +208,9 @@ const Login = () => {
             sessionStorage.setItem('pending_nav', '/recovery-code');
         } else if (needsProfileSetup) {
             sessionStorage.setItem('pending_nav', '/setup-profile');
+        } else if (sellerSetupRequested) {
+            sessionStorage.removeItem('pending_seller_setup');
+            sessionStorage.setItem('pending_nav', '/settings?seller=1');
         }
         login(userData, authToken, csrfToken);
     };

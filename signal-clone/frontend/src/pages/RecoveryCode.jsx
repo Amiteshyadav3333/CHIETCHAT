@@ -25,14 +25,18 @@ const RecoveryCode = () => {
         sessionStorage.removeItem('recovery_code_once');
         sessionStorage.removeItem('recovery_code_optional');
         sessionStorage.removeItem('pending_nav');
-        navigate(optional ? '/social' : '/setup-profile');
+        const sellerSetupRequested = sessionStorage.getItem('pending_seller_setup') === '1';
+        if (sellerSetupRequested) sessionStorage.removeItem('pending_seller_setup');
+        navigate(sellerSetupRequested ? '/settings?seller=1' : optional ? '/social' : '/setup-profile');
     };
 
     const continueWithoutSaving = () => {
         sessionStorage.removeItem('recovery_code_once');
         sessionStorage.removeItem('recovery_code_optional');
         sessionStorage.removeItem('pending_nav');
-        navigate('/social');
+        const sellerSetupRequested = sessionStorage.getItem('pending_seller_setup') === '1';
+        if (sellerSetupRequested) sessionStorage.removeItem('pending_seller_setup');
+        navigate(sellerSetupRequested ? '/settings?seller=1' : '/social');
     };
 
     if (!code) return <div className="flex min-h-screen items-center justify-center bg-[#08090b] text-white">Recovery code is no longer available.</div>;

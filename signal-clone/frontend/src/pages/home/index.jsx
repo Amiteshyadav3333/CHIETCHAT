@@ -206,7 +206,7 @@ export const Home = () => {
     // Notifications
     const [notifications, setNotifications] = useState([]);
     const [showNotifications, setShowNotifications] = useState(false);
-    const [settingsInitialScreen, setSettingsInitialScreen] = useState('settings');
+    const [settingsInitialScreen, setSettingsInitialScreen] = useState(() => new URLSearchParams(window.location.search).get('seller') === '1' ? 'seller-setup' : 'settings');
     const [unreadCount, setUnreadCount] = useState(0);
 
     // Messaging extras

@@ -11,7 +11,7 @@ const copy = {
     badge: 'A little more room for college life',
     title: 'College life has a group chat for everything.',
     intro: 'Classes, new friends, late-night ideas, creator plans and the shop around the corner. Ducor gives your college crew one place to keep it all moving.',
-    explore: 'Explore every feature', android: 'Get Android beta',
+    explore: 'Explore every feature', android: 'Get Android beta', shop: 'Shop without signing in',
     trusted: 'Private by design', india: 'India-first infrastructure', languages: 'Indian languages supported',
     featureTitle: 'The things you do together, in one place.',
     featureIntro: 'Catch up, share something funny, learn a new word, find a local shop or go live. Here are a few ways people can make Ducor their own.',
@@ -36,7 +36,7 @@ const copy = {
     badge: 'भारत के लिए सोशल प्लेटफॉर्म',
     title: 'खोजें। साझा करें। जुड़ें।',
     intro: 'Ducor भारत भर के लोगों को खबरें और संसाधन खोजने, कहानियाँ प्रकाशित करने, वीडियो साझा करने और समुदायों से जुड़ने में मदद करता है।',
-    explore: 'सभी फीचर्स देखें', android: 'Android बीटा पाएं',
+    explore: 'सभी फीचर्स देखें', android: 'Android बीटा पाएं', shop: 'बिना लॉगिन खरीदारी करें',
     trusted: 'डिज़ाइन से प्राइवेट', india: 'भारत-केंद्रित इंफ्रास्ट्रक्चर', languages: 'भारतीय भाषाओं का समर्थन',
     featureTitle: 'खबरें, कहानियाँ और समुदाय।',
     featureIntro: 'स्रोत और क्रिएटर फॉलो करें, उपयोगी संसाधन खोजें और अपने समुदायों के साथ विचार साझा करें।',
@@ -132,7 +132,7 @@ export default function MarketingLanding() {
 
   return <div className="marketing-site" lang={lang === 'hi' ? 'hi' : 'en'}>
     <section className="marketing-hero" id="top">
-      <div className="hero-copy"><span className="hero-badge">🇮🇳 {t.badge}</span><h1>{t.title}</h1><p>{t.intro}</p><div className="hero-actions"><a href="#features" className="primary-cta">{t.explore}</a><a href="https://docs.google.com/uc?export=download&id=1Ljn280n5VmWfD1kEl7u_AAyZ-2S6L1s9" className="secondary-cta">{t.android}</a></div><div className="trust-row"><span><LockClosedIcon/>{t.trusted}</span><span>🇮🇳 {t.india}</span><span><LanguageIcon/>{t.languages}</span></div></div>
+      <div className="hero-copy"><span className="hero-badge">🇮🇳 {t.badge}</span><h1>{t.title}</h1><p>{t.intro}</p><div className="hero-actions"><a href="#features" className="primary-cta">{t.explore}</a><a href="/shopping" className="secondary-cta">{t.shop}</a><a href="https://docs.google.com/uc?export=download&id=1Ljn280n5VmWfD1kEl7u_AAyZ-2S6L1s9" className="secondary-cta">{t.android}</a></div><div className="trust-row"><span><LockClosedIcon/>{t.trusted}</span><span>🇮🇳 {t.india}</span><span><LanguageIcon/>{t.languages}</span></div></div>
       <div className="hero-visual" aria-label="Ducor app screens"><div className="orbit orbit-one"/><div className="orbit orbit-two"/><Phone src="/marketing/chat.jpg" alt="Ducor multilingual private chat" className="phone-left"/><Phone src="/marketing/social.jpg" alt="Ducor social feed" className="phone-center"/><Phone src="/marketing/smart.jpg" alt="Ducor AI smart chat tools" className="phone-right"/><div className="floating-chip chip-one">AI Grammar <SparklesIcon/></div><div className="floating-chip chip-two">HD Call <VideoCameraIcon/></div></div>
     </section>
 

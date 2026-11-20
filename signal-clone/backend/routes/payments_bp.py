@@ -602,15 +602,94 @@ def create_marketplace_checkout(marketplace_order_id):
     return jsonify({'payment': payment_payload(pending), 'checkout': {'keyId': key_id}}), 201
 
 
+@payments_bp.post('/api/marketplace/guest-orders/<int:marketplace_order_id>/checkout')
+def create_guest_marketplace_checkout(marketplace_order_id):
+    data = get_json_data()
+    access_token = str(data.get('guestAccessToken') or '').strip()
+    guest_hash = hashlib.sha256(access_token.encode('utf-8')).hexdigest() if len(access_token) >= 32 else ''
+    order = MarketplaceOrder.query.filter_by(id=marketplace_order_id, buyer_id=None,
+        guest_token_hash=guest_hash).first() if guest_hash else None
+    if not order:
+        return jsonify({'error': 'Guest order not found'}), 404
+    key_id, key_secret = razorpay_credentials()
+    if os.environ.get('MARKETPLACE_CHECKOUT_ENABLED', '').strip().lower() != 'true' or not key_id or not key_secret:
+        return jsonify({'error': 'Online checkout is unavailable. Your order request is with the shop.'}), 503
+    if not os.environ.get('RAZORPAY_WEBHOOK_SECRET'):
+        return jsonify({'error': 'Payments are unavailable until provider webhooks are configured'}), 503
+    if order.status != 'awaiting_payment':
+        return jsonify({'error': 'This guest order is not awaiting payment'}), 409
+    client_request_id = str(data.get('clientRequestId') or '').strip()
+    if not re.fullmatch(r'[A-Za-z0-9_-]{16,100}', client_request_id):
+        return jsonify({'error': 'A valid payment request ID is required'}), 400
+    existing = PaymentOrder.query.filter_by(payer_id=None, client_request_id=client_request_id).first()
+    if existing:
+        if (existing.purpose != 'marketplace' or existing.marketplace_order_id != order.id
+                or existing.payee_id != order.seller_id or existing.amount_paise != order.total_paise
+                or existing.payer_ref != guest_hash):
+            return jsonify({'error': 'Payment request ID was already used for different details'}), 409
+        if existing.status in {'creating', 'creation_unknown'} or existing.provider_order_id.startswith('pending-'):
+            return jsonify({'error': 'Payment setup is still being reconciled; do not submit another payment'}), 409
+        order.payment_order_id = existing.id
+        db.session.commit()
+        return jsonify({'payment': payment_payload(existing), 'checkout': {'keyId': key_id}})
+    if order.payment_order_id:
+        linked = db.session.get(PaymentOrder, order.payment_order_id)
+        if linked and linked.payer_ref != guest_hash:
+            return jsonify({'error': 'Guest order payment details do not match'}), 409
+        if linked and linked.status in {'creating', 'creation_unknown'}:
+            return jsonify({'error': 'Payment setup is still being reconciled; do not submit another payment'}), 409
+        if linked and linked.status not in {'failed', 'cancelled'}:
+            return jsonify({'payment': payment_payload(linked), 'checkout': {'keyId': key_id}})
+        order.payment_order_id = None
+        db.session.commit()
+
+    pending = PaymentOrder(payer_id=None, payer_ref=guest_hash, payee_id=order.seller_id,
+        amount_paise=order.total_paise, currency='INR', description=f'Marketplace order #{order.id}',
+        purpose='marketplace', marketplace_order_id=order.id,
+        provider_order_id=f'pending-{os.urandom(12).hex()}', status='creating',
+        client_request_id=client_request_id)
+    db.session.add(pending)
+    try:
+        db.session.flush()
+        order.payment_order_id = pending.id
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'error': 'This checkout request already exists; refresh the order and retry'}), 409
+    pending_id = pending.id
+    try:
+        provider = create_provider_order(order.total_paise, 'INR', f'marketplace-{order.id}',
+            {'payment_order_id': str(pending_id), 'marketplace_order_id': str(order.id), 'purpose': 'marketplace'})
+        if not provider.get('id') or provider.get('amount') != order.total_paise or str(provider.get('currency') or '').upper() != 'INR':
+            raise RuntimeError('Payment provider returned inconsistent order details')
+        pending.provider_order_id, pending.status = provider['id'], provider.get('status', 'created')
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        pending = db.session.get(PaymentOrder, pending_id)
+        if pending: pending.status = 'creation_unknown'; db.session.commit()
+        report_safe_exception('guest_marketplace_checkout_creation_failed', exc)
+        return jsonify({'error': 'Secure checkout is temporarily unavailable; reconciliation is pending'}), 503
+    return jsonify({'payment': payment_payload(pending), 'checkout': {'keyId': key_id}}), 201
+
+
 @payments_bp.route('/api/payments/orders/<int:payment_id>/verify', methods=['POST'])
 def verify_payment(payment_id):
     payer_id = get_current_user_id()
-    if not payer_id:
-        return jsonify({'error': 'Unauthorized'}), 401
-    payment = PaymentOrder.query.filter_by(id=payment_id, payer_id=payer_id).first()
+    data = get_json_data()
+    payment = PaymentOrder.query.filter_by(id=payment_id, payer_id=payer_id).first() if payer_id else None
+    if not payment:
+        guest_token = str(data.get('guestAccessToken') or '').strip()
+        guest_hash = hashlib.sha256(guest_token.encode('utf-8')).hexdigest() if len(guest_token) >= 32 else ''
+        payment = PaymentOrder.query.filter_by(id=payment_id, payer_id=None, purpose='marketplace',
+            payer_ref=guest_hash).first() if guest_hash else None
+        if payment:
+            guest_order = MarketplaceOrder.query.filter_by(payment_order_id=payment.id, buyer_id=None,
+                guest_token_hash=guest_hash).first()
+            if not guest_order:
+                payment = None
     if not payment:
         return jsonify({'error': 'Payment order not found'}), 404
-    data = get_json_data()
     provider_order_id = str(data.get('razorpay_order_id') or '')
     provider_payment_id = str(data.get('razorpay_payment_id') or '')
     signature = str(data.get('razorpay_signature') or '')

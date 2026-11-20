@@ -73,6 +73,18 @@ export const importPrivateKey = async (pem) => {
     );
 };
 
+export const privateKeyMatchesPublicKey = async (privateKeyString, publicKeyString) => {
+    const [privateKey, publicKey] = await Promise.all([
+        importPrivateKey(privateKeyString),
+        importPublicKey(publicKeyString),
+    ]);
+    const challenge = window.crypto.getRandomValues(new Uint8Array(32));
+    const wrapped = await window.crypto.subtle.encrypt({ name: 'RSA-OAEP' }, publicKey, challenge);
+    const opened = await window.crypto.subtle.decrypt({ name: 'RSA-OAEP' }, privateKey, wrapped);
+    const actual = new Uint8Array(opened);
+    return challenge.length === actual.length && challenge.every((byte, index) => byte === actual[index]);
+};
+
 export const protectPrivateKeyWithPassword = async (privateKeyString, password) => {
     const encoder = new TextEncoder();
     const salt = window.crypto.getRandomValues(new Uint8Array(16));

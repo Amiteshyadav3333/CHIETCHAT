@@ -4,7 +4,6 @@ import { disablePushNotifications } from '../utils/pushNotifications';
 import { clearAccountEncryptedMessageCaches } from '../utils/encryptedMessageCache';
 import { clearChatMetadata } from '../utils/chatMetadataCache';
 import { clearReelCache } from '../utils/reelCache';
-import { deleteDevicePrivateKey } from '../utils/secureKeyStore';
 import { shouldExpireSession, usableBearerToken } from '../utils/authSession';
 
 export const AuthContext = createContext();
@@ -16,17 +15,13 @@ export const AuthProvider = ({ children }) => {
     const tokenRef = useRef(null);
     const userRef = useRef(null);
 
-    const clearLocalSession = ({ clearDeviceKey = false } = {}) => {
+    const clearLocalSession = () => {
         let storedUserId = null;
         try { storedUserId = JSON.parse(localStorage.getItem('user') || 'null')?.id || null; } catch { /* corrupt cache */ }
         const currentUserId = userRef.current?.id || storedUserId;
         clearAccountEncryptedMessageCaches(currentUserId);
         clearChatMetadata(currentUserId);
         clearReelCache(currentUserId);
-        if (clearDeviceKey && currentUserId) {
-            deleteDevicePrivateKey(currentUserId).catch(() => {});
-            localStorage.removeItem(`pubKey_${currentUserId}`);
-        }
         userRef.current = null;
         tokenRef.current = null;
         setUser(null);
@@ -121,7 +116,9 @@ export const AuthProvider = ({ children }) => {
                 await axios.post('/api/auth/logout', {}, { headers: { Authorization: `Bearer ${activeToken}` } });
             } catch { /* session may already be revoked */ }
         }
-        clearLocalSession({ clearDeviceKey: true });
+        // Keep this browser's locally wrapped E2EE key so signing out and back in
+        // on the same device never requires the recovery code.
+        clearLocalSession();
     };
 
     return (

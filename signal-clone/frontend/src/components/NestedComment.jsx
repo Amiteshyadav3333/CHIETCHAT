@@ -87,62 +87,43 @@ const NestedComment = ({ comment, onReply, onEdit, onDelete, onVote, currentUser
 
     return (
         <div className={`w-full ${depth ? 'relative' : ''}`}>
-            {depth > 0 && <span className="absolute -left-4 top-0 h-5 w-4 rounded-bl-xl border-b border-l border-white/10" aria-hidden="true" />}
-            <div className="flex items-start gap-2.5 sm:gap-3">
-                <div className="mt-0.5 flex w-8 shrink-0 flex-col items-center rounded-xl bg-white/[0.035] py-1 text-gray-400 sm:w-9" aria-label={`Comment score ${score}`}>
-                    <button
-                        type="button"
-                        onClick={() => handleVote(1)}
-                        disabled={voteBusy}
-                        aria-label={voteValue === 1 ? 'Remove upvote' : 'Upvote comment'}
-                        aria-pressed={voteValue === 1}
-                        className={`rounded-lg p-0.5 transition-colors hover:bg-orange-500/15 hover:text-orange-400 disabled:opacity-50 ${voteValue === 1 ? 'text-orange-400' : ''}`}
-                    >
-                        <ChevronUpIcon className="h-5 w-5 stroke-[2.5]" />
-                    </button>
-                    <span className={`min-w-[2ch] text-center text-[11px] font-black tabular-nums ${voteValue === 1 ? 'text-orange-400' : voteValue === -1 ? 'text-indigo-300' : 'text-gray-300'}`}>
-                        {formatScore(score)}
-                    </span>
-                    <button
-                        type="button"
-                        onClick={() => handleVote(-1)}
-                        disabled={voteBusy}
-                        aria-label={voteValue === -1 ? 'Remove downvote' : 'Downvote comment'}
-                        aria-pressed={voteValue === -1}
-                        className={`rounded-lg p-0.5 transition-colors hover:bg-indigo-500/15 hover:text-indigo-300 disabled:opacity-50 ${voteValue === -1 ? 'text-indigo-300' : ''}`}
-                    >
-                        <ChevronDownIcon className="h-5 w-5 stroke-[2.5]" />
-                    </button>
-                </div>
-
+            {depth > 0 && <span className="absolute -left-4 top-0 h-5 w-4 rounded-bl-xl border-b border-l border-white/15" aria-hidden="true" />}
+            <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
+                <img src={comment.user.avatar || '/default-avatar.png'} alt="" className="mt-0.5 h-8 w-8 shrink-0 rounded-full object-cover" />
                 <div className="min-w-0 flex-1">
-                    <div className="rounded-2xl border border-white/[0.07] bg-[#14171b] px-3.5 py-3 transition-colors hover:border-white/[0.13] sm:px-4">
-                        <div className="mb-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                            <button type="button" onClick={() => onProfileClick(comment.user.id)} className="flex min-w-0 items-center gap-2 text-left">
-                                <img src={comment.user.avatar || '/default-avatar.png'} alt="" className="h-6 w-6 shrink-0 rounded-full border border-white/10 object-cover" />
-                                <span className="truncate text-xs font-extrabold text-gray-100 hover:underline">@{comment.user.username}</span>
-                            </button>
-                            {comment.user.isVerified && <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 text-[9px] font-black text-white" title="Verified">✓</span>}
-                            {comment.isBoosted && <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[9px] font-bold text-violet-300">Creator</span>}
-                            <span className="text-[10px] text-gray-500">· {timestamp}</span>
-                        </div>
-
-                        {isEditing ? (
-                            <form onSubmit={handleEdit}>
-                                <textarea value={editText} onChange={event => setEditText(event.target.value)} maxLength={1000} autoFocus rows={3}
-                                    className="w-full resize-y rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm leading-relaxed text-white outline-none focus:border-orange-400/60" />
-                                <div className="mt-2 flex justify-end gap-2">
-                                    <button type="button" onClick={() => { setEditText(comment.content); setIsEditing(false); }} className="rounded-full px-3 py-1.5 text-xs font-semibold text-gray-400 hover:bg-white/5 hover:text-white">Cancel</button>
-                                    <button type="submit" disabled={savingEdit || !editText.trim()} className="rounded-full bg-orange-500 px-4 py-1.5 text-xs font-bold text-white disabled:opacity-50">{savingEdit ? 'Saving…' : 'Save edit'}</button>
-                                </div>
-                            </form>
-                        ) : <>
-                            {comment.content && <div className="break-words text-left text-[13px] leading-6 text-gray-200"><LinkifiedText>{comment.content}</LinkifiedText></div>}
-                            {comment.mediaUrl && <img src={comment.mediaUrl} alt={comment.mediaType === 'gif' ? 'GIF comment' : 'Comment attachment'} loading="lazy" referrerPolicy="no-referrer" className="mt-2 max-h-72 max-w-full rounded-xl border border-white/10 object-contain" />}
-                        </>}
+                    <div className="mb-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                        <button type="button" onClick={() => onProfileClick(comment.user.id)} className="truncate text-left text-xs font-extrabold text-gray-100 hover:underline">@{comment.user.username}</button>
+                        {comment.user.isVerified && <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 text-[9px] font-black text-white" title="Verified">✓</span>}
+                        {comment.isBoosted && <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[9px] font-bold text-violet-300">Creator</span>}
+                        <span className="text-[10px] text-gray-500">· {timestamp}</span>
                     </div>
 
-                    <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[11px] font-semibold text-gray-500">
+                    {isEditing ? (
+                        <form onSubmit={handleEdit}>
+                            <textarea value={editText} onChange={event => setEditText(event.target.value)} maxLength={1000} autoFocus rows={3}
+                                className="w-full resize-y rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm leading-relaxed text-white outline-none focus:border-orange-400/60" />
+                            <div className="mt-2 flex justify-end gap-2">
+                                <button type="button" onClick={() => { setEditText(comment.content); setIsEditing(false); }} className="rounded-full px-3 py-1.5 text-xs font-semibold text-gray-400 hover:bg-white/5 hover:text-white">Cancel</button>
+                                <button type="submit" disabled={savingEdit || !editText.trim()} className="rounded-full bg-orange-500 px-4 py-1.5 text-xs font-bold text-white disabled:opacity-50">{savingEdit ? 'Saving…' : 'Save edit'}</button>
+                            </div>
+                        </form>
+                    ) : <>
+                        {comment.content && <div className="break-words text-left text-[13px] leading-6 text-gray-200"><LinkifiedText>{comment.content}</LinkifiedText></div>}
+                        {comment.mediaUrl && <img src={comment.mediaUrl} alt={comment.mediaType === 'gif' ? 'GIF comment' : 'Comment attachment'} loading="lazy" referrerPolicy="no-referrer" className="mt-2 max-h-72 max-w-full rounded-xl border border-white/10 object-contain" />}
+                    </>}
+
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-gray-500">
+                        <div className="flex items-center gap-0.5" aria-label={`Comment score ${score}`}>
+                            <button type="button" onClick={() => handleVote(1)} disabled={voteBusy} aria-label={voteValue === 1 ? 'Remove upvote' : 'Upvote comment'} aria-pressed={voteValue === 1}
+                                className={`rounded-md p-0.5 transition-colors hover:bg-orange-500/15 hover:text-orange-400 disabled:opacity-50 ${voteValue === 1 ? 'text-orange-400' : ''}`}>
+                                <ChevronUpIcon className="h-4 w-4 stroke-[2.5]" />
+                            </button>
+                            <span className={`min-w-[2ch] text-center text-[10px] font-black tabular-nums ${voteValue === 1 ? 'text-orange-400' : voteValue === -1 ? 'text-indigo-300' : 'text-gray-400'}`}>{formatScore(score)}</span>
+                            <button type="button" onClick={() => handleVote(-1)} disabled={voteBusy} aria-label={voteValue === -1 ? 'Remove downvote' : 'Downvote comment'} aria-pressed={voteValue === -1}
+                                className={`rounded-md p-0.5 transition-colors hover:bg-indigo-500/15 hover:text-indigo-300 disabled:opacity-50 ${voteValue === -1 ? 'text-indigo-300' : ''}`}>
+                                <ChevronDownIcon className="h-4 w-4 stroke-[2.5]" />
+                            </button>
+                        </div>
                         <button type="button" onClick={() => { setReplyError(''); setShowReplyBox(value => !value); }} className="transition-colors hover:text-orange-300">Reply</button>
                         {comment.replies?.length > 0 && (
                             <button type="button" onClick={() => setShowReplies(value => !value)} className="text-gray-400 transition-colors hover:text-white">

@@ -5,6 +5,7 @@ import { ArrowDownTrayIcon, ClipboardDocumentIcon, ShieldCheckIcon } from '@hero
 const RecoveryCode = () => {
     const navigate = useNavigate();
     const code = useMemo(() => sessionStorage.getItem('recovery_code_once') || '', []);
+    const optional = useMemo(() => sessionStorage.getItem('recovery_code_optional') === '1', []);
     const [confirmed, setConfirmed] = useState(false);
     const [copied, setCopied] = useState(false);
 
@@ -22,8 +23,16 @@ const RecoveryCode = () => {
 
     const continueSetup = () => {
         sessionStorage.removeItem('recovery_code_once');
+        sessionStorage.removeItem('recovery_code_optional');
         sessionStorage.removeItem('pending_nav');
-        navigate('/setup-profile');
+        navigate(optional ? '/social' : '/setup-profile');
+    };
+
+    const continueWithoutSaving = () => {
+        sessionStorage.removeItem('recovery_code_once');
+        sessionStorage.removeItem('recovery_code_optional');
+        sessionStorage.removeItem('pending_nav');
+        navigate('/social');
     };
 
     if (!code) return <div className="flex min-h-screen items-center justify-center bg-[#08090b] text-white">Recovery code is no longer available.</div>;
@@ -32,15 +41,16 @@ const RecoveryCode = () => {
         <main className="flex min-h-[100dvh] items-center justify-center bg-[#08090b] p-4 text-white">
             <section className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#121418] p-7 shadow-2xl">
                 <ShieldCheckIcon className="mb-4 h-12 w-12 text-emerald-400" />
-                <h1 className="text-2xl font-black">Save your recovery code</h1>
-                <p className="mt-2 text-sm leading-6 text-gray-400">Use this code to restore old encrypted chats if you forget your password. Ducor cannot show this code again.</p>
+                <h1 className="text-2xl font-black">{optional ? 'Save your new recovery code' : 'Save your recovery code'}</h1>
+                <p className="mt-2 text-sm leading-6 text-gray-400">{optional ? 'Your old encrypted chats remain locked because the previous key is unavailable. This new code can restore chats encrypted with your new key on another device.' : 'Use this code to restore encrypted chats on another device. Ducor cannot show this code again.'}</p>
                 <div className="my-6 break-all rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-4 text-center font-mono text-lg font-bold tracking-wider text-emerald-200">{code}</div>
                 <div className="grid grid-cols-2 gap-3">
                     <button onClick={async () => { await navigator.clipboard.writeText(code); setCopied(true); }} className="flex items-center justify-center gap-2 rounded-xl bg-white/10 px-3 py-3 text-sm font-bold"><ClipboardDocumentIcon className="h-5 w-5" />{copied ? 'Copied' : 'Copy'}</button>
                     <button onClick={download} className="flex items-center justify-center gap-2 rounded-xl bg-white/10 px-3 py-3 text-sm font-bold"><ArrowDownTrayIcon className="h-5 w-5" />Download</button>
                 </div>
                 <label className="mt-6 flex items-start gap-3 text-sm text-gray-300"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} className="mt-1" /><span>I saved this code somewhere private and understand that losing it can make old encrypted chats unrecoverable.</span></label>
-                <button disabled={!confirmed} onClick={continueSetup} className="mt-5 w-full rounded-xl bg-emerald-500 py-3 font-black text-black disabled:opacity-40">Continue profile setup</button>
+                <button disabled={!confirmed} onClick={continueSetup} className="mt-5 w-full rounded-xl bg-emerald-500 py-3 font-black text-black disabled:opacity-40">{optional ? 'Continue to chats' : 'Continue profile setup'}</button>
+                {optional && <button onClick={continueWithoutSaving} className="mt-3 w-full rounded-xl border border-white/10 py-3 text-sm font-bold text-gray-300 hover:bg-white/5">Continue without saving the code</button>}
             </section>
         </main>
     );

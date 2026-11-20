@@ -556,11 +556,14 @@ def update_public_key():
         return jsonify({"error": "User not found"}), 404
 
     replacing_existing_key = bool(user.public_key and user.public_key != public_key)
+    recovery_backup = data.get('encryptedRecoveryKey')
     if replacing_existing_key:
-        recovery_backup = data.get('encryptedRecoveryKey')
         if data.get('resetExisting') is not True or not isinstance(recovery_backup, str) or not 50 <= len(recovery_backup) <= 20000:
             return jsonify({'error': 'A confirmed key reset with a recovery backup is required'}), 409
         user.encrypted_private_key = None
+    if recovery_backup is not None:
+        if not isinstance(recovery_backup, str) or not 50 <= len(recovery_backup) <= 20000:
+            return jsonify({'error': 'Invalid encrypted recovery backup'}), 400
         user.encrypted_recovery_key = recovery_backup
     user.public_key = public_key
     db.session.commit()

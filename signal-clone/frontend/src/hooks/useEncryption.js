@@ -1,14 +1,21 @@
-import { useState, useEffect, useRef } from 'react';
-import { generateKeys, importPrivateKey, restorePrivateKeyWithPassword } from '../utils/encryption';
+import { useState, useEffect, useRef, useContext } from 'react';
+import { importPrivateKey, privateKeyMatchesPublicKey, restorePrivateKeyWithPassword } from '../utils/encryption';
 import axios from 'axios';
 import { loadDevicePrivateKey, saveDevicePrivateKey } from '../utils/secureKeyStore';
 import { useRecoveryCodePrompt } from '../context/RecoveryCodePromptContext';
+import { AuthContext } from '../context/AuthContext';
+import { useNavigate } from '../utils/clientRouter';
+import { createFreshDeviceEncryptionIdentity } from '../utils/deviceEncryptionSetup';
 
 export const useEncryption = (user, token) => {
     const [privateKey, setPrivateKey] = useState(null);
     const [publicKey, setPublicKey] = useState(null);
     const recoveryPromptedRef = useRef(false);
+    const updateUserRef = useRef(null);
     const { requestRecoveryCode } = useRecoveryCodePrompt();
+    const { updateUser } = useContext(AuthContext);
+    const navigate = useNavigate();
+    updateUserRef.current = updateUser;
 
     useEffect(() => {
         const initKeys = async () => {
@@ -19,7 +26,7 @@ export const useEncryption = (user, token) => {
             const storedPriv = await loadDevicePrivateKey(user.id);
             const storedPub = localStorage.getItem(storageKeyPub);
 
-            if (storedPriv && storedPub) {
+            if (storedPriv && storedPub && storedPub === user.publicKey) {
                 try {
                     const importedPriv = await importPrivateKey(storedPriv);
                     setPrivateKey(importedPriv);
@@ -30,26 +37,34 @@ export const useEncryption = (user, token) => {
                 }
             }
 
-            // Never silently replace an existing account key. Doing so would make
-            // historical encrypted messages unreadable on every other device.
             if (user.publicKey) {
                 setPublicKey(user.publicKey);
                 if (recoveryPromptedRef.current) return;
                 recoveryPromptedRef.current = true;
                 try {
                     const response = await axios.get('/api/user/key-recovery', {
-                        headers: { Authorization: `Bearer ${token}` }
+                        headers: token && token !== 'cookie-session' ? { Authorization: `Bearer ${token}` } : {},
                     });
-                    if (response.data.recoveryKeyBackup) {
-                        const recoveryCode = await requestRecoveryCode();
-                        if (recoveryCode?.trim()) {
-                            const restoredPrivateKey = await restorePrivateKeyWithPassword(response.data.recoveryKeyBackup, recoveryCode.trim());
-                            await saveDevicePrivateKey(user.id, restoredPrivateKey);
-                            localStorage.setItem(storageKeyPub, user.publicKey);
-                            setPrivateKey(await importPrivateKey(restoredPrivateKey));
-                            return;
-                        }
+                    const recoveryKeyBackup = response.data.recoveryKeyBackup;
+                    const choice = await requestRecoveryCode({ hasRecoveryKey: Boolean(recoveryKeyBackup) });
+                    if (typeof choice === 'string' && choice.trim() && recoveryKeyBackup) {
+                        const restoredPrivateKey = await restorePrivateKeyWithPassword(recoveryKeyBackup, choice.trim());
+                        if (!await privateKeyMatchesPublicKey(restoredPrivateKey, user.publicKey)) throw new Error('Recovery key does not match this account.');
+                        const importedPrivateKey = await importPrivateKey(restoredPrivateKey);
+                        await saveDevicePrivateKey(user.id, restoredPrivateKey);
+                        localStorage.setItem(storageKeyPub, user.publicKey);
+                        setPrivateKey(importedPrivateKey);
                         return;
+                    }
+                    if (choice?.action === 'continue-with-new-key') {
+                        const freshIdentity = await createFreshDeviceEncryptionIdentity(user, token);
+                        setPrivateKey(freshIdentity.keys.privateKey);
+                        setPublicKey(freshIdentity.keys.publicKeyString);
+                        updateUserRef.current?.(freshIdentity.user);
+                        sessionStorage.setItem('recovery_code_once', freshIdentity.recoveryCode);
+                        sessionStorage.setItem('recovery_code_optional', '1');
+                        sessionStorage.setItem('pending_nav', '/recovery-code');
+                        navigate('/recovery-code', { replace: true });
                     }
                 } catch (error) {
                     console.warn('Encrypted chat key recovery was not completed.', error);
@@ -58,28 +73,16 @@ export const useEncryption = (user, token) => {
                 return;
             }
 
-            // First-device setup for legacy accounts that do not have a key yet.
+            // Set up a secured first-device key for legacy accounts with no keys.
             try {
-                const keys = await generateKeys();
-
-                await saveDevicePrivateKey(user.id, keys.privateKeyString);
-                localStorage.setItem(storageKeyPub, keys.publicKeyString);
-
-                setPrivateKey(keys.privateKey);
-                setPublicKey(keys.publicKeyString);
-
-                // Sync public key with server
-                if (token) {
-                    try {
-                        await axios.post('/api/user/key',
-                            { publicKey: keys.publicKeyString },
-                            { headers: { Authorization: `Bearer ${token}` } }
-                        );
-                        console.log("Synced new public key with server");
-                    } catch (e) {
-                        console.error("Failed to sync key", e);
-                    }
-                }
+                const freshIdentity = await createFreshDeviceEncryptionIdentity(user, token);
+                setPrivateKey(freshIdentity.keys.privateKey);
+                setPublicKey(freshIdentity.keys.publicKeyString);
+                updateUserRef.current?.(freshIdentity.user);
+                sessionStorage.setItem('recovery_code_once', freshIdentity.recoveryCode);
+                sessionStorage.setItem('recovery_code_optional', '0');
+                sessionStorage.setItem('pending_nav', '/recovery-code');
+                navigate('/recovery-code', { replace: true });
             } catch (err) {
                 console.error("Encryption initialization failed:", err);
                 if (err.message && err.message.includes('secure context')) {
@@ -89,7 +92,7 @@ export const useEncryption = (user, token) => {
         };
 
         initKeys();
-    }, [user, token, requestRecoveryCode]);
+    }, [user, token, requestRecoveryCode, navigate]);
 
     return { privateKey, publicKey };
 };

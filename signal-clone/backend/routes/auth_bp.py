@@ -686,7 +686,9 @@ def request_login_otp():
         user = User.query.filter_by(email=email).first()
         if not user:
             return jsonify({"error": "No account found for this email"}), 404
-        send_email_otp(email, create_user=True)
+        # The local account was checked above; OTP login must verify its email
+        # without creating a separate Supabase identity for a Google user.
+        send_email_otp(email, create_user=False)
         return jsonify({"message": "OTP sent to email"}), 200
     except Exception as e:
         report_safe_exception('login_otp_request_failed', e)

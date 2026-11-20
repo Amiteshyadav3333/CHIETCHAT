@@ -576,8 +576,8 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
                     <section className="mt-4 overflow-hidden rounded-2xl border border-[#27333b] bg-[#0c1014]">
                         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#27333b] px-4 py-3">
                             <div>
-                                <h3 className="text-sm font-extrabold text-[#e7e9ea]">Discussion</h3>
-                                <p className="mt-0.5 text-[11px] text-[#71767b]">{visibleCommentCount} comments · Join the conversation</p>
+                                <h3 className="text-sm font-extrabold text-[#e7e9ea]">Comments</h3>
+                                <p className="mt-0.5 text-[11px] text-[#71767b]">{visibleCommentCount} comments</p>
                             </div>
                             <div className="flex items-center rounded-full border border-white/[0.07] bg-black/30 p-1" aria-label="Sort comments">
                                 {[['best', 'Top'], ['new', 'New']].map(([value, label]) => (
@@ -592,14 +592,14 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
                             {commentMedia && <div className="relative mb-2 inline-block"><img src={commentMedia.mediaUrl} alt="Comment attachment preview" className="max-h-36 max-w-48 rounded-xl object-cover" /><button type="button" onClick={() => setCommentMedia(null)} aria-label="Remove attachment" className="absolute -right-2 -top-2 rounded-full bg-black p-1 text-white"><XMarkIcon className="h-4 w-4" /></button></div>}
                             <div className="flex items-center gap-2.5">
                             <img src={currentUser?.avatar || '/default-avatar.png'} alt="" className="h-9 w-9 shrink-0 rounded-full border border-white/10 object-cover" />
-                            <input value={comment} onChange={event => setComment(event.target.value)} maxLength={1000} placeholder="Add a thoughtful comment…"
+                            <input value={comment} onChange={event => setComment(event.target.value)} maxLength={1000} placeholder="Write a comment…"
                                 className="min-w-0 flex-1 rounded-xl border border-white/[0.07] bg-[#151a20] px-3.5 py-2.5 text-sm text-white outline-none placeholder:text-gray-600 focus:border-orange-400/50" />
                             <button type="button" title="Add emoji" aria-label="Add emoji" onClick={() => { setShowCommentEmoji(value => !value); setShowCommentGifs(false); }} className="rounded-lg p-2 text-lg hover:bg-white/10">😊</button>
                             <button type="button" title="Add image" aria-label="Add image" disabled={commentMediaBusy} onClick={() => commentImageInput.current?.click()} className="rounded-lg p-2 text-gray-300 hover:bg-white/10 disabled:opacity-50"><PhotoIcon className="h-5 w-5" /></button>
                             <input ref={commentImageInput} type="file" accept="image/jpeg,image/png,image/gif,image/webp" hidden onChange={uploadCommentImage} />
                             <button type="button" title="Add GIF" aria-label="Add GIF" onClick={() => { const opening = !showCommentGifs; setShowCommentGifs(opening); setShowCommentEmoji(false); if (opening) loadCommentGifs('trending'); }} className="rounded-lg px-2 py-2 text-xs font-black text-gray-300 hover:bg-white/10">GIF</button>
                             <button type="submit" disabled={submitting || commentMediaBusy || (!comment.trim() && !commentMedia)} className="shrink-0 rounded-xl bg-orange-500 px-3.5 py-2.5 text-xs font-extrabold text-white transition hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-40">
-                                {submitting ? 'Posting…' : 'Comment'}
+                                {submitting ? 'Posting…' : 'Post'}
                             </button>
                             </div>
                             {showCommentEmoji && <div className="mt-2 flex flex-wrap gap-1 rounded-xl border border-white/10 bg-[#151a20] p-2">{['😀','😂','🥰','😍','😊','😭','😮','😎','🤔','🙏','👏','🔥','❤️','💯','🎉','✨','👍','👎'].map(emoji => <button key={emoji} type="button" onClick={() => setComment(value => (value + emoji).slice(0, 1000))} className="rounded-lg p-1.5 text-xl hover:bg-white/10">{emoji}</button>)}</div>}
@@ -608,7 +608,7 @@ const TweetCard = ({ post, currentUser, token, onLike, onRetweet, onShare, onSha
 
                         <div className="space-y-4 px-3 py-4 sm:px-4">
                             {commentsLoading && !comments.length && <div className="space-y-3" aria-label="Loading comments"><div className="h-16 animate-pulse rounded-2xl bg-white/[0.04]" /><div className="h-16 animate-pulse rounded-2xl bg-white/[0.04]" /></div>}
-                            {!commentsLoading && !comments.length && <div className="py-5 text-center"><p className="text-sm font-semibold text-gray-300">Start the discussion</p><p className="mt-1 text-xs text-gray-500">Be the first to share a helpful thought.</p></div>}
+                            {!commentsLoading && !comments.length && <div className="py-5 text-center"><p className="text-sm font-semibold text-gray-300">No comments yet</p><p className="mt-1 text-xs text-gray-500">Start the conversation.</p></div>}
                             {sortedComments.map(item => (
                                 <NestedComment key={item.id} comment={item} onReply={handleReplyToComment} onEdit={handleEditComment}
                                     onDelete={handleDeleteComment} onVote={handleCommentVote} currentUser={currentUser} onProfileClick={onOpenProfile} />

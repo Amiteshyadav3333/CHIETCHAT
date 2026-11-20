@@ -3,10 +3,11 @@ import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import { useRecoveryCodePrompt } from '../context/RecoveryCodePromptContext';
 import { useNavigate } from '../utils/clientRouter';
-import { generateKeys, generateRecoveryCode, protectPrivateKeyWithPassword, restorePrivateKeyWithPassword } from '../utils/encryption';
+import { generateKeys, generateRecoveryCode, privateKeyMatchesPublicKey, protectPrivateKeyWithPassword, restorePrivateKeyWithPassword } from '../utils/encryption';
 import { EnvelopeIcon, KeyIcon, LockClosedIcon, UserPlusIcon } from '@heroicons/react/24/outline';
 import { getDeviceFingerprint } from '../utils/deviceIdentity';
 import { loadDevicePrivateKey, saveDevicePrivateKey } from '../utils/secureKeyStore';
+import { createFreshDeviceEncryptionIdentity } from '../utils/deviceEncryptionSetup';
 import { getSupabaseClient } from '../utils/supabaseClient';
 import { getGoogleLoginErrorMessage, isExistingPasswordAccountError } from '../utils/googleLoginErrors';
 import MarketingLanding from '../components/MarketingLanding';
@@ -88,9 +89,9 @@ const Login = () => {
                         encryptedRecoveryKey,
                         deviceFingerprint,
                     });
-                    await finishLogin(completed.data.user, null, keys, false, null, recoveryCode, completed.data.csrfToken, completed.data.recoveryKeyBackup);
+                    await finishLogin(completed.data.user, null, keys, false, recoveryCode, completed.data.csrfToken, completed.data.recoveryKeyBackup);
                 } else {
-                    await finishLogin(response.data.user, null, null, false, response.data.keyBackup, '', response.data.csrfToken, response.data.recoveryKeyBackup);
+                    await finishLogin(response.data.user, null, null, false, '', response.data.csrfToken, response.data.recoveryKeyBackup);
                 }
             } catch (error) {
                 window.history.replaceState({}, '', '/login');
@@ -142,43 +143,54 @@ const Login = () => {
         window.dispatchEvent(new CustomEvent('cheetchat-language-change', { detail: nextLanguage }));
     };
 
-    const finishLogin = async (userData, authToken, keysToStore = null, needsProfileSetup = false, keyBackup = null, recoveryCode = '', csrfToken = null, recoveryKeyBackup = null) => {
+    const finishLogin = async (userData, authToken, keysToStore = null, needsProfileSetup = false, recoveryCode = '', csrfToken = null, recoveryKeyBackup = null) => {
         if (csrfToken) sessionStorage.setItem('cheetchat_csrf_token', csrfToken);
+        let recoveryCodeToDisplay = recoveryCode;
+        let recoveryCodeOptional = false;
         if (keysToStore) {
             await saveDevicePrivateKey(userData.id, keysToStore.privateKeyString);
             localStorage.setItem(`pubKey_${userData.id}`, keysToStore.publicKeyString);
         } else {
             let devicePrivateKey = await loadDevicePrivateKey(userData.id);
-            if (!devicePrivateKey && keyBackup && password) {
-                try {
-                    devicePrivateKey = await restorePrivateKeyWithPassword(keyBackup, password);
-                } catch (error) {
-                    console.warn('Password key restore failed; recovery code is required.', error);
+            const storedPublicKey = localStorage.getItem(`pubKey_${userData.id}`);
+            if (devicePrivateKey && userData.publicKey && storedPublicKey !== userData.publicKey) {
+                devicePrivateKey = null;
+            }
+            if (!devicePrivateKey && userData.publicKey) {
+                const recoveryChoice = await requestRecoveryCode({ hasRecoveryKey: Boolean(recoveryKeyBackup) });
+                if (typeof recoveryChoice === 'string' && recoveryChoice.trim() && recoveryKeyBackup) {
+                    try {
+                        devicePrivateKey = await restorePrivateKeyWithPassword(recoveryKeyBackup, recoveryChoice.trim());
+                        if (!await privateKeyMatchesPublicKey(devicePrivateKey, userData.publicKey)) throw new Error('Recovery key does not match this account.');
+                    } catch {
+                        throw new Error('That recovery code did not unlock the encrypted chat history. Try again or continue with a new key.');
+                    }
+                } else if (recoveryChoice?.action === 'continue-with-new-key') {
+                    const freshIdentity = await createFreshDeviceEncryptionIdentity(userData, authToken);
+                    devicePrivateKey = freshIdentity.keys.privateKeyString;
+                    userData = freshIdentity.user;
+                    recoveryCodeToDisplay = freshIdentity.recoveryCode;
+                    recoveryCodeOptional = true;
+                } else {
+                    throw new Error('Sign-in cancelled.');
                 }
             }
-            if (!devicePrivateKey && recoveryKeyBackup) {
-                const enteredRecoveryCode = await requestRecoveryCode();
-                if (enteredRecoveryCode?.trim()) {
-                    try {
-                        devicePrivateKey = await restorePrivateKeyWithPassword(recoveryKeyBackup, enteredRecoveryCode.trim());
-                    } catch {
-                        throw new Error('The recovery code is incorrect. Your account was not opened without its chat key.');
-                    }
-                }
+            if (!devicePrivateKey && !userData.publicKey) {
+                const freshIdentity = await createFreshDeviceEncryptionIdentity(userData, authToken);
+                devicePrivateKey = freshIdentity.keys.privateKeyString;
+                userData = freshIdentity.user;
+                recoveryCodeToDisplay = freshIdentity.recoveryCode;
             }
             if (devicePrivateKey) {
                 await saveDevicePrivateKey(userData.id, devicePrivateKey);
                 if (userData.publicKey) localStorage.setItem(`pubKey_${userData.id}`, userData.publicKey);
-                if (!keyBackup && password && authToken) {
-                    const encryptedPrivateKey = await protectPrivateKeyWithPassword(devicePrivateKey, password);
-                    await axios.post('/api/user/key-backup', { encryptedPrivateKey }, { headers: { Authorization: `Bearer ${authToken}` } });
-                }
             } else if (userData.publicKey) {
-                throw new Error('This device needs your Ducor recovery code before encrypted chats can be opened.');
+                throw new Error('This device needs the recovery code before existing encrypted chats can be opened.');
             }
         }
-        if (recoveryCode) {
-            sessionStorage.setItem('recovery_code_once', recoveryCode);
+        if (recoveryCodeToDisplay) {
+            sessionStorage.setItem('recovery_code_once', recoveryCodeToDisplay);
+            sessionStorage.setItem('recovery_code_optional', recoveryCodeOptional ? '1' : '0');
             sessionStorage.setItem('pending_nav', '/recovery-code');
         } else if (needsProfileSetup) {
             sessionStorage.setItem('pending_nav', '/setup-profile');
@@ -248,13 +260,13 @@ const Login = () => {
                     token: twoFactorCode,
                     deviceFingerprint
                 });
-                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken, res.data.recoveryKeyBackup);
+                await finishLogin(res.data.user, res.data.token, null, false, '', res.data.csrfToken, res.data.recoveryKeyBackup);
                 return;
             }
 
             if (isLogin && isOtpStep) {
                 const res = await axios.post('/api/login/verify-otp', { email: cleanEmail, otp, deviceFingerprint });
-                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken, res.data.recoveryKeyBackup);
+                await finishLogin(res.data.user, res.data.token, null, false, '', res.data.csrfToken, res.data.recoveryKeyBackup);
                 return;
             }
 
@@ -268,13 +280,13 @@ const Login = () => {
                     setSubmitting(false);
                     return;
                 }
-                await finishLogin(res.data.user, res.data.token, null, false, res.data.keyBackup, '', res.data.csrfToken, res.data.recoveryKeyBackup);
+                await finishLogin(res.data.user, res.data.token, null, false, '', res.data.csrfToken, res.data.recoveryKeyBackup);
                 return;
             }
 
             if (isRegister && isOtpStep) {
                 const res = await axios.post('/api/register/verify-otp', { email: cleanEmail, otp, deviceFingerprint });
-                await finishLogin(res.data.user, res.data.token, pendingKeys, res.data.needsProfileSetup ?? true, res.data.keyBackup, pendingRecoveryCode, res.data.csrfToken, res.data.recoveryKeyBackup);
+                await finishLogin(res.data.user, res.data.token, pendingKeys, res.data.needsProfileSetup ?? true, pendingRecoveryCode, res.data.csrfToken, res.data.recoveryKeyBackup);
                 return;
             }
 
@@ -326,7 +338,7 @@ const Login = () => {
     const helperText = isOtpStep
         ? `Enter the OTP sent to ${cleanEmail || 'your email'}`
         : isLogin
-            ? 'Use your password, or continue with a secure email OTP.'
+            ? 'Use your password or get a one-time sign-in code at this email. Google users can use the same email address.'
             : isRegister
                 ? 'Verify your email with OTP before your account is activated.'
                 : 'Enter your email and we will send a secure password reset link.';
@@ -543,7 +555,7 @@ const Login = () => {
                                     disabled={submitting}
                                     className="rounded-lg border border-signal-accent/50 px-4 py-2.5 text-sm font-semibold text-signal-accent transition hover:bg-signal-accent/10 disabled:opacity-60"
                                 >
-                                    Login with OTP
+                                    Email me a sign-in code
                                 </button>
                                 <button
                                     type="button"

@@ -8,13 +8,13 @@ import {
 const copy = {
   en: {
     nav: ['Features', 'Security', 'Projects', 'Pricing', 'Legal', 'FAQ'],
-    badge: 'A social platform for India',
-    title: 'Discover. Share. Belong.',
-    intro: 'Ducor helps people across India discover news and resources, publish stories, share videos and take part in community conversations.',
+    badge: 'The all-in-one social space for college life',
+    title: 'Your campus. Your people. Your whole world.',
+    intro: 'Chat, study, play, create and discover local shops with your college crew. Ducor brings everyday student life together in one social app.',
     explore: 'Explore every feature', android: 'Get Android beta',
     trusted: 'Private by design', india: 'India-first infrastructure', languages: 'Indian languages supported',
-    featureTitle: 'News, stories and communities.',
-    featureIntro: 'Follow sources and creators, find useful resources, and share your perspective with the communities you care about.',
+    featureTitle: 'More than a chat app. Made for your whole crew.',
+    featureIntro: 'From quick campus chats to study sessions, games, creator moments and local shopping, keep the things you do with friends in one place.',
     securityTitle: 'Privacy you can verify — not just a promise.',
     securityBody: 'Ducor private messages use hybrid end-to-end encryption. A fresh AES-GCM key protects message content and is securely wrapped for each participant using their public key. Safety numbers help people compare keys. Encrypted media is protected before upload, while calls use secure WebRTC transport.',
     retentionTitle: 'India-hosted, privacy-minded data handling',
@@ -23,7 +23,7 @@ const copy = {
     founderBody: 'Ducor was founded by Amitesh Kumar Yadav as a social platform for people across India to discover information, publish stories and build communities. The product prioritises language diversity and user choice.',
     projectsTitle: 'More products by Amitesh Kumar Yadav',
     pricingTitle: 'Simple plans for every stage',
-    pricingIntro: 'Start free, upgrade when you need more creation, AI and communication power.',
+    pricingIntro: 'Start free, then choose the monthly or yearly plan that fits your campus life.',
     faqTitle: 'Questions, answered clearly',
     legalTitle: 'Clear rules. Honest privacy. Control stays with you.',
     legalIntro: 'Before creating an account, every user can understand what Ducor collects, why it is needed, how public and private content differ, and how to delete content or the entire account.',
@@ -66,6 +66,12 @@ const features = [
   [VideoCameraIcon, 'HD calls & advanced voice connection', 'HD calls और advanced voice connection', 'Make secure HD voice and video calls, group calls and real-time rooms. WebRTC media transport, connection recovery and call controls are designed for clear communication across devices.', 'Secure HD voice/video और group calls करें। WebRTC transport, connection recovery और call controls clear communication के लिए बनाए गए हैं।'],
   [SparklesIcon, 'Emotion-aware AI companion', 'भावना समझने वाला AI companion', 'Talk to a human-like AI assistant that can respond to the emotional context of your conversation, help you study, brainstorm, write and plan. AI responses can be imperfect and important advice should be independently verified.', 'भावनात्मक संदर्भ के अनुसार जवाब देने वाले AI से बात करें, study, brainstorming, writing और planning में मदद लें। महत्वपूर्ण सलाह को independently verify करें।'],
   [BriefcaseIcon, 'Business tools that stay personal', 'Personal business tools', 'Create a business profile, product catalogue and storefront. Add pricing and stock, welcome and away messages, keyword auto-replies, customer chats and useful activity insights — ideal for student founders and local businesses.', 'Business profile, product catalogue और storefront बनाएं। Pricing, stock, welcome/away message, auto-replies, customer chat और activity insights जोड़ें।'],
+  [BriefcaseIcon, 'Shop your local market & pay with UPI', 'Local shopping और UPI payment', 'Discover participating neighborhood shops and shop directly from Ducor. Send UPI payments to friends, family and shops, with a simple flow for everyday college life.', 'Discover participating neighborhood shops and shop directly from Ducor. Send UPI payments to friends, family and shops.'],
+  [UserGroupIcon, 'Play together, vote together', 'साथ खेलें, साथ वोट करें', 'Challenge friends to Ludo, vocabulary games, tic-tac-toe, chess and Snake. Run a group poll, rally your community and let everyone vote for the leader they support.', 'Challenge friends to Ludo, vocabulary games, tic-tac-toe, chess and Snake. Run a group poll and let everyone vote for their community leader.'],
+  [ChatBubbleLeftRightIcon, 'Little moments that feel personal', 'Personal moments और live chat', 'Share live location for a time limit, send a gift, make someone’s birthday special, or keep a live Noteit space with your favorite person. Give every contact a special DP, set a custom ringtone by profile or message, choose a universal default for all chats, or let Ring Mode play your own voice or a built-in sound.', 'Share live location for a time limit, send gifts and birthday wishes, use live Noteit with your favorite person, set a special DP, and personalize Ring Mode and ringtones for each contact or message.'],
+  [SparklesIcon, 'AI Smart Space, camera & documents', 'AI Smart Space, camera और documents', 'Bring your messages together in AI Smart Space to organize and manage conversations. Capture from the in-built camera, read documents in chat, and draw directly on a conversation. Snap Mode gives you an incognito-style space for supported temporary chats.', 'Organize conversations in AI Smart Space, capture with the in-built camera, read documents in chat, draw on messages and use Snap Mode for supported temporary chats.'],
+  [VideoCameraIcon, 'Study rooms, watch parties & calls', 'Study rooms, watch parties और calls', 'Start audio or video calls with built-in echo and background-noise cancellation. Study together in a live class room, use quiet whisper chat, or stream a movie privately with friends and talk along. Save call recordings directly on your device when recording is supported and everyone has agreed.', 'Start calls with noise cancellation, study in live class rooms with quiet whisper chat, or watch movies privately with friends. Save supported call recordings on-device with everyone’s agreement.'],
+  [FilmIcon, 'Create, react, podcast & earn', 'Create, react, podcast और earn', 'Make direct reaction videos on Reels, publish videos for everyone, host a podcast, or share a private video with a price you set so fans can buy your content on Ducor.', 'Make reaction videos on Reels, publish public videos, host podcasts, and set a price for private videos fans can buy on Ducor.'],
 ];
 
 const projects = [

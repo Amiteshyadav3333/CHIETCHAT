@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from models import db, User, ChatParticipant, BusinessProfile, PaymentOrder, PremiumSubscription, MarketplaceOrder, MarketplaceOrderLine, AffiliateProductTag, AffiliateCommission
 from utils import get_current_user_id, get_json_data, iso_utc, utc_now
 from observability import report_safe_exception
+from payment_config import razorpay_checkout_ready, razorpay_credentials_ready
 
 payments_bp = Blueprint('payments_bp', __name__)
 CAPTURE_TERMINAL_STATUSES = {'refunding', 'refunded', 'approved', 'rejected'}
@@ -106,8 +107,8 @@ def razorpay_credentials():
 
 def provider_request(path, method='GET', payload=None):
     key_id, key_secret = razorpay_credentials()
-    if not key_id or not key_secret:
-        raise RuntimeError('Payments are not configured')
+    if not razorpay_credentials_ready():
+        raise RuntimeError('Live payment credentials are not configured for this environment')
     body = json.dumps(payload).encode('utf-8') if payload is not None else None
     auth = base64.b64encode(f'{key_id}:{key_secret}'.encode()).decode()
     provider_request = urllib.request.Request(
@@ -233,16 +234,16 @@ def payment_config():
     webhook_ready = bool(os.environ.get('RAZORPAY_WEBHOOK_SECRET'))
     marketplace_checkout_enabled = bool(
         os.environ.get('MARKETPLACE_CHECKOUT_ENABLED', '').strip().lower() == 'true'
-        and key_id and key_secret and webhook_ready
+        and razorpay_checkout_ready()
     )
-    checkout_ready = bool(key_id and key_secret and webhook_ready)
+    checkout_ready = bool(razorpay_checkout_ready() and webhook_ready)
     plans = [premium_plan_payload(code, get_premium_plan(code)) for code in PREMIUM_PLANS]
     for plan in plans:
         plan['autopayEnabled'] = checkout_ready and plan['autopayEnabled']
     return jsonify({
         'enabled': checkout_ready,
         'provider': 'razorpay',
-        'keyId': key_id if key_id and key_secret and webhook_ready else None,
+        'keyId': key_id if checkout_ready else None,
         'webhookReady': webhook_ready,
         'marketplaceCheckoutEnabled': marketplace_checkout_enabled,
         'currency': 'INR',
@@ -262,7 +263,7 @@ def create_premium_order():
     user = db.session.get(User, payer_id)
     if user.is_premium and (not user.premium_expires_at or user.premium_expires_at > utc_now()):
         return jsonify({'error': 'Premium is already active'}), 409
-    if not os.environ.get('RAZORPAY_WEBHOOK_SECRET'):
+    if not razorpay_checkout_ready():
         return jsonify({'error': 'Premium checkout is not configured yet'}), 503
     data = get_json_data()
     plan_code = str(data.get('planCode') or '').strip().lower()
@@ -320,7 +321,7 @@ def create_premium_subscription():
     key_id, key_secret = razorpay_credentials()
     if not plan:
         return jsonify({'error': 'Choose a valid Premium plan'}), 400
-    if not plan['provider_plan_id'] or not key_id or not key_secret or not os.environ.get('RAZORPAY_WEBHOOK_SECRET'):
+    if not plan['provider_plan_id'] or not razorpay_checkout_ready():
         return jsonify({'error': 'Premium autopay is not configured yet'}), 503
     request_id = str(data.get('clientRequestId') or '').strip()
     if not re.fullmatch(r'[A-Za-z0-9_-]{16,100}', request_id):
@@ -445,8 +446,8 @@ def create_payment_order():
     payer_id = get_current_user_id()
     if not payer_id:
         return jsonify({'error': 'Unauthorized'}), 401
-    if not os.environ.get('RAZORPAY_WEBHOOK_SECRET'):
-        return jsonify({'error': 'Payments are unavailable until provider webhooks are configured'}), 503
+    if not razorpay_checkout_ready():
+        return jsonify({'error': 'Live payments are unavailable until credentials and webhooks are configured'}), 503
     data = get_json_data()
     client_request_id = str(data.get('clientRequestId') or '').strip()
     if not re.fullmatch(r'[A-Za-z0-9_-]{16,100}', client_request_id):
@@ -537,10 +538,10 @@ def create_marketplace_checkout(marketplace_order_id):
     payer_id = get_current_user_id()
     if not payer_id: return jsonify({'error': 'Unauthorized'}), 401
     key_id, key_secret = razorpay_credentials()
-    if os.environ.get('MARKETPLACE_CHECKOUT_ENABLED', '').strip().lower() != 'true' or not key_id or not key_secret:
+    if os.environ.get('MARKETPLACE_CHECKOUT_ENABLED', '').strip().lower() != 'true' or not razorpay_credentials_ready():
         return jsonify({'error': 'Secure marketplace checkout is not enabled for this deployment yet'}), 503
-    if not os.environ.get('RAZORPAY_WEBHOOK_SECRET'):
-        return jsonify({'error': 'Payments are unavailable until provider webhooks are configured'}), 503
+    if not razorpay_checkout_ready():
+        return jsonify({'error': 'Live payments are unavailable until credentials and webhooks are configured'}), 503
     data = get_json_data()
     client_request_id = str(data.get('clientRequestId') or '').strip()
     if not re.fullmatch(r'[A-Za-z0-9_-]{16,100}', client_request_id):
@@ -612,10 +613,10 @@ def create_guest_marketplace_checkout(marketplace_order_id):
     if not order:
         return jsonify({'error': 'Guest order not found'}), 404
     key_id, key_secret = razorpay_credentials()
-    if os.environ.get('MARKETPLACE_CHECKOUT_ENABLED', '').strip().lower() != 'true' or not key_id or not key_secret:
+    if os.environ.get('MARKETPLACE_CHECKOUT_ENABLED', '').strip().lower() != 'true' or not razorpay_credentials_ready():
         return jsonify({'error': 'Online checkout is unavailable. Your order request is with the shop.'}), 503
-    if not os.environ.get('RAZORPAY_WEBHOOK_SECRET'):
-        return jsonify({'error': 'Payments are unavailable until provider webhooks are configured'}), 503
+    if not razorpay_checkout_ready():
+        return jsonify({'error': 'Live payments are unavailable until credentials and webhooks are configured'}), 503
     if order.status != 'awaiting_payment':
         return jsonify({'error': 'This guest order is not awaiting payment'}), 409
     client_request_id = str(data.get('clientRequestId') or '').strip()

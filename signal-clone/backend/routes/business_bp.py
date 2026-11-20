@@ -21,6 +21,7 @@ from features.business_ai import generate_business_reply
 from utils import get_current_user_id, get_json_data, has_contact, is_blocked, iso_utc
 from utils import validate_upload
 from observability import report_safe_exception
+from payment_config import razorpay_checkout_ready
 from seller_kyc import (
     SellerKycUnavailable, decrypt_private_profile, encrypt_private_profile,
     encrypt_private_bytes, mask_identifier, required_document_types,
@@ -618,8 +619,7 @@ def create_guest_marketplace_order():
 
     checkout_enabled = (
         os.environ.get('MARKETPLACE_CHECKOUT_ENABLED', '').strip().lower() == 'true'
-        and bool(os.environ.get('RAZORPAY_KEY_ID')) and bool(os.environ.get('RAZORPAY_KEY_SECRET'))
-        and bool(os.environ.get('RAZORPAY_WEBHOOK_SECRET'))
+        and razorpay_checkout_ready()
     )
     order = MarketplaceOrder(
         buyer_id=None, seller_id=seller_id, guest_request_id=request_id,

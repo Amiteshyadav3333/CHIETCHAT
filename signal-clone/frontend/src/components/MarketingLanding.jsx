@@ -86,6 +86,14 @@ const projects = [
   ['Amitesh Portfolio', 'The founder’s portfolio, work and product-building journey.', 'Founder portfolio', 'https://amiteshyadav3333.github.io/', '/marketing/founder.jpg'],
 ];
 
+const founderSocials = [
+  ['GitHub', 'https://github.com/Amiteshyadav3333'],
+  ['X', 'https://x.com/Amiteshyad7898'],
+  ['Facebook', 'https://www.facebook.com/profile.php?id=100028854681021'],
+  ['LinkedIn', 'https://www.linkedin.com/in/amitesh-kumar-yadav-b55b10293/'],
+  ['Instagram', 'https://www.instagram.com/iamamiteshky/'],
+];
+
 const plans = [
   ['Free', '₹0', 'Forever', ['Private messaging', 'Social & reels access', 'Standard calls', 'Core translation'], false],
   ['Basic Monthly', '₹199', 'Once a month', ['Basic tier', 'One month of Premium access', 'Razorpay checkout', 'Server verified payment'], false],
@@ -156,6 +164,15 @@ export default function MarketingLanding() {
     <section className="faq-section section-shell" id="faq"><div className="section-heading"><span>FAQ</span><h2>{t.faqTitle}</h2></div><div className="faq-list">{faqs.map(([q, a]) => <details key={q}><summary>{q}<span>+</span></summary><p>{a}</p></details>)}</div></section>
 
     <section className="final-cta section-shell"><img src="/ducor-lion-mark.svg" alt=""/><h2>{t.finalTitle}</h2><p>{t.finalBody}</p><a href="#auth-top">Create your Ducor account</a></section>
-    <footer className="marketing-footer"><div className="marketing-brand"><img src="/ducor-lion-mark.svg" alt=""/><span>Ducor</span></div><p>Founded by Amitesh Kumar Yadav · Designed and developed in India 🇮🇳</p><div><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/about">About</a></div></footer>
+    <footer className="marketing-footer">
+      <div className="marketing-footer-grid">
+        <div className="marketing-footer-intro"><div className="marketing-brand"><img src="/ducor-lion-mark.svg" alt=""/><span>Ducor</span></div><p>A social space for college life, local shops, creators and the ideas people build together.</p><strong>Amitesh Kumar Yadav · he/him<br/>Founder & developer of IndiaSearch.site · Haridwar, India</strong><h3>Follow along</h3><div className="marketing-footer-socials">{founderSocials.map(([label, href]) => <a key={label} href={href} target="_blank" rel="noreferrer">{label}</a>)}</div></div>
+        <div className="marketing-footer-column"><h3>Product</h3><a href="#features">Social & chat</a><a href="#features">Reels</a><a href="#features">PodLive</a><a href="#features">AI Smart Space</a><a href="/shopping">Shop without signing in</a><a href="#pricing">Plans & pricing</a></div>
+        <div className="marketing-footer-column"><h3>Made for</h3><a href="#features">College students</a><a href="#features">English practice</a><a href="#features">Developers</a><a href="#features">Creators & podcasters</a><a href="#features">Local businesses</a></div>
+        <div className="marketing-footer-column"><h3>Resources</h3><a href="#faq">FAQs</a><a href="/about">About Ducor</a><a href="/founder">Founder profile</a><a href="https://github.com/Amiteshyadav3333/CHIETCHAT" target="_blank" rel="noreferrer">Source on GitHub</a><a href="https://indiasearch.site/" target="_blank" rel="noreferrer">IndiaSearch.site</a><a href="https://amiteshyadav3333.github.io/" target="_blank" rel="noreferrer">Developer portfolio</a></div>
+        <div className="marketing-footer-updates"><h3>Get product updates</h3><p>Follow Ducor’s development and releases on GitHub.</p><a href="https://github.com/Amiteshyadav3333/CHIETCHAT" target="_blank" rel="noreferrer">Follow the project <ArrowTopRightOnSquareIcon/></a><div className="marketing-footer-legal"><a href="/privacy">Privacy policy</a><a href="/terms">Terms of use</a><a href="/about">Legal & about</a></div></div>
+      </div>
+      <div className="marketing-footer-bottom"><span>© {new Date().getFullYear()} Ducor · Built in India 🇮🇳</span><span>Private by design. Made for people.</span></div>
+    </footer>
   </div>;
 }

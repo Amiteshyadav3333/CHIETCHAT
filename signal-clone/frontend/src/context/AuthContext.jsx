@@ -36,6 +36,13 @@ export const AuthProvider = ({ children }) => {
         let cancelled = false;
         setLoading(true);
         const storedBearer = usableBearerToken(sessionStorage.getItem('cheetchat_legacy_token'));
+        let hasCachedUser = false;
+        try { hasCachedUser = Boolean(JSON.parse(localStorage.getItem('user') || 'null')?.id); }
+        catch { localStorage.removeItem('user'); }
+        if (!storedBearer && !hasCachedUser) {
+            setLoading(false);
+            return () => { cancelled = true; };
+        }
         axios.get('/api/auth/me', storedBearer ? {
             headers: { Authorization: `Bearer ${storedBearer}` },
         } : undefined)

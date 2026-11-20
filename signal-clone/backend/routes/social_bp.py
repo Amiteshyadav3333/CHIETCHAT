@@ -25,6 +25,7 @@ from content_moderation import ModerationUnavailable, reject_adult_content
 from features.social.feed import rank_public_posts
 from service_gateway import call_social_feed_ranker, call_social_poll_results, call_social_poll_vote
 from observability import report_safe_exception
+from premium_access import premium_tier, premium_limits
 
 social_bp = Blueprint('social_bp', __name__)
 
@@ -202,7 +203,7 @@ def serialize_comment(comment, current_user_id, vote_stats=None):
         replies,
         key=lambda reply: (
             vote_stats.get(reply.id, {}).get('score', 0),
-            bool(reply.user.is_premium),
+            premium_tier(reply.user) >= 2,
             reply.created_at,
         ),
         reverse=True,
@@ -216,7 +217,7 @@ def serialize_comment(comment, current_user_id, vote_stats=None):
         "user": serialize_user(comment.user, viewer_id=current_user_id),
         "parentId": comment.parent_id,
         "replies": [serialize_comment(reply, current_user_id, vote_stats) for reply in sorted_replies],
-        "isBoosted": bool(comment.user.is_premium),
+        "isBoosted": premium_tier(comment.user) >= 2,
         **comment_vote,
     }
 
@@ -496,7 +497,9 @@ def create_social_post():
         return jsonify({"error": "Invalid post type"}), 400
     poll_options = []
     user = db.session.get(User, user_id)
-    premium_active = bool(user.is_premium and (not user.premium_expires_at or user.premium_expires_at > utc_now()))
+    tier = premium_tier(user)
+    limits = premium_limits(tier)
+    premium_active = tier > 0
     is_monetized = request.form.get('isMonetized', 'false').lower() == 'true'
     article_title = request.form.get('articleTitle', '').strip()[:200]
     post_title = request.form.get('postTitle', '').strip()[:200] or article_title
@@ -513,8 +516,12 @@ def create_social_post():
             link_url = urllib.parse.urlunsplit(parsed_link)
         except ValueError as error:
             return jsonify({'error': str(error) or 'Use a valid public http or https link'}), 400
-    if is_monetized and not premium_active:
-        return jsonify({"error": "Premium membership is required for paid posts"}), 403
+    if is_monetized and tier < 3:
+        return jsonify({"error": "Paid posts are included with the Max plan", "code": "PREMIUM_TIER_REQUIRED", "requiredTier": 3}), 403
+    if post_kind == 'article' and tier < 2:
+        return jsonify({"error": "Long-form articles are included with Medium and Max plans", "code": "PREMIUM_TIER_REQUIRED", "requiredTier": 2}), 403
+    if post_kind == 'article' and len(caption) > limits['articleCharacters']:
+        return jsonify({"error": f"This plan supports articles up to {limits['articleCharacters']:,} characters", "code": "ARTICLE_LENGTH_LIMIT", "limit": limits['articleCharacters']}), 400
     if post_kind == 'article' and not post_title:
         return jsonify({"error": "Article title is required"}), 400
     if post_kind == 'link' and (not post_title or not link_url):
@@ -541,7 +548,7 @@ def create_social_post():
         if role not in {'owner', 'approved'}:
             return jsonify({"error": "Channel approval required before posting"}), 403
 
-    if not premium_active and post_kind != 'article':
+    if post_kind != 'article':
         # Serialize quota checks per user in PostgreSQL so parallel requests
         # cannot both pass the count and create a fourth free post.
         user = User.query.filter_by(id=user_id).with_for_update().one()
@@ -551,11 +558,12 @@ def create_social_post():
             SocialPost.retweet_of_id.is_(None),
             SocialPost.created_at >= today_start,
         ).count()
-        if posts_today >= FREE_DAILY_POST_LIMIT:
+        daily_post_limit = limits['socialPostsPerDay']
+        if posts_today >= daily_post_limit:
             return jsonify({
-                "error": "Free accounts can publish 3 posts per day. Upgrade to Premium for unlimited posts.",
+                "error": f"Your plan allows {daily_post_limit} posts per day. Upgrade to a higher plan for more creator posts.",
                 "code": "DAILY_POST_LIMIT_REACHED",
-                "limit": FREE_DAILY_POST_LIMIT,
+                "limit": daily_post_limit,
                 "used": posts_today,
                 "upgradeAvailable": True,
             }), 429
@@ -577,10 +585,12 @@ def create_social_post():
             media_duration = float(request.form.get('mediaDuration', 0))
         except (TypeError, ValueError):
             return jsonify({"error": "Invalid video duration"}), 400
-        if media_duration > 150 and not premium_active:
+        if media_duration > limits['feedVideoSeconds']:
             return jsonify({
-                "error": "Videos longer than 2 minutes 30 seconds require Premium.",
+                "error": f"Your plan supports feed videos up to {limits['feedVideoSeconds'] // 60} minutes.",
                 "code": "PREMIUM_VIDEO_LENGTH_REQUIRED",
+                "limitSeconds": limits['feedVideoSeconds'],
+                "requiredTier": 1 if tier == 0 else tier + 1,
             }), 403
     if len(typed_files) > 1 and any(kind != 'image' for _, kind in typed_files):
         return jsonify({"error": "Multiple selection supports photos only; upload a video by itself"}), 400
@@ -642,8 +652,8 @@ def social_post_analytics(post_id):
     post = db.get_or_404(SocialPost, post_id)
     if post.user_id != user_id:
         return jsonify({"error": "Only the creator can view analytics"}), 403
-    if not post.user.is_premium:
-        return jsonify({"error": "Premium membership is required"}), 403
+    if premium_tier(post.user) < 1:
+        return jsonify({"error": "Social post analytics are included with Basic, Medium, and Max plans", "code": "PREMIUM_TIER_REQUIRED", "requiredTier": 1}), 403
     return jsonify({
         "views": post.views_count or 0, "likes": len(post.likes),
         "comments": len(post.comments), "reposts": len(post.retweets),

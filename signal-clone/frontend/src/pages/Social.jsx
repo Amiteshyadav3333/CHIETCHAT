@@ -24,6 +24,7 @@ import { useBackHandler } from '../utils/backNavigation';
 import { isSocialFeedCacheFresh, loadSocialFeedCache, saveSocialFeedCache } from '../utils/socialFeedCache';
 import { useNavigate, usePathname } from '../utils/clientRouter';
 import { getRazorpayUpiCheckoutConfig, getRazorpayUpiPrefill } from '../utils/razorpayCheckout';
+import { getPremiumLimits, getPremiumTier, getPremiumTierForPlan } from '../utils/premiumAccess';
 
 const authHeaders = (token) => ({ Authorization: `Bearer ${token}` });
 const feedCacheKey = (userId, feed) => `${userId || 'guest'}:${feed}`;
@@ -170,16 +171,17 @@ const TweetAction = ({ icon, count, onClick, active, activeColor, hoverColor, ho
     </button>
 );
 
-const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, preview, fileRef, posting, onSubmit, isPremium, onUpgrade, earnByDefault = false, defaultArticleMode = false }) => {
-    const [format, setFormat] = useState(defaultArticleMode ? 'article' : 'post');
+const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, preview, fileRef, posting, onSubmit, premiumTier = 0, onUpgrade, earnByDefault = false, defaultArticleMode = false }) => {
+    const limits = getPremiumLimits(premiumTier);
+    const [format, setFormat] = useState(defaultArticleMode && premiumTier >= 2 ? 'article' : 'post');
     const [title, setTitle] = useState('');
     const [linkUrl, setLinkUrl] = useState('');
     const [pollOptions, setPollOptions] = useState(['', '']);
     const [mediaDuration, setMediaDuration] = useState(0);
     const [showProCamera, setShowProCamera] = useState(false);
     const articleMode = format === 'article';
-    useEffect(() => { setFormat(defaultArticleMode ? 'article' : 'post'); }, [defaultArticleMode]);
-    const maxChars = articleMode ? Number.POSITIVE_INFINITY : 1000;
+    useEffect(() => { setFormat(defaultArticleMode && premiumTier >= 2 ? 'article' : 'post'); }, [defaultArticleMode]);
+    const maxChars = articleMode ? limits.articleCharacters : 1000;
     const remaining = maxChars - caption.length;
     const progress = Math.min((caption.length / maxChars) * 100, 100);
     const isOverLimit = remaining < 0;
@@ -200,7 +202,7 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
                     id="tweet-composer"
                     value={caption}
                     onChange={e => setCaption(e.target.value)}
-                    placeholder={articleMode ? 'Write your story. Articles have no character limit.' : format === 'link' ? 'Add context to this link (optional)…' : format === 'poll' ? 'Add details for your poll (optional)…' : 'What would you like to share?'}
+                    placeholder={articleMode ? `Write your story. Up to ${limits.articleCharacters.toLocaleString()} characters.` : format === 'link' ? 'Add context to this link (optional)…' : format === 'poll' ? 'Add details for your poll (optional)…' : 'What would you like to share?'}
                     rows={caption ? Math.min(24, Math.max(3, Math.ceil(caption.length / 50))) : articleMode ? 8 : 3}
                     style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', resize: 'vertical', minHeight: articleMode ? 220 : 64, maxHeight: 560, overflowY: 'auto', fontSize: articleMode ? 16 : 20, color: '#e7e9ea', lineHeight: 1.7, fontFamily: 'inherit' }}
                 />
@@ -225,7 +227,7 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
                             if (selected.length > 1 && selected.some(file => !file.type.startsWith('image/'))) { alert('Multiple selection supports photos only. Upload a video separately.'); e.target.value = ''; return; }
                             const videoFile = selected.find(file => file.type.startsWith('video/'));
                             const duration = videoFile ? await readVideoDuration(videoFile) : 0;
-                            if (duration > 150 && !isPremium) { e.target.value = ''; onUpgrade('video'); return; }
+                            if (duration > limits.feedVideoSeconds) { e.target.value = ''; onUpgrade('video'); return; }
                             setMediaDuration(duration);
                             setMedia(selected);
                         }} />
@@ -239,7 +241,7 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
                             <CameraIcon className="h-5 w-5" />
                         </button>}
                         <div className="flex flex-wrap gap-1 rounded-xl bg-black/30 p-1" role="group" aria-label="Post format">
-                            {['post', 'link', 'poll', 'article'].map(item => <button key={item} type="button" onClick={() => { setFormat(item); if (['link', 'poll'].includes(item)) { setMedia([]); setMediaDuration(0); if (fileRef.current) fileRef.current.value = ''; } }} className={`rounded-lg px-2 py-1.5 text-[11px] font-bold capitalize ${format === item ? 'bg-[#ff6a3d] text-white' : 'text-gray-400 hover:bg-white/10'}`}>{item === 'post' ? 'Post' : item === 'article' ? 'Article' : item}</button>)}
+                            {['post', 'link', 'poll', 'article'].map(item => <button key={item} type="button" onClick={() => { if (item === 'article' && premiumTier < 2) { onUpgrade('article'); return; } setFormat(item); if (['link', 'poll'].includes(item)) { setMedia([]); setMediaDuration(0); if (fileRef.current) fileRef.current.value = ''; } }} className={`rounded-lg px-2 py-1.5 text-[11px] font-bold capitalize ${format === item ? 'bg-[#ff6a3d] text-white' : 'text-gray-400 hover:bg-white/10'}`}>{item === 'post' ? 'Post' : item === 'article' ? 'Article' : item}</button>)}
                         </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -254,7 +256,7 @@ const CheetChatComposer = ({ avatar, caption, setCaption, media, setMedia, previ
                             </svg>
                         )}
                         <div style={{ width: 1, height: 24, background: '#27333b' }} />
-                        <button onClick={async () => { const normalizedLink = linkUrl.trim() && !/^[a-z][a-z\d+.-]*:/i.test(linkUrl.trim()) ? `https://${linkUrl.trim()}` : linkUrl.trim(); const posted = await onSubmit({ postKind: articleMode ? 'article' : format === 'link' || format === 'poll' ? format : defaultArticleMode ? 'news_post' : 'standard', postTitle: title, articleTitle: articleMode ? title : '', linkUrl: normalizedLink, pollOptions: pollOptions.filter(option => option.trim()), isMonetized: Boolean(isPremium && earnByDefault), mediaDuration }); if (posted) { setTitle(''); setLinkUrl(''); setPollOptions(['', '']); } }} disabled={posting || !canPost}
+                        <button onClick={async () => { const normalizedLink = linkUrl.trim() && !/^[a-z][a-z\d+.-]*:/i.test(linkUrl.trim()) ? `https://${linkUrl.trim()}` : linkUrl.trim(); const posted = await onSubmit({ postKind: articleMode ? 'article' : format === 'link' || format === 'poll' ? format : defaultArticleMode ? 'news_post' : 'standard', postTitle: title, articleTitle: articleMode ? title : '', linkUrl: normalizedLink, pollOptions: pollOptions.filter(option => option.trim()), isMonetized: Boolean(premiumTier >= 3 && earnByDefault), mediaDuration }); if (posted) { setTitle(''); setLinkUrl(''); setPollOptions(['', '']); } }} disabled={posting || !canPost}
                             style={{ padding: '6px 16px', borderRadius: 9999, fontWeight: 700, fontSize: 14, border: 'none', cursor: canPost ? 'pointer' : 'not-allowed', background: canPost ? '#ff6a3d' : '#0f4f6e', color: canPost ? '#fff' : '#71767b', transition: 'background 0.15s' }}>
                             {posting ? 'Posting…' : 'Post'}
                         </button>
@@ -768,7 +770,7 @@ const ChannelView = ({ channel, posts, user, token, preview, media, caption, pos
         )}
         {channel.canPost && (
             <div style={{ padding: '12px 16px', borderBottom: '1px solid #27333b' }}>
-                <CheetChatComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} media={media} setMedia={setMedia} preview={preview} fileRef={fileRef} posting={posting} onSubmit={submitPost} isPremium={user?.isPremium} onUpgrade={onUpgrade} earnByDefault={user?.uiPreferences?.socialMonetizePosts} />
+                <CheetChatComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} media={media} setMedia={setMedia} preview={preview} fileRef={fileRef} posting={posting} onSubmit={submitPost} premiumTier={getPremiumTier(user)} onUpgrade={onUpgrade} earnByDefault={user?.uiPreferences?.socialMonetizePosts} />
             </div>
         )}
         {posts.length ? posts.map(post => (
@@ -1345,14 +1347,14 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                                 setPremiumPrompt(false);
                                 return;
                             }
-                            updateUser?.({ ...user, isPremium: true, premiumPlanCode: selectedPremiumPlan, premiumExpiresAt: verified.data.premiumExpiresAt });
+                            updateUser?.({ ...user, isPremium: true, premiumTier: getPremiumTierForPlan(selectedPremiumPlan), premiumPlanCode: selectedPremiumPlan, premiumExpiresAt: verified.data.premiumExpiresAt });
                         } else {
                             const verified = await axios.post(`/api/payments/orders/${payment.id}/verify`, result, { headers });
                             if (verified.data.status !== 'approved') {
                                 alert('Payment authorization received. Premium activates after Razorpay confirms capture.');
                                 return;
                             }
-                            updateUser?.({ ...user, isPremium: true, premiumPlanCode: selectedPremiumPlan, premiumExpiresAt: verified.data.premiumExpiresAt });
+                            updateUser?.({ ...user, isPremium: true, premiumTier: getPremiumTierForPlan(selectedPremiumPlan), premiumPlanCode: selectedPremiumPlan, premiumExpiresAt: verified.data.premiumExpiresAt });
                         }
                         setPremiumPrompt(false);
                             alert(autopay ? 'Autopay is active. Premium is enabled for your paid period.' : 'Payment verified. Premium is active for the selected period.');
@@ -1540,7 +1542,7 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                         ) : (
                             <div>
                                 {activeTab === 'community' ? <CommunityComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} pollOptions={pollOptions} setPollOptions={setPollOptions} posting={posting} onSubmit={() => submitPost(null, 'community')} /> : <div className="padding-4 px-4 py-3 border-b border-[#27333b]">
-                            <div data-ducor-composer><CheetChatComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} media={media} setMedia={setMedia} preview={preview} fileRef={fileRef} posting={posting} isPremium={user?.isPremium} onUpgrade={showPremiumUpgrade} earnByDefault={user?.uiPreferences?.socialMonetizePosts} defaultArticleMode={activeTab === 'news'} onSubmit={options => submitPost(null, options)} /></div>
+                            <div data-ducor-composer><CheetChatComposer avatar={user && user.avatar} caption={caption} setCaption={setCaption} media={media} setMedia={setMedia} preview={preview} fileRef={fileRef} posting={posting} premiumTier={getPremiumTier(user)} onUpgrade={showPremiumUpgrade} earnByDefault={user?.uiPreferences?.socialMonetizePosts} defaultArticleMode={activeTab === 'news'} onSubmit={options => submitPost(null, options)} /></div>
                                 </div>}
                                 {loading ? <CheetChatLoading /> : displayedPosts.length ? displayedPosts.map((post, postIndex) => (
                                     <div key={`${post.id}-${postIndex}`} ref={post.id === highlightedPostId && postIndex === 0 ? highlightedRef : null} style={post.id === highlightedPostId && postIndex === 0 ? { outline: '2px solid #ff6a3d' } : {}}>
@@ -1618,11 +1620,11 @@ const Social = ({ onBack, deepLink, onDeepLinkConsumed, onShareToChat, onDirectM
                 <div className="fixed inset-0 z-[180] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={() => setPremiumPrompt(false)}>
                     <div onClick={event => event.stopPropagation()} className="w-full max-w-md rounded-3xl border border-violet-400/25 bg-gradient-to-br from-[#1b1230] to-[#10131d] p-6 text-center shadow-2xl">
                         <SparklesIcon className="mx-auto h-12 w-12 text-violet-300" />
-                        <h2 className="mt-3 text-2xl font-black text-white">{premiumPromptReason === 'video' ? 'Share longer videos with Premium' : 'Your three free posts are used'}</h2>
-                        <p className="mt-2 text-sm leading-6 text-gray-300">{premiumPromptReason === 'video' ? 'Videos over 2 minutes 30 seconds require Premium. News and articles remain free to publish without a length limit.' : 'Upgrade for more social posts and creator tools. News articles can be published without a daily limit.'}</p>
+                        <h2 className="mt-3 text-2xl font-black text-white">{premiumPromptReason === 'video' ? 'Share longer videos' : premiumPromptReason === 'article' ? 'Write long-form articles' : 'Your post limit is reached'}</h2>
+                        <p className="mt-2 text-sm leading-6 text-gray-300">{premiumPromptReason === 'video' ? 'Your plan controls video length: Basic supports up to 5 minutes, Medium 15 minutes, and Max 30 minutes.' : premiumPromptReason === 'article' ? 'Long-form articles are included with Medium and Max. Your plan sets the maximum article length.' : 'Choose the plan that fits you: Basic includes 10 posts and 5 Reels daily, Medium includes 30 posts and 10 Reels, and Max includes 100 posts and 25 Reels daily.'}</p>
                         <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3">
                             {premiumPlans.map(plan => <button type="button" key={plan.code} onClick={() => setSelectedPremiumPlan(plan.code)} className={`rounded-xl border p-3 text-left ${selectedPremiumPlan === plan.code ? 'border-violet-300 bg-violet-400/20' : 'border-white/10 bg-white/5'}`}>
-                                <span className="block text-xs font-bold text-white">{plan.name}</span><span className="mt-1 block text-sm font-black text-white">₹{plan.amount.toLocaleString('en-IN')}</span><span className="text-[10px] text-gray-400">{plan.period === 'yearly' ? 'per year' : 'per month'}</span>
+                                <span className="block text-xs font-bold text-white">{plan.name}</span><span className="mt-1 block text-sm font-black text-white">₹{plan.amount.toLocaleString('en-IN')}</span><span className="text-[10px] text-gray-400">{plan.period === 'yearly' ? 'per year' : 'per month'}</span><span className="mt-2 block text-[10px] leading-4 text-gray-300">{(plan.features || []).slice(0, 2).join(' · ')}</span>
                             </button>)}
                         </div>
                         <button disabled={premiumBuying || !premiumCheckoutEnabled || !premiumPlans.length} onClick={() => buyPremium(false)} className="mt-3 w-full rounded-xl bg-violet-500 py-3.5 text-sm font-black text-white hover:bg-violet-400 disabled:opacity-60">{!premiumCheckoutEnabled ? 'Checkout unavailable' : premiumBuying ? 'Opening secure checkout…' : `Pay via UPI · ₹${(premiumPlans.find(plan => plan.code === selectedPremiumPlan)?.amount || 0).toLocaleString('en-IN')}`}</button>

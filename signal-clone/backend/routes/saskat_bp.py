@@ -18,6 +18,7 @@ Design principles
 from flask import Blueprint, jsonify, current_app
 from utils import get_current_user_id, get_json_data, utc_now
 from models import db, User
+from premium_access import premium_tier, premium_limits
 import os
 import json
 import hashlib
@@ -70,13 +71,13 @@ DAILY_FREE_CREDITS = int(os.environ.get('SASKAT_DAILY_FREE_CREDITS', '30'))
 # In a multi-worker deployment replace with Redis INCR + EXPIRE.
 _daily_usage: dict = {}
 
-def _check_and_consume_credits(user_id: int, cost: int, is_premium: bool) -> dict:
+def _check_and_consume_credits(user_id: int, cost: int, daily_limit: int | None) -> dict:
     """
     Returns {'allowed': True} or {'allowed': False, 'credits_used': N,
     'credits_limit': N, 'resets_at': ISO}.
     Never raises.
     """
-    if is_premium:
+    if daily_limit is None:
         return {'allowed': True}
 
     today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
@@ -85,17 +86,17 @@ def _check_and_consume_credits(user_id: int, cost: int, is_premium: bool) -> dic
         entry = {'date': today, 'used': 0}
         _daily_usage[user_id] = entry
 
-    if entry['used'] + cost > DAILY_FREE_CREDITS:
+    if entry['used'] + cost > daily_limit:
         tomorrow = (datetime.datetime.utcnow() + datetime.timedelta(days=1)).strftime('%Y-%m-%dT00:00:00Z')
         return {
             'allowed': False,
             'credits_used': entry['used'],
-            'credits_limit': DAILY_FREE_CREDITS,
+            'credits_limit': daily_limit,
             'resets_at': tomorrow,
         }
 
     entry['used'] += cost
-    return {'allowed': True, 'credits_remaining': DAILY_FREE_CREDITS - entry['used']}
+    return {'allowed': True, 'credits_remaining': daily_limit - entry['used']}
 
 
 # ---------------------------------------------------------------------------
@@ -543,15 +544,13 @@ def saskat_chat():
     # Bug #4 fix: use db.session.get instead of deprecated User.query.get
     user = db.session.get(User, user_id)
     user_name = user.username if user else 'Friend'
-    premium_active = bool(
-        user
-        and user.is_premium
-        and (not user.premium_expires_at or user.premium_expires_at > utc_now())
-    )
+    tier = premium_tier(user)
+    premium_active = tier > 0
+    daily_ai_limit = premium_limits(tier)['aiCreditsPerDay'] if tier else DAILY_FREE_CREDITS
 
-    # Fair-use credit check
+    # Fair-use credits follow the account's purchased plan.
     cost = _task_credit_cost(message)
-    usage = _check_and_consume_credits(user_id, cost, premium_active)
+    usage = _check_and_consume_credits(user_id, cost, daily_ai_limit)
     if not usage['allowed']:
         return jsonify({
             'error': 'daily_limit_reached',
@@ -633,10 +632,10 @@ def saskat_chat():
             _save_session_turn(user_id, 'assistant', response, [])
 
         credits_info = None
-        if not premium_active and 'credits_remaining' in usage:
+        if daily_ai_limit is not None and 'credits_remaining' in usage:
             credits_info = {
                 'remaining': usage['credits_remaining'],
-                'limit': DAILY_FREE_CREDITS,
+                'limit': daily_ai_limit,
             }
 
         return jsonify({
@@ -670,7 +669,7 @@ def saskat_video_ad():
     if not user_id:
         return jsonify({'error': 'Unauthorized'}), 401
     user = db.session.get(User, user_id)
-    if user and user.is_premium and (not user.premium_expires_at or user.premium_expires_at > utc_now()):
+    if premium_tier(user) > 0:
         return jsonify({'ad': None}), 200
     from routes.admin_bp import Ad
     import random
@@ -729,12 +728,9 @@ def generate_image():
 
     # Image generation costs 2 credits for free users
     user = db.session.get(User, user_id)
-    premium_active = bool(
-        user
-        and user.is_premium
-        and (not user.premium_expires_at or user.premium_expires_at > utc_now())
-    )
-    usage = _check_and_consume_credits(user_id, 2, premium_active)
+    tier = premium_tier(user)
+    premium_active = tier > 0
+    usage = _check_and_consume_credits(user_id, 2, (premium_limits(tier)['aiCreditsPerDay'] if tier else DAILY_FREE_CREDITS))
     if not usage['allowed']:
         return jsonify({
             'error': 'daily_limit_reached',
@@ -761,7 +757,7 @@ def get_contextual_ad():
         return jsonify({'error': 'Unauthorized'}), 401
 
     user = db.session.get(User, user_id)
-    if user and user.is_premium and (not user.premium_expires_at or user.premium_expires_at > utc_now()):
+    if premium_tier(user) > 0:
         return jsonify({'sponsored': None}), 200
 
     query = str(get_json_data().get('query') or '').strip()[:8000]
@@ -835,24 +831,20 @@ def saskat_credits():
         return jsonify({'error': 'Unauthorized'}), 401
 
     user = db.session.get(User, user_id)
-    premium_active = bool(
-        user
-        and user.is_premium
-        and (not user.premium_expires_at or user.premium_expires_at > utc_now())
-    )
-
-    if premium_active:
-        return jsonify({'premium': True, 'unlimited': True}), 200
-
+    tier = premium_tier(user)
+    daily_limit = premium_limits(tier)['aiCreditsPerDay'] if tier else DAILY_FREE_CREDITS
     today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
     entry = _daily_usage.get(user_id)
     used = entry['used'] if entry and entry['date'] == today else 0
     tomorrow = (datetime.datetime.utcnow() + datetime.timedelta(days=1)).strftime('%Y-%m-%dT00:00:00Z')
-
+    if daily_limit is None:
+        return jsonify({'premium': True, 'tier': tier, 'unlimited': True}), 200
     return jsonify({
-        'premium': False,
+        'premium': tier > 0,
+        'tier': tier,
+        'unlimited': False,
         'credits_used': used,
-        'credits_limit': DAILY_FREE_CREDITS,
-        'credits_remaining': max(0, DAILY_FREE_CREDITS - used),
+        'credits_limit': daily_limit,
+        'credits_remaining': max(0, daily_limit - used),
         'resets_at': tomorrow,
     }), 200

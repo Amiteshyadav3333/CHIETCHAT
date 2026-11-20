@@ -22,6 +22,7 @@ from models import (
 )
 import cloudinary.uploader
 from observability import report_safe_exception
+from premium_access import premium_tier, premium_features
 
 UPLOAD_EXTENSIONS = {
     'image': {'jpg', 'jpeg', 'png', 'gif', 'webp'},
@@ -1127,7 +1128,8 @@ def serialize_user(user, viewer_id=None):
         show_phone = has_contact(user.id, viewer_id)
     public_phone = user.phone if show_phone and not str(user.phone or '').startswith('google:') else ''
 
-    premium_active = bool(user.is_premium and (not user.premium_expires_at or user.premium_expires_at > utc_now()))
+    active_premium_tier = premium_tier(user)
+    premium_active = active_premium_tier > 0
     return {
         "id": user.id,
         "username": user.username,
@@ -1149,6 +1151,8 @@ def serialize_user(user, viewer_id=None):
         "readReceipts": bool(user.read_receipts),
         "isPremium": premium_active,
         "isVerified": bool(user.is_verified or premium_active),
+        "premiumTier": active_premium_tier,
+        "premiumFeatures": premium_features(active_premium_tier),
         "premiumExpiresAt": iso_utc(user.premium_expires_at) if premium_active else None,
         "premiumPlanCode": user.premium_plan_code if premium_active else None,
         "birthDate": user.birth_date.isoformat() if user.birth_date and viewer_id == user.id else "",

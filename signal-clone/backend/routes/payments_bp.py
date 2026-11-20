@@ -16,6 +16,7 @@ from models import db, User, ChatParticipant, BusinessProfile, PaymentOrder, Pre
 from utils import get_current_user_id, get_json_data, iso_utc, utc_now
 from observability import report_safe_exception
 from payment_config import razorpay_checkout_ready, razorpay_credentials_ready
+from premium_access import premium_features
 
 payments_bp = Blueprint('payments_bp', __name__)
 CAPTURE_TERMINAL_STATUSES = {'refunding', 'refunded', 'approved', 'rejected'}
@@ -38,8 +39,9 @@ def get_premium_plan(plan_code):
 
 def premium_plan_payload(plan_code, plan):
     return {
-        'code': plan_code, 'name': plan['name'], 'tier': plan['tier'],
-        'period': plan['period'], 'amount': plan['amount_paise'] / 100,
+        'code': plan_code, 'name': plan['name'], 'period': plan['period'], 'amount': plan['amount_paise'] / 100,
+        'tier': plan_code.split('_', 1)[0].title(),
+        'features': premium_features({'basic': 1, 'medium': 2, 'max': 3}.get(plan_code.split('_', 1)[0], 0)),
         'durationMonths': plan['duration_months'], 'autopayEnabled': bool(plan['provider_plan_id']),
     }
 

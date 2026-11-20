@@ -9,6 +9,7 @@ from utils import (
     MediaStorageUnavailable,
 )
 from content_moderation import ModerationUnavailable, reject_adult_content
+from premium_access import premium_tier, premium_limits
 
 reels_bp = Blueprint('reels_bp', __name__)
 
@@ -20,7 +21,6 @@ MAX_REEL_CAPTION_LENGTH = 500
 MAX_COMMENT_LENGTH = 1000
 MAX_REPOST_NOTE_LENGTH = 280
 FREE_DAILY_REEL_LIMIT = 3
-PREMIUM_DAILY_REEL_LIMIT = 10
 REEL_CATEGORIES = {'entertainment', 'comedy', 'dance', 'music', 'sports', 'gaming', 'food', 'travel', 'fashion', 'fitness', 'education', 'technology', 'devotional', 'news'}
 MAX_MEME_IMPORT_BYTES = 25 * 1024 * 1024
 
@@ -211,14 +211,16 @@ def create_reel():
     today = utc_now().date()
     day_start = datetime.datetime.combine(today, datetime.time.min)
     day_end = day_start + datetime.timedelta(days=1)
-    premium_active = bool(user.is_premium and (not user.premium_expires_at or user.premium_expires_at > utc_now()))
-    daily_limit = PREMIUM_DAILY_REEL_LIMIT if premium_active else FREE_DAILY_REEL_LIMIT
+    tier = premium_tier(user)
+    limits = premium_limits(tier)
+    premium_active = tier > 0
+    daily_limit = limits['reelsPerDay']
     daily_count = Reel.query.filter(Reel.user_id == user_id, Reel.created_at >= day_start, Reel.created_at < day_end).count()
     if daily_count >= daily_limit:
         return jsonify({"error": f"Your daily Reel limit is {daily_limit}", "code": "DAILY_REEL_LIMIT_REACHED", "limit": daily_limit}), 429
     is_monetized = request.form.get('isMonetized', 'false').lower() == 'true'
-    if is_monetized and not premium_active:
-        return jsonify({"error": "Premium membership is required for paid reels"}), 403
+    if is_monetized and tier < 3:
+        return jsonify({"error": "Paid Reels are included with the Max plan", "code": "PREMIUM_TIER_REQUIRED", "requiredTier": 3}), 403
     if len(caption) > MAX_REEL_CAPTION_LENGTH:
         return jsonify({"error": f"Caption must be {MAX_REEL_CAPTION_LENGTH} characters or less"}), 400
     music_url = request.form.get('musicUrl', '')
@@ -349,7 +351,7 @@ def like_reel(reel_id):
 
 def serialize_reel_comment(comment, current_user_id):
     replies = comment.replies
-    sorted_replies = sorted(replies, key=lambda r: (not bool(r.user.is_premium), r.created_at))
+    sorted_replies = sorted(replies, key=lambda r: (premium_tier(r.user) < 2, r.created_at))
     return {
         "id": comment.id,
         "content": comment.content,
@@ -357,7 +359,7 @@ def serialize_reel_comment(comment, current_user_id):
         "user": serialize_user(comment.user, viewer_id=current_user_id),
         "parentId": comment.parent_id,
         "replies": [serialize_reel_comment(r, current_user_id) for r in sorted_replies]
-        ,"isBoosted": bool(comment.user.is_premium)
+        ,"isBoosted": premium_tier(comment.user) >= 2
     }
 
 @reels_bp.route('/api/reels/<int:reel_id>/comments', methods=['GET'])
@@ -559,8 +561,8 @@ def reel_analytics(reel_id):
     reel = db.get_or_404(Reel, reel_id)
     if reel.user_id != user_id:
         return jsonify({"error": "Only the creator can view analytics"}), 403
-    if not reel.user.is_premium:
-        return jsonify({"error": "Premium membership is required"}), 403
+    if premium_tier(reel.user) < 2:
+        return jsonify({"error": "Reels analytics are included with Medium and Max plans", "code": "PREMIUM_TIER_REQUIRED", "requiredTier": 2}), 403
     return jsonify({
         "views": reel.views_count or 0, "likes": len(reel.likes),
         "comments": len(reel.comments), "reposts": len(reel.reposts),

@@ -371,12 +371,21 @@ def exchange_google_session():
         if user:
             return finalize_login(user)
 
-        # Never silently link a Google identity to an existing password account.
-        if User.query.filter(db.func.lower(User.email) == email).first():
-            return jsonify({
-                'error': 'This email already uses email/password login. Sign in with your existing method.',
-                'code': 'EXISTING_EMAIL_ACCOUNT',
-            }), 409
+        # The Google identity is provider-verified and the email is confirmed.
+        # Link it to the existing Ducor account so Google, password, and email-code
+        # sign-in all continue to use one account and one encrypted chat identity.
+        existing_email_user = User.query.filter(db.func.lower(User.email) == email).first()
+        if existing_email_user:
+            linked_subject = str(existing_email_user.supabase_user_id or '').strip()
+            if linked_subject and linked_subject != subject:
+                return jsonify({
+                    'error': 'This email is already linked to a different Google identity. Sign in with your existing account.',
+                    'code': 'EMAIL_IDENTITY_CONFLICT',
+                }), 409
+            existing_email_user.supabase_user_id = subject
+            existing_email_user.email_verified = True
+            existing_email_user.auth_provider = 'hybrid' if existing_email_user.password_hash else 'google'
+            return complete_login(existing_email_user)
 
         # Auto-create user and log them directly in
         metadata = supabase_user.get('user_metadata') or {}
@@ -644,7 +653,15 @@ def login():
                 "passwordLocked": True
             }), 423
         if not user.password_hash:
-            return jsonify({"error": "This account uses Google Sign-In"}), 409
+            try:
+                send_email_otp(email, create_user=True)
+            except Exception as exc:
+                report_safe_exception('passwordless_login_otp_failed', exc)
+                return jsonify({'error': 'Could not send a sign-in code right now. Try Google Sign-In or retry shortly.'}), 503
+            return jsonify({
+                'otpRequired': True,
+                'message': 'This account signs in without a password. A sign-in code was sent to your email.',
+            }), 200
         if check_password_hash(user.password_hash, password):
             if not user.email_verified:
                 send_email_otp(email, create_user=True)
@@ -688,7 +705,7 @@ def request_login_otp():
             return jsonify({"error": "No account found for this email"}), 404
         # The local account was checked above; OTP login must verify its email
         # without creating a separate Supabase identity for a Google user.
-        send_email_otp(email, create_user=False)
+        send_email_otp(email, create_user=True)
         return jsonify({"message": "OTP sent to email"}), 200
     except Exception as e:
         report_safe_exception('login_otp_request_failed', e)

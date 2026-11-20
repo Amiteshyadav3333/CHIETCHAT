@@ -297,6 +297,13 @@ const Login = () => {
                     setSubmitting(false);
                     return;
                 }
+                if (res.data.otpRequired) {
+                    setAuthStep('otp');
+                    setOtp('');
+                    setMessage(res.data.message || 'A sign-in code was sent to your email.');
+                    setSubmitting(false);
+                    return;
+                }
                 await finishLogin(res.data.user, res.data.token, null, false, '', res.data.csrfToken, res.data.recoveryKeyBackup);
                 return;
             }

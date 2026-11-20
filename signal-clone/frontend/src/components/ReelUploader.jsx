@@ -1,3 +1,4 @@
+import { getPremiumTier } from '../utils/premiumAccess';
 import React, { useState, useRef, useContext, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import axios from 'axios';
@@ -458,7 +459,7 @@ const ReelUploader = ({ onClose, onSuccess, initialCaption = '', affiliateCode =
 
                 <div><p className="mb-2 text-xs font-bold text-gray-300">Choose Reel category</p><div className="flex gap-2 overflow-x-auto pb-1">{REEL_CATEGORIES.map(([id, label]) => <button key={id} type="button" onClick={() => setCategory(id)} className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold ${category === id ? 'border-pink-400 bg-pink-500 text-white' : 'border-white/10 bg-white/5 text-gray-300'}`}>{label}</button>)}</div></div>
 
-                <button type="button" onClick={() => user?.isPremium ? setMonetized(v => !v) : alert('Paid reels are available with Premium')} className={`flex w-full items-center justify-between rounded-xl border p-3 text-left ${monetized ? 'border-amber-400/40 bg-amber-400/10 text-amber-200' : 'border-white/10 bg-white/5 text-white'}`}><span><span className="block text-sm font-bold">₹ Get paid to post</span><span className="text-xs text-gray-400">Enable creator earnings for this Reel</span></span><span className={`rounded-full px-2 py-1 text-[10px] font-black ${user?.isPremium ? 'bg-blue-500 text-white' : 'bg-white/10 text-gray-400'}`}>{user?.isPremium ? (monetized ? 'ON' : 'PREMIUM') : 'LOCKED'}</span></button>
+                <button type="button" onClick={() => getPremiumTier(user) >= 3 ? setMonetized(v => !v) : alert('Paid Reels are included with the Max plan')} className={`flex w-full items-center justify-between rounded-xl border p-3 text-left ${monetized ? 'border-amber-400/40 bg-amber-400/10 text-amber-200' : 'border-white/10 bg-white/5 text-white'}`}><span><span className="block text-sm font-bold">₹ Get paid to post</span><span className="text-xs text-gray-400">Enable creator earnings for this Reel</span></span><span className={`rounded-full px-2 py-1 text-[10px] font-black ${getPremiumTier(user) >= 3 ? 'bg-blue-500 text-white' : 'bg-white/10 text-gray-400'}`}>{getPremiumTier(user) >= 3 ? (monetized ? 'ON' : 'MAX') : 'LOCKED'}</span></button>
 
                 {/* Music Section */}
                 <div className="space-y-3">
